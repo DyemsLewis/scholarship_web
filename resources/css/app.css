@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+@source '../**/*.vue';
+
+@theme {
+    --font-sans: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Merriweather', ui-serif, Georgia, serif;
+    --color-ink-950: #09111f;
+    --color-ink-900: #0e172a;
+    --color-lagoon-500: #0ea5e9;
+    --color-lagoon-400: #38bdf8;
+    --color-aurora-400: #2dd4bf;
+    --color-mist-100: #e2ecff;
+    --color-mist-200: #bfd6ff;
+}
+
+@layer base {
+    body {
+        @apply bg-slate-950 text-slate-100 antialiased;
+    }
+}
