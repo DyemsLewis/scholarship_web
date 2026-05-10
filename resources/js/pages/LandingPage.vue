@@ -1,4 +1,6 @@
 <script setup>
+import SiteNavbar from '../components/SiteNavbar.vue';
+
 const heroImage = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1800&q=85';
 
 const scholarshipSteps = [
@@ -23,28 +25,7 @@ const scholarshipSteps = [
             class="relative flex min-h-[86vh] flex-col overflow-hidden bg-slate-900 text-white"
             :style="{ backgroundImage: `linear-gradient(90deg, rgba(8, 20, 38, 0.84), rgba(8, 20, 38, 0.46), rgba(8, 20, 38, 0.18)), url(${heroImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }"
         >
-            <header class="relative z-10 border-b border-white/15">
-                <nav class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-                    <a href="/" class="font-display text-xl font-bold tracking-normal text-white">
-                        Scholarship Portal
-                    </a>
-
-                    <div class="flex items-center gap-2">
-                        <a
-                            href="/login"
-                            class="rounded-md px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
-                        >
-                            Login
-                        </a>
-                        <a
-                            href="/register"
-                            class="rounded-md bg-amber-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-200"
-                        >
-                            Register
-                        </a>
-                    </div>
-                </nav>
-            </header>
+            <SiteNavbar variant="transparent" />
 
             <div class="relative z-10 mx-auto flex w-full max-w-6xl flex-1 items-center px-4 py-16 sm:px-6 lg:px-8">
                 <div class="max-w-2xl">

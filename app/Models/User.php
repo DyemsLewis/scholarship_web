@@ -20,7 +20,14 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
+        'first_name',
+        'last_name',
+        'middle_initial',
         'email',
+        'username',
+        'contact_number',
+        'is_admin',
+        'role',
         'password',
     ];
 
@@ -43,7 +50,13 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'is_admin' => 'boolean',
             'password' => 'hashed',
         ];
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin' || $this->is_admin;
     }
 }

@@ -1,11 +1,13 @@
 import './bootstrap';
 import { createApp } from 'vue';
+import AdminPage from './pages/AdminPage.vue';
 import LandingPage from './pages/LandingPage.vue';
 import LoginPage from './pages/LoginPage.vue';
 import RegisterPage from './pages/RegisterPage.vue';
 
 const appElement = document.getElementById('app');
 const pages = {
+    admin: AdminPage,
     landing: LandingPage,
     login: LoginPage,
     register: RegisterPage,

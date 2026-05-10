@@ -10,10 +10,14 @@ const form = ref({
     email: '',
     username: '',
     number: '',
+    password: '',
+    passwordConfirmation: '',
 });
 
 const isSubmitting = ref(false);
 const statusMessage = ref('');
+const errorMessage = ref('');
+const showPassword = ref(false);
 
 function handleMiddleInitialInput(event) {
     form.value.middleInitial = event.target.value.replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase();
@@ -25,6 +29,7 @@ function handleNumberInput(event) {
 
 async function submitForm() {
     statusMessage.value = '';
+    errorMessage.value = '';
 
     if (!formElement.value?.reportValidity()) {
         return;
@@ -41,14 +46,37 @@ async function submitForm() {
     }
 
     formElement.value?.querySelector('#number')?.setCustomValidity('');
+
+    if (form.value.password !== form.value.passwordConfirmation) {
+        formElement.value
+            ?.querySelector('#password-confirmation')
+            ?.setCustomValidity('Passwords must match.');
+        formElement.value?.reportValidity();
+        return;
+    }
+
+    formElement.value?.querySelector('#password-confirmation')?.setCustomValidity('');
     isSubmitting.value = true;
 
-    await new Promise((resolve) => {
-        window.setTimeout(resolve, 1200);
-    });
+    try {
+        const response = await window.axios.post('/register', {
+            first_name: form.value.firstName,
+            last_name: form.value.lastName,
+            middle_initial: form.value.middleInitial,
+            email: form.value.email,
+            username: form.value.username,
+            number: form.value.number,
+            password: form.value.password,
+            password_confirmation: form.value.passwordConfirmation,
+        });
 
-    statusMessage.value = `Registration details saved for ${form.value.firstName} ${form.value.lastName}.`;
-    isSubmitting.value = false;
+        statusMessage.value = response.data.message ?? 'Registration complete.';
+        window.location.href = response.data.redirect ?? '/';
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Registration failed. Check your details and try again.';
+    } finally {
+        isSubmitting.value = false;
+    }
 }
 </script>
 
@@ -171,6 +199,50 @@ async function submitForm() {
                 </div>
             </div>
 
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label class="mb-2 block text-sm font-medium text-slate-700" for="password">
+                        Password
+                    </label>
+                    <div class="relative">
+                        <input
+                            id="password"
+                            v-model="form.password"
+                            :type="showPassword ? 'text' : 'password'"
+                            autocomplete="new-password"
+                            required
+                            minlength="8"
+                            placeholder="Password"
+                            class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 pr-16 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                        >
+                        <button
+                            type="button"
+                            class="absolute inset-y-0 right-2 my-auto h-9 rounded-md px-3 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                            @click="showPassword = !showPassword"
+                        >
+                            {{ showPassword ? 'Hide' : 'Show' }}
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="mb-2 block text-sm font-medium text-slate-700" for="password-confirmation">
+                        Confirm password
+                    </label>
+                    <input
+                        id="password-confirmation"
+                        v-model="form.passwordConfirmation"
+                        :type="showPassword ? 'text' : 'password'"
+                        autocomplete="new-password"
+                        required
+                        minlength="8"
+                        placeholder="Confirm password"
+                        class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                        @input="event.target.setCustomValidity('')"
+                    >
+                </div>
+            </div>
+
             <button
                 type="submit"
                 :disabled="isSubmitting"
@@ -182,6 +254,10 @@ async function submitForm() {
 
         <p v-if="statusMessage" class="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-700">
             {{ statusMessage }}
+        </p>
+
+        <p v-if="errorMessage" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
+            {{ errorMessage }}
         </p>
     </AuthShell>
 </template>

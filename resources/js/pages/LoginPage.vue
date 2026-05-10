@@ -12,9 +12,11 @@ const form = ref({
 const showPassword = ref(false);
 const isSubmitting = ref(false);
 const statusMessage = ref('');
+const errorMessage = ref('');
 
 async function submitForm() {
     statusMessage.value = '';
+    errorMessage.value = '';
 
     if (!formElement.value?.reportValidity()) {
         return;
@@ -22,12 +24,21 @@ async function submitForm() {
 
     isSubmitting.value = true;
 
-    await new Promise((resolve) => {
-        window.setTimeout(resolve, 1200);
-    });
+    try {
+        const response = await window.axios.post('/login', {
+            email: form.value.email,
+            password: form.value.password,
+            remember: form.value.remember,
+        });
 
-    statusMessage.value = `Welcome back, ${form.value.email}. Your dashboard is ready.`;
-    isSubmitting.value = false;
+        statusMessage.value = response.data.message ?? 'Login successful.';
+
+        window.location.href = response.data.redirect ?? '/';
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Login failed. Check your details and try again.';
+    } finally {
+        isSubmitting.value = false;
+    }
 }
 </script>
 
@@ -123,6 +134,10 @@ async function submitForm() {
 
         <p v-if="statusMessage" class="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-700">
             {{ statusMessage }}
+        </p>
+
+        <p v-if="errorMessage" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
+            {{ errorMessage }}
         </p>
     </AuthShell>
 </template>
