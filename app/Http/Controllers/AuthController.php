@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,7 @@ class AuthController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', 'unique:users,username'],
             'number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'role' => ['required', 'string', 'in:applicant,provider'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
@@ -32,17 +34,23 @@ class AuthController extends Controller
             'email' => $validated['email'],
             'username' => $validated['username'],
             'contact_number' => $validated['number'],
-            'role' => 'applicant',
+            'role' => $validated['role'],
             'is_admin' => false,
             'password' => $validated['password'],
         ]);
 
         Auth::login($user);
         $request->session()->regenerate();
+        ActivityLog::record(
+            $user,
+            'registered',
+            "{$user->name} registered as {$user->role}.",
+            $request,
+        );
 
         return response()->json([
             'message' => 'Registration complete. You are now signed in.',
-            'redirect' => '/',
+            'redirect' => $user->isProvider() ? '/provider' : '/',
             'user' => $user->only(['id', 'name', 'email', 'username', 'role', 'is_admin']),
         ], 201);
     }
@@ -61,22 +69,49 @@ class AuthController extends Controller
             'email' => $credentials['email'],
             'password' => $credentials['password'],
         ], $remember)) {
+            ActivityLog::record(
+                null,
+                'login_failed',
+                "Failed login attempt for {$credentials['email']}.",
+                $request,
+                ['email' => $credentials['email']],
+            );
+
             return response()->json([
                 'message' => 'The email or password is incorrect.',
             ], 422);
         }
 
         $request->session()->regenerate();
+        ActivityLog::record(
+            $request->user(),
+            'login',
+            "{$request->user()->name} logged in.",
+            $request,
+        );
 
         return response()->json([
             'message' => 'Login successful.',
-            'redirect' => $request->user()->isAdmin() ? '/admin' : '/',
+            'redirect' => match (true) {
+                $request->user()->isAdmin() => '/admin',
+                $request->user()->isProvider() => '/provider',
+                default => '/',
+            },
             'user' => $request->user()->only(['id', 'name', 'email', 'username', 'role', 'is_admin']),
         ]);
     }
 
     public function logout(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        ActivityLog::record(
+            $user,
+            'logout',
+            "{$user?->name} logged out.",
+            $request,
+        );
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

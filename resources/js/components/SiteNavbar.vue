@@ -12,7 +12,6 @@ const props = defineProps({
 const currentPath = window.location.pathname;
 const links = [
     { href: '/', label: 'Home' },
-    { href: '/admin', label: 'Admin' },
     { href: '/login', label: 'Login' },
     { href: '/register', label: 'Register' },
 ];

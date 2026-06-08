@@ -1,6 +1,7 @@
 <script setup>
-import { ref } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
 import AuthShell from '../components/AuthShell.vue';
+import ToastMessage from '../components/ToastMessage.vue';
 
 const formElement = ref(null);
 const form = ref({
@@ -9,10 +10,49 @@ const form = ref({
     remember: true,
 });
 
+const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
+const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
+const toggleButtonClass = 'absolute inset-y-0 right-2 my-auto h-9 rounded-md px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900';
+const primaryButtonClass = 'w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80';
+
 const showPassword = ref(false);
 const isSubmitting = ref(false);
 const statusMessage = ref('');
 const errorMessage = ref('');
+const toast = ref({
+    show: false,
+    type: 'success',
+    title: '',
+    message: '',
+});
+
+let toastTimer = null;
+let redirectTimer = null;
+
+function showToast(type, title, message) {
+    if (toastTimer) {
+        window.clearTimeout(toastTimer);
+    }
+
+    toast.value = {
+        show: true,
+        type,
+        title,
+        message,
+    };
+
+    toastTimer = window.setTimeout(() => {
+        toast.value.show = false;
+    }, 3500);
+}
+
+function closeToast() {
+    if (toastTimer) {
+        window.clearTimeout(toastTimer);
+    }
+
+    toast.value.show = false;
+}
 
 async function submitForm() {
     statusMessage.value = '';
@@ -32,14 +72,28 @@ async function submitForm() {
         });
 
         statusMessage.value = response.data.message ?? 'Login successful.';
+        showToast('success', 'Login successful', statusMessage.value);
 
-        window.location.href = response.data.redirect ?? '/';
+        redirectTimer = window.setTimeout(() => {
+            window.location.href = response.data.redirect ?? '/';
+        }, 900);
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Login failed. Check your details and try again.';
+        showToast('error', 'Login failed', errorMessage.value);
     } finally {
         isSubmitting.value = false;
     }
 }
+
+onBeforeUnmount(() => {
+    if (toastTimer) {
+        window.clearTimeout(toastTimer);
+    }
+
+    if (redirectTimer) {
+        window.clearTimeout(redirectTimer);
+    }
+});
 </script>
 
 <template>
@@ -60,10 +114,18 @@ async function submitForm() {
         ]"
         panel-note="Use the same account details connected to your scholarship application to continue where you left off."
     >
+        <ToastMessage
+            :show="toast.show"
+            :type="toast.type"
+            :title="toast.title"
+            :message="toast.message"
+            @close="closeToast"
+        />
+
         <form ref="formElement" class="space-y-4" @submit.prevent="submitForm">
             <div class="grid gap-4">
                 <div>
-                    <label class="mb-2 block text-sm font-medium text-slate-700" for="email">
+                    <label :class="labelClass" for="email">
                         Email address
                     </label>
                     <input
@@ -73,16 +135,16 @@ async function submitForm() {
                         autocomplete="email"
                         required
                         placeholder="student@example.com"
-                        class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                        :class="inputClass"
                     >
                 </div>
 
                 <div>
                     <div class="mb-2 flex items-center justify-between gap-4">
-                        <label class="block text-sm font-medium text-slate-700" for="password">
+                        <label class="block text-sm font-semibold text-slate-700" for="password">
                             Password
                         </label>
-                        <a href="#" class="text-sm font-medium text-sky-700 transition hover:text-slate-900">
+                        <a href="#" class="text-sm font-semibold text-sky-700 transition hover:text-slate-900">
                             Forgot password?
                         </a>
                     </div>
@@ -95,11 +157,11 @@ async function submitForm() {
                             required
                             minlength="8"
                             placeholder="Enter your password"
-                            class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 pr-16 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                            :class="[inputClass, 'pr-16']"
                         >
                         <button
                             type="button"
-                            class="absolute inset-y-0 right-2 my-auto h-9 rounded-md px-3 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                            :class="toggleButtonClass"
                             @click="showPassword = !showPassword"
                         >
                             {{ showPassword ? 'Hide' : 'Show' }}
@@ -118,7 +180,7 @@ async function submitForm() {
                     Remember me
                 </label>
 
-                <span class="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                     Secure login
                 </span>
             </div>
@@ -126,7 +188,7 @@ async function submitForm() {
             <button
                 type="submit"
                 :disabled="isSubmitting"
-                class="w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80"
+                :class="primaryButtonClass"
             >
                 {{ isSubmitting ? 'Signing in...' : 'Log in to portal' }}
             </button>
