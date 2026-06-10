@@ -7,7 +7,9 @@ import AdminUsersPage from './pages/AdminUsersPage.vue';
 import AccountSetupPage from './pages/AccountSetupPage.vue';
 import LandingPage from './pages/LandingPage.vue';
 import LoginPage from './pages/LoginPage.vue';
+import ProviderApplicationsPage from './pages/ProviderApplicationsPage.vue';
 import ProviderPage from './pages/ProviderPage.vue';
+import ProviderProgramsPage from './pages/ProviderProgramsPage.vue';
 import RegisterPage from './pages/RegisterPage.vue';
 
 const appElement = document.getElementById('app');
@@ -20,6 +22,8 @@ const pages = {
     landing: LandingPage,
     login: LoginPage,
     provider: ProviderPage,
+    providerApplications: ProviderApplicationsPage,
+    providerPrograms: ProviderProgramsPage,
     register: RegisterPage,
 };
 

@@ -7,12 +7,13 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
-        $validated = $request->validate([
+        $rules = [
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
@@ -21,10 +22,33 @@ class AuthController extends Controller
             'number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
             'role' => ['required', 'string', 'in:applicant,provider'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
+        ];
+
+        if ($request->input('role') === 'provider') {
+            $rules = [
+                ...$rules,
+                'provider_name' => ['required', 'string', 'max:255'],
+                'provider_type' => ['required', 'string', Rule::in([
+                    'school',
+                    'foundation',
+                    'government',
+                    'company',
+                    'non_profit',
+                    'other',
+                ])],
+                'provider_website' => ['nullable', 'url', 'max:255'],
+                'provider_address' => ['required', 'string', 'max:500'],
+                'provider_description' => ['nullable', 'string', 'max:1000'],
+            ];
+        }
+
+        $validated = $request->validate($rules);
 
         $middleInitial = strtoupper($validated['middle_initial']);
-        $name = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
+        $contactName = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
+        $name = $validated['role'] === 'provider'
+            ? $validated['provider_name']
+            : $contactName;
 
         $user = User::create([
             'name' => $name,
@@ -34,6 +58,11 @@ class AuthController extends Controller
             'email' => $validated['email'],
             'username' => $validated['username'],
             'contact_number' => $validated['number'],
+            'provider_name' => $validated['provider_name'] ?? null,
+            'provider_type' => $validated['provider_type'] ?? null,
+            'provider_website' => $validated['provider_website'] ?? null,
+            'provider_address' => $validated['provider_address'] ?? null,
+            'provider_description' => $validated['provider_description'] ?? null,
             'role' => $validated['role'],
             'is_admin' => false,
             'password' => $validated['password'],

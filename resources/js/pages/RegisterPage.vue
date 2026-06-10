@@ -13,9 +13,23 @@ const form = ref({
     email: '',
     username: '',
     number: '',
+    providerName: '',
+    providerType: '',
+    providerWebsite: '',
+    providerAddress: '',
+    providerDescription: '',
     password: '',
     passwordConfirmation: '',
 });
+
+const providerTypeOptions = [
+    { value: 'school', label: 'School / University' },
+    { value: 'foundation', label: 'Foundation' },
+    { value: 'government', label: 'Government Office' },
+    { value: 'company', label: 'Company / Sponsor' },
+    { value: 'non_profit', label: 'Non-profit Organization' },
+    { value: 'other', label: 'Other Provider' },
+];
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
@@ -69,16 +83,16 @@ const shellCopy = computed(() => {
         return {
             eyebrow: 'Provider Registration',
             title: 'Create your provider account',
-            description: 'Set up a scholarship provider account for managing programs and future applicant activity.',
+            description: 'Add the organization and contact details needed to manage scholarship programs.',
             panelBadge: 'Provider Access Desk',
             panelTitle: 'A workspace for scholarship providers',
-            panelText: 'Provider accounts are separate from applicant accounts so scholarship management can stay organized.',
+            panelText: 'Provider accounts are separate from applicant accounts so scholarship management stays organized.',
             panelHighlights: [
-                'Register as a scholarship provider.',
-                'Use the provider workspace after login.',
-                'Manage scholarship activity from a separate dashboard.',
+                'Save organization details for scholarship listings.',
+                'Keep one contact person connected to the account.',
+                'Manage programs from a separate provider dashboard.',
             ],
-            panelNote: 'After registration, you can finish account setup or open the provider workspace.',
+            panelNote: 'After registration, provider accounts continue directly to the provider workspace.',
         };
     }
 
@@ -141,18 +155,30 @@ async function submitForm() {
     formElement.value?.querySelector('#password-confirmation')?.setCustomValidity('');
     isSubmitting.value = true;
 
-    try {
-        const response = await window.axios.post('/register', {
-            first_name: form.value.firstName,
-            last_name: form.value.lastName,
-            middle_initial: form.value.middleInitial,
-            email: form.value.email,
-            username: form.value.username,
-            number: form.value.number,
-            role: registrationRole,
-            password: form.value.password,
-            password_confirmation: form.value.passwordConfirmation,
+    const payload = {
+        first_name: form.value.firstName,
+        last_name: form.value.lastName,
+        middle_initial: form.value.middleInitial,
+        email: form.value.email,
+        username: form.value.username,
+        number: form.value.number,
+        role: registrationRole,
+        password: form.value.password,
+        password_confirmation: form.value.passwordConfirmation,
+    };
+
+    if (isProviderRegistration) {
+        Object.assign(payload, {
+            provider_name: form.value.providerName,
+            provider_type: form.value.providerType,
+            provider_website: form.value.providerWebsite,
+            provider_address: form.value.providerAddress,
+            provider_description: form.value.providerDescription,
         });
+    }
+
+    try {
+        const response = await window.axios.post('/register', payload);
 
         statusMessage.value = response.data.message ?? 'Registration complete.';
         nextUrl.value = response.data.redirect ?? '/';
@@ -200,7 +226,16 @@ onBeforeUnmount(() => {
                 {{ statusMessage }}
             </p>
 
-            <div class="grid gap-3 sm:grid-cols-2">
+            <div v-if="isProviderRegistration">
+                <a
+                    :href="nextUrl"
+                    class="block rounded-md bg-slate-900 px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                >
+                    Open provider dashboard
+                </a>
+            </div>
+
+            <div v-else class="grid gap-3 sm:grid-cols-2">
                 <a
                     href="/account/setup"
                     class="rounded-md bg-slate-900 px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-slate-800"
@@ -211,16 +246,116 @@ onBeforeUnmount(() => {
                     :href="nextUrl"
                     :class="secondaryButtonClass"
                 >
-                    {{ isProviderRegistration ? 'Open provider dashboard' : 'Check out the web' }}
+                    Check out the web
                 </a>
             </div>
         </div>
 
         <form v-else ref="formElement" class="space-y-5" @submit.prevent="submitForm">
+            <div v-if="isProviderRegistration" class="rounded-md border border-slate-200 bg-slate-50 p-4">
+                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                    Provider Details
+                </p>
+                <p class="mt-1 text-sm leading-6 text-slate-500">
+                    These details identify the organization that will manage scholarship programs.
+                </p>
+
+                <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label :class="labelClass" for="provider-name">
+                            Organization name
+                        </label>
+                        <input
+                            id="provider-name"
+                            v-model="form.providerName"
+                            type="text"
+                            autocomplete="organization"
+                            required
+                            placeholder="Scholarship provider name"
+                            :class="inputClass"
+                        >
+                    </div>
+
+                    <div>
+                        <label :class="labelClass" for="provider-type">
+                            Provider type
+                        </label>
+                        <select
+                            id="provider-type"
+                            v-model="form.providerType"
+                            required
+                            :class="inputClass"
+                        >
+                            <option value="" disabled>
+                                Select provider type
+                            </option>
+                            <option
+                                v-for="option in providerTypeOptions"
+                                :key="option.value"
+                                :value="option.value"
+                            >
+                                {{ option.label }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label :class="labelClass" for="provider-website">
+                            Website
+                        </label>
+                        <input
+                            id="provider-website"
+                            v-model="form.providerWebsite"
+                            type="url"
+                            inputmode="url"
+                            autocomplete="url"
+                            placeholder="https://example.edu"
+                            :class="inputClass"
+                        >
+                    </div>
+
+                    <div>
+                        <label :class="labelClass" for="provider-address">
+                            Office address
+                        </label>
+                        <input
+                            id="provider-address"
+                            v-model="form.providerAddress"
+                            type="text"
+                            autocomplete="street-address"
+                            required
+                            placeholder="Office or campus address"
+                            :class="inputClass"
+                        >
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <label :class="labelClass" for="provider-description">
+                        Short description
+                    </label>
+                    <textarea
+                        id="provider-description"
+                        v-model="form.providerDescription"
+                        rows="3"
+                        placeholder="Briefly describe the provider or scholarship office"
+                        :class="inputClass"
+                    ></textarea>
+                </div>
+            </div>
+
+            <div v-if="isProviderRegistration" class="border-t border-slate-200 pt-5">
+                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Account Contact
+                </p>
+            </div>
+
             <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-end">
                 <div>
                     <label :class="labelClass" for="first-name">
-                        First name
+                        {{ isProviderRegistration ? 'Contact first name' : 'First name' }}
                     </label>
                     <input
                         id="first-name"
@@ -228,7 +363,7 @@ onBeforeUnmount(() => {
                         type="text"
                         autocomplete="given-name"
                         required
-                        placeholder="First name"
+                        :placeholder="isProviderRegistration ? 'Contact first name' : 'First name'"
                         :class="inputClass"
                     >
                 </div>
@@ -253,7 +388,7 @@ onBeforeUnmount(() => {
 
                 <div>
                     <label :class="labelClass" for="last-name">
-                        Last name
+                        {{ isProviderRegistration ? 'Contact last name' : 'Last name' }}
                     </label>
                     <input
                         id="last-name"
@@ -261,7 +396,7 @@ onBeforeUnmount(() => {
                         type="text"
                         autocomplete="family-name"
                         required
-                        placeholder="Last name"
+                        :placeholder="isProviderRegistration ? 'Contact last name' : 'Last name'"
                         :class="inputClass"
                     >
                 </div>
