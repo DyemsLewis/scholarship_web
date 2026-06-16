@@ -5,6 +5,8 @@ import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
+const statusMessage = ref('');
+const savingId = ref(null);
 const user = ref(null);
 const scholarships = ref([]);
 const search = ref('');
@@ -24,7 +26,11 @@ const filteredScholarships = computed(() => scholarships.value.filter((scholarsh
         scholarship.eligibility,
     ].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword));
     const matchesProvider = selectedProviderType.value === 'all' || scholarship.provider?.type === selectedProviderType.value;
-    const matchesGwa = !maxGwa.value || !scholarship.minimum_gwa || Number(scholarship.minimum_gwa) <= Number(maxGwa.value);
+    const studentGwa = Number(maxGwa.value);
+    const minimumGwa = Number(scholarship.minimum_gwa);
+    const matchesGwa = !maxGwa.value
+        || !scholarship.minimum_gwa
+        || (studentGwa <= 5 && minimumGwa <= 5 ? studentGwa <= minimumGwa : minimumGwa <= studentGwa);
 
     return matchesSearch && matchesProvider && matchesGwa;
 }));
@@ -58,6 +64,53 @@ function documentRequirements(requirements) {
         .filter(Boolean);
 }
 
+function matchClass(score) {
+    if (Number(score) >= 80) {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (Number(score) >= 50) {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-rose-100 text-rose-800';
+}
+
+function criterionClass(status) {
+    if (status === 'pass') {
+        return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+    }
+
+    if (status === 'fail') {
+        return 'border-rose-200 bg-rose-50 text-rose-800';
+    }
+
+    if (status === 'missing') {
+        return 'border-amber-200 bg-amber-50 text-amber-800';
+    }
+
+    return 'border-slate-200 bg-slate-50 text-slate-600';
+}
+
+async function toggleSave(scholarship) {
+    savingId.value = scholarship.id;
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    try {
+        const response = scholarship.is_saved
+            ? await window.axios.delete(`/dashboard/scholarships/${scholarship.id}/save`)
+            : await window.axios.post(`/dashboard/scholarships/${scholarship.id}/save`);
+
+        scholarships.value = scholarships.value.map((item) => (item.id === scholarship.id ? response.data.scholarship : item));
+        statusMessage.value = response.data.message ?? 'Saved scholarships updated.';
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to update saved scholarship.';
+    } finally {
+        savingId.value = null;
+    }
+}
+
 async function loadScholarships() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -83,7 +136,7 @@ onMounted(loadScholarships);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900">
         <ApplicantSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -103,6 +156,11 @@ onMounted(loadScholarships);
                         </div>
 
                         <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                            <img
+                                :src="'/images/scholarship-cards.jpg'"
+                                alt="Students in a learning space"
+                                class="mb-3 h-28 w-full rounded-md object-cover sm:w-56"
+                            >
                             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                                 Applicant
                             </p>
@@ -122,6 +180,10 @@ onMounted(loadScholarships);
                 </div>
 
                 <section v-else class="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div v-if="statusMessage" class="border-b border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
+                        {{ statusMessage }}
+                    </div>
+
                     <div class="border-b border-slate-200 p-5">
                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
                             Published Programs
@@ -187,13 +249,18 @@ onMounted(loadScholarships);
                                         {{ scholarship.title }}
                                     </h3>
                                     <p class="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                                        {{ providerTypeLabel(scholarship.provider?.type) }}
+                                        {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
                                     </p>
                                 </div>
 
-                                <span class="inline-flex rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
-                                    {{ scholarship.deadline || 'No deadline' }}
-                                </span>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span :class="['inline-flex rounded-md px-2.5 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
+                                        {{ scholarship.eligibility_match?.score ?? 0 }}% match
+                                    </span>
+                                    <span class="inline-flex rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                                        {{ scholarship.deadline || 'No deadline' }}
+                                    </span>
+                                </div>
                             </div>
 
                             <p class="mt-3 text-sm leading-6 text-slate-600">
@@ -227,15 +294,40 @@ onMounted(loadScholarships);
                                         {{ scholarship.minimum_gwa || 'Not listed yet' }}
                                     </p>
                                 </div>
+                                <div class="rounded-md bg-white p-3">
+                                    <p class="font-semibold text-slate-500">
+                                        Saved by students
+                                    </p>
+                                    <p class="mt-1 font-bold text-slate-950">
+                                        {{ scholarship.bookmarks_count || 0 }}
+                                    </p>
+                                </div>
                             </div>
 
                             <div class="mt-4 rounded-lg border border-emerald-100 bg-white p-3 text-sm">
-                                <p class="font-semibold text-slate-700">
-                                    Eligibility guide
-                                </p>
-                                <p class="mt-1 leading-6 text-slate-600">
-                                    {{ scholarship.eligibility_guide?.note || 'Review the listed requirements before applying.' }}
-                                </p>
+                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <p class="font-semibold text-slate-700">
+                                            Eligibility match
+                                        </p>
+                                        <p class="mt-1 leading-6 text-slate-600">
+                                            {{ scholarship.eligibility_match?.summary || scholarship.eligibility_guide?.note || 'Review the listed requirements before applying.' }}
+                                        </p>
+                                    </div>
+                                    <span :class="['shrink-0 rounded-md px-2.5 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
+                                        {{ scholarship.eligibility_match?.label || 'Needs review' }}
+                                    </span>
+                                </div>
+
+                                <div v-if="scholarship.eligibility_match?.criteria?.length" class="mt-3 flex flex-wrap gap-2">
+                                    <span
+                                        v-for="criterion in scholarship.eligibility_match.criteria"
+                                        :key="criterion.key"
+                                        :class="['rounded-md border px-2.5 py-1.5 text-xs font-bold', criterionClass(criterion.status)]"
+                                    >
+                                        {{ criterion.label }}: {{ criterion.status }}
+                                    </span>
+                                </div>
                             </div>
 
                             <div class="mt-4 rounded-lg border border-sky-100 bg-white p-3 text-sm">
@@ -259,12 +351,22 @@ onMounted(loadScholarships);
                                 </div>
                             </div>
 
-                            <a
-                                :href="`/dashboard/applications?scholarship=${scholarship.id}`"
-                                class="mt-4 block w-full rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                            >
-                                Start application wizard
-                            </a>
+                            <div class="mt-4 grid gap-2 sm:grid-cols-[auto_1fr]">
+                                <button
+                                    type="button"
+                                    :disabled="savingId === scholarship.id"
+                                    class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                                    @click="toggleSave(scholarship)"
+                                >
+                                    {{ savingId === scholarship.id ? 'Saving...' : scholarship.is_saved ? 'Remove saved' : 'Save' }}
+                                </button>
+                                <a
+                                    :href="`/dashboard/applications?scholarship=${scholarship.id}`"
+                                    class="block rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                                >
+                                    Start application wizard
+                                </a>
+                            </div>
                         </article>
                     </div>
                 </section>

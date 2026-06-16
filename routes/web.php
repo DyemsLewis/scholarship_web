@@ -26,6 +26,8 @@ Route::get('/dashboard/applications/data', [ApplicantDashboardController::class,
 Route::post('/dashboard/applications', [ApplicantDashboardController::class, 'storeApplication'])->middleware('auth')->name('dashboard.applications.store');
 Route::post('/dashboard/applications/{application}/documents', [ApplicantDashboardController::class, 'uploadDocument'])->middleware('auth')->name('dashboard.applications.documents.store');
 Route::delete('/dashboard/documents/{document}', [ApplicantDashboardController::class, 'deleteDocument'])->middleware('auth')->name('dashboard.documents.destroy');
+Route::post('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardController::class, 'saveScholarship'])->middleware('auth')->name('dashboard.scholarships.save');
+Route::delete('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardController::class, 'unsaveScholarship'])->middleware('auth')->name('dashboard.scholarships.unsave');
 Route::get('/documents/{document}/download', [ApplicationDocumentController::class, 'download'])->middleware('auth')->name('documents.download');
 Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->middleware('auth')->name('notifications.read');
 Route::get('/admin', [AdminController::class, 'index'])->name('admin.index');
@@ -45,6 +47,7 @@ Route::get('/provider/programs', [ProviderController::class, 'programs'])->name(
 Route::get('/provider/applications', [ProviderController::class, 'applications'])->name('provider.applications');
 Route::get('/provider/applications/data', [ProviderController::class, 'applicationsData'])->middleware('auth')->name('provider.applications.data');
 Route::patch('/provider/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->middleware('auth')->name('provider.applications.status');
+Route::patch('/provider/documents/{document}/status', [ProviderController::class, 'updateDocumentStatus'])->middleware('auth')->name('provider.documents.status');
 Route::get('/provider/export/applications', [ProviderController::class, 'exportApplications'])->middleware('auth')->name('provider.export.applications');
 Route::get('/provider/profile', [ProviderController::class, 'profile'])->middleware('auth')->name('provider.profile');
 Route::get('/provider/scholarships', [ProviderController::class, 'scholarships'])->middleware('auth')->name('provider.scholarships');

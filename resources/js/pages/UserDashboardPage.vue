@@ -80,7 +80,7 @@ onMounted(loadDashboard);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900">
         <ApplicantSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -100,6 +100,11 @@ onMounted(loadDashboard);
                         </div>
 
                         <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                            <img
+                                :src="'/images/student-dashboard.jpg'"
+                                alt="Students working together"
+                                class="mb-4 h-36 w-full rounded-md object-cover"
+                            >
                             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                                 Profile Readiness
                             </p>

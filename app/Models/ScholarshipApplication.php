@@ -13,8 +13,14 @@ class ScholarshipApplication extends Model
         'applicant_id',
         'status',
         'document_checklist',
+        'eligibility_score',
+        'eligibility_breakdown',
         'notes',
         'review_notes',
+        'decision_reason',
+        'dss_score',
+        'dss_recommendation',
+        'dss_breakdown',
         'reviewed_by',
         'reviewed_at',
         'submitted_at',
@@ -24,6 +30,10 @@ class ScholarshipApplication extends Model
     {
         return [
             'document_checklist' => 'array',
+            'eligibility_score' => 'decimal:2',
+            'eligibility_breakdown' => 'array',
+            'dss_score' => 'decimal:2',
+            'dss_breakdown' => 'array',
             'reviewed_at' => 'datetime',
             'submitted_at' => 'datetime',
         ];
@@ -47,5 +57,10 @@ class ScholarshipApplication extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function statusHistories(): HasMany
+    {
+        return $this->hasMany(ApplicationStatusHistory::class);
     }
 }

@@ -15,6 +15,9 @@ const stats = ref({
     approved_providers: 0,
     rejected_providers: 0,
     recent_applications: 0,
+    average_match_score: 0,
+    average_dss_score: 0,
+    pending_documents: 0,
 });
 const providers = ref([]);
 const applications = ref([]);
@@ -142,7 +145,7 @@ onMounted(loadReviewData);
                         {{ statusMessage }}
                     </p>
 
-                    <div class="grid gap-4 md:grid-cols-4">
+                    <div class="grid gap-4 md:grid-cols-6">
                         <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <p class="text-sm font-semibold text-slate-500">Providers</p>
                             <p class="mt-3 font-display text-3xl font-bold text-slate-950">{{ stats.providers }}</p>
@@ -158,6 +161,14 @@ onMounted(loadReviewData);
                         <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <p class="text-sm font-semibold text-slate-500">Recent Apps</p>
                             <p class="mt-3 font-display text-3xl font-bold text-sky-700">{{ stats.recent_applications }}</p>
+                        </article>
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <p class="text-sm font-semibold text-slate-500">DSS Avg</p>
+                            <p class="mt-3 font-display text-3xl font-bold text-indigo-700">{{ stats.average_dss_score || 0 }}%</p>
+                        </article>
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <p class="text-sm font-semibold text-slate-500">Pending Docs</p>
+                            <p class="mt-3 font-display text-3xl font-bold text-amber-600">{{ stats.pending_documents || 0 }}</p>
                         </article>
                     </div>
 
@@ -282,7 +293,7 @@ onMounted(loadReviewData);
                             <div
                                 v-for="application in applications"
                                 :key="application.id"
-                                class="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm lg:grid-cols-[1fr_10rem_8rem]"
+                                class="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm lg:grid-cols-[1fr_10rem_8rem_8rem]"
                             >
                                 <div>
                                     <p class="font-bold text-slate-950">{{ application.scholarship }}</p>
@@ -292,12 +303,22 @@ onMounted(loadReviewData);
                                     <p v-if="application.review_notes" class="mt-2 text-slate-600">
                                         Note: {{ application.review_notes }}
                                     </p>
+                                    <p v-if="application.decision_reason" class="mt-2 text-slate-600">
+                                        Reason: {{ statusLabel(application.decision_reason) }}
+                                    </p>
+                                    <p class="mt-2 font-semibold text-indigo-700">
+                                        DSS: {{ application.dss_score ?? 0 }}% - {{ statusLabel(application.dss_recommendation || 'needs_review') }}
+                                    </p>
                                 </div>
                                 <span :class="['h-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
                                     {{ statusLabel(application.status) }}
                                 </span>
                                 <p class="text-slate-500 lg:text-right">
+                                    {{ application.eligibility_score ?? 0 }}% match
+                                </p>
+                                <p class="text-slate-500 lg:text-right">
                                     {{ application.documents_uploaded }} files
+                                    <span v-if="application.documents_pending">({{ application.documents_pending }} pending)</span>
                                 </p>
                             </div>
                         </div>

@@ -11,13 +11,19 @@ class Scholarship extends Model
     protected $fillable = [
         'provider_id',
         'title',
+        'category',
         'description',
         'eligibility',
+        'eligible_courses',
+        'eligible_year_levels',
+        'eligible_locations',
+        'income_requirement',
         'requirements',
         'award_amount',
         'minimum_gwa',
         'deadline',
         'status',
+        'views_count',
     ];
 
     protected function casts(): array
@@ -26,6 +32,7 @@ class Scholarship extends Model
             'award_amount' => 'decimal:2',
             'minimum_gwa' => 'decimal:2',
             'deadline' => 'date',
+            'views_count' => 'integer',
         ];
     }
 
@@ -37,5 +44,10 @@ class Scholarship extends Model
     public function applications(): HasMany
     {
         return $this->hasMany(ScholarshipApplication::class);
+    }
+
+    public function bookmarks(): HasMany
+    {
+        return $this->hasMany(ScholarshipBookmark::class);
     }
 }

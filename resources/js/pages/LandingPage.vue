@@ -2,20 +2,23 @@
 import SiteFooter from '../components/SiteFooter.vue';
 import SiteNavbar from '../components/SiteNavbar.vue';
 
-const heroImage = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1800&q=85';
+const heroImage = '/images/scholarship-hero.jpg';
 
 const scholarshipSteps = [
     {
         title: 'Choose your role',
         text: 'Applicants and providers each have a dedicated registration path.',
+        image: '/images/student-dashboard.jpg',
     },
     {
         title: 'Enter the right workspace',
         text: 'Applicants continue to scholarship access while providers use a provider dashboard.',
+        image: '/images/scholarship-cards.jpg',
     },
     {
         title: 'Keep records organized',
         text: 'Admins can monitor account roles and review registered users from the admin panel.',
+        image: '/images/application-documents.jpg',
     },
 ];
 
@@ -26,6 +29,7 @@ const audiences = [
         text: 'Students can create an applicant profile, sign in, and continue their scholarship journey through the portal.',
         href: '/register',
         action: 'Register as applicant',
+        image: '/images/student-dashboard.jpg',
     },
     {
         label: 'For providers',
@@ -33,6 +37,7 @@ const audiences = [
         text: 'Scholarship providers can register separately and access a workspace prepared for managing scholarship programs.',
         href: '/provider/register',
         action: 'Register as provider',
+        image: '/images/scholarship-cards.jpg',
     },
 ];
 </script>
@@ -136,23 +141,26 @@ const audiences = [
                     <article
                         v-for="audience in audiences"
                         :key="audience.label"
-                        class="rounded-lg border border-slate-200 bg-slate-50 p-6"
+                        class="overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
                     >
-                        <p class="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
-                            {{ audience.label }}
-                        </p>
-                        <h3 class="mt-3 text-xl font-bold text-slate-950">
-                            {{ audience.title }}
-                        </h3>
-                        <p class="mt-3 text-sm leading-6 text-slate-600">
-                            {{ audience.text }}
-                        </p>
-                        <a
-                            :href="audience.href"
-                            class="mt-5 inline-flex rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                        >
-                            {{ audience.action }}
-                        </a>
+                        <img :src="audience.image" :alt="audience.title" class="h-52 w-full object-cover">
+                        <div class="p-6">
+                            <p class="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
+                                {{ audience.label }}
+                            </p>
+                            <h3 class="mt-3 text-xl font-bold text-slate-950">
+                                {{ audience.title }}
+                            </h3>
+                            <p class="mt-3 text-sm leading-6 text-slate-600">
+                                {{ audience.text }}
+                            </p>
+                            <a
+                                :href="audience.href"
+                                class="mt-5 inline-flex rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                            >
+                                {{ audience.action }}
+                            </a>
+                        </div>
                     </article>
                 </div>
             </div>
@@ -173,14 +181,17 @@ const audiences = [
                     <article
                         v-for="step in scholarshipSteps"
                         :key="step.title"
-                        class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                        class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
                     >
-                        <h3 class="text-lg font-bold text-slate-950">
-                            {{ step.title }}
-                        </h3>
-                        <p class="mt-3 text-sm leading-6 text-slate-600">
-                            {{ step.text }}
-                        </p>
+                        <img :src="step.image" :alt="step.title" class="h-36 w-full object-cover">
+                        <div class="p-5">
+                            <h3 class="text-lg font-bold text-slate-950">
+                                {{ step.title }}
+                            </h3>
+                            <p class="mt-3 text-sm leading-6 text-slate-600">
+                                {{ step.text }}
+                            </p>
+                        </div>
                     </article>
                 </div>
             </div>

@@ -21,6 +21,8 @@ const scholarshipForm = ref(emptyScholarshipForm());
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
+const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
+const incomeOptions = ['Any', 'Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
 const documentRequirementOptions = [
     'Completed application form',
     'Certificate of enrollment',
@@ -59,8 +61,13 @@ const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 function emptyScholarshipForm() {
     return {
         title: '',
+        category: '',
         description: '',
         eligibility: '',
+        eligibleCourses: '',
+        eligibleYearLevels: '',
+        eligibleLocations: '',
+        incomeRequirement: 'Any',
         requirements: [],
         awardAmount: '',
         minimumGwa: '',
@@ -158,8 +165,13 @@ function editScholarship(scholarship) {
     formError.value = '';
     scholarshipForm.value = {
         title: scholarship.title ?? '',
+        category: scholarship.category ?? '',
         description: scholarship.description ?? '',
         eligibility: scholarship.eligibility ?? '',
+        eligibleCourses: scholarship.eligible_courses ?? '',
+        eligibleYearLevels: scholarship.eligible_year_levels ?? '',
+        eligibleLocations: scholarship.eligible_locations ?? '',
+        incomeRequirement: scholarship.income_requirement ?? 'Any',
         requirements: parseRequirements(scholarship.requirements),
         awardAmount: scholarship.award_amount ?? '',
         minimumGwa: scholarship.minimum_gwa ?? '',
@@ -182,8 +194,13 @@ async function saveScholarship() {
 
     const payload = {
         title: scholarshipForm.value.title,
+        category: scholarshipForm.value.category || null,
         description: scholarshipForm.value.description,
         eligibility: scholarshipForm.value.eligibility,
+        eligible_courses: scholarshipForm.value.eligibleCourses,
+        eligible_year_levels: scholarshipForm.value.eligibleYearLevels,
+        eligible_locations: scholarshipForm.value.eligibleLocations,
+        income_requirement: scholarshipForm.value.incomeRequirement || 'Any',
         requirements: scholarshipForm.value.requirements.join('\n'),
         award_amount: scholarshipForm.value.awardAmount || null,
         minimum_gwa: scholarshipForm.value.minimumGwa || null,
@@ -312,7 +329,29 @@ onMounted(loadProviderData);
                                 >
                             </div>
 
-                                <div class="grid gap-4 md:grid-cols-4">
+                                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-category">
+                                            Category
+                                        </label>
+                                        <select
+                                            id="scholarship-category"
+                                            v-model="scholarshipForm.category"
+                                            :class="inputClass"
+                                        >
+                                            <option value="">
+                                                Select category
+                                            </option>
+                                            <option
+                                                v-for="option in categoryOptions"
+                                                :key="option"
+                                                :value="option"
+                                            >
+                                                {{ option }}
+                                            </option>
+                                        </select>
+                                    </div>
+
                                     <div>
                                         <label :class="labelClass" for="scholarship-amount">
                                             Award amount
@@ -405,6 +444,75 @@ onMounted(loadProviderData);
                                     :class="inputClass"
                                 ></textarea>
                             </div>
+
+                            <fieldset class="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4">
+                                <legend class="text-sm font-semibold text-slate-700">
+                                    Matching criteria
+                                </legend>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">
+                                    These fields power the student match score and admin analytics. Use commas or new lines for multiple entries.
+                                </p>
+
+                                <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-courses">
+                                            Eligible courses / strands
+                                        </label>
+                                        <textarea
+                                            id="scholarship-courses"
+                                            v-model="scholarshipForm.eligibleCourses"
+                                            rows="3"
+                                            placeholder="Example: BSIT, STEM, ABM"
+                                            :class="inputClass"
+                                        ></textarea>
+                                    </div>
+
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-years">
+                                            Eligible year levels
+                                        </label>
+                                        <textarea
+                                            id="scholarship-years"
+                                            v-model="scholarshipForm.eligibleYearLevels"
+                                            rows="3"
+                                            placeholder="Example: 1st year, Grade 12"
+                                            :class="inputClass"
+                                        ></textarea>
+                                    </div>
+
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-locations">
+                                            Eligible locations
+                                        </label>
+                                        <textarea
+                                            id="scholarship-locations"
+                                            v-model="scholarshipForm.eligibleLocations"
+                                            rows="3"
+                                            placeholder="Example: Manila, Cebu, Quezon City"
+                                            :class="inputClass"
+                                        ></textarea>
+                                    </div>
+
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-income">
+                                            Income requirement
+                                        </label>
+                                        <select
+                                            id="scholarship-income"
+                                            v-model="scholarshipForm.incomeRequirement"
+                                            :class="inputClass"
+                                        >
+                                            <option
+                                                v-for="option in incomeOptions"
+                                                :key="option"
+                                                :value="option"
+                                            >
+                                                {{ option }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </fieldset>
 
                             <fieldset class="rounded-lg border border-slate-200 bg-white p-4">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -548,6 +656,9 @@ onMounted(loadProviderData);
                                         <h4 class="mt-3 text-lg font-bold text-slate-950">
                                             {{ scholarship.title }}
                                         </h4>
+                                        <p class="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                            {{ scholarship.category || 'Uncategorized' }}
+                                        </p>
                                     </div>
 
                                     <button
@@ -589,6 +700,29 @@ onMounted(loadProviderData);
                                             {{ scholarship.minimum_gwa || 'Not set' }}
                                         </p>
                                     </div>
+                                    <div class="rounded-md bg-white p-3">
+                                        <p class="font-semibold text-slate-500">
+                                            Saved by students
+                                        </p>
+                                        <p class="mt-1 font-bold text-slate-950">
+                                            {{ scholarship.bookmarks_count || 0 }}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 rounded-md border border-emerald-100 bg-white p-3 text-sm">
+                                    <p class="font-semibold text-slate-500">
+                                        Matching criteria
+                                    </p>
+                                    <p class="mt-1 leading-6 text-slate-700">
+                                        Courses: {{ scholarship.eligible_courses || 'Any' }}
+                                    </p>
+                                    <p class="mt-1 leading-6 text-slate-700">
+                                        Year levels: {{ scholarship.eligible_year_levels || 'Any' }}
+                                    </p>
+                                    <p class="mt-1 leading-6 text-slate-700">
+                                        Locations: {{ scholarship.eligible_locations || 'Any' }}
+                                    </p>
                                 </div>
                             </article>
                         </div>

@@ -16,6 +16,13 @@ const stats = ref({
     draft_scholarships: 0,
     applications: 0,
     recent_applications: 0,
+    average_match_score: 0,
+    average_dss_score: 0,
+    highly_recommended_applications: 0,
+    needs_review_applications: 0,
+    saved_scholarships: 0,
+    documents_pending_review: 0,
+    documents_needing_replacement: 0,
     upcoming_deadlines: 0,
     expired_published: 0,
 });
@@ -30,6 +37,20 @@ const applicationStatuses = ref({
 const deadlineWatch = ref([]);
 const recentApplications = ref([]);
 const monthlyApplications = ref([]);
+const documentStatuses = ref({
+    pending: 0,
+    accepted: 0,
+    rejected: 0,
+    needs_replacement: 0,
+});
+const dssRecommendations = ref({
+    highly_recommended: 0,
+    recommended: 0,
+    needs_review: 0,
+    low_priority: 0,
+    not_recommended: 0,
+});
+const decisionReasons = ref([]);
 
 const statCards = computed(() => [
     {
@@ -57,6 +78,27 @@ const statCards = computed(() => [
         label: 'Upcoming Deadlines',
         value: stats.value.upcoming_deadlines,
         description: 'Published deadlines in the next 30 days.',
+        className: 'text-amber-600',
+        accent: 'bg-amber-500',
+    },
+    {
+        label: 'Avg Match',
+        value: `${stats.value.average_dss_score || 0}%`,
+        description: 'Average decision-support score.',
+        className: 'text-indigo-700',
+        accent: 'bg-indigo-600',
+    },
+    {
+        label: 'Saved Programs',
+        value: stats.value.saved_scholarships,
+        description: 'Scholarships bookmarked by students.',
+        className: 'text-emerald-700',
+        accent: 'bg-emerald-600',
+    },
+    {
+        label: 'Pending Documents',
+        value: stats.value.documents_pending_review,
+        description: 'Uploaded files waiting for review.',
         className: 'text-amber-600',
         accent: 'bg-amber-500',
     },
@@ -102,6 +144,25 @@ const statusDetails = computed(() => [
     { label: 'Approved', value: applicationStatuses.value.approved, className: 'bg-emerald-100 text-emerald-800' },
     { label: 'Rejected', value: applicationStatuses.value.rejected, className: 'bg-rose-100 text-rose-800' },
 ]);
+const documentStatusDetails = computed(() => [
+    { label: 'Pending', value: documentStatuses.value.pending, className: 'bg-sky-100 text-sky-800' },
+    { label: 'Accepted', value: documentStatuses.value.accepted, className: 'bg-emerald-100 text-emerald-800' },
+    { label: 'Needs Replacement', value: documentStatuses.value.needs_replacement, className: 'bg-amber-100 text-amber-800' },
+    { label: 'Rejected', value: documentStatuses.value.rejected, className: 'bg-rose-100 text-rose-800' },
+]);
+const dssRecommendationDetails = computed(() => [
+    { label: 'Highly Recommended', value: dssRecommendations.value.highly_recommended, className: 'bg-emerald-100 text-emerald-800' },
+    { label: 'Recommended', value: dssRecommendations.value.recommended, className: 'bg-sky-100 text-sky-800' },
+    { label: 'Needs Review', value: dssRecommendations.value.needs_review, className: 'bg-amber-100 text-amber-800' },
+    { label: 'Low Priority', value: dssRecommendations.value.low_priority, className: 'bg-rose-100 text-rose-800' },
+    { label: 'Not Recommended', value: dssRecommendations.value.not_recommended, className: 'bg-slate-200 text-slate-700' },
+]);
+
+function labelFromKey(value) {
+    return String(value ?? '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 async function loadAdminData() {
     isLoading.value = true;
@@ -112,6 +173,9 @@ async function loadAdminData() {
 
         stats.value = response.data.stats;
         applicationStatuses.value = response.data.application_statuses;
+        documentStatuses.value = response.data.document_statuses;
+        dssRecommendations.value = response.data.dss_recommendations;
+        decisionReasons.value = response.data.decision_reasons;
         deadlineWatch.value = response.data.deadline_watch;
         users.value = response.data.recent_users;
         recentApplications.value = response.data.recent_applications_list;
@@ -314,6 +378,46 @@ onMounted(loadAdminData);
                                 </span>
                             </div>
                         </div>
+
+                        <div class="mt-6 border-t border-slate-200 pt-5">
+                            <p class="text-sm font-semibold text-slate-700">
+                                DSS recommendation distribution
+                            </p>
+                            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                <div
+                                    v-for="recommendation in dssRecommendationDetails"
+                                    :key="recommendation.label"
+                                    class="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4"
+                                >
+                                    <span :class="['rounded-md px-2 py-1 text-xs font-bold uppercase', recommendation.className]">
+                                        {{ recommendation.label }}
+                                    </span>
+                                    <span class="font-display text-2xl font-bold text-slate-950">
+                                        {{ recommendation.value }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 border-t border-slate-200 pt-5">
+                            <p class="text-sm font-semibold text-slate-700">
+                                Document review status
+                            </p>
+                            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                <div
+                                    v-for="status in documentStatusDetails"
+                                    :key="status.label"
+                                    class="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4"
+                                >
+                                    <span :class="['rounded-md px-2 py-1 text-xs font-bold uppercase', status.className]">
+                                        {{ status.label }}
+                                    </span>
+                                    <span class="font-display text-2xl font-bold text-slate-950">
+                                        {{ status.value }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
                     </section>
 
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -359,6 +463,37 @@ onMounted(loadAdminData);
                 </div>
 
                 <div class="mt-6 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
+                            Decision Reasons
+                        </p>
+                        <h3 class="mt-2 text-xl font-bold text-slate-950">
+                            Review outcome signals
+                        </h3>
+                        <p class="mt-3 text-sm leading-6 text-slate-600">
+                            Structured reasons make it easier to find why applications are approved, delayed, or rejected.
+                        </p>
+
+                        <div v-if="decisionReasons.length" class="mt-5 grid gap-3">
+                            <div
+                                v-for="reason in decisionReasons"
+                                :key="reason.reason"
+                                class="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4"
+                            >
+                                <p class="text-sm font-bold text-slate-950">
+                                    {{ reason.label }}
+                                </p>
+                                <p class="font-display text-2xl font-bold text-indigo-700">
+                                    {{ reason.total }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div v-else class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                            No decision reasons recorded yet.
+                        </div>
+                    </section>
+
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
                             Monthly Trend
@@ -416,6 +551,9 @@ onMounted(loadAdminData);
                                         {{ application.status }}
                                     </span>
                                 </div>
+                                <p class="mt-2 text-sm font-semibold text-indigo-700">
+                                    DSS: {{ application.dss_score ?? 0 }}% - {{ labelFromKey(application.dss_recommendation || 'needs_review') }}
+                                </p>
                                 <p class="mt-2 text-sm text-slate-500">
                                     {{ application.submitted_at || 'Recently submitted' }}
                                 </p>

@@ -87,6 +87,76 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function matchClass(score) {
+    if (Number(score) >= 80) {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (Number(score) >= 50) {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-rose-100 text-rose-800';
+}
+
+function recommendationClass(recommendation) {
+    if (recommendation === 'highly_recommended') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (recommendation === 'recommended') {
+        return 'bg-sky-100 text-sky-800';
+    }
+
+    if (recommendation === 'needs_review') {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    if (recommendation === 'not_recommended') {
+        return 'bg-slate-200 text-slate-700';
+    }
+
+    return 'bg-rose-100 text-rose-800';
+}
+
+function criterionClass(status) {
+    if (status === 'pass') {
+        return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+    }
+
+    if (status === 'fail') {
+        return 'border-rose-200 bg-rose-50 text-rose-800';
+    }
+
+    if (status === 'missing') {
+        return 'border-amber-200 bg-amber-50 text-amber-800';
+    }
+
+    return 'border-slate-200 bg-slate-50 text-slate-600';
+}
+
+function documentStatusClass(status) {
+    if (status === 'accepted') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (status === 'needs_replacement') {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-sky-100 text-sky-800';
+}
+
+function labelFromKey(value) {
+    return String(value ?? '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function documentRequirements(requirements) {
     if (!requirements) {
         return [];
@@ -276,7 +346,7 @@ onMounted(loadApplications);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900">
         <ApplicantSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -296,6 +366,11 @@ onMounted(loadApplications);
                         </div>
 
                         <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                            <img
+                                :src="'/images/application-documents.jpg'"
+                                alt="Scholarship document review photo"
+                                class="mb-3 h-28 w-full rounded-md object-cover sm:w-56"
+                            >
                             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                                 Applicant
                             </p>
@@ -432,7 +507,7 @@ onMounted(loadApplications);
                                             {{ scholarship.description }}
                                         </p>
 
-                                        <div class="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+                                        <div class="mt-4 grid gap-2 text-sm sm:grid-cols-4">
                                             <div class="rounded-md bg-white p-3">
                                                 <p class="font-semibold text-slate-500">
                                                     Award
@@ -455,6 +530,14 @@ onMounted(loadApplications);
                                                 </p>
                                                 <p class="mt-1 font-bold text-slate-950">
                                                     {{ documentRequirements(scholarship.requirements).length }}
+                                                </p>
+                                            </div>
+                                            <div class="rounded-md bg-white p-3">
+                                                <p class="font-semibold text-slate-500">
+                                                    Match
+                                                </p>
+                                                <p :class="['mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
+                                                    {{ scholarship.eligibility_match?.score ?? 0 }}%
                                                 </p>
                                             </div>
                                         </div>
@@ -525,6 +608,14 @@ onMounted(loadApplications);
                                                 {{ selectedScholarship.deadline || 'No deadline' }}
                                             </p>
                                         </div>
+                                        <div class="rounded-md bg-white p-3">
+                                            <p class="font-semibold text-slate-500">
+                                                Match score
+                                            </p>
+                                            <p :class="['mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold', matchClass(selectedScholarship.eligibility_match?.score)]">
+                                                {{ selectedScholarship.eligibility_match?.score ?? 0 }}% - {{ selectedScholarship.eligibility_match?.label || 'Needs review' }}
+                                            </p>
+                                        </div>
                                     </div>
 
                                     <div class="mt-4 rounded-md bg-white p-3 text-sm">
@@ -541,8 +632,17 @@ onMounted(loadApplications);
                                             Match guide
                                         </p>
                                         <p class="mt-1 leading-6 text-slate-700">
-                                            {{ selectedScholarship.eligibility_guide?.note || 'Review the scholarship requirements before submitting.' }}
+                                            {{ selectedScholarship.eligibility_match?.summary || selectedScholarship.eligibility_guide?.note || 'Review the scholarship requirements before submitting.' }}
                                         </p>
+                                        <div v-if="selectedScholarship.eligibility_match?.criteria?.length" class="mt-3 flex flex-wrap gap-2">
+                                            <span
+                                                v-for="criterion in selectedScholarship.eligibility_match.criteria"
+                                                :key="criterion.key"
+                                                :class="['rounded-md border px-2.5 py-1.5 text-xs font-bold', criterionClass(criterion.status)]"
+                                            >
+                                                {{ criterion.label }}: {{ criterion.status }}
+                                            </span>
+                                        </div>
                                     </div>
                                 </section>
 
@@ -576,6 +676,14 @@ onMounted(loadApplications);
                                             </p>
                                             <p class="mt-1 font-bold text-slate-950">
                                                 {{ user?.contact_number || 'Not provided' }}
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                            <p class="font-semibold text-slate-500">
+                                                Academic details
+                                            </p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ user?.course_or_strand || 'Course not set' }} - {{ user?.year_level || 'Year not set' }}
                                             </p>
                                         </div>
                                     </div>
@@ -661,6 +769,14 @@ onMounted(loadApplications);
                                             </p>
                                             <p class="mt-1 font-bold text-slate-950">
                                                 {{ documentChecklist.length }} of {{ selectedRequirements.length }}
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md bg-white p-3">
+                                            <p class="font-semibold text-slate-500">
+                                                Match score
+                                            </p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ selectedScholarship.eligibility_match?.score ?? 0 }}%
                                             </p>
                                         </div>
                                     </div>
@@ -749,6 +865,44 @@ onMounted(loadApplications);
                                     </span>
                                 </div>
 
+                                <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                                    <div class="rounded-md border border-indigo-100 bg-indigo-50 p-3">
+                                        <p class="font-semibold text-indigo-800">
+                                            Decision support
+                                        </p>
+                                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                                            <span class="font-display text-2xl font-bold text-indigo-950">
+                                                {{ application.dss_score ?? 0 }}%
+                                            </span>
+                                            <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', recommendationClass(application.dss_recommendation)]">
+                                                {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-2 text-xs leading-5 text-indigo-900">
+                                            {{ application.dss_breakdown?.summary || 'This score helps reviewers prioritize applications.' }}
+                                        </p>
+                                    </div>
+                                    <div class="rounded-md bg-white p-3">
+                                        <p class="font-semibold text-slate-500">
+                                            Eligibility match
+                                        </p>
+                                        <p :class="['mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold', matchClass(application.eligibility_score)]">
+                                            {{ application.eligibility_score ?? 0 }}% - {{ application.eligibility_breakdown?.label || 'Needs review' }}
+                                        </p>
+                                    </div>
+                                    <div class="rounded-md bg-white p-3">
+                                        <p class="font-semibold text-slate-500">
+                                            Decision reason
+                                        </p>
+                                        <p class="mt-1 font-bold text-slate-950">
+                                            {{ application.decision_reason ? labelFromKey(application.decision_reason) : 'Not set yet' }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <p class="mt-2 text-xs leading-5 text-slate-500">
+                                    DSS is a guide for prioritizing review. Final scholarship decisions are still made by the provider.
+                                </p>
+
                                 <div class="mt-4 rounded-md bg-white p-3 text-sm">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <p class="font-semibold text-slate-500">
@@ -793,10 +947,16 @@ onMounted(loadApplications);
                                                     {{ document.document_name }}
                                                 </p>
                                                 <p class="mt-1 text-xs text-slate-500">
-                                                    {{ document.original_name }} · {{ formatFileSize(document.size) }} · {{ document.uploaded_at }}
+                                                    {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
+                                                </p>
+                                                <p v-if="document.review_notes" class="mt-1 text-xs font-semibold text-amber-700">
+                                                    {{ document.review_notes }}
                                                 </p>
                                             </div>
                                             <div class="flex gap-2">
+                                                <span :class="['h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase', documentStatusClass(document.status)]">
+                                                    {{ labelFromKey(document.status || 'pending') }}
+                                                </span>
                                                 <a
                                                     :href="document.download_url"
                                                     class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-white"
@@ -875,6 +1035,34 @@ onMounted(loadApplications);
                                     <p class="mt-1 leading-6 text-amber-900">
                                         {{ application.review_notes }}
                                     </p>
+                                </div>
+
+                                <div v-if="application.timeline?.length" class="mt-4 rounded-md bg-white p-3 text-sm">
+                                    <p class="font-semibold text-slate-500">
+                                        Application timeline
+                                    </p>
+                                    <div class="mt-3 grid gap-2">
+                                        <div
+                                            v-for="event in application.timeline"
+                                            :key="event.id"
+                                            class="rounded-md border border-slate-200 bg-slate-50 p-3"
+                                        >
+                                            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                                <p class="font-bold text-slate-950">
+                                                    {{ statusLabel(event.to_status) }}
+                                                </p>
+                                                <p class="text-xs text-slate-500">
+                                                    {{ event.changed_at || 'Recently' }}
+                                                </p>
+                                            </div>
+                                            <p class="mt-1 text-xs text-slate-500">
+                                                By {{ event.actor || 'System' }}
+                                            </p>
+                                            <p v-if="event.review_notes" class="mt-2 leading-5 text-slate-600">
+                                                {{ event.review_notes }}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             </article>
                         </div>

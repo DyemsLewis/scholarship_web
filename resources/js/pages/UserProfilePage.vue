@@ -13,6 +13,8 @@ const form = ref(emptyForm());
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
 const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
+const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
+const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
 
 const profileFields = computed(() => [
     { label: 'First name', value: user.value?.first_name },
@@ -22,8 +24,13 @@ const profileFields = computed(() => [
     { label: 'School', value: user.value?.school },
     { label: 'Course / strand', value: user.value?.course_or_strand },
     { label: 'Year level', value: user.value?.year_level },
+    { label: 'Enrollment status', value: user.value?.enrollment_status },
     { label: 'GWA / average', value: user.value?.gwa },
+    { label: 'Income bracket', value: user.value?.income_bracket },
     { label: 'Address', value: user.value?.address },
+    { label: 'Barangay', value: user.value?.barangay },
+    { label: 'City', value: user.value?.city },
+    { label: 'Province', value: user.value?.province },
     { label: 'Birthdate', value: user.value?.birthdate },
     { label: 'Guardian name', value: user.value?.guardian_name },
     { label: 'Guardian contact', value: user.value?.guardian_contact },
@@ -40,8 +47,13 @@ function emptyForm() {
         school: '',
         course_or_strand: '',
         year_level: '',
+        enrollment_status: '',
         gwa: '',
+        income_bracket: '',
         address: '',
+        barangay: '',
+        city: '',
+        province: '',
         birthdate: '',
         guardian_name: '',
         guardian_contact: '',
@@ -57,8 +69,13 @@ function fillForm(payload) {
         school: payload?.school ?? '',
         course_or_strand: payload?.course_or_strand ?? '',
         year_level: payload?.year_level ?? '',
+        enrollment_status: payload?.enrollment_status ?? '',
         gwa: payload?.gwa ?? '',
+        income_bracket: payload?.income_bracket ?? '',
         address: payload?.address ?? '',
+        barangay: payload?.barangay ?? '',
+        city: payload?.city ?? '',
+        province: payload?.province ?? '',
         birthdate: payload?.birthdate ?? '',
         guardian_name: payload?.guardian_name ?? '',
         guardian_contact: payload?.guardian_contact ?? '',
@@ -116,7 +133,7 @@ onMounted(loadProfile);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900">
         <ApplicantSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -136,6 +153,11 @@ onMounted(loadProfile);
                         </div>
 
                         <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                            <img
+                                :src="'/images/student-dashboard.jpg'"
+                                alt="Students collaborating"
+                                class="mb-4 h-36 w-full rounded-md object-cover"
+                            >
                             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                                 Profile Readiness
                             </p>
@@ -216,6 +238,50 @@ onMounted(loadProfile);
                                 <div>
                                     <label :class="labelClass" for="profile-year">Year level</label>
                                     <input id="profile-year" v-model="form.year_level" placeholder="1st year / Grade 12" :class="inputClass">
+                                </div>
+                            </div>
+
+                            <div class="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label :class="labelClass" for="profile-enrollment">Enrollment status</label>
+                                    <select id="profile-enrollment" v-model="form.enrollment_status" :class="inputClass">
+                                        <option value="">Select status</option>
+                                        <option
+                                            v-for="option in enrollmentOptions"
+                                            :key="option"
+                                            :value="option"
+                                        >
+                                            {{ option }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label :class="labelClass" for="profile-income">Household income bracket</label>
+                                    <select id="profile-income" v-model="form.income_bracket" :class="inputClass">
+                                        <option value="">Select income bracket</option>
+                                        <option
+                                            v-for="option in incomeOptions"
+                                            :key="option"
+                                            :value="option"
+                                        >
+                                            {{ option }}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="grid gap-4 md:grid-cols-3">
+                                <div>
+                                    <label :class="labelClass" for="profile-barangay">Barangay</label>
+                                    <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass">
+                                </div>
+                                <div>
+                                    <label :class="labelClass" for="profile-city">City / municipality</label>
+                                    <input id="profile-city" v-model="form.city" placeholder="City or municipality" :class="inputClass">
+                                </div>
+                                <div>
+                                    <label :class="labelClass" for="profile-province">Province</label>
+                                    <input id="profile-province" v-model="form.province" placeholder="Province" :class="inputClass">
                                 </div>
                             </div>
 

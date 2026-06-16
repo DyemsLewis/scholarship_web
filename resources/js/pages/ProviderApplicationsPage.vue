@@ -12,17 +12,42 @@ const stats = ref({
     scholarships: 0,
     applications: 0,
     drafts: 0,
+    average_match_score: 0,
+    average_dss_score: 0,
+    pending_documents: 0,
 });
 const scholarships = ref([]);
 const applications = ref([]);
 const reviewNotes = ref({});
+const decisionReasons = ref({});
+const documentStatuses = ref({});
+const documentNotes = ref({});
+const documentUpdatingId = ref(null);
 
 const publishedPrograms = computed(() => scholarships.value.filter((scholarship) => scholarship.status === 'published'));
+const rankedApplications = computed(() => [...applications.value].sort((first, second) => Number(second.dss_score ?? 0) - Number(first.dss_score ?? 0)));
 const statusOptions = [
     { value: 'submitted', label: 'Submitted' },
     { value: 'under_review', label: 'Under review' },
     { value: 'qualified', label: 'Qualified' },
     { value: 'approved', label: 'Approved' },
+    { value: 'rejected', label: 'Rejected' },
+];
+const decisionReasonOptions = [
+    { value: '', label: 'No reason selected' },
+    { value: 'complete_requirements', label: 'Complete requirements' },
+    { value: 'missing_documents', label: 'Missing documents' },
+    { value: 'gwa_not_met', label: 'GWA not met' },
+    { value: 'outside_eligibility', label: 'Outside eligibility' },
+    { value: 'for_interview', label: 'For interview' },
+    { value: 'approved_for_award', label: 'Approved for award' },
+    { value: 'funds_limited', label: 'Funds limited' },
+    { value: 'other', label: 'Other' },
+];
+const documentStatusOptions = [
+    { value: 'pending', label: 'Pending' },
+    { value: 'accepted', label: 'Accepted' },
+    { value: 'needs_replacement', label: 'Needs replacement' },
     { value: 'rejected', label: 'Rejected' },
 ];
 
@@ -48,6 +73,60 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function matchClass(score) {
+    if (Number(score) >= 80) {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (Number(score) >= 50) {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-rose-100 text-rose-800';
+}
+
+function recommendationClass(recommendation) {
+    if (recommendation === 'highly_recommended') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (recommendation === 'recommended') {
+        return 'bg-sky-100 text-sky-800';
+    }
+
+    if (recommendation === 'needs_review') {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    if (recommendation === 'not_recommended') {
+        return 'bg-slate-200 text-slate-700';
+    }
+
+    return 'bg-rose-100 text-rose-800';
+}
+
+function documentStatusClass(status) {
+    if (status === 'accepted') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (status === 'needs_replacement') {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-sky-100 text-sky-800';
+}
+
+function labelFromKey(value) {
+    return String(value ?? '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function formatFileSize(size) {
     if (!size) {
         return '0 KB';
@@ -70,6 +149,15 @@ async function loadProviderData() {
         reviewNotes.value = Object.fromEntries(
             applications.value.map((application) => [application.id, application.review_notes ?? '']),
         );
+        decisionReasons.value = Object.fromEntries(
+            applications.value.map((application) => [application.id, application.decision_reason ?? '']),
+        );
+        documentStatuses.value = Object.fromEntries(
+            applications.value.flatMap((application) => (application.documents ?? []).map((document) => [document.id, document.status ?? 'pending'])),
+        );
+        documentNotes.value = Object.fromEntries(
+            applications.value.flatMap((application) => (application.documents ?? []).map((document) => [document.id, document.review_notes ?? ''])),
+        );
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider applications.';
     } finally {
@@ -85,6 +173,7 @@ async function updateStatus(application, status) {
     try {
         const response = await window.axios.patch(`/provider/applications/${application.id}/status`, {
             status,
+            decision_reason: decisionReasons.value[application.id] ?? '',
             review_notes: reviewNotes.value[application.id] ?? '',
         });
 
@@ -94,6 +183,27 @@ async function updateStatus(application, status) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to update application status.';
     } finally {
         updatingId.value = null;
+    }
+}
+
+async function updateDocumentStatus(application, document) {
+    documentUpdatingId.value = document.id;
+    statusMessage.value = '';
+    errorMessage.value = '';
+
+    try {
+        const response = await window.axios.patch(`/provider/documents/${document.id}/status`, {
+            status: documentStatuses.value[document.id] ?? 'pending',
+            review_notes: documentNotes.value[document.id] ?? '',
+        });
+
+        applications.value = applications.value.map((item) => (item.id === application.id ? response.data.application : item));
+        statusMessage.value = response.data.message ?? 'Document status updated.';
+        await loadProviderData();
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to update document status.';
+    } finally {
+        documentUpdatingId.value = null;
     }
 }
 
@@ -149,7 +259,7 @@ onMounted(loadProviderData);
                         {{ statusMessage }}
                     </div>
 
-                    <div class="grid gap-4 md:grid-cols-3">
+                    <div class="grid gap-4 md:grid-cols-4">
                         <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <p class="text-sm font-semibold text-slate-500">
                                 Total Applications
@@ -174,6 +284,14 @@ onMounted(loadProviderData);
                             </p>
                             <p class="mt-3 font-display text-3xl font-bold text-amber-600">
                                 {{ stats.drafts }}
+                            </p>
+                        </article>
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <p class="text-sm font-semibold text-slate-500">
+                                DSS Avg Score
+                            </p>
+                            <p class="mt-3 font-display text-3xl font-bold text-indigo-700">
+                                {{ stats.average_dss_score || 0 }}%
                             </p>
                         </article>
                     </div>
@@ -203,7 +321,7 @@ onMounted(loadProviderData);
 
                         <div v-else class="mt-5 grid gap-4 xl:grid-cols-2">
                             <article
-                                v-for="application in applications"
+                                v-for="application in rankedApplications"
                                 :key="application.id"
                                 class="rounded-lg border border-slate-200 bg-slate-50 p-4"
                             >
@@ -222,6 +340,77 @@ onMounted(loadProviderData);
                                     <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
                                         {{ statusLabel(application.status) }}
                                     </span>
+                                </div>
+
+                                <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                                    <div class="rounded-md border border-indigo-100 bg-indigo-50 p-3">
+                                        <p class="font-semibold text-indigo-800">
+                                            DSS recommendation
+                                        </p>
+                                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                                            <span class="font-display text-2xl font-bold text-indigo-950">
+                                                {{ application.dss_score ?? 0 }}%
+                                            </span>
+                                            <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', recommendationClass(application.dss_recommendation)]">
+                                                {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-2 text-xs leading-5 text-indigo-900">
+                                            {{ application.dss_breakdown?.summary || 'Decision support score based on applicant data.' }}
+                                        </p>
+                                    </div>
+                                    <div class="rounded-md bg-white p-3">
+                                        <p class="font-semibold text-slate-500">
+                                            Eligibility match
+                                        </p>
+                                        <p :class="['mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold', matchClass(application.eligibility_score)]">
+                                            {{ application.eligibility_score ?? 0 }}%
+                                        </p>
+                                    </div>
+                                    <div class="rounded-md bg-white p-3">
+                                        <p class="font-semibold text-slate-500">
+                                            Course / year
+                                        </p>
+                                        <p class="mt-1 font-bold text-slate-950">
+                                            {{ application.applicant?.course_or_strand || 'Not set' }} - {{ application.applicant?.year_level || 'Not set' }}
+                                        </p>
+                                    </div>
+                                    <div class="rounded-md bg-white p-3">
+                                        <p class="font-semibold text-slate-500">
+                                            GWA / income
+                                        </p>
+                                        <p class="mt-1 font-bold text-slate-950">
+                                            {{ application.applicant?.gwa || 'No GWA' }} - {{ application.applicant?.income_bracket || 'No income data' }}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div v-if="application.dss_breakdown?.criteria?.length" class="mt-4 rounded-md bg-white p-3 text-sm">
+                                    <p class="font-semibold text-slate-500">
+                                        DSS weighted criteria
+                                    </p>
+                                    <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                                        <div
+                                            v-for="criterion in application.dss_breakdown.criteria"
+                                            :key="criterion.key"
+                                            class="rounded-md border border-slate-200 bg-slate-50 p-3"
+                                        >
+                                            <div class="flex items-center justify-between gap-3">
+                                                <p class="font-bold text-slate-950">
+                                                    {{ criterion.label }}
+                                                </p>
+                                                <p class="text-xs font-bold text-slate-500">
+                                                    {{ criterion.weight }}%
+                                                </p>
+                                            </div>
+                                            <p class="mt-2 font-display text-2xl font-bold text-slate-950">
+                                                {{ criterion.score }}%
+                                            </p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">
+                                                {{ criterion.note }}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="mt-4 rounded-md bg-white p-3 text-sm">
@@ -251,6 +440,22 @@ onMounted(loadProviderData);
                                     </div>
 
                                     <div class="mt-4 border-t border-slate-200 pt-3">
+                                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                            Decision reason
+                                        </label>
+                                        <select
+                                            v-model="decisionReasons[application.id]"
+                                            class="mb-3 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                        >
+                                            <option
+                                                v-for="option in decisionReasonOptions"
+                                                :key="option.value"
+                                                :value="option.value"
+                                            >
+                                                {{ option.label }}
+                                            </option>
+                                        </select>
+
                                         <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                                             Review note
                                         </label>
@@ -324,20 +529,74 @@ onMounted(loadProviderData);
                                         </span>
                                     </div>
 
-                                    <div v-if="application.documents?.length" class="mt-3 grid gap-2">
-                                        <a
+                                    <div v-if="application.documents?.length" class="mt-3 grid gap-3">
+                                        <div
                                             v-for="document in application.documents"
                                             :key="document.id"
-                                            :href="document.download_url"
-                                            class="rounded-md border border-slate-200 bg-slate-50 p-3 transition hover:border-sky-200 hover:bg-sky-50"
+                                            class="rounded-md border border-slate-200 bg-slate-50 p-3"
                                         >
-                                            <p class="font-bold text-slate-950">
-                                                {{ document.document_name }}
-                                            </p>
-                                            <p class="mt-1 text-xs text-slate-500">
-                                                {{ document.original_name }} · {{ formatFileSize(document.size) }} · {{ document.uploaded_at }}
-                                            </p>
-                                        </a>
+                                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                                <div>
+                                                    <p class="font-bold text-slate-950">
+                                                        {{ document.document_name }}
+                                                    </p>
+                                                    <p class="mt-1 text-xs text-slate-500">
+                                                        {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
+                                                    </p>
+                                                </div>
+                                                <span :class="['h-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', documentStatusClass(document.status)]">
+                                                    {{ labelFromKey(document.status || 'pending') }}
+                                                </span>
+                                            </div>
+
+                                            <div class="mt-3 grid gap-2 md:grid-cols-[12rem_1fr_auto] md:items-end">
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                                        Status
+                                                    </label>
+                                                    <select
+                                                        v-model="documentStatuses[document.id]"
+                                                        class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                                    >
+                                                        <option
+                                                            v-for="option in documentStatusOptions"
+                                                            :key="option.value"
+                                                            :value="option.value"
+                                                        >
+                                                            {{ option.label }}
+                                                        </option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                                        Document note
+                                                    </label>
+                                                    <input
+                                                        v-model="documentNotes[document.id]"
+                                                        type="text"
+                                                        maxlength="1000"
+                                                        placeholder="Optional note for applicant"
+                                                        class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                                    >
+                                                </div>
+                                                <div class="flex gap-2">
+                                                    <a
+                                                        :href="document.download_url"
+                                                        class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-white"
+                                                    >
+                                                        Download
+                                                    </a>
+                                                    <button
+                                                        type="button"
+                                                        :disabled="documentUpdatingId === document.id"
+                                                        class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                                                        @click="updateDocumentStatus(application, document)"
+                                                    >
+                                                        {{ documentUpdatingId === document.id ? 'Saving...' : 'Save' }}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <p v-else class="mt-2 text-slate-500">
                                         No uploaded files yet.
@@ -351,6 +610,35 @@ onMounted(loadProviderData);
                                     <p class="mt-1 leading-6 text-slate-700">
                                         {{ application.notes || 'No note added.' }}
                                     </p>
+                                </div>
+
+                                <div v-if="application.timeline?.length" class="mt-4 rounded-md bg-white p-3 text-sm">
+                                    <p class="font-semibold text-slate-500">
+                                        Review timeline
+                                    </p>
+                                    <div class="mt-3 grid gap-2">
+                                        <div
+                                            v-for="event in application.timeline"
+                                            :key="event.id"
+                                            class="rounded-md border border-slate-200 bg-slate-50 p-3"
+                                        >
+                                            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                                <p class="font-bold text-slate-950">
+                                                    {{ statusLabel(event.to_status) }}
+                                                </p>
+                                                <p class="text-xs text-slate-500">
+                                                    {{ event.changed_at || 'Recently' }}
+                                                </p>
+                                            </div>
+                                            <p class="mt-1 text-xs text-slate-500">
+                                                By {{ event.actor || 'System' }}
+                                                <span v-if="event.decision_reason"> - {{ labelFromKey(event.decision_reason) }}</span>
+                                            </p>
+                                            <p v-if="event.review_notes" class="mt-2 leading-5 text-slate-600">
+                                                {{ event.review_notes }}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             </article>
                         </div>

@@ -4,9 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\ApplicationDocument;
+use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\ScholarshipBookmark;
+use App\Models\User;
+use App\Services\DecisionSupportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -61,7 +65,7 @@ class ApplicantDashboardController extends Controller
         return response()->json([
             'user' => $this->userPayload($request),
             'stats' => $this->statsPayload($request),
-            'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
+            'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))->values(),
             'notifications' => $this->notificationsPayload($request),
             'next_steps' => [
                 'Review available scholarship programs.',
@@ -77,7 +81,7 @@ class ApplicantDashboardController extends Controller
 
         $scholarships = $this->publishedScholarships()->get();
         $applications = ScholarshipApplication::query()
-            ->with(['documents', 'scholarship.provider.providerProfile'])
+            ->with(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
             ->where('applicant_id', $request->user()->id)
             ->latest('submitted_at')
             ->get();
@@ -85,7 +89,7 @@ class ApplicantDashboardController extends Controller
         return response()->json([
             'user' => $this->userPayload($request),
             'stats' => $this->statsPayload($request),
-            'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
+            'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))->values(),
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
             'notifications' => $this->notificationsPayload($request),
         ]);
@@ -103,8 +107,13 @@ class ApplicantDashboardController extends Controller
             'school' => ['nullable', 'string', 'max:255'],
             'course_or_strand' => ['nullable', 'string', 'max:255'],
             'year_level' => ['nullable', 'string', 'max:100'],
+            'enrollment_status' => ['nullable', 'string', 'max:100'],
             'gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'income_bracket' => ['nullable', 'string', 'max:100'],
             'address' => ['nullable', 'string', 'max:500'],
+            'barangay' => ['nullable', 'string', 'max:255'],
+            'city' => ['nullable', 'string', 'max:255'],
+            'province' => ['nullable', 'string', 'max:255'],
             'birthdate' => ['nullable', 'date', 'before:today'],
             'guardian_name' => ['nullable', 'string', 'max:255'],
             'guardian_contact' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
@@ -156,15 +165,29 @@ class ApplicantDashboardController extends Controller
         }
 
         $scholarship = Scholarship::query()->findOrFail($validated['scholarship_id']);
+        $eligibilityMatch = $this->eligibilityMatch($scholarship, $request->user());
 
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => $request->user()->id,
             'status' => 'submitted',
             'document_checklist' => $validated['document_checklist'] ?? [],
+            'eligibility_score' => $eligibilityMatch['score'],
+            'eligibility_breakdown' => $eligibilityMatch,
             'notes' => $validated['notes'] ?? null,
             'submitted_at' => now(),
         ]);
+
+        ApplicationStatusHistory::create([
+            'scholarship_application_id' => $application->id,
+            'changed_by' => $request->user()->id,
+            'from_status' => null,
+            'to_status' => 'submitted',
+            'review_notes' => 'Application submitted by applicant.',
+            'changed_at' => now(),
+        ]);
+
+        app(DecisionSupportService::class)->syncApplication($application);
 
         ActivityLog::record(
             $request->user(),
@@ -182,10 +205,61 @@ class ApplicantDashboardController extends Controller
             'action_url' => '/provider/applications',
         ]);
 
+        $freshApplication = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
+
         return response()->json([
             'message' => 'Application submitted successfully.',
-            'application' => $this->applicationPayload($application->load(['documents', 'scholarship.provider.providerProfile'])),
+            'application' => $this->applicationPayload($freshApplication),
         ], 201);
+    }
+
+    public function saveScholarship(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($scholarship->status === 'published', 404);
+
+        ScholarshipBookmark::query()->firstOrCreate([
+            'scholarship_id' => $scholarship->id,
+            'user_id' => $request->user()->id,
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'scholarship_saved',
+            "{$request->user()->name} saved scholarship {$scholarship->title}.",
+            $request,
+            ['scholarship_id' => $scholarship->id],
+        );
+
+        return response()->json([
+            'message' => 'Scholarship saved.',
+            'scholarship' => $this->scholarshipPayload($scholarship->fresh()->load('provider.providerProfile'), $request->user()),
+            'stats' => $this->statsPayload($request),
+        ]);
+    }
+
+    public function unsaveScholarship(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        ScholarshipBookmark::query()
+            ->where('scholarship_id', $scholarship->id)
+            ->where('user_id', $request->user()->id)
+            ->delete();
+
+        ActivityLog::record(
+            $request->user(),
+            'scholarship_unsaved',
+            "{$request->user()->name} removed saved scholarship {$scholarship->title}.",
+            $request,
+            ['scholarship_id' => $scholarship->id],
+        );
+
+        return response()->json([
+            'message' => 'Scholarship removed from saved list.',
+            'scholarship' => $this->scholarshipPayload($scholarship->fresh()->load('provider.providerProfile'), $request->user()),
+            'stats' => $this->statsPayload($request),
+        ]);
     }
 
     public function uploadDocument(Request $request, ScholarshipApplication $application): JsonResponse
@@ -218,6 +292,10 @@ class ApplicantDashboardController extends Controller
             'path' => $path,
             'mime_type' => $file->getClientMimeType(),
             'size' => $file->getSize(),
+            'status' => 'pending',
+            'review_notes' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
             'uploaded_at' => now(),
         ]);
 
@@ -229,9 +307,12 @@ class ApplicantDashboardController extends Controller
             ['application_id' => $application->id, 'document_id' => $document->id],
         );
 
+        $freshApplication = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
+        app(DecisionSupportService::class)->syncApplication($freshApplication);
+
         return response()->json([
             'message' => 'Document uploaded successfully.',
-            'application' => $this->applicationPayload($application->fresh()->load(['documents', 'scholarship.provider.providerProfile'])),
+            'application' => $this->applicationPayload($freshApplication),
         ]);
     }
 
@@ -254,9 +335,12 @@ class ApplicantDashboardController extends Controller
             ['application_id' => $application?->id],
         );
 
+        $freshApplication = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
+        app(DecisionSupportService::class)->syncApplication($freshApplication);
+
         return response()->json([
             'message' => 'Document removed.',
-            'application' => $this->applicationPayload($application->fresh()->load(['documents', 'scholarship.provider.providerProfile'])),
+            'application' => $this->applicationPayload($freshApplication),
         ]);
     }
 
@@ -283,6 +367,7 @@ class ApplicantDashboardController extends Controller
     {
         return Scholarship::query()
             ->with('provider.providerProfile')
+            ->withCount('bookmarks')
             ->where('status', 'published')
             ->orderByRaw('deadline is null')
             ->orderBy('deadline')
@@ -299,21 +384,37 @@ class ApplicantDashboardController extends Controller
         return [
             'available_scholarships' => Scholarship::query()->where('status', 'published')->count(),
             'applications' => ScholarshipApplication::query()->where('applicant_id', $request->user()->id)->count(),
-            'saved' => 0,
+            'saved' => ScholarshipBookmark::query()->where('user_id', $request->user()->id)->count(),
         ];
     }
 
-    private function scholarshipPayload(Scholarship $scholarship): array
+    private function scholarshipPayload(Scholarship $scholarship, ?User $user = null): array
     {
+        $match = $this->eligibilityMatch($scholarship, $user);
+        $saved = $user
+            ? ScholarshipBookmark::query()
+                ->where('scholarship_id', $scholarship->id)
+                ->where('user_id', $user->id)
+                ->exists()
+            : false;
+
         return [
             'id' => $scholarship->id,
             'title' => $scholarship->title,
+            'category' => $scholarship->category,
             'description' => $scholarship->description,
             'eligibility' => $scholarship->eligibility,
+            'eligible_courses' => $scholarship->eligible_courses,
+            'eligible_year_levels' => $scholarship->eligible_year_levels,
+            'eligible_locations' => $scholarship->eligible_locations,
+            'income_requirement' => $scholarship->income_requirement,
             'requirements' => $scholarship->requirements,
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
             'deadline' => $scholarship->deadline?->format('M d, Y'),
+            'bookmarks_count' => $scholarship->bookmarks_count ?? $scholarship->bookmarks()->count(),
+            'is_saved' => $saved,
+            'eligibility_match' => $match,
             'eligibility_guide' => [
                 'requires_gwa' => filled($scholarship->minimum_gwa),
                 'minimum_gwa' => $scholarship->minimum_gwa,
@@ -331,17 +432,26 @@ class ApplicantDashboardController extends Controller
 
     private function applicationPayload(ScholarshipApplication $application): array
     {
+        $dss = app(DecisionSupportService::class)->scoreApplication($application);
+
         return [
             'id' => $application->id,
             'status' => $application->status,
             'document_checklist' => $application->document_checklist ?? [],
             'document_readiness' => $this->documentReadiness($application),
+            'eligibility_score' => $application->eligibility_score,
+            'eligibility_breakdown' => $application->eligibility_breakdown,
             'documents' => $application->documents->map(fn (ApplicationDocument $document) => $this->documentPayload($document))->values(),
             'notes' => $application->notes,
             'review_notes' => $application->review_notes,
+            'decision_reason' => $application->decision_reason,
+            'dss_score' => $dss['score'],
+            'dss_recommendation' => $dss['recommendation'],
+            'dss_breakdown' => $dss,
+            'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             'scholarship' => $application->scholarship
-                ? $this->scholarshipPayload($application->scholarship)
+                ? $this->scholarshipPayload($application->scholarship, $application->applicant)
                 : null,
         ];
     }
@@ -363,6 +473,9 @@ class ApplicantDashboardController extends Controller
         $uploadedRequiredCount = collect($requiredDocuments)
             ->filter(fn (string $document) => $uploadedDocuments->contains($document))
             ->count();
+        $acceptedRequiredCount = $application->documents
+            ->filter(fn (ApplicationDocument $document) => $document->status === 'accepted' && collect($requiredDocuments)->contains($document->document_name))
+            ->count();
 
         return [
             'required' => $requiredCount,
@@ -370,6 +483,8 @@ class ApplicantDashboardController extends Controller
             'percent' => $requiredCount === 0 ? 100 : (int) round(($confirmedRequiredCount / $requiredCount) * 100),
             'uploaded' => $uploadedRequiredCount,
             'uploaded_percent' => $requiredCount === 0 ? 100 : (int) round(($uploadedRequiredCount / $requiredCount) * 100),
+            'accepted' => $acceptedRequiredCount,
+            'accepted_percent' => $requiredCount === 0 ? 100 : (int) round(($acceptedRequiredCount / $requiredCount) * 100),
             'missing' => collect($requiredDocuments)
                 ->reject(fn (string $document) => $confirmedDocuments->contains($document))
                 ->values()
@@ -397,9 +512,192 @@ class ApplicantDashboardController extends Controller
             'document_name' => $document->document_name,
             'original_name' => $document->original_name,
             'size' => $document->size,
+            'status' => $document->status,
+            'review_notes' => $document->review_notes,
+            'reviewed_at' => $document->reviewed_at?->format('M d, Y h:i A'),
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'download_url' => route('documents.download', $document),
         ];
+    }
+
+    private function timelinePayload(ScholarshipApplication $application): array
+    {
+        if ($application->statusHistories->isEmpty()) {
+            return [[
+                'id' => "submitted-{$application->id}",
+                'from_status' => null,
+                'to_status' => $application->status,
+                'decision_reason' => $application->decision_reason,
+                'review_notes' => 'Application record created.',
+                'actor' => $application->applicant?->name ?? 'Applicant',
+                'changed_at' => $application->submitted_at?->format('M d, Y h:i A'),
+            ]];
+        }
+
+        return $application->statusHistories
+            ->sortBy('changed_at')
+            ->map(fn (ApplicationStatusHistory $history) => [
+                'id' => $history->id,
+                'from_status' => $history->from_status,
+                'to_status' => $history->to_status,
+                'decision_reason' => $history->decision_reason,
+                'review_notes' => $history->review_notes,
+                'actor' => $history->actor?->name ?? 'System',
+                'changed_at' => $history->changed_at?->format('M d, Y h:i A'),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function eligibilityMatch(Scholarship $scholarship, ?User $user): array
+    {
+        $profile = $user?->studentProfile;
+        $criteria = [];
+        $passed = 0;
+        $applicable = 0;
+
+        $addCriterion = function (string $key, string $label, string $status, ?string $studentValue, ?string $requirement, string $note, bool $counts = true) use (&$criteria, &$passed, &$applicable): void {
+            $criteria[] = [
+                'key' => $key,
+                'label' => $label,
+                'status' => $status,
+                'student_value' => $studentValue,
+                'requirement' => $requirement,
+                'note' => $note,
+            ];
+
+            if (! $counts) {
+                return;
+            }
+
+            $applicable++;
+
+            if ($status === 'pass') {
+                $passed++;
+            }
+        };
+
+        if (filled($scholarship->minimum_gwa)) {
+            $studentGwa = $profile?->gwa === null ? null : (float) $profile->gwa;
+            $minimumGwa = (float) $scholarship->minimum_gwa;
+
+            if ($studentGwa === null) {
+                $addCriterion('gwa', 'GWA / average', 'missing', null, (string) $scholarship->minimum_gwa, 'Add your GWA in your profile to improve matching.');
+            } else {
+                $usesGradePointScale = $studentGwa <= 5 && $minimumGwa <= 5;
+                $isPassing = $usesGradePointScale ? $studentGwa <= $minimumGwa : $studentGwa >= $minimumGwa;
+                $addCriterion(
+                    'gwa',
+                    'GWA / average',
+                    $isPassing ? 'pass' : 'fail',
+                    (string) $profile->gwa,
+                    (string) $scholarship->minimum_gwa,
+                    $isPassing ? 'Your academic average meets this requirement.' : 'Your academic average may need provider review.',
+                );
+            }
+        } else {
+            $addCriterion('gwa', 'GWA / average', 'info', $profile?->gwa, null, 'No minimum GWA listed.', false);
+        }
+
+        $courseOptions = $this->splitOptions($scholarship->eligible_courses);
+        if ($courseOptions !== []) {
+            $studentCourse = $profile?->course_or_strand;
+            $matchesCourse = filled($studentCourse) && $this->matchesAnyOption($studentCourse, $courseOptions);
+            $addCriterion(
+                'course',
+                'Course / strand',
+                filled($studentCourse) ? ($matchesCourse ? 'pass' : 'fail') : 'missing',
+                $studentCourse,
+                implode(', ', $courseOptions),
+                $matchesCourse ? 'Your course or strand matches the listed target.' : 'Check if your course or strand is accepted by the provider.',
+            );
+        } else {
+            $addCriterion('course', 'Course / strand', 'info', $profile?->course_or_strand, null, 'No course restriction listed.', false);
+        }
+
+        $yearOptions = $this->splitOptions($scholarship->eligible_year_levels);
+        if ($yearOptions !== []) {
+            $studentYear = $profile?->year_level;
+            $matchesYear = filled($studentYear) && $this->matchesAnyOption($studentYear, $yearOptions);
+            $addCriterion(
+                'year_level',
+                'Year level',
+                filled($studentYear) ? ($matchesYear ? 'pass' : 'fail') : 'missing',
+                $studentYear,
+                implode(', ', $yearOptions),
+                $matchesYear ? 'Your year level matches this program.' : 'Confirm if your year level is eligible.',
+            );
+        } else {
+            $addCriterion('year_level', 'Year level', 'info', $profile?->year_level, null, 'No year level restriction listed.', false);
+        }
+
+        $locationOptions = $this->splitOptions($scholarship->eligible_locations);
+        if ($locationOptions !== []) {
+            $studentLocation = collect([$profile?->barangay, $profile?->city, $profile?->province, $profile?->address])->filter()->implode(', ');
+            $matchesLocation = filled($studentLocation) && $this->matchesAnyOption($studentLocation, $locationOptions);
+            $addCriterion(
+                'location',
+                'Location',
+                filled($studentLocation) ? ($matchesLocation ? 'pass' : 'fail') : 'missing',
+                $studentLocation ?: null,
+                implode(', ', $locationOptions),
+                $matchesLocation ? 'Your location matches the scholarship coverage.' : 'Your location may be outside the listed coverage.',
+            );
+        } else {
+            $addCriterion('location', 'Location', 'info', $profile?->province ?? $profile?->city, null, 'No location restriction listed.', false);
+        }
+
+        if (filled($scholarship->income_requirement) && ! in_array(strtolower($scholarship->income_requirement), ['any', 'none', 'no preference'], true)) {
+            $income = $profile?->income_bracket;
+            $matchesIncome = filled($income) && $this->matchesAnyOption($income, [$scholarship->income_requirement]);
+            $addCriterion(
+                'income',
+                'Income bracket',
+                filled($income) ? ($matchesIncome ? 'pass' : 'fail') : 'missing',
+                $income,
+                $scholarship->income_requirement,
+                $matchesIncome ? 'Your income bracket matches the listed preference.' : 'Review the income requirement before applying.',
+            );
+        } else {
+            $addCriterion('income', 'Income bracket', 'info', $profile?->income_bracket, $scholarship->income_requirement, 'No income restriction listed.', false);
+        }
+
+        $score = $applicable === 0 ? 100 : (int) round(($passed / $applicable) * 100);
+
+        return [
+            'score' => $score,
+            'passed' => $passed,
+            'applicable' => $applicable,
+            'label' => $score >= 80 ? 'Strong match' : ($score >= 50 ? 'Needs review' : 'Low match'),
+            'summary' => $applicable === 0
+                ? 'This scholarship has no structured matching rules yet.'
+                : "{$passed} of {$applicable} structured criteria match your profile.",
+            'criteria' => $criteria,
+        ];
+    }
+
+    private function splitOptions(?string $value): array
+    {
+        if (! $value) {
+            return [];
+        }
+
+        return collect(preg_split('/\r\n|\r|\n|,/', $value))
+            ->map(fn (string $option) => trim($option))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function matchesAnyOption(string $value, array $options): bool
+    {
+        $normalizedValue = str($value)->lower()->squish()->toString();
+
+        return collect($options)->contains(function (string $option) use ($normalizedValue) {
+            $normalizedOption = str($option)->lower()->squish()->toString();
+
+            return str_contains($normalizedValue, $normalizedOption) || str_contains($normalizedOption, $normalizedValue);
+        });
     }
 
     private function notificationsPayload(Request $request): array

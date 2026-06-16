@@ -6,7 +6,9 @@ use App\Models\ActivityLog;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\ScholarshipBookmark;
 use App\Models\User;
+use App\Services\DecisionSupportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -96,15 +98,30 @@ class AdminController extends Controller
             ->with(['studentProfile', 'providerProfile', 'adminProfile'])
             ->latest()
             ->get(['id', 'email', 'username', 'role', 'created_at']);
-        $scholarships = Scholarship::query()->get(['id', 'title', 'provider_id', 'status', 'deadline', 'created_at']);
+        $scholarships = Scholarship::query()
+            ->withCount('bookmarks')
+            ->get(['id', 'title', 'provider_id', 'status', 'deadline', 'created_at']);
         $applications = ScholarshipApplication::query()
-            ->with(['applicant.studentProfile', 'scholarship.provider.providerProfile'])
+            ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
             ->latest('submitted_at')
             ->get();
+        $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
         $applicationStatuses = $applications
             ->groupBy('status')
             ->map(fn ($items) => $items->count())
             ->all();
+        $dssRecommendations = $applications
+            ->groupBy('dss_recommendation')
+            ->map(fn ($items) => $items->count());
+        $decisionReasons = $applications
+            ->filter(fn (ScholarshipApplication $application) => filled($application->decision_reason))
+            ->groupBy('decision_reason')
+            ->map(fn ($items) => $items->count());
+        $documentStatuses = $applications
+            ->flatMap(fn (ScholarshipApplication $application) => $application->documents)
+            ->groupBy('status')
+            ->map(fn ($items) => $items->count());
+        $scoredApplications = $applications->filter(fn (ScholarshipApplication $application) => $application->eligibility_score !== null);
         $now = now();
         $upcomingDeadlineLimit = now()->addDays(30);
 
@@ -120,6 +137,13 @@ class AdminController extends Controller
                 'draft_scholarships' => $scholarships->where('status', 'draft')->count(),
                 'applications' => $applications->count(),
                 'recent_applications' => $applications->where('submitted_at', '>=', now()->subDays(7))->count(),
+                'average_match_score' => $scoredApplications->isEmpty() ? 0 : round((float) $scoredApplications->avg('eligibility_score'), 1),
+                'average_dss_score' => $applications->isEmpty() ? 0 : round((float) $applications->avg('dss_score'), 1),
+                'highly_recommended_applications' => $dssRecommendations['highly_recommended'] ?? 0,
+                'needs_review_applications' => $dssRecommendations['needs_review'] ?? 0,
+                'saved_scholarships' => ScholarshipBookmark::query()->count(),
+                'documents_pending_review' => $documentStatuses['pending'] ?? 0,
+                'documents_needing_replacement' => $documentStatuses['needs_replacement'] ?? 0,
                 'pending_providers' => $users
                     ->where('role', 'provider')
                     ->filter(fn (User $user) => $user->providerProfile?->verification_status === 'pending')
@@ -140,6 +164,26 @@ class AdminController extends Controller
                 'approved' => $applicationStatuses['approved'] ?? 0,
                 'rejected' => $applicationStatuses['rejected'] ?? 0,
             ],
+            'document_statuses' => [
+                'pending' => $documentStatuses['pending'] ?? 0,
+                'accepted' => $documentStatuses['accepted'] ?? 0,
+                'rejected' => $documentStatuses['rejected'] ?? 0,
+                'needs_replacement' => $documentStatuses['needs_replacement'] ?? 0,
+            ],
+            'dss_recommendations' => [
+                'highly_recommended' => $dssRecommendations['highly_recommended'] ?? 0,
+                'recommended' => $dssRecommendations['recommended'] ?? 0,
+                'needs_review' => $dssRecommendations['needs_review'] ?? 0,
+                'low_priority' => $dssRecommendations['low_priority'] ?? 0,
+                'not_recommended' => $dssRecommendations['not_recommended'] ?? 0,
+            ],
+            'decision_reasons' => $decisionReasons
+                ->map(fn (int $total, string $reason) => [
+                    'reason' => $reason,
+                    'label' => $this->labelFromKey($reason),
+                    'total' => $total,
+                ])
+                ->values(),
             'deadline_watch' => $scholarships
                 ->where('status', 'published')
                 ->filter(fn (Scholarship $scholarship) => $scholarship->deadline)
@@ -164,6 +208,10 @@ class AdminController extends Controller
                 'applicant' => $application->applicant?->name,
                 'scholarship' => $application->scholarship?->title,
                 'status' => $application->status,
+                'dss_score' => $application->dss_score,
+                'dss_recommendation' => $application->dss_recommendation,
+                'eligibility_score' => $application->eligibility_score,
+                'decision_reason' => $application->decision_reason,
                 'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             ])->values(),
             'monthly_applications' => collect(range(5, 0))
@@ -195,6 +243,7 @@ class AdminController extends Controller
             ->latest('submitted_at')
             ->limit(8)
             ->get();
+        $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
 
         return response()->json([
             'stats' => [
@@ -203,6 +252,9 @@ class AdminController extends Controller
                 'approved_providers' => $providers->filter(fn (User $user) => $user->providerProfile?->verification_status === 'approved')->count(),
                 'rejected_providers' => $providers->filter(fn (User $user) => $user->providerProfile?->verification_status === 'rejected')->count(),
                 'recent_applications' => $applications->count(),
+                'average_match_score' => round((float) $applications->avg('eligibility_score'), 1),
+                'average_dss_score' => round((float) $applications->avg('dss_score'), 1),
+                'pending_documents' => $applications->flatMap(fn (ScholarshipApplication $application) => $application->documents)->where('status', 'pending')->count(),
             ],
             'providers' => $providers->map(fn (User $user) => [
                 ...$user->publicPayload(),
@@ -214,7 +266,12 @@ class AdminController extends Controller
                 'scholarship' => $application->scholarship?->title,
                 'provider' => $application->scholarship?->provider?->name,
                 'status' => $application->status,
+                'dss_score' => $application->dss_score,
+                'dss_recommendation' => $application->dss_recommendation,
+                'eligibility_score' => $application->eligibility_score,
+                'decision_reason' => $application->decision_reason,
                 'documents_uploaded' => $application->documents->count(),
+                'documents_pending' => $application->documents->where('status', 'pending')->count(),
                 'review_notes' => $application->review_notes,
                 'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             ])->values(),
@@ -412,13 +469,14 @@ class AdminController extends Controller
 
         return response()->streamDownload(function () {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['ID', 'Scholarship', 'Provider', 'Applicant', 'Email', 'Status', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Review Notes']);
+            fputcsv($handle, ['ID', 'Scholarship', 'Provider', 'Applicant', 'Email', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Pending Documents', 'Applicant Notes', 'Review Notes']);
 
             ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
                 ->orderBy('id')
                 ->chunk(200, function ($applications) use ($handle) {
                     foreach ($applications as $application) {
+                        app(DecisionSupportService::class)->syncApplication($application);
                         fputcsv($handle, [
                             $application->id,
                             $application->scholarship?->title,
@@ -426,9 +484,14 @@ class AdminController extends Controller
                             $application->applicant?->name,
                             $application->applicant?->email,
                             $application->status,
+                            $application->dss_score,
+                            $application->dss_recommendation,
+                            $application->eligibility_score,
+                            $application->decision_reason,
                             $application->submitted_at?->format('Y-m-d H:i:s'),
                             implode('; ', $application->document_checklist ?? []),
                             $application->documents->count(),
+                            $application->documents->where('status', 'pending')->count(),
                             $application->notes,
                             $application->review_notes,
                         ]);
@@ -448,5 +511,10 @@ class AdminController extends Controller
         return collect($metadata)
             ->map(fn ($value, string $key) => "{$key}: {$value}")
             ->implode(' | ');
+    }
+
+    private function labelFromKey(string $value): string
+    {
+        return str($value)->replace('_', ' ')->title()->toString();
     }
 }

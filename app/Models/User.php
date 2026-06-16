@@ -70,6 +70,11 @@ class User extends Authenticatable
         return $this->hasMany(PortalNotification::class);
     }
 
+    public function scholarshipBookmarks(): HasMany
+    {
+        return $this->hasMany(ScholarshipBookmark::class);
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
@@ -170,8 +175,13 @@ class User extends Authenticatable
             'school' => $this->studentProfile?->school,
             'course_or_strand' => $this->studentProfile?->course_or_strand,
             'year_level' => $this->studentProfile?->year_level,
+            'enrollment_status' => $this->studentProfile?->enrollment_status,
             'gwa' => $this->studentProfile?->gwa,
+            'income_bracket' => $this->studentProfile?->income_bracket,
             'address' => $this->studentProfile?->address,
+            'barangay' => $this->studentProfile?->barangay,
+            'city' => $this->studentProfile?->city,
+            'province' => $this->studentProfile?->province,
             'birthdate' => $this->studentProfile?->birthdate?->format('Y-m-d'),
             'guardian_name' => $this->studentProfile?->guardian_name,
             'guardian_contact' => $this->studentProfile?->guardian_contact,

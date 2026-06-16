@@ -15,6 +15,10 @@ class ApplicationDocument extends Model
         'path',
         'mime_type',
         'size',
+        'status',
+        'review_notes',
+        'reviewed_by',
+        'reviewed_at',
         'uploaded_at',
     ];
 
@@ -22,6 +26,7 @@ class ApplicationDocument extends Model
     {
         return [
             'uploaded_at' => 'datetime',
+            'reviewed_at' => 'datetime',
         ];
     }
 
@@ -33,5 +38,10 @@ class ApplicationDocument extends Model
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
     }
 }

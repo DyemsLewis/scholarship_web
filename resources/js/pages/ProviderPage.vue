@@ -13,6 +13,7 @@ const stats = ref({
     under_review: 0,
     approved: 0,
     rejected: 0,
+    average_dss_score: 0,
 });
 const programPerformance = ref([]);
 const statusCounts = ref({
@@ -48,6 +49,14 @@ const statCards = computed(() => [
         href: '/provider/applications',
         className: 'text-emerald-700',
         accent: 'bg-emerald-600',
+    },
+    {
+        label: 'DSS Avg',
+        value: `${stats.value.average_dss_score || 0}%`,
+        description: 'Average decision-support score for applications.',
+        href: '/provider/applications',
+        className: 'text-indigo-700',
+        accent: 'bg-indigo-600',
     },
     {
         label: 'Drafts',
@@ -148,7 +157,7 @@ onMounted(loadProviderData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <div class="grid gap-4 md:grid-cols-3">
+                    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                         <a
                             v-for="card in statCards"
                             :key="card.label"
@@ -225,7 +234,7 @@ onMounted(loadProviderData);
                                                 {{ program.title }}
                                             </p>
                                             <p class="mt-1 text-sm text-slate-500">
-                                                {{ program.applications }} application{{ program.applications === 1 ? '' : 's' }} · {{ program.complete_applications }} complete checklist{{ program.complete_applications === 1 ? '' : 's' }}
+                                                {{ program.applications }} application{{ program.applications === 1 ? '' : 's' }} - {{ program.complete_applications }} complete checklist{{ program.complete_applications === 1 ? '' : 's' }} - DSS {{ program.average_dss_score || 0 }}%
                                             </p>
                                         </div>
                                         <span
