@@ -44,6 +44,24 @@ class PageController extends Controller
         return view('provider-register');
     }
 
+    public function forgotPassword(Request $request): View|RedirectResponse
+    {
+        if ($redirect = $this->roleRedirect($request)) {
+            return $redirect;
+        }
+
+        return view('forgot-password');
+    }
+
+    public function resetPassword(Request $request): View|RedirectResponse
+    {
+        if ($redirect = $this->roleRedirect($request)) {
+            return $redirect;
+        }
+
+        return view('reset-password');
+    }
+
     public function accountSetup(Request $request): View|RedirectResponse
     {
         if ($request->user()?->isAdmin()) {
@@ -68,7 +86,7 @@ class PageController extends Controller
         }
 
         if ($includeApplicant && $request->user()) {
-            return redirect()->route('home');
+            return redirect()->route('dashboard');
         }
 
         return null;

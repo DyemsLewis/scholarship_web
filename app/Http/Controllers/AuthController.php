@@ -6,7 +6,10 @@ use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
@@ -45,28 +48,33 @@ class AuthController extends Controller
         $validated = $request->validate($rules);
 
         $middleInitial = strtoupper($validated['middle_initial']);
-        $contactName = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
-        $name = $validated['role'] === 'provider'
-            ? $validated['provider_name']
-            : $contactName;
 
         $user = User::create([
-            'name' => $name,
+            'email' => $validated['email'],
+            'username' => $validated['username'],
+            'role' => $validated['role'],
+            'password' => $validated['password'],
+        ]);
+
+        $profile = [
             'first_name' => $validated['first_name'],
             'last_name' => $validated['last_name'],
             'middle_initial' => $middleInitial,
-            'email' => $validated['email'],
-            'username' => $validated['username'],
             'contact_number' => $validated['number'],
-            'provider_name' => $validated['provider_name'] ?? null,
-            'provider_type' => $validated['provider_type'] ?? null,
-            'provider_website' => $validated['provider_website'] ?? null,
-            'provider_address' => $validated['provider_address'] ?? null,
-            'provider_description' => $validated['provider_description'] ?? null,
-            'role' => $validated['role'],
-            'is_admin' => false,
-            'password' => $validated['password'],
-        ]);
+        ];
+
+        if ($user->isProvider()) {
+            $user->providerProfile()->create([
+                ...$profile,
+                'provider_name' => $validated['provider_name'],
+                'provider_type' => $validated['provider_type'],
+                'provider_website' => $validated['provider_website'] ?? null,
+                'provider_address' => $validated['provider_address'],
+                'provider_description' => $validated['provider_description'] ?? null,
+            ]);
+        } else {
+            $user->studentProfile()->create($profile);
+        }
 
         Auth::login($user);
         $request->session()->regenerate();
@@ -79,8 +87,8 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Registration complete. You are now signed in.',
-            'redirect' => $user->isProvider() ? '/provider' : '/',
-            'user' => $user->only(['id', 'name', 'email', 'username', 'role', 'is_admin']),
+            'redirect' => $user->isProvider() ? '/provider' : '/dashboard',
+            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ], 201);
     }
 
@@ -124,9 +132,9 @@ class AuthController extends Controller
             'redirect' => match (true) {
                 $request->user()->isAdmin() => '/admin',
                 $request->user()->isProvider() => '/provider',
-                default => '/',
+                default => '/dashboard',
             },
-            'user' => $request->user()->only(['id', 'name', 'email', 'username', 'role', 'is_admin']),
+            'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ]);
     }
 
@@ -148,6 +156,79 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Logged out successfully.',
+        ]);
+    }
+
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $user = User::query()->where('email', $validated['email'])->first();
+        $resetUrl = null;
+
+        if ($user) {
+            $token = Str::random(64);
+
+            DB::table('password_reset_tokens')->updateOrInsert([
+                'email' => $validated['email'],
+            ], [
+                'token' => Hash::make($token),
+                'created_at' => now(),
+            ]);
+
+            $resetUrl = url('/reset-password').'?token='.$token.'&email='.urlencode($validated['email']);
+
+            ActivityLog::record(
+                $user,
+                'password_reset_requested',
+                "{$user->name} requested a password reset link.",
+                $request,
+            );
+        }
+
+        return response()->json([
+            'message' => 'If that email exists, a password reset link has been prepared.',
+            'reset_url' => app()->isLocal() ? $resetUrl : null,
+        ]);
+    }
+
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $record = DB::table('password_reset_tokens')
+            ->where('email', $validated['email'])
+            ->first();
+
+        if (! $record || ! Hash::check($validated['token'], $record->token) || \Illuminate\Support\Carbon::parse($record->created_at)->lessThan(now()->subHour())) {
+            return response()->json([
+                'message' => 'The reset link is invalid or expired.',
+            ], 422);
+        }
+
+        $user = User::query()->where('email', $validated['email'])->firstOrFail();
+        $user->forceFill([
+            'password' => $validated['password'],
+        ])->save();
+
+        DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+
+        ActivityLog::record(
+            $user,
+            'password_reset_completed',
+            "{$user->name} reset their password.",
+            $request,
+        );
+
+        return response()->json([
+            'message' => 'Password reset successful. You can now log in.',
+            'redirect' => '/login',
         ]);
     }
 }

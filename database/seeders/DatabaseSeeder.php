@@ -15,18 +15,22 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        User::query()->updateOrCreate([
+        $admin = User::query()->updateOrCreate([
             'email' => env('ADMIN_EMAIL', 'admin@scholarship.test'),
         ], [
-            'name' => 'Scholarship Admin',
+            'username' => env('ADMIN_USERNAME', 'admin'),
+            'role' => 'admin',
+            'password' => env('ADMIN_PASSWORD', 'password123'),
+        ]);
+
+        $admin->adminProfile()->updateOrCreate([
+            'user_id' => $admin->id,
+        ], [
             'first_name' => 'Scholarship',
             'last_name' => 'Admin',
             'middle_initial' => 'A',
-            'username' => env('ADMIN_USERNAME', 'admin'),
             'contact_number' => '09170000000',
-            'is_admin' => true,
-            'role' => 'admin',
-            'password' => env('ADMIN_PASSWORD', 'password123'),
+            'display_name' => 'Scholarship Admin',
         ]);
     }
 }

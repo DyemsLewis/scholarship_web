@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Scholarship extends Model
 {
@@ -14,6 +15,7 @@ class Scholarship extends Model
         'eligibility',
         'requirements',
         'award_amount',
+        'minimum_gwa',
         'deadline',
         'status',
     ];
@@ -22,6 +24,7 @@ class Scholarship extends Model
     {
         return [
             'award_amount' => 'decimal:2',
+            'minimum_gwa' => 'decimal:2',
             'deadline' => 'date',
         ];
     }
@@ -29,5 +32,10 @@ class Scholarship extends Model
     public function provider(): BelongsTo
     {
         return $this->belongsTo(User::class, 'provider_id');
+    }
+
+    public function applications(): HasMany
+    {
+        return $this->hasMany(ScholarshipApplication::class);
     }
 }

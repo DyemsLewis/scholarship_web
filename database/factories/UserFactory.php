@@ -17,6 +17,45 @@ class UserFactory extends Factory
      */
     protected static ?string $password;
 
+    public function configure(): static
+    {
+        return $this->afterCreating(function (User $user): void {
+            $profile = [
+                'first_name' => fake()->firstName(),
+                'last_name' => fake()->lastName(),
+                'middle_initial' => fake()->randomLetter(),
+                'contact_number' => '0917'.fake()->numerify('#######'),
+            ];
+
+            if ($user->isAdmin()) {
+                $user->adminProfile()->firstOrCreate([
+                    'user_id' => $user->id,
+                ], [
+                    ...$profile,
+                    'display_name' => "{$profile['first_name']} {$profile['last_name']}",
+                ]);
+
+                return;
+            }
+
+            if ($user->isProvider()) {
+                $user->providerProfile()->firstOrCreate([
+                    'user_id' => $user->id,
+                ], [
+                    ...$profile,
+                    'provider_name' => fake()->company(),
+                    'provider_type' => 'foundation',
+                ]);
+
+                return;
+            }
+
+            $user->studentProfile()->firstOrCreate([
+                'user_id' => $user->id,
+            ], $profile);
+        });
+    }
+
     /**
      * Define the model's default state.
      *
@@ -25,9 +64,10 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
+            'username' => fake()->unique()->userName(),
             'email_verified_at' => now(),
+            'role' => 'applicant',
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
         ];

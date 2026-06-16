@@ -1,31 +1,58 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\ApplicantDashboardController;
+use App\Http\Controllers\ApplicationDocumentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProviderController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PageController::class, 'home'])->name('home');
 Route::get('/login', [PageController::class, 'login'])->name('login');
+Route::get('/forgot-password', [PageController::class, 'forgotPassword'])->name('password.request');
+Route::get('/reset-password', [PageController::class, 'resetPassword'])->name('password.reset');
 Route::get('/register', [PageController::class, 'register'])->name('register');
 Route::get('/provider/register', [PageController::class, 'providerRegister'])->name('provider.register');
 Route::get('/account/setup', [PageController::class, 'accountSetup'])->middleware('auth')->name('account.setup');
+Route::get('/dashboard', [ApplicantDashboardController::class, 'index'])->middleware('auth')->name('dashboard');
+Route::get('/dashboard/scholarships', [ApplicantDashboardController::class, 'scholarships'])->middleware('auth')->name('dashboard.scholarships');
+Route::get('/dashboard/applications', [ApplicantDashboardController::class, 'applications'])->middleware('auth')->name('dashboard.applications');
+Route::get('/dashboard/profile', [ApplicantDashboardController::class, 'profile'])->middleware('auth')->name('dashboard.profile');
+Route::patch('/dashboard/profile', [ApplicantDashboardController::class, 'updateProfile'])->middleware('auth')->name('dashboard.profile.update');
+Route::get('/dashboard/data', [ApplicantDashboardController::class, 'data'])->middleware('auth')->name('dashboard.data');
+Route::get('/dashboard/applications/data', [ApplicantDashboardController::class, 'applicationsData'])->middleware('auth')->name('dashboard.applications.data');
+Route::post('/dashboard/applications', [ApplicantDashboardController::class, 'storeApplication'])->middleware('auth')->name('dashboard.applications.store');
+Route::post('/dashboard/applications/{application}/documents', [ApplicantDashboardController::class, 'uploadDocument'])->middleware('auth')->name('dashboard.applications.documents.store');
+Route::delete('/dashboard/documents/{document}', [ApplicantDashboardController::class, 'deleteDocument'])->middleware('auth')->name('dashboard.documents.destroy');
+Route::get('/documents/{document}/download', [ApplicationDocumentController::class, 'download'])->middleware('auth')->name('documents.download');
+Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->middleware('auth')->name('notifications.read');
 Route::get('/admin', [AdminController::class, 'index'])->name('admin.index');
 Route::get('/admin/manage-users', [AdminController::class, 'manageUsers'])->name('admin.manage-users');
 Route::get('/admin/reviews', [AdminController::class, 'reviews'])->name('admin.reviews');
 Route::get('/admin/logs', [AdminController::class, 'logs'])->name('admin.logs');
 Route::get('/admin/users', [AdminController::class, 'users'])->middleware('auth')->name('admin.users');
 Route::post('/admin/users', [AdminController::class, 'storeUser'])->middleware('auth')->name('admin.users.store');
+Route::get('/admin/analytics', [AdminController::class, 'analytics'])->middleware('auth')->name('admin.analytics');
+Route::get('/admin/reviews/data', [AdminController::class, 'reviewsData'])->middleware('auth')->name('admin.reviews.data');
+Route::patch('/admin/providers/{provider}/verification', [AdminController::class, 'updateProviderVerification'])->middleware('auth')->name('admin.providers.verification');
+Route::get('/admin/export/users', [AdminController::class, 'exportUsers'])->middleware('auth')->name('admin.export.users');
+Route::get('/admin/export/applications', [AdminController::class, 'exportApplications'])->middleware('auth')->name('admin.export.applications');
 Route::get('/admin/log-entries', [AdminController::class, 'logEntries'])->middleware('auth')->name('admin.log-entries');
 Route::get('/provider', [ProviderController::class, 'index'])->name('provider.index');
 Route::get('/provider/programs', [ProviderController::class, 'programs'])->name('provider.programs');
 Route::get('/provider/applications', [ProviderController::class, 'applications'])->name('provider.applications');
+Route::get('/provider/applications/data', [ProviderController::class, 'applicationsData'])->middleware('auth')->name('provider.applications.data');
+Route::patch('/provider/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->middleware('auth')->name('provider.applications.status');
+Route::get('/provider/export/applications', [ProviderController::class, 'exportApplications'])->middleware('auth')->name('provider.export.applications');
 Route::get('/provider/profile', [ProviderController::class, 'profile'])->middleware('auth')->name('provider.profile');
 Route::get('/provider/scholarships', [ProviderController::class, 'scholarships'])->middleware('auth')->name('provider.scholarships');
 Route::post('/provider/scholarships', [ProviderController::class, 'storeScholarship'])->middleware('auth')->name('provider.scholarships.store');
 Route::put('/provider/scholarships/{scholarship}', [ProviderController::class, 'updateScholarship'])->middleware('auth')->name('provider.scholarships.update');
 
 Route::post('/login', [AuthController::class, 'login'])->name('login.store');
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('password.email');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update');
 Route::post('/register', [AuthController::class, 'register'])->name('register.store');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');

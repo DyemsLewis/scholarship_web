@@ -176,6 +176,9 @@ onMounted(() => loadLogs());
                                 <p class="mt-1 text-sm text-slate-500">
                                     Actor: {{ entry.actor_name }}
                                 </p>
+                                <p v-if="entry.metadata_summary" class="mt-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                                    {{ entry.metadata_summary }}
+                                </p>
                             </div>
 
                             <div class="text-sm text-slate-500 lg:text-right">

@@ -26,19 +26,19 @@ class MobileAuthController extends Controller
         ]);
 
         $middleInitial = strtoupper($validated['middle_initial']);
-        $name = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
 
         $user = User::create([
-            'name' => $name,
+            'email' => $validated['email'],
+            'username' => $validated['username'],
+            'role' => 'applicant',
+            'password' => $validated['password'],
+        ]);
+
+        $user->studentProfile()->create([
             'first_name' => $validated['first_name'],
             'last_name' => $validated['last_name'],
             'middle_initial' => $middleInitial,
-            'email' => $validated['email'],
-            'username' => $validated['username'],
             'contact_number' => $validated['contact_number'],
-            'role' => 'applicant',
-            'is_admin' => false,
-            'password' => $validated['password'],
         ]);
 
         ActivityLog::record(
@@ -189,16 +189,6 @@ class MobileAuthController extends Controller
 
     private function userPayload(User $user): array
     {
-        return $user->only([
-            'id',
-            'name',
-            'first_name',
-            'last_name',
-            'middle_initial',
-            'email',
-            'username',
-            'contact_number',
-            'role',
-        ]);
+        return $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload();
     }
 }

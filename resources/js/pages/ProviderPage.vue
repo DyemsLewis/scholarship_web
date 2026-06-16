@@ -10,6 +10,17 @@ const stats = ref({
     scholarships: 0,
     applications: 0,
     drafts: 0,
+    under_review: 0,
+    approved: 0,
+    rejected: 0,
+});
+const programPerformance = ref([]);
+const statusCounts = ref({
+    submitted: 0,
+    under_review: 0,
+    qualified: 0,
+    approved: 0,
+    rejected: 0,
 });
 
 const providerTypeLabels = {
@@ -47,6 +58,13 @@ const statCards = computed(() => [
         accent: 'bg-amber-500',
     },
 ]);
+const statusDetails = computed(() => [
+    { label: 'Submitted', value: statusCounts.value.submitted, className: 'bg-amber-100 text-amber-800' },
+    { label: 'Under Review', value: statusCounts.value.under_review, className: 'bg-sky-100 text-sky-800' },
+    { label: 'Qualified', value: statusCounts.value.qualified, className: 'bg-indigo-100 text-indigo-800' },
+    { label: 'Approved', value: statusCounts.value.approved, className: 'bg-emerald-100 text-emerald-800' },
+    { label: 'Rejected', value: statusCounts.value.rejected, className: 'bg-rose-100 text-rose-800' },
+]);
 
 const contactPerson = computed(() => {
     if (!user.value?.first_name && !user.value?.last_name) {
@@ -69,10 +87,12 @@ async function loadProviderData() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/provider/profile');
+        const response = await window.axios.get('/provider/applications/data');
 
         user.value = response.data.user;
         stats.value = response.data.stats;
+        programPerformance.value = response.data.program_performance;
+        statusCounts.value = response.data.status_counts;
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider dashboard.';
     } finally {
@@ -150,6 +170,87 @@ onMounted(loadProviderData);
                             </p>
                         </a>
                     </div>
+
+                    <section class="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+                        <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                Application Pipeline
+                            </p>
+                            <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                Review status counts
+                            </h3>
+                            <div class="mt-5 grid gap-3 sm:grid-cols-2">
+                                <div
+                                    v-for="status in statusDetails"
+                                    :key="status.label"
+                                    class="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                                >
+                                    <span :class="['rounded-md px-2 py-1 text-xs font-bold uppercase', status.className]">
+                                        {{ status.label }}
+                                    </span>
+                                    <span class="font-display text-2xl font-bold text-slate-950">
+                                        {{ status.value }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                        Program Performance
+                                    </p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                        Applications per scholarship
+                                    </h3>
+                                </div>
+                                <a
+                                    href="/provider/export/applications"
+                                    class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                                >
+                                    Export CSV
+                                </a>
+                            </div>
+
+                            <div class="mt-5 grid gap-3">
+                                <div
+                                    v-for="program in programPerformance.slice(0, 5)"
+                                    :key="program.id"
+                                    class="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                                >
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div class="min-w-0">
+                                            <p class="truncate text-sm font-bold text-slate-950">
+                                                {{ program.title }}
+                                            </p>
+                                            <p class="mt-1 text-sm text-slate-500">
+                                                {{ program.applications }} application{{ program.applications === 1 ? '' : 's' }} · {{ program.complete_applications }} complete checklist{{ program.complete_applications === 1 ? '' : 's' }}
+                                            </p>
+                                        </div>
+                                        <span
+                                            :class="[
+                                                'shrink-0 rounded-md px-2 py-1 text-xs font-bold uppercase',
+                                                program.days_left === null
+                                                    ? 'bg-slate-200 text-slate-700'
+                                                    : program.days_left < 0
+                                                        ? 'bg-rose-100 text-rose-800'
+                                                        : program.days_left <= 7
+                                                            ? 'bg-amber-100 text-amber-800'
+                                                            : 'bg-emerald-100 text-emerald-800'
+                                            ]"
+                                        >
+                                            {{ program.days_left === null ? 'No deadline' : program.days_left < 0 ? 'Expired' : `${program.days_left} days left` }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div v-if="programPerformance.length === 0" class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                                    No programs yet.
+                                </div>
+                            </div>
+                        </div>
+                    </section>
 
                     <section class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
                         <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -231,6 +332,17 @@ onMounted(loadProviderData);
                                     </p>
                                     <p class="mt-1 text-sm leading-6 text-slate-600">
                                         This area is prepared for application records once applicant submissions are connected.
+                                    </p>
+                                </a>
+                                <a
+                                    href="/provider/export/applications"
+                                    class="rounded-md border border-slate-200 bg-slate-50 p-4 transition hover:border-amber-200 hover:bg-amber-50"
+                                >
+                                    <p class="font-bold text-slate-950">
+                                        Export application report
+                                    </p>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">
+                                        Download provider application records as a CSV file.
                                     </p>
                                 </a>
                             </div>

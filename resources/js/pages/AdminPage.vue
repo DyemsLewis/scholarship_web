@@ -11,8 +11,25 @@ const stats = ref({
     applicants: 0,
     providers: 0,
     recent_signups: 0,
+    scholarships: 0,
+    published_scholarships: 0,
+    draft_scholarships: 0,
+    applications: 0,
+    recent_applications: 0,
+    upcoming_deadlines: 0,
+    expired_published: 0,
 });
 const users = ref([]);
+const applicationStatuses = ref({
+    submitted: 0,
+    under_review: 0,
+    qualified: 0,
+    approved: 0,
+    rejected: 0,
+});
+const deadlineWatch = ref([]);
+const recentApplications = ref([]);
+const monthlyApplications = ref([]);
 
 const statCards = computed(() => [
     {
@@ -23,30 +40,30 @@ const statCards = computed(() => [
         accent: 'bg-slate-900',
     },
     {
-        label: 'Applicants',
-        value: stats.value.applicants,
-        description: 'Student accounts in the portal.',
+        label: 'Applications',
+        value: stats.value.applications,
+        description: 'Submitted scholarship applications.',
         className: 'text-emerald-700',
         accent: 'bg-emerald-600',
     },
     {
-        label: 'Providers',
-        value: stats.value.providers,
-        description: 'Scholarship provider accounts.',
+        label: 'Scholarships',
+        value: stats.value.scholarships,
+        description: 'Programs created by providers.',
         className: 'text-sky-700',
         accent: 'bg-sky-600',
     },
     {
-        label: 'Admins',
-        value: stats.value.admins,
-        description: 'Accounts with admin access.',
+        label: 'Upcoming Deadlines',
+        value: stats.value.upcoming_deadlines,
+        description: 'Published deadlines in the next 30 days.',
         className: 'text-amber-600',
         accent: 'bg-amber-500',
     },
     {
-        label: 'Recent Signups',
-        value: stats.value.recent_signups,
-        description: 'New accounts in the last 7 days.',
+        label: 'Recent Activity',
+        value: stats.value.recent_applications + stats.value.recent_signups,
+        description: 'Applications and signups in the last 7 days.',
         className: 'text-slate-700',
         accent: 'bg-slate-500',
     },
@@ -78,16 +95,27 @@ const roleDetails = computed(() => {
 });
 
 const recentUsers = computed(() => users.value.slice(0, 5));
+const statusDetails = computed(() => [
+    { label: 'Submitted', value: applicationStatuses.value.submitted, className: 'bg-amber-100 text-amber-800' },
+    { label: 'Under Review', value: applicationStatuses.value.under_review, className: 'bg-sky-100 text-sky-800' },
+    { label: 'Qualified', value: applicationStatuses.value.qualified, className: 'bg-indigo-100 text-indigo-800' },
+    { label: 'Approved', value: applicationStatuses.value.approved, className: 'bg-emerald-100 text-emerald-800' },
+    { label: 'Rejected', value: applicationStatuses.value.rejected, className: 'bg-rose-100 text-rose-800' },
+]);
 
 async function loadAdminData() {
     isLoading.value = true;
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/admin/users');
+        const response = await window.axios.get('/admin/analytics');
 
         stats.value = response.data.stats;
-        users.value = response.data.users;
+        applicationStatuses.value = response.data.application_statuses;
+        deadlineWatch.value = response.data.deadline_watch;
+        users.value = response.data.recent_users;
+        recentApplications.value = response.data.recent_applications_list;
+        monthlyApplications.value = response.data.monthly_applications;
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load admin data.';
     } finally {
@@ -123,12 +151,26 @@ onMounted(loadAdminData);
                             </p>
                         </div>
 
-                        <a
-                            href="/admin/manage-users"
-                            class="rounded-md bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-200"
-                        >
-                            Manage Users
-                        </a>
+                        <div class="flex flex-col gap-2 sm:flex-row">
+                            <a
+                                href="/admin/manage-users"
+                                class="rounded-md bg-amber-300 px-4 py-2.5 text-center text-sm font-bold text-slate-950 transition hover:bg-amber-200"
+                            >
+                                Manage Users
+                            </a>
+                            <a
+                                href="/admin/export/users"
+                                class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                            >
+                                Export Users
+                            </a>
+                            <a
+                                href="/admin/export/applications"
+                                class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                            >
+                                Export Applications
+                            </a>
+                        </div>
                     </div>
                 </header>
 
@@ -241,6 +283,146 @@ onMounted(loadAdminData);
 
                             <div v-if="recentUsers.length === 0" class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
                                 No recent accounts found.
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                            Application Pipeline
+                        </p>
+                        <h3 class="mt-2 text-xl font-bold text-slate-950">
+                            Status breakdown
+                        </h3>
+                        <p class="mt-3 text-sm leading-6 text-slate-600">
+                            Track where applications currently sit in the review process.
+                        </p>
+
+                        <div class="mt-5 grid gap-3 sm:grid-cols-2">
+                            <div
+                                v-for="status in statusDetails"
+                                :key="status.label"
+                                class="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4"
+                            >
+                                <span :class="['rounded-md px-2 py-1 text-xs font-bold uppercase', status.className]">
+                                    {{ status.label }}
+                                </span>
+                                <span class="font-display text-2xl font-bold text-slate-950">
+                                    {{ status.value }}
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                            Deadline Monitoring
+                        </p>
+                        <h3 class="mt-2 text-xl font-bold text-slate-950">
+                            Published program deadlines
+                        </h3>
+                        <div class="mt-5 grid gap-3">
+                            <div
+                                v-for="deadline in deadlineWatch"
+                                :key="deadline.id"
+                                class="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4"
+                            >
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-bold text-slate-950">
+                                        {{ deadline.title }}
+                                    </p>
+                                    <p class="mt-1 text-sm text-slate-500">
+                                        {{ deadline.deadline }}
+                                    </p>
+                                </div>
+                                <span
+                                    :class="[
+                                        'shrink-0 rounded-md px-2 py-1 text-xs font-bold uppercase',
+                                        deadline.days_left < 0
+                                            ? 'bg-rose-100 text-rose-800'
+                                            : deadline.days_left <= 7
+                                                ? 'bg-amber-100 text-amber-800'
+                                                : 'bg-emerald-100 text-emerald-800'
+                                    ]"
+                                >
+                                    {{ deadline.days_left < 0 ? 'Expired' : `${deadline.days_left} days` }}
+                                </span>
+                            </div>
+
+                            <div v-if="deadlineWatch.length === 0" class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                                No published program deadlines found.
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="mt-6 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                            Monthly Trend
+                        </p>
+                        <h3 class="mt-2 text-xl font-bold text-slate-950">
+                            Applications over time
+                        </h3>
+                        <div class="mt-5 grid gap-3">
+                            <div
+                                v-for="month in monthlyApplications"
+                                :key="month.label"
+                                class="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                            >
+                                <div class="flex items-center justify-between gap-4">
+                                    <p class="text-sm font-bold text-slate-950">
+                                        {{ month.label }}
+                                    </p>
+                                    <p class="text-sm font-bold text-sky-700">
+                                        {{ month.total }} applications
+                                    </p>
+                                </div>
+                                <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                                    <div
+                                        class="h-full rounded-full bg-sky-600"
+                                        :style="{ width: `${Math.min(month.total * 20, 100)}%` }"
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                            Latest Applications
+                        </p>
+                        <h3 class="mt-2 text-xl font-bold text-slate-950">
+                            Recent submissions
+                        </h3>
+                        <div class="mt-5 grid gap-3">
+                            <div
+                                v-for="application in recentApplications"
+                                :key="application.id"
+                                class="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                            >
+                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="min-w-0">
+                                        <p class="truncate text-sm font-bold text-slate-950">
+                                            {{ application.applicant || 'Applicant' }}
+                                        </p>
+                                        <p class="mt-1 truncate text-sm text-slate-500">
+                                            {{ application.scholarship || 'Scholarship' }}
+                                        </p>
+                                    </div>
+                                    <span class="shrink-0 rounded-md bg-slate-200 px-2 py-1 text-xs font-bold uppercase text-slate-700">
+                                        {{ application.status }}
+                                    </span>
+                                </div>
+                                <p class="mt-2 text-sm text-slate-500">
+                                    {{ application.submitted_at || 'Recently submitted' }}
+                                </p>
+                            </div>
+
+                            <div v-if="recentApplications.length === 0" class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                                No applications submitted yet.
                             </div>
                         </div>
                     </section>

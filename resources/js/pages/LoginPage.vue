@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
                         <label class="block text-sm font-semibold text-slate-700" for="password">
                             Password
                         </label>
-                        <a href="#" class="text-sm font-semibold text-sky-700 transition hover:text-slate-900">
+                        <a href="/forgot-password" class="text-sm font-semibold text-sky-700 transition hover:text-slate-900">
                             Forgot password?
                         </a>
                     </div>

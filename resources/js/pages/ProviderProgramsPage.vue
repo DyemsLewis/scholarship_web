@@ -21,6 +21,20 @@ const scholarshipForm = ref(emptyScholarshipForm());
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
+const documentRequirementOptions = [
+    'Completed application form',
+    'Certificate of enrollment',
+    'Latest report card or grades',
+    'Transcript of records',
+    'School ID',
+    'Birth certificate',
+    'Good moral certificate',
+    'Barangay certificate of residency',
+    'Certificate of indigency',
+    'Parent or guardian valid ID',
+    'Proof of income',
+    'Recommendation letter',
+];
 
 const programStats = computed(() => [
     {
@@ -39,17 +53,49 @@ const programStats = computed(() => [
         className: 'text-emerald-700',
     },
 ]);
+const selectedRequirementCount = computed(() => scholarshipForm.value.requirements.length);
+const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 
 function emptyScholarshipForm() {
     return {
         title: '',
         description: '',
         eligibility: '',
-        requirements: '',
+        requirements: [],
         awardAmount: '',
+        minimumGwa: '',
         deadline: '',
         status: 'draft',
     };
+}
+
+function parseRequirements(requirements) {
+    if (!requirements) {
+        return [];
+    }
+
+    return String(requirements)
+        .split(/\r?\n|,/)
+        .map((requirement) => requirement.trim())
+        .filter((requirement) => documentRequirementOptions.includes(requirement));
+}
+
+function isRequirementSelected(requirement) {
+    return scholarshipForm.value.requirements.includes(requirement);
+}
+
+function selectCommonRequirements() {
+    scholarshipForm.value.requirements = [
+        'Completed application form',
+        'Certificate of enrollment',
+        'Latest report card or grades',
+        'School ID',
+        'Proof of income',
+    ];
+}
+
+function clearRequirements() {
+    scholarshipForm.value.requirements = [];
 }
 
 function statusLabel(status) {
@@ -114,8 +160,9 @@ function editScholarship(scholarship) {
         title: scholarship.title ?? '',
         description: scholarship.description ?? '',
         eligibility: scholarship.eligibility ?? '',
-        requirements: scholarship.requirements ?? '',
+        requirements: parseRequirements(scholarship.requirements),
         awardAmount: scholarship.award_amount ?? '',
+        minimumGwa: scholarship.minimum_gwa ?? '',
         deadline: scholarship.deadline ?? '',
         status: scholarship.status ?? 'draft',
     };
@@ -137,8 +184,9 @@ async function saveScholarship() {
         title: scholarshipForm.value.title,
         description: scholarshipForm.value.description,
         eligibility: scholarshipForm.value.eligibility,
-        requirements: scholarshipForm.value.requirements,
+        requirements: scholarshipForm.value.requirements.join('\n'),
         award_amount: scholarshipForm.value.awardAmount || null,
+        minimum_gwa: scholarshipForm.value.minimumGwa || null,
         deadline: scholarshipForm.value.deadline || null,
         status: scholarshipForm.value.status,
     };
@@ -207,6 +255,18 @@ onMounted(loadProviderData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
+                    <div
+                        v-if="!canPostScholarships"
+                        class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm"
+                    >
+                        <p class="font-bold">
+                            Provider verification required
+                        </p>
+                        <p class="mt-1 leading-6">
+                            Your provider account is currently {{ user?.verification_status || 'pending' }}. An admin must approve the provider account before scholarships can be created or updated.
+                        </p>
+                    </div>
+
                     <div class="grid gap-4 md:grid-cols-3">
                         <article
                             v-for="item in programStats"
@@ -252,10 +312,10 @@ onMounted(loadProviderData);
                                 >
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-3">
-                                <div>
-                                    <label :class="labelClass" for="scholarship-amount">
-                                        Award amount
+                                <div class="grid gap-4 md:grid-cols-4">
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-amount">
+                                            Award amount
                                     </label>
                                     <input
                                         id="scholarship-amount"
@@ -264,13 +324,29 @@ onMounted(loadProviderData);
                                         min="0"
                                         step="0.01"
                                         placeholder="0.00"
-                                        :class="inputClass"
-                                    >
-                                </div>
+                                            :class="inputClass"
+                                        >
+                                    </div>
 
-                                <div>
-                                    <label :class="labelClass" for="scholarship-deadline">
-                                        Deadline
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-minimum-gwa">
+                                            Minimum GWA / avg
+                                        </label>
+                                        <input
+                                            id="scholarship-minimum-gwa"
+                                            v-model="scholarshipForm.minimumGwa"
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            step="0.01"
+                                            placeholder="85 or 2.00"
+                                            :class="inputClass"
+                                        >
+                                    </div>
+
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-deadline">
+                                            Deadline
                                     </label>
                                     <input
                                         id="scholarship-deadline"
@@ -317,33 +393,99 @@ onMounted(loadProviderData);
                                 ></textarea>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-2">
-                                <div>
-                                    <label :class="labelClass" for="scholarship-eligibility">
-                                        Eligibility
-                                    </label>
-                                    <textarea
-                                        id="scholarship-eligibility"
-                                        v-model="scholarshipForm.eligibility"
-                                        rows="4"
-                                        placeholder="Who can apply?"
-                                        :class="inputClass"
-                                    ></textarea>
+                            <div>
+                                <label :class="labelClass" for="scholarship-eligibility">
+                                    Eligibility
+                                </label>
+                                <textarea
+                                    id="scholarship-eligibility"
+                                    v-model="scholarshipForm.eligibility"
+                                    rows="4"
+                                    placeholder="Who can apply?"
+                                    :class="inputClass"
+                                ></textarea>
+                            </div>
+
+                            <fieldset class="rounded-lg border border-slate-200 bg-white p-4">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <legend class="text-sm font-semibold text-slate-700">
+                                            Document requirements
+                                        </legend>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            Choose the documents applicants must prepare for this scholarship.
+                                        </p>
+                                    </div>
+
+                                    <div class="flex shrink-0 flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            class="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                                            @click="selectCommonRequirements"
+                                        >
+                                            Select common
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                                            @click="clearRequirements"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
                                 </div>
 
-                                <div>
-                                    <label :class="labelClass" for="scholarship-requirements">
-                                        Requirements
+                                <div class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                    <label
+                                        v-for="requirement in documentRequirementOptions"
+                                        :key="requirement"
+                                        :class="[
+                                            'group flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition',
+                                            isRequirementSelected(requirement)
+                                                ? 'border-sky-300 bg-sky-50 text-slate-950 shadow-sm'
+                                                : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white',
+                                        ]"
+                                    >
+                                        <input
+                                            v-model="scholarshipForm.requirements"
+                                            type="checkbox"
+                                            :value="requirement"
+                                            class="sr-only"
+                                        >
+                                        <span
+                                            :class="[
+                                                'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] font-bold transition',
+                                                isRequirementSelected(requirement)
+                                                    ? 'border-sky-600 bg-sky-600 text-white'
+                                                    : 'border-slate-300 bg-white text-transparent group-hover:border-sky-300',
+                                            ]"
+                                        >
+                                            OK
+                                        </span>
+                                        <span class="leading-5">
+                                            {{ requirement }}
+                                        </span>
                                     </label>
-                                    <textarea
-                                        id="scholarship-requirements"
-                                        v-model="scholarshipForm.requirements"
-                                        rows="4"
-                                        placeholder="Documents or steps required"
-                                        :class="inputClass"
-                                    ></textarea>
                                 </div>
-                            </div>
+
+                                <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                                        {{ selectedRequirementCount }} selected
+                                    </p>
+                                    <div v-if="selectedRequirementCount" class="mt-2 flex flex-wrap gap-2">
+                                        <span
+                                            v-for="requirement in scholarshipForm.requirements"
+                                            :key="requirement"
+                                            class="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800"
+                                        >
+                                            {{ requirement }}
+                                        </span>
+                                    </div>
+                                    <p v-else class="mt-2 text-xs leading-5 text-slate-500">
+                                        No document requirements selected yet.
+                                    </p>
+                                </div>
+                            </fieldset>
                         </div>
 
                         <div class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -366,7 +508,7 @@ onMounted(loadProviderData);
                                 </button>
                                 <button
                                     type="submit"
-                                    :disabled="isSaving"
+                                    :disabled="isSaving || !canPostScholarships"
                                     class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80"
                                 >
                                     {{ isSaving ? 'Saving...' : editingId ? 'Update scholarship' : 'Create scholarship' }}
@@ -437,6 +579,14 @@ onMounted(loadProviderData);
                                         </p>
                                         <p class="mt-1 font-bold text-slate-950">
                                             {{ scholarship.deadline || 'Not set' }}
+                                        </p>
+                                    </div>
+                                    <div class="rounded-md bg-white p-3">
+                                        <p class="font-semibold text-slate-500">
+                                            Minimum GWA / avg
+                                        </p>
+                                        <p class="mt-1 font-bold text-slate-950">
+                                            {{ scholarship.minimum_gwa || 'Not set' }}
                                         </p>
                                     </div>
                                 </div>

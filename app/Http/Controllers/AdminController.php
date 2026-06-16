@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\PortalNotification;
+use App\Models\Scholarship;
+use App\Models\ScholarshipApplication;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -60,21 +63,12 @@ class AdminController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
 
         $users = User::query()
+            ->with(['studentProfile', 'providerProfile', 'adminProfile'])
             ->latest()
             ->get([
                 'id',
-                'name',
-                'first_name',
-                'last_name',
-                'middle_initial',
                 'email',
                 'username',
-                'contact_number',
-                'provider_name',
-                'provider_type',
-                'provider_website',
-                'provider_address',
-                'is_admin',
                 'role',
                 'created_at',
             ]);
@@ -88,22 +82,183 @@ class AdminController extends Controller
                 'recent_signups' => $users->where('created_at', '>=', now()->subDays(7))->count(),
             ],
             'users' => $users->map(fn (User $user) => [
+                ...$user->publicPayload(),
+                'created_at' => $user->created_at?->format('M d, Y'),
+            ])->values(),
+        ]);
+    }
+
+    public function analytics(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $users = User::query()
+            ->with(['studentProfile', 'providerProfile', 'adminProfile'])
+            ->latest()
+            ->get(['id', 'email', 'username', 'role', 'created_at']);
+        $scholarships = Scholarship::query()->get(['id', 'title', 'provider_id', 'status', 'deadline', 'created_at']);
+        $applications = ScholarshipApplication::query()
+            ->with(['applicant.studentProfile', 'scholarship.provider.providerProfile'])
+            ->latest('submitted_at')
+            ->get();
+        $applicationStatuses = $applications
+            ->groupBy('status')
+            ->map(fn ($items) => $items->count())
+            ->all();
+        $now = now();
+        $upcomingDeadlineLimit = now()->addDays(30);
+
+        return response()->json([
+            'stats' => [
+                'total_users' => $users->count(),
+                'applicants' => $users->where('role', 'applicant')->count(),
+                'providers' => $users->where('role', 'provider')->count(),
+                'admins' => $users->where('role', 'admin')->count(),
+                'recent_signups' => $users->where('created_at', '>=', now()->subDays(7))->count(),
+                'scholarships' => $scholarships->count(),
+                'published_scholarships' => $scholarships->where('status', 'published')->count(),
+                'draft_scholarships' => $scholarships->where('status', 'draft')->count(),
+                'applications' => $applications->count(),
+                'recent_applications' => $applications->where('submitted_at', '>=', now()->subDays(7))->count(),
+                'pending_providers' => $users
+                    ->where('role', 'provider')
+                    ->filter(fn (User $user) => $user->providerProfile?->verification_status === 'pending')
+                    ->count(),
+                'upcoming_deadlines' => $scholarships
+                    ->where('status', 'published')
+                    ->filter(fn (Scholarship $scholarship) => $scholarship->deadline && $scholarship->deadline->between($now, $upcomingDeadlineLimit))
+                    ->count(),
+                'expired_published' => $scholarships
+                    ->where('status', 'published')
+                    ->filter(fn (Scholarship $scholarship) => $scholarship->deadline && $scholarship->deadline->isPast())
+                    ->count(),
+            ],
+            'application_statuses' => [
+                'submitted' => $applicationStatuses['submitted'] ?? 0,
+                'under_review' => $applicationStatuses['under_review'] ?? 0,
+                'qualified' => $applicationStatuses['qualified'] ?? 0,
+                'approved' => $applicationStatuses['approved'] ?? 0,
+                'rejected' => $applicationStatuses['rejected'] ?? 0,
+            ],
+            'deadline_watch' => $scholarships
+                ->where('status', 'published')
+                ->filter(fn (Scholarship $scholarship) => $scholarship->deadline)
+                ->sortBy('deadline')
+                ->take(6)
+                ->map(fn (Scholarship $scholarship) => [
+                    'id' => $scholarship->id,
+                    'title' => $scholarship->title,
+                    'deadline' => $scholarship->deadline?->format('M d, Y'),
+                    'days_left' => $scholarship->deadline ? now()->startOfDay()->diffInDays($scholarship->deadline->startOfDay(), false) : null,
+                ])
+                ->values(),
+            'recent_users' => $users->take(5)->map(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
-                'middle_initial' => $user->middle_initial,
                 'email' => $user->email,
-                'username' => $user->username,
-                'contact_number' => $user->contact_number,
-                'provider_name' => $user->provider_name,
-                'provider_type' => $user->provider_type,
-                'provider_website' => $user->provider_website,
-                'provider_address' => $user->provider_address,
-                'is_admin' => $user->is_admin,
                 'role' => $user->role,
                 'created_at' => $user->created_at?->format('M d, Y'),
             ])->values(),
+            'recent_applications_list' => $applications->take(5)->map(fn (ScholarshipApplication $application) => [
+                'id' => $application->id,
+                'applicant' => $application->applicant?->name,
+                'scholarship' => $application->scholarship?->title,
+                'status' => $application->status,
+                'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
+            ])->values(),
+            'monthly_applications' => collect(range(5, 0))
+                ->map(function (int $monthsAgo) use ($applications) {
+                    $month = now()->subMonths($monthsAgo);
+
+                    return [
+                        'label' => $month->format('M Y'),
+                        'total' => $applications
+                            ->filter(fn (ScholarshipApplication $application) => $application->submitted_at?->format('Y-m') === $month->format('Y-m'))
+                            ->count(),
+                    ];
+                })
+                ->values(),
+        ]);
+    }
+
+    public function reviewsData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $providers = User::query()
+            ->with('providerProfile')
+            ->where('role', 'provider')
+            ->latest()
+            ->get(['id', 'email', 'username', 'role', 'created_at']);
+        $applications = ScholarshipApplication::query()
+            ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
+            ->latest('submitted_at')
+            ->limit(8)
+            ->get();
+
+        return response()->json([
+            'stats' => [
+                'providers' => $providers->count(),
+                'pending_providers' => $providers->filter(fn (User $user) => $user->providerProfile?->verification_status === 'pending')->count(),
+                'approved_providers' => $providers->filter(fn (User $user) => $user->providerProfile?->verification_status === 'approved')->count(),
+                'rejected_providers' => $providers->filter(fn (User $user) => $user->providerProfile?->verification_status === 'rejected')->count(),
+                'recent_applications' => $applications->count(),
+            ],
+            'providers' => $providers->map(fn (User $user) => [
+                ...$user->publicPayload(),
+                'created_at' => $user->created_at?->format('M d, Y'),
+            ])->values(),
+            'applications' => $applications->map(fn (ScholarshipApplication $application) => [
+                'id' => $application->id,
+                'applicant' => $application->applicant?->name,
+                'scholarship' => $application->scholarship?->title,
+                'provider' => $application->scholarship?->provider?->name,
+                'status' => $application->status,
+                'documents_uploaded' => $application->documents->count(),
+                'review_notes' => $application->review_notes,
+                'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
+            ])->values(),
+        ]);
+    }
+
+    public function updateProviderVerification(Request $request, User $provider): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($provider->isProvider(), 404);
+
+        $validated = $request->validate([
+            'verification_status' => ['required', 'string', 'in:pending,approved,rejected'],
+            'verification_notes' => ['nullable', 'string', 'max:1500'],
+        ]);
+
+        $provider->providerProfile()->updateOrCreate([
+            'user_id' => $provider->id,
+        ], [
+            'verification_status' => $validated['verification_status'],
+            'verification_notes' => $validated['verification_notes'] ?? null,
+            'verified_by' => $request->user()->id,
+            'verified_at' => $validated['verification_status'] === 'pending' ? null : now(),
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_verification_updated',
+            "{$request->user()->name} marked provider {$provider->name} as {$validated['verification_status']}.",
+            $request,
+            ['provider_id' => $provider->id, 'verification_status' => $validated['verification_status']],
+        );
+
+        PortalNotification::create([
+            'user_id' => $provider->id,
+            'type' => 'provider_verification',
+            'title' => 'Provider verification updated',
+            'message' => "Your provider account is now {$validated['verification_status']}.",
+            'action_url' => '/provider',
+        ]);
+
+        return response()->json([
+            'message' => 'Provider verification updated.',
+            'provider' => $provider->fresh('providerProfile')->publicPayload(),
         ]);
     }
 
@@ -123,20 +278,36 @@ class AdminController extends Controller
         ]);
 
         $middleInitial = strtoupper($validated['middle_initial']);
-        $name = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
+        $displayName = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
 
         $user = User::create([
-            'name' => $name,
+            'email' => $validated['email'],
+            'username' => $validated['username'],
+            'role' => $validated['role'],
+            'password' => $validated['password'],
+        ]);
+
+        $profile = [
             'first_name' => $validated['first_name'],
             'last_name' => $validated['last_name'],
             'middle_initial' => $middleInitial,
-            'email' => $validated['email'],
-            'username' => $validated['username'],
             'contact_number' => $validated['contact_number'],
-            'role' => $validated['role'],
-            'is_admin' => $validated['role'] === 'admin',
-            'password' => $validated['password'],
-        ]);
+        ];
+
+        match ($user->role) {
+            'admin' => $user->adminProfile()->create([
+                ...$profile,
+                'display_name' => $displayName,
+            ]),
+            'provider' => $user->providerProfile()->create([
+                ...$profile,
+                'provider_name' => $displayName,
+                'verification_status' => 'approved',
+                'verified_by' => $request->user()->id,
+                'verified_at' => now(),
+            ]),
+            default => $user->studentProfile()->create($profile),
+        };
 
         ActivityLog::record(
             $request->user(),
@@ -148,7 +319,7 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'Account created successfully.',
-            'user' => $user->only(['id', 'name', 'email', 'username', 'role', 'is_admin']),
+            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ], 201);
     }
 
@@ -187,6 +358,8 @@ class AdminController extends Controller
                 'action' => $log->action,
                 'description' => $log->description,
                 'ip_address' => $log->ip_address,
+                'metadata' => $log->metadata,
+                'metadata_summary' => $this->metadataSummary($log->metadata ?? []),
                 'created_at' => $log->created_at?->format('M d, Y h:i A'),
             ])->values(),
             'pagination' => [
@@ -202,5 +375,78 @@ class AdminController extends Controller
                 ...$actions->all(),
             ],
         ]);
+    }
+
+    public function exportUsers(Request $request)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return response()->streamDownload(function () {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['ID', 'Name', 'Email', 'Username', 'Contact Number', 'Role', 'Created At']);
+
+            User::query()
+                ->with(['studentProfile', 'providerProfile', 'adminProfile'])
+                ->orderBy('id')
+                ->chunk(200, function ($users) use ($handle) {
+                    foreach ($users as $user) {
+                        fputcsv($handle, [
+                            $user->id,
+                            $user->name,
+                            $user->email,
+                            $user->username,
+                            $user->contact_number,
+                            $user->role,
+                            $user->created_at?->format('Y-m-d H:i:s'),
+                        ]);
+                    }
+                });
+
+            fclose($handle);
+        }, 'scholarship-users.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    public function exportApplications(Request $request)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return response()->streamDownload(function () {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['ID', 'Scholarship', 'Provider', 'Applicant', 'Email', 'Status', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Review Notes']);
+
+            ScholarshipApplication::query()
+                ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
+                ->orderBy('id')
+                ->chunk(200, function ($applications) use ($handle) {
+                    foreach ($applications as $application) {
+                        fputcsv($handle, [
+                            $application->id,
+                            $application->scholarship?->title,
+                            $application->scholarship?->provider?->provider_name ?? $application->scholarship?->provider?->name,
+                            $application->applicant?->name,
+                            $application->applicant?->email,
+                            $application->status,
+                            $application->submitted_at?->format('Y-m-d H:i:s'),
+                            implode('; ', $application->document_checklist ?? []),
+                            $application->documents->count(),
+                            $application->notes,
+                            $application->review_notes,
+                        ]);
+                    }
+                });
+
+            fclose($handle);
+        }, 'scholarship-applications.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    private function metadataSummary(array $metadata): string
+    {
+        if ($metadata === []) {
+            return '';
+        }
+
+        return collect($metadata)
+            ->map(fn ($value, string $key) => "{$key}: {$value}")
+            ->implode(' | ');
     }
 }
