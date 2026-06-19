@@ -165,6 +165,8 @@ class MobileAuthController extends Controller
             'city' => ['nullable', 'string', 'max:255'],
             'province' => ['nullable', 'string', 'max:255'],
             'region' => ['nullable', 'string', 'max:255'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'birthdate' => ['nullable', 'date', 'before:today'],
             'guardian_name' => ['nullable', 'string', 'max:255'],
             'guardian_contact' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
@@ -413,6 +415,12 @@ class MobileAuthController extends Controller
 
     private function scholarshipPayload(Scholarship $scholarship, User $user): array
     {
+        $distanceKm = $this->distanceKm($user->studentProfile, $scholarship);
+        $hasApplied = ScholarshipApplication::query()
+            ->where('scholarship_id', $scholarship->id)
+            ->where('applicant_id', $user->id)
+            ->exists();
+
         return [
             'id' => $scholarship->id,
             'title' => $scholarship->title,
@@ -423,6 +431,14 @@ class MobileAuthController extends Controller
             'eligible_year_levels' => $scholarship->eligible_year_levels,
             'eligible_locations' => $scholarship->eligible_locations,
             'income_requirement' => $scholarship->income_requirement,
+            'location_name' => $scholarship->location_name,
+            'location_address' => $scholarship->location_address,
+            'latitude' => $scholarship->latitude,
+            'longitude' => $scholarship->longitude,
+            'map_url' => $this->mapUrl($scholarship),
+            'embed_map_url' => $this->embedMapUrl($scholarship),
+            'distance_km' => $distanceKm,
+            'distance_label' => $distanceKm === null ? null : number_format($distanceKm, 1).' km away',
             'requirements' => $scholarship->requirements,
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
@@ -432,12 +448,64 @@ class MobileAuthController extends Controller
                 ->where('scholarship_id', $scholarship->id)
                 ->where('user_id', $user->id)
                 ->exists(),
+            'has_applied' => $hasApplied,
             'eligibility_match' => $this->eligibilityMatch($scholarship, $user),
             'provider' => [
                 'name' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
                 'type' => $scholarship->provider?->provider_type,
             ],
         ];
+    }
+
+    private function mapUrl(Scholarship $scholarship): ?string
+    {
+        if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
+            return 'https://www.google.com/maps/search/?api=1&query='.rawurlencode("{$scholarship->latitude},{$scholarship->longitude}");
+        }
+
+        $query = $scholarship->location_address ?: $scholarship->location_name;
+
+        return filled($query)
+            ? 'https://www.google.com/maps/search/?api=1&query='.rawurlencode($query)
+            : null;
+    }
+
+    private function embedMapUrl(Scholarship $scholarship): ?string
+    {
+        if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
+            return 'https://maps.google.com/maps?q='.rawurlencode("{$scholarship->latitude},{$scholarship->longitude}").'&z=15&output=embed';
+        }
+
+        $query = $scholarship->location_address ?: $scholarship->location_name;
+
+        return filled($query)
+            ? 'https://maps.google.com/maps?q='.rawurlencode($query).'&z=15&output=embed'
+            : null;
+    }
+
+    private function distanceKm($profile, Scholarship $scholarship): ?float
+    {
+        if (
+            $profile?->latitude === null
+            || $profile?->longitude === null
+            || $scholarship->latitude === null
+            || $scholarship->longitude === null
+        ) {
+            return null;
+        }
+
+        $studentLatitude = deg2rad((float) $profile->latitude);
+        $studentLongitude = deg2rad((float) $profile->longitude);
+        $scholarshipLatitude = deg2rad((float) $scholarship->latitude);
+        $scholarshipLongitude = deg2rad((float) $scholarship->longitude);
+
+        $latitudeDelta = $scholarshipLatitude - $studentLatitude;
+        $longitudeDelta = $scholarshipLongitude - $studentLongitude;
+        $angle = (sin($latitudeDelta / 2) ** 2)
+            + cos($studentLatitude) * cos($scholarshipLatitude) * (sin($longitudeDelta / 2) ** 2);
+        $angle = min(1, max(0, $angle));
+
+        return round(6371 * 2 * atan2(sqrt($angle), sqrt(1 - $angle)), 1);
     }
 
     private function applicationPayload(ScholarshipApplication $application): array

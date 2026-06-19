@@ -25,6 +25,8 @@ class StudentProfile extends Model
         'city',
         'province',
         'region',
+        'latitude',
+        'longitude',
         'birthdate',
         'guardian_name',
         'guardian_contact',
@@ -35,6 +37,8 @@ class StudentProfile extends Model
         return [
             'birthdate' => 'date',
             'gwa' => 'decimal:2',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
         ];
     }
 

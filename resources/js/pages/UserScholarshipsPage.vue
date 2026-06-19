@@ -47,6 +47,8 @@ const filteredScholarships = computed(() => scholarships.value
             scholarship.eligible_year_levels,
             scholarship.eligible_locations,
             scholarship.income_requirement,
+            scholarship.location_name,
+            scholarship.location_address,
             scholarship.requirements,
         ].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword));
         const matchesProvider = selectedProviderType.value === 'all' || scholarship.provider?.type === selectedProviderType.value;
@@ -59,7 +61,7 @@ const filteredScholarships = computed(() => scholarships.value
         const matchesMinimum = !minimumMatch.value || matchScore >= Number(minimumMatch.value);
         const matchesCourse = textMatches(scholarship.eligible_courses, courseFilter.value);
         const matchesYear = textMatches(scholarship.eligible_year_levels, yearFilter.value);
-        const matchesLocation = textMatches(scholarship.eligible_locations, locationFilter.value);
+        const matchesLocation = textMatches([scholarship.eligible_locations, scholarship.location_name, scholarship.location_address].filter(Boolean).join(' '), locationFilter.value);
         const matchesIncome = selectedIncome.value === 'all' || textMatches(scholarship.income_requirement, selectedIncome.value);
         const matchesSaved = !savedOnly.value || scholarship.is_saved;
         const matchesDeadline = deadlineMatches(scholarship);
@@ -102,13 +104,19 @@ function providerTypeLabel(type) {
 
 function documentRequirements(requirements) {
     if (!requirements) {
-        return ['Not listed yet'];
+        return [];
     }
 
     return String(requirements)
         .split(/\r?\n|,/)
         .map((requirement) => requirement.trim())
         .filter(Boolean);
+}
+
+function requirementsLabel(requirements) {
+    const count = documentRequirements(requirements).length;
+
+    return count === 0 ? 'Not listed yet' : `${count} item${count === 1 ? '' : 's'}`;
 }
 
 function matchClass(score) {
@@ -121,22 +129,6 @@ function matchClass(score) {
     }
 
     return 'bg-rose-100 text-rose-800';
-}
-
-function criterionClass(status) {
-    if (status === 'pass') {
-        return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-    }
-
-    if (status === 'fail') {
-        return 'border-rose-200 bg-rose-50 text-rose-800';
-    }
-
-    if (status === 'missing') {
-        return 'border-amber-200 bg-amber-50 text-amber-800';
-    }
-
-    return 'border-slate-200 bg-slate-50 text-slate-600';
 }
 
 function textMatches(value, filter) {
@@ -247,7 +239,7 @@ onMounted(loadScholarships);
                                 Available scholarship programs
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Browse published scholarship programs from providers. Application submission can be connected next.
+                                Browse published scholarship programs from providers. Open a program to review full requirements, map details, and application steps.
                             </p>
                         </div>
 
@@ -427,29 +419,26 @@ onMounted(loadScholarships);
                                     <span class="inline-flex rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
                                         {{ scholarship.deadline || 'No deadline' }}
                                     </span>
+                                    <span
+                                        v-if="scholarship.distance_label"
+                                        class="inline-flex rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800"
+                                    >
+                                        {{ scholarship.distance_label }}
+                                    </span>
                                 </div>
                             </div>
 
-                            <p class="mt-3 text-sm leading-6 text-slate-600">
+                            <p class="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
                                 {{ scholarship.description }}
                             </p>
 
-                            <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                            <div class="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                                 <div class="rounded-md bg-white p-3">
                                     <p class="font-semibold text-slate-500">
                                         Award
                                     </p>
                                     <p class="mt-1 font-bold text-slate-950">
                                         {{ formatAmount(scholarship.award_amount) }}
-                                    </p>
-                                </div>
-
-                                <div class="rounded-md bg-white p-3">
-                                    <p class="font-semibold text-slate-500">
-                                        Eligibility
-                                    </p>
-                                    <p class="mt-1 text-slate-700">
-                                        {{ scholarship.eligibility || 'Not listed yet' }}
                                     </p>
                                 </div>
 
@@ -463,71 +452,21 @@ onMounted(loadScholarships);
                                 </div>
                                 <div class="rounded-md bg-white p-3">
                                     <p class="font-semibold text-slate-500">
-                                        Saved by students
+                                        Requirements
                                     </p>
                                     <p class="mt-1 font-bold text-slate-950">
-                                        {{ scholarship.bookmarks_count || 0 }}
+                                        {{ requirementsLabel(scholarship.requirements) }}
                                     </p>
                                 </div>
                             </div>
 
-                            <div class="mt-4 rounded-lg border border-emerald-100 bg-white p-3 text-sm">
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p class="font-semibold text-slate-700">
-                                            Eligibility pre-check
-                                        </p>
-                                        <p class="mt-1 leading-6 text-slate-600">
-                                            {{ scholarship.eligibility_match?.summary || scholarship.eligibility_guide?.note || 'Review the listed requirements before applying.' }}
-                                        </p>
-                                    </div>
-                                    <span :class="['shrink-0 rounded-md px-2.5 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
-                                        {{ scholarship.eligibility_match?.label || 'Needs review' }}
-                                    </span>
-                                </div>
-
-                                <div v-if="scholarship.eligibility_match?.criteria?.length" class="mt-3 grid gap-2 sm:grid-cols-2">
-                                    <div
-                                        v-for="criterion in scholarship.eligibility_match.criteria"
-                                        :key="criterion.key"
-                                        :class="['rounded-md border p-2.5 text-xs', criterionClass(criterion.status)]"
-                                    >
-                                        <div class="flex items-center justify-between gap-2">
-                                            <span class="font-bold">{{ criterion.label }}</span>
-                                            <span class="font-bold uppercase">{{ criterion.status }}</span>
-                                        </div>
-                                        <p class="mt-1 leading-5">
-                                            Profile: {{ criterion.student_value || criterion.studentValue || 'Not set' }}
-                                        </p>
-                                        <p v-if="criterion.requirement" class="mt-1 leading-5">
-                                            Required: {{ criterion.requirement }}
-                                        </p>
-                                        <p class="mt-1 leading-5 opacity-80">
-                                            {{ criterion.note }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="mt-4 rounded-lg border border-sky-100 bg-white p-3 text-sm">
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <p class="font-semibold text-slate-700">
-                                        Document requirements
-                                    </p>
-                                    <span class="rounded-md bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">
-                                        {{ documentRequirements(scholarship.requirements).length }} item{{ documentRequirements(scholarship.requirements).length === 1 ? '' : 's' }}
-                                    </span>
-                                </div>
-
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <span
-                                        v-for="requirement in documentRequirements(scholarship.requirements)"
-                                        :key="requirement"
-                                        class="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-700"
-                                    >
-                                        {{ requirement }}
-                                    </span>
-                                </div>
+                            <div class="mt-4 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                                <p class="font-semibold text-slate-700">
+                                    Quick note
+                                </p>
+                                <p class="mt-1 leading-6 text-slate-600">
+                                    {{ scholarship.eligibility_match?.summary || scholarship.eligibility_guide?.note || 'Open the full page to review eligibility, documents, and map details.' }}
+                                </p>
                             </div>
 
                             <div class="mt-4 grid gap-2 sm:grid-cols-[auto_1fr]">
@@ -540,10 +479,10 @@ onMounted(loadScholarships);
                                     {{ savingId === scholarship.id ? 'Saving...' : scholarship.is_saved ? 'Remove saved' : 'Save' }}
                                 </button>
                                 <a
-                                    :href="`/dashboard/applications?scholarship=${scholarship.id}`"
+                                    :href="`/dashboard/scholarships/${scholarship.id}`"
                                     class="block rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
                                 >
-                                    Start application wizard
+                                    View scholarship
                                 </a>
                             </div>
                         </article>

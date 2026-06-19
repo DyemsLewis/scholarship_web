@@ -18,6 +18,7 @@ const stats = ref({
 const scholarships = ref([]);
 const scholarshipFormElement = ref(null);
 const scholarshipForm = ref(emptyScholarshipForm());
+const selectedMapScholarship = ref(null);
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
@@ -68,6 +69,10 @@ function emptyScholarshipForm() {
         eligibleYearLevels: '',
         eligibleLocations: '',
         incomeRequirement: 'Any',
+        locationName: '',
+        locationAddress: '',
+        latitude: '',
+        longitude: '',
         requirements: [],
         awardAmount: '',
         minimumGwa: '',
@@ -103,6 +108,14 @@ function selectCommonRequirements() {
 
 function clearRequirements() {
     scholarshipForm.value.requirements = [];
+}
+
+function openMapModal(scholarship) {
+    selectedMapScholarship.value = scholarship;
+}
+
+function closeMapModal() {
+    selectedMapScholarship.value = null;
 }
 
 function statusLabel(status) {
@@ -172,6 +185,10 @@ function editScholarship(scholarship) {
         eligibleYearLevels: scholarship.eligible_year_levels ?? '',
         eligibleLocations: scholarship.eligible_locations ?? '',
         incomeRequirement: scholarship.income_requirement ?? 'Any',
+        locationName: scholarship.location_name ?? '',
+        locationAddress: scholarship.location_address ?? '',
+        latitude: scholarship.latitude ?? '',
+        longitude: scholarship.longitude ?? '',
         requirements: parseRequirements(scholarship.requirements),
         awardAmount: scholarship.award_amount ?? '',
         minimumGwa: scholarship.minimum_gwa ?? '',
@@ -201,6 +218,10 @@ async function saveScholarship() {
         eligible_year_levels: scholarshipForm.value.eligibleYearLevels,
         eligible_locations: scholarshipForm.value.eligibleLocations,
         income_requirement: scholarshipForm.value.incomeRequirement || 'Any',
+        location_name: scholarshipForm.value.locationName || null,
+        location_address: scholarshipForm.value.locationAddress || null,
+        latitude: scholarshipForm.value.latitude || null,
+        longitude: scholarshipForm.value.longitude || null,
         requirements: scholarshipForm.value.requirements.join('\n'),
         award_amount: scholarshipForm.value.awardAmount || null,
         minimum_gwa: scholarshipForm.value.minimumGwa || null,
@@ -514,6 +535,75 @@ onMounted(loadProviderData);
                                 </div>
                             </fieldset>
 
+                            <fieldset class="rounded-lg border border-sky-100 bg-sky-50/60 p-4">
+                                <legend class="text-sm font-semibold text-slate-700">
+                                    Map location
+                                </legend>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">
+                                    Add the office, campus, or scholarship service location. Coordinates allow students to estimate distance from their saved location.
+                                </p>
+
+                                <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-location-name">
+                                            Location name
+                                        </label>
+                                        <input
+                                            id="scholarship-location-name"
+                                            v-model="scholarshipForm.locationName"
+                                            type="text"
+                                            placeholder="Example: City Scholarship Office"
+                                            :class="inputClass"
+                                        >
+                                    </div>
+
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-location-address">
+                                            Full address
+                                        </label>
+                                        <input
+                                            id="scholarship-location-address"
+                                            v-model="scholarshipForm.locationAddress"
+                                            type="text"
+                                            placeholder="Street, city, province"
+                                            :class="inputClass"
+                                        >
+                                    </div>
+
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-latitude">
+                                            Latitude
+                                        </label>
+                                        <input
+                                            id="scholarship-latitude"
+                                            v-model="scholarshipForm.latitude"
+                                            type="number"
+                                            min="-90"
+                                            max="90"
+                                            step="0.0000001"
+                                            placeholder="14.599512"
+                                            :class="inputClass"
+                                        >
+                                    </div>
+
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-longitude">
+                                            Longitude
+                                        </label>
+                                        <input
+                                            id="scholarship-longitude"
+                                            v-model="scholarshipForm.longitude"
+                                            type="number"
+                                            min="-180"
+                                            max="180"
+                                            step="0.0000001"
+                                            placeholder="120.984222"
+                                            :class="inputClass"
+                                        >
+                                    </div>
+                                </div>
+                            </fieldset>
+
                             <fieldset class="rounded-lg border border-slate-200 bg-white p-4">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
@@ -724,6 +814,34 @@ onMounted(loadProviderData);
                                         Locations: {{ scholarship.eligible_locations || 'Any' }}
                                     </p>
                                 </div>
+
+                                <div class="mt-4 rounded-md border border-sky-100 bg-white p-3 text-sm">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="font-semibold text-slate-500">
+                                                Map location
+                                            </p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ scholarship.location_name || 'No location name' }}
+                                            </p>
+                                            <p class="mt-1 leading-6 text-slate-700">
+                                                {{ scholarship.location_address || 'No address added yet.' }}
+                                            </p>
+                                            <p v-if="scholarship.latitude && scholarship.longitude" class="mt-1 text-xs font-semibold text-slate-500">
+                                                {{ scholarship.latitude }}, {{ scholarship.longitude }}
+                                            </p>
+                                        </div>
+
+                                        <button
+                                            v-if="scholarship.embed_map_url"
+                                            type="button"
+                                            class="rounded-md border border-sky-200 px-3 py-2 text-center text-xs font-bold text-sky-700 transition hover:bg-sky-50"
+                                            @click="openMapModal(scholarship)"
+                                        >
+                                            Preview Map
+                                        </button>
+                                    </div>
+                                </div>
                             </article>
                         </div>
                     </section>
@@ -732,5 +850,67 @@ onMounted(loadProviderData);
                 <ProviderFooter />
             </div>
         </section>
+
+        <div
+            v-if="selectedMapScholarship"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6"
+            @click.self="closeMapModal"
+        >
+            <section class="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl">
+                <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
+                            Provider Map Preview
+                        </p>
+                        <h3 class="mt-1 text-xl font-bold text-slate-950">
+                            {{ selectedMapScholarship.location_name || selectedMapScholarship.title }}
+                        </h3>
+                        <p class="mt-1 text-sm leading-6 text-slate-600">
+                            {{ selectedMapScholarship.location_address || 'No map address added yet.' }}
+                        </p>
+                        <p v-if="selectedMapScholarship.latitude && selectedMapScholarship.longitude" class="mt-1 text-xs font-semibold text-slate-500">
+                            {{ selectedMapScholarship.latitude }}, {{ selectedMapScholarship.longitude }}
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                        @click="closeMapModal"
+                    >
+                        Close
+                    </button>
+                </div>
+
+                <div class="bg-slate-100 p-4">
+                    <iframe
+                        v-if="selectedMapScholarship.embed_map_url"
+                        :src="selectedMapScholarship.embed_map_url"
+                        class="h-[55vh] min-h-80 w-full rounded-md border border-slate-200 bg-white"
+                        loading="lazy"
+                        referrerpolicy="no-referrer-when-downgrade"
+                        title="Provider scholarship map preview"
+                    ></iframe>
+                    <div v-else class="rounded-md border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+                        No embeddable map is available for this scholarship yet.
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p class="text-xs leading-5 text-slate-500">
+                        This is the map preview students will see when browsing scholarship locations.
+                    </p>
+                    <a
+                        v-if="selectedMapScholarship.map_url"
+                        :href="selectedMapScholarship.map_url"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                    >
+                        Open Full Map
+                    </a>
+                </div>
+            </section>
+        </div>
     </main>
 </template>

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api_client.dart';
 
@@ -54,7 +55,9 @@ class _HomeScreenState extends State<HomeScreen> {
         stats = asMap(data['stats']);
         scholarships = asMapList(data['scholarships']);
         applications = asMapList(data['applications']);
-        nextSteps = data['next_steps'] is List ? data['next_steps'] as List : [];
+        nextSteps = data['next_steps'] is List
+            ? data['next_steps'] as List
+            : [];
       });
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
@@ -105,33 +108,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> openApplicationSheet(Map<String, dynamic> scholarship) async {
-    final submitted = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => _ApplicationSheet(
-        scholarship: scholarship,
-        apiClient: widget.apiClient,
-      ),
-    );
-
-    if (submitted == true) {
-      showMessage('Application submitted successfully.');
-      await loadPortal();
-      setState(() => selectedTab = 2);
-    }
-  }
-
   Future<void> openProfileEditor() async {
     final updated = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => _ProfileEditor(
-        user: user,
-        apiClient: widget.apiClient,
-      ),
+      builder: (context) =>
+          _ProfileEditor(user: user, apiClient: widget.apiClient),
     );
 
     if (updated == true) {
@@ -141,7 +124,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> openScholarshipDetail(Map<String, dynamic> scholarship) async {
+    final scholarshipId = intValue(scholarship['id']);
+    final alreadyApplied =
+        scholarship['has_applied'] == true ||
+        applications.any(
+          (application) =>
+              intValue(asMap(application['scholarship'])['id']) ==
+              scholarshipId,
+        );
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => _ScholarshipDetailScreen(
+          scholarship: scholarship,
+          apiClient: widget.apiClient,
+          alreadyApplied: alreadyApplied,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      await loadPortal();
+    }
   }
 
   @override
@@ -151,10 +161,26 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedIndex: selectedTab,
         onDestinationSelected: (index) => setState(() => selectedTab = index),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.school_outlined), selectedIcon: Icon(Icons.school), label: 'Programs'),
-          NavigationDestination(icon: Icon(Icons.assignment_outlined), selectedIcon: Icon(Icons.assignment), label: 'Applications'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(Icons.school),
+            label: 'Programs',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment),
+            label: 'Applications',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
       ),
       body: Container(
@@ -221,16 +247,32 @@ class _HomeScreenState extends State<HomeScreen> {
           selectedDeadline: selectedDeadline,
           minimumMatch: minimumMatch,
           savedOnly: savedOnly,
-          categories: filterOptions(scholarships, (scholarship) => stringValue(scholarship['category'])),
-          providerTypes: filterOptions(scholarships, (scholarship) => stringValue(asMap(scholarship['provider'])['type'])),
-          incomeRules: filterOptions(scholarships, (scholarship) => stringValue(scholarship['income_requirement'])),
+          categories: filterOptions(
+            scholarships,
+            (scholarship) => stringValue(scholarship['category']),
+          ),
+          providerTypes: filterOptions(
+            scholarships,
+            (scholarship) =>
+                stringValue(asMap(scholarship['provider'])['type']),
+          ),
+          incomeRules: filterOptions(
+            scholarships,
+            (scholarship) => stringValue(scholarship['income_requirement']),
+          ),
           onSearchChanged: (value) => setState(() => programSearch = value),
-          onCategoryChanged: (value) => setState(() => selectedCategory = value ?? 'all'),
-          onProviderChanged: (value) => setState(() => selectedProviderType = value ?? 'all'),
-          onIncomeChanged: (value) => setState(() => selectedIncomeRule = value ?? 'all'),
-          onDeadlineChanged: (value) => setState(() => selectedDeadline = value ?? 'all'),
-          onMinimumMatchChanged: (value) => setState(() => minimumMatch = value),
-          onSavedOnlyChanged: (value) => setState(() => savedOnly = value ?? false),
+          onCategoryChanged: (value) =>
+              setState(() => selectedCategory = value ?? 'all'),
+          onProviderChanged: (value) =>
+              setState(() => selectedProviderType = value ?? 'all'),
+          onIncomeChanged: (value) =>
+              setState(() => selectedIncomeRule = value ?? 'all'),
+          onDeadlineChanged: (value) =>
+              setState(() => selectedDeadline = value ?? 'all'),
+          onMinimumMatchChanged: (value) =>
+              setState(() => minimumMatch = value),
+          onSavedOnlyChanged: (value) =>
+              setState(() => savedOnly = value ?? false),
           onReset: () => setState(() {
             programSearch = '';
             selectedCategory = 'all';
@@ -245,15 +287,23 @@ class _HomeScreenState extends State<HomeScreen> {
         if (scholarships.isEmpty)
           const _EmptyCard(message: 'No published scholarship programs yet.')
         else if (filteredPrograms.isEmpty)
-          const _EmptyCard(message: 'No scholarships match your current finder filters.')
+          const _EmptyCard(
+            message: 'No scholarships match your current finder filters.',
+          )
         else
           for (final scholarship in filteredPrograms)
             _ScholarshipCard(
               scholarship: scholarship,
               isSaving: isSaving,
-              alreadyApplied: applications.any((application) => intValue(asMap(application['scholarship'])['id']) == intValue(scholarship['id'])),
+              alreadyApplied:
+                  scholarship['has_applied'] == true ||
+                  applications.any(
+                    (application) =>
+                        intValue(asMap(application['scholarship'])['id']) ==
+                        intValue(scholarship['id']),
+                  ),
               onSave: () => toggleSave(scholarship),
-              onApply: () => openApplicationSheet(scholarship),
+              onView: () => openScholarshipDetail(scholarship),
             ),
       ];
     }
@@ -261,7 +311,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (selectedTab == 2) {
       return [
         _PhotoBanner(
-          imageUrl: '${ApiClient.assetBaseUrl}/images/application-documents.jpg',
+          imageUrl:
+              '${ApiClient.assetBaseUrl}/images/application-documents.jpg',
           title: 'Applications',
           subtitle: 'Track DSS guidance, provider review, and document status.',
         ),
@@ -271,7 +322,8 @@ class _HomeScreenState extends State<HomeScreen> {
         if (applications.isEmpty)
           const _EmptyCard(message: 'No applications submitted yet.')
         else
-          for (final application in applications) _ApplicationCard(application: application),
+          for (final application in applications)
+            _ApplicationCard(application: application),
       ];
     }
 
@@ -382,10 +434,8 @@ class _PhotoBanner extends StatelessWidget {
             height: 190,
             width: double.infinity,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => Container(
-              height: 190,
-              color: const Color(0xFF0F172A),
-            ),
+            errorBuilder: (context, error, stackTrace) =>
+                Container(height: 190, color: const Color(0xFF0F172A)),
           ),
           Container(
             height: 190,
@@ -418,7 +468,10 @@ class _PhotoBanner extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   subtitle,
-                  style: const TextStyle(color: Color(0xFFE2E8F0), height: 1.35),
+                  style: const TextStyle(
+                    color: Color(0xFFE2E8F0),
+                    height: 1.35,
+                  ),
                 ),
               ],
             ),
@@ -535,7 +588,12 @@ class _FinderFiltersCard extends StatelessWidget {
   final ValueChanged<bool?> onSavedOnlyChanged;
   final VoidCallback onReset;
 
-  static const deadlineOptions = ['all', 'next_7_days', 'next_30_days', 'no_deadline'];
+  static const deadlineOptions = [
+    'all',
+    'next_7_days',
+    'next_30_days',
+    'no_deadline',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -565,7 +623,8 @@ class _FinderFiltersCard extends StatelessWidget {
             const SizedBox(height: 14),
             TextField(
               onChanged: onSearchChanged,
-              controller: TextEditingController(text: search)..selection = TextSelection.collapsed(offset: search.length),
+              controller: TextEditingController(text: search)
+                ..selection = TextSelection.collapsed(offset: search.length),
               decoration: const InputDecoration(
                 labelText: 'Search title, provider, course, or location',
                 prefixIcon: Icon(Icons.search),
@@ -604,7 +663,10 @@ class _FinderFiltersCard extends StatelessWidget {
             TextField(
               keyboardType: TextInputType.number,
               onChanged: onMinimumMatchChanged,
-              controller: TextEditingController(text: minimumMatch)..selection = TextSelection.collapsed(offset: minimumMatch.length),
+              controller: TextEditingController(text: minimumMatch)
+                ..selection = TextSelection.collapsed(
+                  offset: minimumMatch.length,
+                ),
               decoration: const InputDecoration(
                 labelText: 'Minimum match percentage',
                 hintText: 'Example: 80',
@@ -643,12 +705,18 @@ class _FilterDropdown extends StatelessWidget {
     return DropdownButtonFormField<String>(
       initialValue: value,
       isExpanded: true,
-      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
       items: options
           .map(
             (option) => DropdownMenuItem(
               value: option,
-              child: Text(friendlyOption(option), overflow: TextOverflow.ellipsis),
+              child: Text(
+                friendlyOption(option),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           )
           .toList(),
@@ -752,7 +820,9 @@ class _ProfileSummary extends StatelessWidget {
       'province',
       'region',
     ];
-    final complete = readinessFields.where((key) => stringValue(user[key]).isNotEmpty).length;
+    final complete = readinessFields
+        .where((key) => stringValue(user[key]).isNotEmpty)
+        .length;
     final percent = (complete / readinessFields.length * 100).round();
 
     return Card(
@@ -776,7 +846,9 @@ class _ProfileSummary extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            Text('$percent% complete - better profile data improves DSS scoring.'),
+            Text(
+              '$percent% complete - better profile data improves DSS scoring.',
+            ),
           ],
         ),
       ),
@@ -795,15 +867,45 @@ class _ProfileCard extends StatelessWidget {
     final details = [
       _Detail('Name', stringValue(user['name'])),
       _Detail('Email', stringValue(user['email'])),
-      _Detail('Contact', stringValue(user['contact_number'], fallback: 'Not provided')),
+      _Detail(
+        'Contact',
+        stringValue(user['contact_number'], fallback: 'Not provided'),
+      ),
       _Detail('School', stringValue(user['school'], fallback: 'Not provided')),
-      _Detail('Course / strand', stringValue(user['course_or_strand'], fallback: 'Not provided')),
-      _Detail('Year level', stringValue(user['year_level'], fallback: 'Not provided')),
-      _Detail('GWA / average', stringValue(user['gwa'], fallback: 'Not provided')),
+      _Detail(
+        'Course / strand',
+        stringValue(user['course_or_strand'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'Year level',
+        stringValue(user['year_level'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'GWA / average',
+        stringValue(user['gwa'], fallback: 'Not provided'),
+      ),
       _Detail('Grading scale', gradingScaleLabel(user['grading_scale'])),
-      _Detail('Income bracket', stringValue(user['income_bracket'], fallback: 'Not provided')),
-      _Detail('Location', [user['barangay'], user['city'], user['province'], user['region']].map(stringValue).where((value) => value.isNotEmpty).join(', ')),
-      _Detail('Guardian', stringValue(user['guardian_name'], fallback: 'Not provided')),
+      _Detail(
+        'Income bracket',
+        stringValue(user['income_bracket'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'Location',
+        [
+          user['barangay'],
+          user['city'],
+          user['province'],
+          user['region'],
+        ].map(stringValue).where((value) => value.isNotEmpty).join(', '),
+      ),
+      _Detail(
+        'Coordinates',
+        coordinateLabel(user['latitude'], user['longitude']),
+      ),
+      _Detail(
+        'Guardian',
+        stringValue(user['guardian_name'], fallback: 'Not provided'),
+      ),
     ];
 
     return Card(
@@ -823,7 +925,10 @@ class _ProfileCard extends StatelessWidget {
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
                   ),
                 ),
-                FilledButton.tonal(onPressed: onEdit, child: const Text('Edit')),
+                FilledButton.tonal(
+                  onPressed: onEdit,
+                  child: const Text('Edit'),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -892,10 +997,26 @@ class _DssFormulaCard extends StatelessWidget {
   const _DssFormulaCard();
 
   static const items = [
-    _DssFormulaItem('35%', 'Eligibility', 'GWA, course, year, location, and income fit.'),
-    _DssFormulaItem('25%', 'Documents', 'Checklist, uploads, and accepted files.'),
-    _DssFormulaItem('20%', 'Academic', 'Average or GWA compared with the minimum.'),
-    _DssFormulaItem('15%', 'Need', 'Income bracket priority for aid-focused programs.'),
+    _DssFormulaItem(
+      '35%',
+      'Eligibility',
+      'GWA, course, year, location, and income fit.',
+    ),
+    _DssFormulaItem(
+      '25%',
+      'Documents',
+      'Checklist, uploads, and accepted files.',
+    ),
+    _DssFormulaItem(
+      '20%',
+      'Academic',
+      'Average or GWA compared with the minimum.',
+    ),
+    _DssFormulaItem(
+      '15%',
+      'Need',
+      'Income bracket priority for aid-focused programs.',
+    ),
     _DssFormulaItem('5%', 'Review', 'Provider status and decision signal.'),
   ];
 
@@ -911,7 +1032,11 @@ class _DssFormulaCard extends StatelessWidget {
           children: [
             const Text(
               'Decision Support System',
-              style: TextStyle(color: Color(0xFF312E81), fontSize: 18, fontWeight: FontWeight.w900),
+              style: TextStyle(
+                color: Color(0xFF312E81),
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -935,7 +1060,10 @@ class _DssFormulaCard extends StatelessWidget {
                       child: Text(
                         item.weight,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: Color(0xFF312E81), fontWeight: FontWeight.w900),
+                        style: const TextStyle(
+                          color: Color(0xFF312E81),
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -943,9 +1071,15 @@ class _DssFormulaCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(item.label, style: const TextStyle(fontWeight: FontWeight.w900)),
+                          Text(
+                            item.label,
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
                           const SizedBox(height: 2),
-                          Text(item.detail, style: const TextStyle(color: Color(0xFF475569))),
+                          Text(
+                            item.detail,
+                            style: const TextStyle(color: Color(0xFF475569)),
+                          ),
                         ],
                       ),
                     ),
@@ -991,7 +1125,11 @@ class _TopMatchesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final top = [...scholarships]
-      ..sort((first, second) => intValue(asMap(second['eligibility_match'])['score']).compareTo(intValue(asMap(first['eligibility_match'])['score'])));
+      ..sort(
+        (first, second) => intValue(
+          asMap(second['eligibility_match'])['score'],
+        ).compareTo(intValue(asMap(first['eligibility_match'])['score'])),
+      );
 
     return Card(
       color: const Color(0xFF081426),
@@ -1003,11 +1141,18 @@ class _TopMatchesCard extends StatelessWidget {
           children: [
             const Text(
               'Top Scholarship Matches',
-              style: TextStyle(color: Color(0xFFFDE68A), fontSize: 16, fontWeight: FontWeight.w900),
+              style: TextStyle(
+                color: Color(0xFFFDE68A),
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
             ),
             const SizedBox(height: 12),
             if (top.isEmpty)
-              const Text('Published programs will appear here.', style: TextStyle(color: Colors.white70))
+              const Text(
+                'Published programs will appear here.',
+                style: TextStyle(color: Colors.white70),
+              )
             else
               for (final scholarship in top.take(3))
                 Padding(
@@ -1018,7 +1163,10 @@ class _TopMatchesCard extends StatelessWidget {
                   ),
                 ),
             const SizedBox(height: 8),
-            FilledButton.tonal(onPressed: onOpenPrograms, child: const Text('Browse programs')),
+            FilledButton.tonal(
+              onPressed: onOpenPrograms,
+              child: const Text('Browse programs'),
+            ),
           ],
         ),
       ),
@@ -1032,21 +1180,30 @@ class _ScholarshipCard extends StatelessWidget {
     required this.isSaving,
     required this.alreadyApplied,
     required this.onSave,
-    required this.onApply,
+    required this.onView,
   });
 
   final Map<String, dynamic> scholarship;
   final bool isSaving;
   final bool alreadyApplied;
   final VoidCallback onSave;
-  final VoidCallback onApply;
+  final VoidCallback onView;
 
   @override
   Widget build(BuildContext context) {
+    final provider = asMap(scholarship['provider']);
     final match = asMap(scholarship['eligibility_match']);
     final requirements = documentRequirements(scholarship['requirements']);
-    final criteria = asMapList(match['criteria']);
     final score = intValue(match['score']);
+    final distanceLabel = stringValue(scholarship['distance_label']);
+    final quickNote = stringValue(
+      match['summary'],
+      fallback: stringValue(
+        asMap(scholarship['eligibility_guide'])['note'],
+        fallback:
+            'Open the full page to review eligibility, documents, and map details.',
+      ),
+    );
 
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
@@ -1064,13 +1221,24 @@ class _ScholarshipCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        stringValue(scholarship['provider'] is Map ? scholarship['provider']['name'] : null, fallback: 'Scholarship Provider'),
-                        style: const TextStyle(color: Color(0xFF047857), fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1),
+                        stringValue(
+                          provider['name'],
+                          fallback: 'Scholarship Provider',
+                        ),
+                        style: const TextStyle(
+                          color: Color(0xFF047857),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         stringValue(scholarship['title']),
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ],
                   ),
@@ -1078,49 +1246,470 @@ class _ScholarshipCard extends StatelessWidget {
                 _ScorePill(score: score, label: '$score%'),
               ],
             ),
+            if (alreadyApplied) ...[
+              const SizedBox(height: 8),
+              const _StatusPill(label: 'Applied'),
+            ],
             const SizedBox(height: 10),
-            Text(stringValue(scholarship['description']), maxLines: 3, overflow: TextOverflow.ellipsis),
+            Text(
+              stringValue(scholarship['description']),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                _InfoChip(icon: Icons.payments, label: moneyValue(scholarship['award_amount'])),
-                _InfoChip(icon: Icons.grade, label: 'GWA ${stringValue(scholarship['minimum_gwa'], fallback: 'Any')}'),
-                _InfoChip(icon: Icons.calendar_month, label: stringValue(scholarship['deadline'], fallback: 'No deadline')),
-                _InfoChip(icon: Icons.description, label: '${requirements.length} docs'),
+                _InfoChip(
+                  icon: Icons.payments,
+                  label: moneyValue(scholarship['award_amount']),
+                ),
+                _InfoChip(
+                  icon: Icons.grade,
+                  label:
+                      'GWA ${stringValue(scholarship['minimum_gwa'], fallback: 'Any')}',
+                ),
+                _InfoChip(
+                  icon: Icons.calendar_month,
+                  label: stringValue(
+                    scholarship['deadline'],
+                    fallback: 'No deadline',
+                  ),
+                ),
+                _InfoChip(
+                  icon: Icons.description,
+                  label: requirements.isEmpty
+                      ? 'Docs not listed'
+                      : '${requirements.length} docs',
+                ),
+                if (distanceLabel.isNotEmpty)
+                  _InfoChip(icon: Icons.place_outlined, label: distanceLabel),
               ],
             ),
             const SizedBox(height: 12),
-            Text(stringValue(match['summary'], fallback: 'Review eligibility before applying.')),
-            if (criteria.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              const Text('Eligibility pre-check', style: TextStyle(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 8),
-              for (final criterion in criteria.take(5))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _CriterionTile(criterion: criterion),
-                ),
-            ],
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Text(
+                quickNote,
+                style: const TextStyle(color: Color(0xFF475569), height: 1.35),
+              ),
+            ),
             const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: isSaving ? null : onSave,
-                    icon: Icon(scholarship['is_saved'] == true ? Icons.bookmark : Icons.bookmark_border),
-                    label: Text(scholarship['is_saved'] == true ? 'Saved' : 'Save'),
+                    icon: Icon(
+                      scholarship['is_saved'] == true
+                          ? Icons.bookmark
+                          : Icons.bookmark_border,
+                    ),
+                    label: Text(
+                      scholarship['is_saved'] == true ? 'Saved' : 'Save',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
-                    onPressed: alreadyApplied ? null : onApply,
-                    child: Text(alreadyApplied ? 'Applied' : 'Apply'),
+                    onPressed: onView,
+                    child: const Text('View scholarship'),
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScholarshipDetailScreen extends StatefulWidget {
+  const _ScholarshipDetailScreen({
+    required this.scholarship,
+    required this.apiClient,
+    required this.alreadyApplied,
+  });
+
+  final Map<String, dynamic> scholarship;
+  final ApiClient apiClient;
+  final bool alreadyApplied;
+
+  @override
+  State<_ScholarshipDetailScreen> createState() =>
+      _ScholarshipDetailScreenState();
+}
+
+class _ScholarshipDetailScreenState extends State<_ScholarshipDetailScreen> {
+  late Map<String, dynamic> scholarship;
+  late bool alreadyApplied;
+  bool isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    scholarship = Map<String, dynamic>.from(widget.scholarship);
+    alreadyApplied =
+        widget.alreadyApplied || scholarship['has_applied'] == true;
+  }
+
+  Future<void> toggleSave() async {
+    setState(() => isSaving = true);
+
+    try {
+      final id = intValue(scholarship['id']);
+      final response = scholarship['is_saved'] == true
+          ? await widget.apiClient.unsaveScholarship(id)
+          : await widget.apiClient.saveScholarship(id);
+      final updatedScholarship = asMap(response['scholarship']);
+
+      if (mounted && updatedScholarship.isNotEmpty) {
+        setState(() {
+          scholarship = updatedScholarship;
+          alreadyApplied = alreadyApplied || scholarship['has_applied'] == true;
+        });
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              stringValue(
+                response['message'],
+                fallback: 'Saved scholarships updated.',
+              ),
+            ),
+          ),
+        );
+      }
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isSaving = false);
+      }
+    }
+  }
+
+  Future<void> openApplicationWizard() async {
+    final submitted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _ApplicationSheet(
+        scholarship: scholarship,
+        apiClient: widget.apiClient,
+      ),
+    );
+
+    if (submitted == true && mounted) {
+      setState(() => alreadyApplied = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Application submitted successfully.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = asMap(scholarship['provider']);
+    final match = asMap(scholarship['eligibility_match']);
+    final criteria = asMapList(match['criteria']);
+    final requirements = documentRequirements(scholarship['requirements']);
+    final score = intValue(match['score']);
+    final mapUrl = stringValue(scholarship['map_url']);
+    final distanceLabel = stringValue(scholarship['distance_label']);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFE8EFF8),
+      appBar: AppBar(
+        title: const Text('Scholarship details'),
+        backgroundColor: const Color(0xFF081426),
+        foregroundColor: Colors.white,
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Card(
+              color: const Color(0xFF081426),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      stringValue(
+                        scholarship['category'],
+                        fallback: labelFromKey(provider['type']),
+                      ),
+                      style: const TextStyle(
+                        color: Color(0xFFFDE68A),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      stringValue(
+                        scholarship['title'],
+                        fallback: 'Scholarship program',
+                      ),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 27,
+                        fontWeight: FontWeight.w900,
+                        height: 1.05,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      stringValue(
+                        provider['name'],
+                        fallback: 'Scholarship Provider',
+                      ),
+                      style: const TextStyle(
+                        color: Color(0xFFCBD5E1),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _ScorePill(score: score, label: '$score% match'),
+                        _InfoChip(
+                          icon: Icons.calendar_month,
+                          label: stringValue(
+                            scholarship['deadline'],
+                            fallback: 'No deadline',
+                          ),
+                        ),
+                        if (distanceLabel.isNotEmpty)
+                          _InfoChip(
+                            icon: Icons.place_outlined,
+                            label: distanceLabel,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            _DetailSection(
+              title: 'Program Overview',
+              children: [
+                Text(
+                  stringValue(
+                    scholarship['description'],
+                    fallback: 'No description has been posted yet.',
+                  ),
+                  style: const TextStyle(height: 1.45),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _InfoChip(
+                      icon: Icons.payments,
+                      label: moneyValue(scholarship['award_amount']),
+                    ),
+                    _InfoChip(
+                      icon: Icons.grade,
+                      label:
+                          'Minimum ${stringValue(scholarship['minimum_gwa'], fallback: 'Not listed')}',
+                    ),
+                    _InfoChip(
+                      icon: Icons.description,
+                      label: requirements.isEmpty
+                          ? 'Docs not listed'
+                          : '${requirements.length} documents',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            _DetailSection(
+              title: 'Eligibility',
+              children: [
+                Text(
+                  stringValue(
+                    scholarship['eligibility'],
+                    fallback: 'No eligibility description has been posted yet.',
+                  ),
+                  style: const TextStyle(height: 1.45),
+                ),
+                const SizedBox(height: 14),
+                _DetailTile(
+                  detail: _Detail(
+                    'Courses / strands',
+                    stringValue(
+                      scholarship['eligible_courses'],
+                      fallback: 'Any',
+                    ),
+                  ),
+                ),
+                _DetailTile(
+                  detail: _Detail(
+                    'Year levels',
+                    stringValue(
+                      scholarship['eligible_year_levels'],
+                      fallback: 'Any',
+                    ),
+                  ),
+                ),
+                _DetailTile(
+                  detail: _Detail(
+                    'Eligible locations',
+                    stringValue(
+                      scholarship['eligible_locations'],
+                      fallback: 'Any',
+                    ),
+                  ),
+                ),
+                _DetailTile(
+                  detail: _Detail(
+                    'Income rule',
+                    stringValue(
+                      scholarship['income_requirement'],
+                      fallback: 'Any',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            _DetailSection(
+              title: 'Eligibility Pre-check',
+              children: [
+                Text(
+                  stringValue(
+                    match['summary'],
+                    fallback: 'Review the listed requirements before applying.',
+                  ),
+                  style: const TextStyle(height: 1.45),
+                ),
+                if (criteria.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  for (final criterion in criteria)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _CriterionTile(criterion: criterion),
+                    ),
+                ],
+              ],
+            ),
+            _DetailSection(
+              title: 'Document Requirements',
+              children: [
+                if (requirements.isEmpty)
+                  const Text('No document requirements are listed yet.')
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final requirement in requirements)
+                        Chip(
+                          label: Text(requirement),
+                          side: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
+            _DetailSection(
+              title: 'Map Location',
+              children: [
+                Text(
+                  stringValue(
+                    scholarship['location_name'],
+                    fallback: 'Location not named',
+                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  stringValue(
+                    scholarship['location_address'],
+                    fallback: 'No map address added yet.',
+                  ),
+                ),
+                if (distanceLabel.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'About $distanceLabel from your saved location.',
+                    style: const TextStyle(
+                      color: Color(0xFF0369A1),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+                if (mapUrl.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => openExternalMap(context, mapUrl),
+                    icon: const Icon(Icons.map_outlined),
+                    label: const Text('Open Maps'),
+                  ),
+                ],
+              ],
+            ),
+            Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: isSaving ? null : toggleSave,
+                      icon: Icon(
+                        scholarship['is_saved'] == true
+                            ? Icons.bookmark
+                            : Icons.bookmark_border,
+                      ),
+                      label: Text(
+                        isSaving
+                            ? 'Saving...'
+                            : scholarship['is_saved'] == true
+                            ? 'Remove saved'
+                            : 'Save scholarship',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    FilledButton(
+                      onPressed: alreadyApplied ? null : openApplicationWizard,
+                      child: Text(
+                        alreadyApplied
+                            ? 'Already applied'
+                            : 'Start application wizard',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -1159,11 +1748,19 @@ class _ApplicationCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        stringValue(scholarship['title'], fallback: 'Scholarship'),
-                        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                        stringValue(
+                          scholarship['title'],
+                          fallback: 'Scholarship',
+                        ),
+                        style: const TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                       const SizedBox(height: 4),
-                      Text('Submitted ${stringValue(application['submitted_at'], fallback: 'recently')}'),
+                      Text(
+                        'Submitted ${stringValue(application['submitted_at'], fallback: 'recently')}',
+                      ),
                     ],
                   ),
                 ),
@@ -1184,15 +1781,28 @@ class _ApplicationCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          stringValue(dss['label'], fallback: labelFromKey(application['dss_recommendation'])),
-                          style: const TextStyle(color: Color(0xFF312E81), fontWeight: FontWeight.w900),
+                          stringValue(
+                            dss['label'],
+                            fallback: labelFromKey(
+                              application['dss_recommendation'],
+                            ),
+                          ),
+                          style: const TextStyle(
+                            color: Color(0xFF312E81),
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
                       _ScorePill(score: dssScore, label: '$dssScore% DSS'),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(stringValue(dss['summary'], fallback: 'DSS helps providers prioritize applications.')),
+                  Text(
+                    stringValue(
+                      dss['summary'],
+                      fallback: 'DSS helps providers prioritize applications.',
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1201,14 +1811,27 @@ class _ApplicationCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _InfoChip(icon: Icons.checklist, label: '${intValue(readiness['confirmed'])}/${intValue(readiness['required'])} confirmed'),
-                _InfoChip(icon: Icons.upload_file, label: '${intValue(readiness['uploaded'])} uploaded'),
-                _InfoChip(icon: Icons.verified, label: '${intValue(readiness['accepted'])} accepted'),
+                _InfoChip(
+                  icon: Icons.checklist,
+                  label:
+                      '${intValue(readiness['confirmed'])}/${intValue(readiness['required'])} confirmed',
+                ),
+                _InfoChip(
+                  icon: Icons.upload_file,
+                  label: '${intValue(readiness['uploaded'])} uploaded',
+                ),
+                _InfoChip(
+                  icon: Icons.verified,
+                  label: '${intValue(readiness['accepted'])} accepted',
+                ),
               ],
             ),
             if (documents.isNotEmpty) ...[
               const SizedBox(height: 12),
-              const Text('Documents', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Text(
+                'Documents',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 8),
               for (final document in documents)
                 Padding(
@@ -1218,12 +1841,17 @@ class _ApplicationCard extends StatelessWidget {
             ],
             if (timeline.isNotEmpty) ...[
               const SizedBox(height: 12),
-              const Text('Timeline', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Text(
+                'Timeline',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 8),
               for (final event in timeline.take(3))
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Text('${labelFromKey(event['to_status'])} - ${stringValue(event['changed_at'], fallback: 'recently')}'),
+                  child: Text(
+                    '${labelFromKey(event['to_status'])} - ${stringValue(event['changed_at'], fallback: 'recently')}',
+                  ),
                 ),
             ],
             const SizedBox(height: 8),
@@ -1268,22 +1896,35 @@ class _CriterionTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   stringValue(criterion['label'], fallback: 'Requirement'),
-                  style: TextStyle(color: colors.text, fontWeight: FontWeight.w900),
+                  style: TextStyle(
+                    color: colors.text,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
               Text(
                 labelFromKey(status),
-                style: TextStyle(color: colors.text, fontSize: 12, fontWeight: FontWeight.w900),
+                style: TextStyle(
+                  color: colors.text,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 6),
           Text('Profile: $studentValue', style: TextStyle(color: colors.text)),
           if (stringValue(criterion['requirement']).isNotEmpty)
-            Text('Required: ${stringValue(criterion['requirement'])}', style: TextStyle(color: colors.text)),
+            Text(
+              'Required: ${stringValue(criterion['requirement'])}',
+              style: TextStyle(color: colors.text),
+            ),
           if (stringValue(criterion['note']).isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(stringValue(criterion['note']), style: TextStyle(color: colors.text.withAlpha(210), fontSize: 12)),
+            Text(
+              stringValue(criterion['note']),
+              style: TextStyle(color: colors.text.withAlpha(210), fontSize: 12),
+            ),
           ],
         ],
       ),
@@ -1292,10 +1933,7 @@ class _CriterionTile extends StatelessWidget {
 }
 
 class _ApplicationSheet extends StatefulWidget {
-  const _ApplicationSheet({
-    required this.scholarship,
-    required this.apiClient,
-  });
+  const _ApplicationSheet({required this.scholarship, required this.apiClient});
 
   final Map<String, dynamic> scholarship;
   final ApiClient apiClient;
@@ -1325,7 +1963,9 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
   Future<void> submit() async {
     if (requirements.isNotEmpty && selected.length != requirements.length) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Confirm all listed documents before submitting.')),
+        const SnackBar(
+          content: Text('Confirm all listed documents before submitting.'),
+        ),
       );
       return;
     }
@@ -1344,7 +1984,9 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
       }
     } on ApiException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
       }
     } finally {
       if (mounted) {
@@ -1371,7 +2013,9 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 8),
-            const Text('Confirm prepared documents. Uploading files is still handled on the web portal.'),
+            const Text(
+              'Confirm prepared documents. Uploading files is still handled on the web portal.',
+            ),
             const SizedBox(height: 16),
             if (requirements.isEmpty)
               const Text('No document requirements are listed.')
@@ -1403,7 +2047,9 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: isSubmitting ? null : submit,
-              child: Text(isSubmitting ? 'Submitting...' : 'Submit application'),
+              child: Text(
+                isSubmitting ? 'Submitting...' : 'Submit application',
+              ),
             ),
           ],
         ),
@@ -1431,7 +2077,12 @@ class _ProfileEditorState extends State<_ProfileEditor> {
     _ProfileField('first_name', 'First name', required: true),
     _ProfileField('middle_initial', 'M.I.', required: true, maxLength: 1),
     _ProfileField('last_name', 'Last name', required: true),
-    _ProfileField('contact_number', 'Contact number', required: true, keyboardType: TextInputType.phone),
+    _ProfileField(
+      'contact_number',
+      'Contact number',
+      required: true,
+      keyboardType: TextInputType.phone,
+    ),
     _ProfileField('school', 'School'),
     _ProfileField('course_or_strand', 'Course / strand'),
     _ProfileField('year_level', 'Year level'),
@@ -1443,17 +2094,25 @@ class _ProfileEditorState extends State<_ProfileEditor> {
     _ProfileField('city', 'City / municipality'),
     _ProfileField('province', 'Province'),
     _ProfileField('region', 'Region'),
+    _ProfileField('latitude', 'Latitude', keyboardType: TextInputType.number),
+    _ProfileField('longitude', 'Longitude', keyboardType: TextInputType.number),
     _ProfileField('address', 'Address'),
     _ProfileField('birthdate', 'Birthdate YYYY-MM-DD'),
     _ProfileField('guardian_name', 'Guardian name'),
-    _ProfileField('guardian_contact', 'Guardian contact', keyboardType: TextInputType.phone),
+    _ProfileField(
+      'guardian_contact',
+      'Guardian contact',
+      keyboardType: TextInputType.phone,
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
     for (final field in fields) {
-      controllers[field.key] = TextEditingController(text: stringValue(widget.user[field.key]));
+      controllers[field.key] = TextEditingController(
+        text: stringValue(widget.user[field.key]),
+      );
     }
   }
 
@@ -1477,7 +2136,9 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       for (final field in fields) {
         payload[field.key] = controllers[field.key]!.text.trim();
       }
-      payload['grading_scale'] = normalizeGradingScale(payload['grading_scale']);
+      payload['grading_scale'] = normalizeGradingScale(
+        payload['grading_scale'],
+      );
 
       await widget.apiClient.updateProfile(payload);
 
@@ -1486,7 +2147,9 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       }
     } on ApiException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
       }
     } finally {
       if (mounted) {
@@ -1532,7 +2195,8 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                         return 'Required';
                       }
 
-                      if (field.key == 'middle_initial' && !RegExp(r'^[A-Za-z]$').hasMatch(stringValue(value))) {
+                      if (field.key == 'middle_initial' &&
+                          !RegExp(r'^[A-Za-z]$').hasMatch(stringValue(value))) {
                         return 'Use 1 letter';
                       }
 
@@ -1595,7 +2259,11 @@ class _DetailTile extends StatelessWidget {
         children: [
           Text(
             detail.label,
-            style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w800),
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1603,6 +2271,35 @@ class _DetailTile extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DetailSection extends StatelessWidget {
+  const _DetailSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
       ),
     );
   }
@@ -1636,8 +2333,8 @@ class _ScorePill extends StatelessWidget {
     final color = score >= 80
         ? Colors.green
         : score >= 55
-            ? Colors.amber
-            : Colors.red;
+        ? Colors.amber
+        : Colors.red;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1668,7 +2365,10 @@ class _StatusPill extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(color: Color(0xFF075985), fontWeight: FontWeight.w900),
+        style: const TextStyle(
+          color: Color(0xFF075985),
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }
@@ -1696,10 +2396,19 @@ class _DocumentRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(stringValue(document['document_name']), style: const TextStyle(fontWeight: FontWeight.w900)),
-                Text(labelFromKey(document['status']), style: const TextStyle(color: Color(0xFF64748B))),
+                Text(
+                  stringValue(document['document_name']),
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                Text(
+                  labelFromKey(document['status']),
+                  style: const TextStyle(color: Color(0xFF64748B)),
+                ),
                 if (stringValue(document['review_notes']).isNotEmpty)
-                  Text(stringValue(document['review_notes']), style: const TextStyle(color: Color(0xFF92400E))),
+                  Text(
+                    stringValue(document['review_notes']),
+                    style: const TextStyle(color: Color(0xFF92400E)),
+                  ),
               ],
             ),
           ),
@@ -1729,12 +2438,14 @@ List<Map<String, dynamic>> asMapList(Object? value) {
   return [];
 }
 
-List<Map<String, dynamic>> rankedScholarships(List<Map<String, dynamic>> scholarships) {
-  return [...scholarships]
-    ..sort(
-      (first, second) => intValue(asMap(second['eligibility_match'])['score'])
-          .compareTo(intValue(asMap(first['eligibility_match'])['score'])),
-    );
+List<Map<String, dynamic>> rankedScholarships(
+  List<Map<String, dynamic>> scholarships,
+) {
+  return [...scholarships]..sort(
+    (first, second) => intValue(
+      asMap(second['eligibility_match'])['score'],
+    ).compareTo(intValue(asMap(first['eligibility_match'])['score'])),
+  );
 }
 
 List<Map<String, dynamic>> filterScholarships({
@@ -1754,7 +2465,8 @@ List<Map<String, dynamic>> filterScholarships({
     final provider = asMap(scholarship['provider']);
     final match = asMap(scholarship['eligibility_match']);
     final score = intValue(match['score']);
-    final matchesSearch = keyword.isEmpty ||
+    final matchesSearch =
+        keyword.isEmpty ||
         [
           scholarship['title'],
           scholarship['description'],
@@ -1764,6 +2476,8 @@ List<Map<String, dynamic>> filterScholarships({
           scholarship['eligible_year_levels'],
           scholarship['eligible_locations'],
           scholarship['income_requirement'],
+          scholarship['location_name'],
+          scholarship['location_address'],
           scholarship['requirements'],
           provider['name'],
         ].any((value) => stringValue(value).toLowerCase().contains(keyword));
@@ -1777,26 +2491,30 @@ List<Map<String, dynamic>> filterScholarships({
         (!savedOnly || scholarship['is_saved'] == true);
   }).toList();
 
-  return rankedScholarships(filtered)
-    ..sort((first, second) {
-      final scoreDifference = intValue(asMap(second['eligibility_match'])['score'])
-          .compareTo(intValue(asMap(first['eligibility_match'])['score']));
+  return rankedScholarships(filtered)..sort((first, second) {
+    final scoreDifference = intValue(
+      asMap(second['eligibility_match'])['score'],
+    ).compareTo(intValue(asMap(first['eligibility_match'])['score']));
 
-      if (scoreDifference != 0) {
-        return scoreDifference;
-      }
+    if (scoreDifference != 0) {
+      return scoreDifference;
+    }
 
-      return deadlineSortValue(first).compareTo(deadlineSortValue(second));
-    });
+    return deadlineSortValue(first).compareTo(deadlineSortValue(second));
+  });
 }
 
-List<String> filterOptions(List<Map<String, dynamic>> scholarships, String Function(Map<String, dynamic>) selector) {
-  final options = scholarships
-      .map(selector)
-      .where((value) => value.trim().isNotEmpty)
-      .toSet()
-      .toList()
-    ..sort();
+List<String> filterOptions(
+  List<Map<String, dynamic>> scholarships,
+  String Function(Map<String, dynamic>) selector,
+) {
+  final options =
+      scholarships
+          .map(selector)
+          .where((value) => value.trim().isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
 
   return ['all', ...options];
 }
@@ -1837,7 +2555,9 @@ bool textMatches(Object? value, String filter) {
   final haystack = stringValue(value).toLowerCase();
   final needle = filter.toLowerCase();
 
-  return haystack.isEmpty || haystack.contains(needle) || needle.contains(haystack);
+  return haystack.isEmpty ||
+      haystack.contains(needle) ||
+      needle.contains(haystack);
 }
 
 bool deadlineMatches(Map<String, dynamic> scholarship, String filter) {
@@ -1891,7 +2611,9 @@ DateTime? parsePortalDate(String value) {
     return direct;
   }
 
-  final match = RegExp(r'^([A-Za-z]{3}) (\d{1,2}), (\d{4})$').firstMatch(value.trim());
+  final match = RegExp(
+    r'^([A-Za-z]{3}) (\d{1,2}), (\d{4})$',
+  ).firstMatch(value.trim());
 
   if (match == null) {
     return null;
@@ -1996,6 +2718,36 @@ String gradingScaleLabel(Object? value) {
   }
 
   return 'Not provided';
+}
+
+String coordinateLabel(Object? latitude, Object? longitude) {
+  final lat = stringValue(latitude);
+  final lng = stringValue(longitude);
+
+  if (lat.isEmpty || lng.isEmpty) {
+    return 'Not provided';
+  }
+
+  return '$lat, $lng';
+}
+
+Future<void> openExternalMap(BuildContext context, String url) async {
+  final uri = Uri.tryParse(url);
+
+  if (uri == null) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Map link is not valid.')));
+    return;
+  }
+
+  final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+  if (!opened && context.mounted) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Unable to open map link.')));
+  }
 }
 
 String normalizeGradingScale(Object? value) {

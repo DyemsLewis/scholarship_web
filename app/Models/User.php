@@ -184,6 +184,8 @@ class User extends Authenticatable
             'city' => $this->studentProfile?->city,
             'province' => $this->studentProfile?->province,
             'region' => $this->studentProfile?->region,
+            'latitude' => $this->studentProfile?->latitude,
+            'longitude' => $this->studentProfile?->longitude,
             'birthdate' => $this->studentProfile?->birthdate?->format('Y-m-d'),
             'guardian_name' => $this->studentProfile?->guardian_name,
             'guardian_contact' => $this->studentProfile?->guardian_contact,

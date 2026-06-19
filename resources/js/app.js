@@ -16,6 +16,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage.vue';
 import UserApplicationsPage from './pages/UserApplicationsPage.vue';
 import UserDashboardPage from './pages/UserDashboardPage.vue';
 import UserProfilePage from './pages/UserProfilePage.vue';
+import UserScholarshipDetailPage from './pages/UserScholarshipDetailPage.vue';
 import UserScholarshipsPage from './pages/UserScholarshipsPage.vue';
 
 const appElement = document.getElementById('app');
@@ -28,6 +29,7 @@ const pages = {
     dashboard: UserDashboardPage,
     dashboardApplications: UserApplicationsPage,
     dashboardProfile: UserProfilePage,
+    dashboardScholarshipDetail: UserScholarshipDetailPage,
     dashboardScholarships: UserScholarshipsPage,
     forgotPassword: ForgotPasswordPage,
     landing: LandingPage,

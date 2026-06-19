@@ -377,6 +377,10 @@ class ProviderController extends Controller
             'eligible_year_levels' => ['nullable', 'string', 'max:2000'],
             'eligible_locations' => ['nullable', 'string', 'max:3000'],
             'income_requirement' => ['nullable', 'string', 'max:100'],
+            'location_name' => ['nullable', 'string', 'max:255'],
+            'location_address' => ['nullable', 'string', 'max:500'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'requirements' => ['nullable', 'string', 'max:5000'],
             'award_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'minimum_gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -421,7 +425,10 @@ class ProviderController extends Controller
                     $application->applicant?->studentProfile?->barangay,
                     $application->applicant?->studentProfile?->city,
                     $application->applicant?->studentProfile?->province,
+                    $application->applicant?->studentProfile?->region,
                 ])->filter()->implode(', '),
+                'latitude' => $application->applicant?->studentProfile?->latitude,
+                'longitude' => $application->applicant?->studentProfile?->longitude,
             ],
             'scholarship' => $application->scholarship
                 ? $this->scholarshipPayload($application->scholarship)
@@ -490,6 +497,12 @@ class ProviderController extends Controller
             'eligible_year_levels' => $scholarship->eligible_year_levels,
             'eligible_locations' => $scholarship->eligible_locations,
             'income_requirement' => $scholarship->income_requirement,
+            'location_name' => $scholarship->location_name,
+            'location_address' => $scholarship->location_address,
+            'latitude' => $scholarship->latitude,
+            'longitude' => $scholarship->longitude,
+            'map_url' => $this->mapUrl($scholarship),
+            'embed_map_url' => $this->embedMapUrl($scholarship),
             'requirements' => $scholarship->requirements,
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
@@ -509,6 +522,32 @@ class ProviderController extends Controller
         }
 
         abort(403, 'Your provider account must be approved by an admin before posting scholarships.');
+    }
+
+    private function mapUrl(Scholarship $scholarship): ?string
+    {
+        if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
+            return 'https://www.google.com/maps/search/?api=1&query='.rawurlencode("{$scholarship->latitude},{$scholarship->longitude}");
+        }
+
+        $query = $scholarship->location_address ?: $scholarship->location_name;
+
+        return filled($query)
+            ? 'https://www.google.com/maps/search/?api=1&query='.rawurlencode($query)
+            : null;
+    }
+
+    private function embedMapUrl(Scholarship $scholarship): ?string
+    {
+        if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
+            return 'https://maps.google.com/maps?q='.rawurlencode("{$scholarship->latitude},{$scholarship->longitude}").'&z=15&output=embed';
+        }
+
+        $query = $scholarship->location_address ?: $scholarship->location_name;
+
+        return filled($query)
+            ? 'https://maps.google.com/maps?q='.rawurlencode($query).'&z=15&output=embed'
+            : null;
     }
 
     private function documentPayload(ApplicationDocument $document): array

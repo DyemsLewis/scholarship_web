@@ -18,6 +18,10 @@ class Scholarship extends Model
         'eligible_year_levels',
         'eligible_locations',
         'income_requirement',
+        'location_name',
+        'location_address',
+        'latitude',
+        'longitude',
         'requirements',
         'award_amount',
         'minimum_gwa',
@@ -31,6 +35,8 @@ class Scholarship extends Model
         return [
             'award_amount' => 'decimal:2',
             'minimum_gwa' => 'decimal:2',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
             'deadline' => 'date',
             'views_count' => 'integer',
         ];

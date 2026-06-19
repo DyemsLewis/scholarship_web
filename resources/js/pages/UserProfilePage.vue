@@ -7,6 +7,7 @@ const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
 const statusMessage = ref('');
+const locationMessage = ref('');
 const user = ref(null);
 const form = ref(emptyForm());
 
@@ -37,6 +38,8 @@ const profileFields = computed(() => [
     { label: 'City', value: user.value?.city },
     { label: 'Province', value: user.value?.province },
     { label: 'Region', value: user.value?.region },
+    { label: 'Latitude', value: user.value?.latitude },
+    { label: 'Longitude', value: user.value?.longitude },
     { label: 'Birthdate', value: user.value?.birthdate },
     { label: 'Guardian name', value: user.value?.guardian_name },
     { label: 'Guardian contact', value: user.value?.guardian_contact },
@@ -62,6 +65,8 @@ function emptyForm() {
         city: '',
         province: '',
         region: '',
+        latitude: '',
+        longitude: '',
         birthdate: '',
         guardian_name: '',
         guardian_contact: '',
@@ -90,6 +95,8 @@ function fillForm(payload) {
         city: payload?.city ?? '',
         province: payload?.province ?? '',
         region: payload?.region ?? '',
+        latitude: payload?.latitude ?? '',
+        longitude: payload?.longitude ?? '',
         birthdate: payload?.birthdate ?? '',
         guardian_name: payload?.guardian_name ?? '',
         guardian_contact: payload?.guardian_contact ?? '',
@@ -102,6 +109,32 @@ function handleMiddleInitialInput(event) {
 
 function handlePhoneInput(key, event) {
     form.value[key] = event.target.value.replace(/[^\d+\s().-]/g, '');
+}
+
+function useCurrentLocation() {
+    locationMessage.value = '';
+
+    if (!navigator.geolocation) {
+        locationMessage.value = 'Location is not supported by this browser.';
+        return;
+    }
+
+    locationMessage.value = 'Getting your current location...';
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            form.value.latitude = position.coords.latitude.toFixed(7);
+            form.value.longitude = position.coords.longitude.toFixed(7);
+            locationMessage.value = 'Location added. Save your profile to keep it.';
+        },
+        () => {
+            locationMessage.value = 'Unable to get location. You can enter latitude and longitude manually.';
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 60000,
+        },
+    );
 }
 
 async function loadProfile() {
@@ -314,6 +347,41 @@ onMounted(loadProfile);
                                     <label :class="labelClass" for="profile-region">Region</label>
                                     <input id="profile-region" v-model="form.region" placeholder="NCR / Region IV-A" :class="inputClass">
                                 </div>
+                            </div>
+
+                            <div class="rounded-lg border border-sky-100 bg-sky-50/70 p-4">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold text-slate-700">
+                                            Map coordinates
+                                        </p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            Save your coordinates so the portal can estimate how far scholarship locations are from you.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50"
+                                        @click="useCurrentLocation"
+                                    >
+                                        Use my current location
+                                    </button>
+                                </div>
+
+                                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label :class="labelClass" for="profile-latitude">Latitude</label>
+                                        <input id="profile-latitude" v-model="form.latitude" type="number" min="-90" max="90" step="0.0000001" placeholder="14.599512" :class="inputClass">
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-longitude">Longitude</label>
+                                        <input id="profile-longitude" v-model="form.longitude" type="number" min="-180" max="180" step="0.0000001" placeholder="120.984222" :class="inputClass">
+                                    </div>
+                                </div>
+
+                                <p v-if="locationMessage" class="mt-3 text-xs font-semibold text-sky-800">
+                                    {{ locationMessage }}
+                                </p>
                             </div>
 
                             <div class="grid gap-4 md:grid-cols-2">

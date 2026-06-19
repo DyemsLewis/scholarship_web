@@ -22,6 +22,7 @@ const notes = ref('');
 const uploadForms = ref({});
 const uploadFiles = ref({});
 const uploadingId = ref(null);
+const selectedMapScholarship = ref(null);
 
 const steps = [
     { label: 'Program', detail: 'Choose scholarship' },
@@ -233,6 +234,14 @@ function resetWizard() {
     notes.value = '';
     submitMessage.value = '';
     currentStep.value = 0;
+}
+
+function openMapModal(scholarship) {
+    selectedMapScholarship.value = scholarship;
+}
+
+function closeMapModal() {
+    selectedMapScholarship.value = null;
 }
 
 async function loadApplications() {
@@ -544,6 +553,12 @@ onMounted(loadApplications);
                                             <span class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
                                                 {{ scholarship.deadline || 'No deadline' }}
                                             </span>
+                                            <span
+                                                v-if="scholarship.distance_label"
+                                                class="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800"
+                                            >
+                                                {{ scholarship.distance_label }}
+                                            </span>
                                         </div>
 
                                         <p class="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
@@ -592,6 +607,33 @@ onMounted(loadApplications);
                                             <p class="mt-1 leading-6 text-slate-700">
                                                 {{ scholarship.eligibility_guide?.note || 'Review the listed eligibility before applying.' }}
                                             </p>
+                                        </div>
+
+                                        <div class="mt-4 rounded-md border border-sky-100 bg-white p-3 text-sm">
+                                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                                <div>
+                                                    <p class="font-semibold text-slate-500">
+                                                        Map location
+                                                    </p>
+                                                    <p class="mt-1 font-bold text-slate-950">
+                                                        {{ scholarship.location_name || 'Location not named' }}
+                                                    </p>
+                                                    <p class="mt-1 leading-6 text-slate-600">
+                                                        {{ scholarship.location_address || 'No map address added yet.' }}
+                                                    </p>
+                                                    <p v-if="scholarship.distance_label" class="mt-1 text-xs font-bold text-sky-700">
+                                                        About {{ scholarship.distance_label }} from your saved location.
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    v-if="scholarship.embed_map_url"
+                                                    type="button"
+                                                    class="rounded-md border border-sky-200 px-3 py-2 text-center text-xs font-bold text-sky-700 transition hover:bg-sky-50"
+                                                    @click="openMapModal(scholarship)"
+                                                >
+                                                    Preview Map
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <button
@@ -1115,5 +1157,67 @@ onMounted(loadApplications);
                 <ApplicantFooter />
             </div>
         </section>
+
+        <div
+            v-if="selectedMapScholarship"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6"
+            @click.self="closeMapModal"
+        >
+            <section class="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl">
+                <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
+                            Map Preview
+                        </p>
+                        <h3 class="mt-1 text-xl font-bold text-slate-950">
+                            {{ selectedMapScholarship.location_name || selectedMapScholarship.title }}
+                        </h3>
+                        <p class="mt-1 text-sm leading-6 text-slate-600">
+                            {{ selectedMapScholarship.location_address || 'No map address added yet.' }}
+                        </p>
+                        <p v-if="selectedMapScholarship.distance_label" class="mt-1 text-xs font-bold text-sky-700">
+                            About {{ selectedMapScholarship.distance_label }} from your saved location.
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                        @click="closeMapModal"
+                    >
+                        Close
+                    </button>
+                </div>
+
+                <div class="bg-slate-100 p-4">
+                    <iframe
+                        v-if="selectedMapScholarship.embed_map_url"
+                        :src="selectedMapScholarship.embed_map_url"
+                        class="h-[55vh] min-h-80 w-full rounded-md border border-slate-200 bg-white"
+                        loading="lazy"
+                        referrerpolicy="no-referrer-when-downgrade"
+                        title="Scholarship map preview"
+                    ></iframe>
+                    <div v-else class="rounded-md border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+                        No embeddable map is available for this scholarship yet.
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p class="text-xs leading-5 text-slate-500">
+                        Map preview uses Google Maps based on the provider's saved coordinates or address.
+                    </p>
+                    <a
+                        v-if="selectedMapScholarship.map_url"
+                        :href="selectedMapScholarship.map_url"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                    >
+                        Open Full Map
+                    </a>
+                </div>
+            </section>
+        </div>
     </main>
 </template>
