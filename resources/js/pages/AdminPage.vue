@@ -51,6 +51,13 @@ const dssRecommendations = ref({
     not_recommended: 0,
 });
 const decisionReasons = ref([]);
+const dssFormula = [
+    { label: 'Eligibility match', weight: '35%', detail: 'Program fit across applicant profile criteria.' },
+    { label: 'Documents', weight: '25%', detail: 'Checklist, uploads, and accepted files.' },
+    { label: 'Academic merit', weight: '20%', detail: 'GWA or average compared with the minimum.' },
+    { label: 'Financial need', weight: '15%', detail: 'Income bracket priority for aid.' },
+    { label: 'Review status', weight: '5%', detail: 'Provider pipeline and decision reason.' },
+];
 
 const statCards = computed(() => [
     {
@@ -82,7 +89,7 @@ const statCards = computed(() => [
         accent: 'bg-amber-500',
     },
     {
-        label: 'Avg Match',
+        label: 'Avg DSS',
         value: `${stats.value.average_dss_score || 0}%`,
         description: 'Average decision-support score.',
         className: 'text-indigo-700',
@@ -264,6 +271,42 @@ onMounted(loadAdminData);
                         </p>
                     </article>
                 </div>
+
+                <section v-if="!isLoading && !errorMessage" class="mt-6 rounded-lg border border-indigo-100 bg-white p-6 shadow-sm">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
+                                DSS Transparency
+                            </p>
+                            <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                Recommendation formula shown for audit
+                            </h3>
+                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                Admins can explain how application recommendations are weighted while still treating provider decisions as the final authority.
+                            </p>
+                        </div>
+                        <span class="h-fit rounded-md bg-indigo-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-indigo-700">
+                            {{ stats.average_dss_score || 0 }}% average DSS
+                        </span>
+                    </div>
+                    <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                        <div
+                            v-for="item in dssFormula"
+                            :key="item.label"
+                            class="rounded-md border border-slate-200 bg-slate-50 p-3"
+                        >
+                            <p class="font-display text-2xl font-bold text-indigo-700">
+                                {{ item.weight }}
+                            </p>
+                            <p class="mt-1 text-sm font-bold text-slate-950">
+                                {{ item.label }}
+                            </p>
+                            <p class="mt-2 text-xs leading-5 text-slate-500">
+                                {{ item.detail }}
+                            </p>
+                        </div>
+                    </div>
+                </section>
 
                 <div class="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">

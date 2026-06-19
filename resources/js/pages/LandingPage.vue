@@ -1,8 +1,85 @@
 <script setup>
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import SiteNavbar from '../components/SiteNavbar.vue';
 
-const heroImage = '/images/scholarship-hero.jpg';
+const activeSlide = ref(0);
+let carouselTimer = null;
+
+const heroSlides = [
+    {
+        eyebrow: 'Scholarship access for applicants',
+        title: 'Find scholarship opportunities with a clearer path',
+        text: 'Students can build a profile, compare programs, save scholarships, and track applications from one portal.',
+        image: '/images/scholarship-hero.jpg',
+        primaryAction: 'Create Account',
+        primaryHref: '/register',
+        secondaryAction: 'Sign In',
+        secondaryHref: '/login',
+        metric: 'Student Workspace',
+        metricText: 'Profiles, saved programs, applications, and DSS guidance.',
+    },
+    {
+        eyebrow: 'Provider workspace',
+        title: 'Manage scholarship programs and applicant reviews',
+        text: 'Providers get a separate panel for posting scholarships, reviewing documents, and tracking decision support signals.',
+        image: '/images/scholarship-cards.jpg',
+        primaryAction: 'Provider Register',
+        primaryHref: '/provider/register',
+        secondaryAction: 'Provider Portal',
+        secondaryHref: '/provider',
+        metric: 'Provider Panel',
+        metricText: 'Program creation, document review, and application rankings.',
+    },
+    {
+        eyebrow: 'Decision support system',
+        title: 'Use data to support fairer scholarship decisions',
+        text: 'Eligibility match, document readiness, academic merit, and financial need are combined into transparent DSS guidance.',
+        image: '/images/application-documents.jpg',
+        primaryAction: 'Explore Programs',
+        primaryHref: '/register',
+        secondaryAction: 'Admin Access',
+        secondaryHref: '/admin',
+        metric: 'DSS Ready',
+        metricText: 'Weighted scores, recommendations, analytics, and exports.',
+    },
+];
+
+const currentSlide = computed(() => heroSlides[activeSlide.value]);
+
+function goToSlide(index) {
+    activeSlide.value = (index + heroSlides.length) % heroSlides.length;
+    restartCarousel();
+}
+
+function nextSlide() {
+    goToSlide(activeSlide.value + 1);
+}
+
+function previousSlide() {
+    goToSlide(activeSlide.value - 1);
+}
+
+function startCarousel() {
+    carouselTimer = window.setInterval(() => {
+        activeSlide.value = (activeSlide.value + 1) % heroSlides.length;
+    }, 6000);
+}
+
+function stopCarousel() {
+    if (carouselTimer) {
+        window.clearInterval(carouselTimer);
+        carouselTimer = null;
+    }
+}
+
+function restartCarousel() {
+    stopCarousel();
+    startCarousel();
+}
+
+onMounted(startCarousel);
+onBeforeUnmount(stopCarousel);
 
 const scholarshipSteps = [
     {
@@ -44,43 +121,107 @@ const audiences = [
 
 <template>
     <main class="min-h-screen bg-white text-slate-900">
-        <section
-            class="relative flex min-h-[86vh] flex-col overflow-hidden bg-slate-900 text-white"
-            :style="{ backgroundImage: `linear-gradient(90deg, rgba(8, 20, 38, 0.84), rgba(8, 20, 38, 0.46), rgba(8, 20, 38, 0.18)), url(${heroImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }"
-        >
+        <section class="relative flex min-h-[86vh] flex-col overflow-hidden bg-slate-900 text-white">
+            <div class="absolute inset-0">
+                <div
+                    v-for="(slide, index) in heroSlides"
+                    :key="slide.title"
+                    :class="[
+                        'absolute inset-0 bg-cover bg-center transition-opacity duration-700 ease-out',
+                        activeSlide === index ? 'opacity-100' : 'opacity-0',
+                    ]"
+                    :style="{ backgroundImage: `url(${slide.image})` }"
+                ></div>
+                <div class="absolute inset-0 bg-[linear-gradient(90deg,_rgba(8,20,38,0.9),_rgba(8,20,38,0.62),_rgba(8,20,38,0.18))]"></div>
+                <div class="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-slate-950/70 to-transparent"></div>
+            </div>
+
             <SiteNavbar variant="transparent" />
 
-            <div class="relative z-10 mx-auto flex w-full max-w-6xl flex-1 items-center px-4 py-16 sm:px-6 lg:px-8">
+            <div class="relative z-10 mx-auto grid w-full max-w-6xl flex-1 items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_22rem] lg:px-8">
                 <div class="max-w-2xl">
                     <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-200">
-                        Scholarship Access for Applicants and Providers
+                        {{ currentSlide.eyebrow }}
                     </p>
-                    <h1 class="mt-5 font-display text-4xl leading-tight font-bold text-white sm:text-5xl lg:text-6xl">
-                        Scholarship Portal
+                    <h1
+                        :key="currentSlide.title"
+                        class="mt-5 animate-[fadeIn_0.55s_ease-out] font-display text-4xl leading-tight font-bold text-white sm:text-5xl lg:text-6xl"
+                    >
+                        {{ currentSlide.title }}
                     </h1>
-                    <p class="mt-5 max-w-xl text-lg leading-8 text-slate-100">
-                        A shared portal where students apply for opportunities and scholarship providers manage access to their programs.
+                    <p
+                        :key="currentSlide.text"
+                        class="mt-5 max-w-xl animate-[fadeIn_0.65s_ease-out] text-lg leading-8 text-slate-100"
+                    >
+                        {{ currentSlide.text }}
                     </p>
 
                     <div class="mt-8 flex flex-col gap-3 sm:flex-row">
                         <a
-                            href="/register"
+                            :href="currentSlide.primaryHref"
                             class="rounded-md bg-amber-300 px-5 py-3 text-center text-sm font-bold text-slate-950 transition hover:bg-amber-200"
                         >
-                            Create Account
+                            {{ currentSlide.primaryAction }}
                         </a>
                         <a
-                            href="/provider"
+                            :href="currentSlide.secondaryHref"
                             class="rounded-md bg-white px-5 py-3 text-center text-sm font-bold text-slate-950 transition hover:bg-slate-100"
                         >
-                            Provider Portal
+                            {{ currentSlide.secondaryAction }}
                         </a>
-                        <a
-                            href="/login"
-                            class="rounded-md border border-white/60 px-5 py-3 text-center text-sm font-bold text-white transition hover:bg-white hover:text-slate-950"
+                    </div>
+                </div>
+
+                <aside class="rounded-lg border border-white/15 bg-white/10 p-5 shadow-2xl shadow-slate-950/30 backdrop-blur-md">
+                    <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-200">
+                        {{ currentSlide.metric }}
+                    </p>
+                    <p class="mt-3 text-sm leading-6 text-slate-100">
+                        {{ currentSlide.metricText }}
+                    </p>
+                    <div class="mt-5 overflow-hidden rounded-md border border-white/10">
+                        <img
+                            :src="currentSlide.image"
+                            :alt="currentSlide.title"
+                            class="h-44 w-full object-cover"
                         >
-                            Sign In
-                        </a>
+                    </div>
+                </aside>
+            </div>
+
+            <div class="relative z-10 mx-auto mb-8 flex w-full max-w-6xl flex-col gap-4 px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between gap-4">
+                    <div class="flex gap-2">
+                        <button
+                            v-for="(slide, index) in heroSlides"
+                            :key="slide.title"
+                            type="button"
+                            :aria-label="`Go to slide ${index + 1}`"
+                            :class="[
+                                'h-2.5 rounded-full transition-all',
+                                activeSlide === index ? 'w-9 bg-amber-300' : 'w-2.5 bg-white/45 hover:bg-white/80',
+                            ]"
+                            @click="goToSlide(index)"
+                        ></button>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button
+                            type="button"
+                            aria-label="Previous slide"
+                            class="rounded-md border border-white/30 bg-white/10 px-3 py-2 text-sm font-bold text-white transition hover:bg-white hover:text-slate-950"
+                            @click="previousSlide"
+                        >
+                            Prev
+                        </button>
+                        <button
+                            type="button"
+                            aria-label="Next slide"
+                            class="rounded-md border border-white/30 bg-white/10 px-3 py-2 text-sm font-bold text-white transition hover:bg-white hover:text-slate-950"
+                            @click="nextSlide"
+                        >
+                            Next
+                        </button>
                     </div>
                 </div>
             </div>
@@ -200,3 +341,17 @@ const audiences = [
         <SiteFooter variant="dark" />
     </main>
 </template>
+
+<style scoped>
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+</style>

@@ -50,6 +50,13 @@ const documentStatusOptions = [
     { value: 'needs_replacement', label: 'Needs replacement' },
     { value: 'rejected', label: 'Rejected' },
 ];
+const dssFormula = [
+    { label: 'Eligibility match', weight: '35%', detail: 'Structured fit against program rules.' },
+    { label: 'Documents', weight: '25%', detail: 'Confirmed, uploaded, and accepted files.' },
+    { label: 'Academic merit', weight: '20%', detail: 'GWA or average against the minimum.' },
+    { label: 'Financial need', weight: '15%', detail: 'Income bracket support priority.' },
+    { label: 'Review status', weight: '5%', detail: 'Pipeline progress and decision reason.' },
+];
 
 function statusLabel(status) {
     return String(status ?? 'submitted')
@@ -295,6 +302,42 @@ onMounted(loadProviderData);
                             </p>
                         </article>
                     </div>
+
+                    <section class="rounded-lg border border-indigo-100 bg-white p-6 shadow-sm">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
+                                    Decision Support Formula
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    Queue ranking guide
+                                </h3>
+                                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                    Applications are sorted by DSS score to help reviewers prioritize complete and eligible records. Final decisions still require provider review.
+                                </p>
+                            </div>
+                            <span class="h-fit rounded-md bg-indigo-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-indigo-700">
+                                {{ stats.average_dss_score || 0 }}% avg
+                            </span>
+                        </div>
+                        <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                            <div
+                                v-for="item in dssFormula"
+                                :key="item.label"
+                                class="rounded-md border border-slate-200 bg-slate-50 p-3"
+                            >
+                                <p class="font-display text-2xl font-bold text-indigo-700">
+                                    {{ item.weight }}
+                                </p>
+                                <p class="mt-1 text-sm font-bold text-slate-950">
+                                    {{ item.label }}
+                                </p>
+                                <p class="mt-2 text-xs leading-5 text-slate-500">
+                                    {{ item.detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </section>
 
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">

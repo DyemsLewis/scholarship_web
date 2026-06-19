@@ -15,6 +15,10 @@ const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py
 const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
 const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
 const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
+const gradingScaleOptions = [
+    { value: 'percentage', label: 'Percentage average' },
+    { value: 'grade_point', label: 'GWA grade point' },
+];
 
 const profileFields = computed(() => [
     { label: 'First name', value: user.value?.first_name },
@@ -26,11 +30,13 @@ const profileFields = computed(() => [
     { label: 'Year level', value: user.value?.year_level },
     { label: 'Enrollment status', value: user.value?.enrollment_status },
     { label: 'GWA / average', value: user.value?.gwa },
+    { label: 'Grading scale', value: gradingScaleLabel(user.value?.grading_scale) },
     { label: 'Income bracket', value: user.value?.income_bracket },
     { label: 'Address', value: user.value?.address },
     { label: 'Barangay', value: user.value?.barangay },
     { label: 'City', value: user.value?.city },
     { label: 'Province', value: user.value?.province },
+    { label: 'Region', value: user.value?.region },
     { label: 'Birthdate', value: user.value?.birthdate },
     { label: 'Guardian name', value: user.value?.guardian_name },
     { label: 'Guardian contact', value: user.value?.guardian_contact },
@@ -49,15 +55,21 @@ function emptyForm() {
         year_level: '',
         enrollment_status: '',
         gwa: '',
+        grading_scale: '',
         income_bracket: '',
         address: '',
         barangay: '',
         city: '',
         province: '',
+        region: '',
         birthdate: '',
         guardian_name: '',
         guardian_contact: '',
     };
+}
+
+function gradingScaleLabel(value) {
+    return gradingScaleOptions.find((option) => option.value === value)?.label ?? value;
 }
 
 function fillForm(payload) {
@@ -71,11 +83,13 @@ function fillForm(payload) {
         year_level: payload?.year_level ?? '',
         enrollment_status: payload?.enrollment_status ?? '',
         gwa: payload?.gwa ?? '',
+        grading_scale: payload?.grading_scale ?? '',
         income_bracket: payload?.income_bracket ?? '',
         address: payload?.address ?? '',
         barangay: payload?.barangay ?? '',
         city: payload?.city ?? '',
         province: payload?.province ?? '',
+        region: payload?.region ?? '',
         birthdate: payload?.birthdate ?? '',
         guardian_name: payload?.guardian_name ?? '',
         guardian_contact: payload?.guardian_contact ?? '',
@@ -215,14 +229,27 @@ onMounted(loadProfile);
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-2">
+                            <div class="grid gap-4 md:grid-cols-3">
                                 <div>
                                     <label :class="labelClass" for="profile-contact">Contact number</label>
                                     <input id="profile-contact" :value="form.contact_number" required :class="inputClass" @input="handlePhoneInput('contact_number', $event)">
                                 </div>
                                 <div>
+                                    <label :class="labelClass" for="profile-grading-scale">Grading scale</label>
+                                    <select id="profile-grading-scale" v-model="form.grading_scale" :class="inputClass">
+                                        <option value="">Auto detect scale</option>
+                                        <option
+                                            v-for="option in gradingScaleOptions"
+                                            :key="option.value"
+                                            :value="option.value"
+                                        >
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div>
                                     <label :class="labelClass" for="profile-gwa">GWA / average</label>
-                                    <input id="profile-gwa" v-model="form.gwa" type="number" min="0" max="100" step="0.01" placeholder="Example: 92.50" :class="inputClass">
+                                    <input id="profile-gwa" v-model="form.gwa" type="number" min="0" max="100" step="0.01" placeholder="92.50 or 1.75" :class="inputClass">
                                 </div>
                             </div>
 
@@ -270,7 +297,7 @@ onMounted(loadProfile);
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-3">
+                            <div class="grid gap-4 md:grid-cols-4">
                                 <div>
                                     <label :class="labelClass" for="profile-barangay">Barangay</label>
                                     <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass">
@@ -282,6 +309,10 @@ onMounted(loadProfile);
                                 <div>
                                     <label :class="labelClass" for="profile-province">Province</label>
                                     <input id="profile-province" v-model="form.province" placeholder="Province" :class="inputClass">
+                                </div>
+                                <div>
+                                    <label :class="labelClass" for="profile-region">Region</label>
+                                    <input id="profile-region" v-model="form.region" placeholder="NCR / Region IV-A" :class="inputClass">
                                 </div>
                             </div>
 

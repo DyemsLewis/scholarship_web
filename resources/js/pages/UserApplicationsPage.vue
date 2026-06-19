@@ -29,6 +29,13 @@ const steps = [
     { label: 'Documents', detail: 'Confirm checklist' },
     { label: 'Submit', detail: 'Final review' },
 ];
+const dssFormula = [
+    { label: 'Eligibility match', weight: '35%', detail: 'Fit against GWA, course, year level, location, and income rules.' },
+    { label: 'Documents', weight: '25%', detail: 'Prepared, uploaded, and accepted requirements.' },
+    { label: 'Academic merit', weight: '20%', detail: 'Student GWA or average compared with the program minimum.' },
+    { label: 'Financial need', weight: '15%', detail: 'Income bracket priority for assistance-focused grants.' },
+    { label: 'Review status', weight: '5%', detail: 'Provider review progress and decision signal.' },
+];
 
 const selectedScholarship = computed(() => scholarships.value.find((scholarship) => scholarship.id === Number(selectedScholarshipId.value)));
 const selectedRequirements = computed(() => documentRequirements(selectedScholarship.value?.requirements));
@@ -422,6 +429,42 @@ onMounted(loadApplications);
                             </p>
                         </article>
                     </div>
+
+                    <section class="rounded-lg border border-indigo-100 bg-white p-6 shadow-sm">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
+                                    Decision Support System
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    How the recommendation score is computed
+                                </h3>
+                                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                    DSS helps rank applications for review. It does not replace provider validation or final scholarship decisions.
+                                </p>
+                            </div>
+                            <span class="h-fit rounded-md bg-indigo-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-indigo-700">
+                                Guidance only
+                            </span>
+                        </div>
+                        <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                            <div
+                                v-for="item in dssFormula"
+                                :key="item.label"
+                                class="rounded-md border border-slate-200 bg-slate-50 p-3"
+                            >
+                                <p class="font-display text-2xl font-bold text-indigo-700">
+                                    {{ item.weight }}
+                                </p>
+                                <p class="mt-1 text-sm font-bold text-slate-950">
+                                    {{ item.label }}
+                                </p>
+                                <p class="mt-2 text-xs leading-5 text-slate-500">
+                                    {{ item.detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </section>
 
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="grid gap-3 md:grid-cols-4">

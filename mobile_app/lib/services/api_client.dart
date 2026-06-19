@@ -19,6 +19,8 @@ class ApiClient {
     defaultValue: 'http://10.0.2.2:8000/api/mobile',
   );
 
+  static final String assetBaseUrl = baseUrl.replaceFirst('/api/mobile', '');
+
   static const String _tokenKey = 'mobile_api_token';
 
   SharedPreferences? _preferences;
@@ -70,6 +72,30 @@ class ApiClient {
     return _get('/profile');
   }
 
+  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload) async {
+    return _patch('/profile', payload);
+  }
+
+  Future<Map<String, dynamic>> submitApplication({
+    required int scholarshipId,
+    required List<String> documentChecklist,
+    String? notes,
+  }) async {
+    return _post('/applications', {
+      'scholarship_id': scholarshipId,
+      'document_checklist': documentChecklist,
+      'notes': notes,
+    });
+  }
+
+  Future<Map<String, dynamic>> saveScholarship(int scholarshipId) async {
+    return _post('/scholarships/$scholarshipId/save', {});
+  }
+
+  Future<Map<String, dynamic>> unsaveScholarship(int scholarshipId) async {
+    return _delete('/scholarships/$scholarshipId/save');
+  }
+
   Future<void> logout() async {
     if (hasToken) {
       try {
@@ -113,6 +139,28 @@ class ApiClient {
       Uri.parse('$baseUrl$path'),
       headers: _headers(),
       body: jsonEncode(payload),
+    );
+
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> _patch(
+    String path,
+    Map<String, dynamic> payload,
+  ) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl$path'),
+      headers: _headers(),
+      body: jsonEncode(payload),
+    );
+
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> _delete(String path) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl$path'),
+      headers: _headers(),
     );
 
     return _decode(response);

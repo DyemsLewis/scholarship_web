@@ -11,29 +11,76 @@ const user = ref(null);
 const scholarships = ref([]);
 const search = ref('');
 const selectedProviderType = ref('all');
+const selectedCategory = ref('all');
+const selectedIncome = ref('all');
+const deadlineFilter = ref('all');
 const maxGwa = ref('');
+const minimumMatch = ref('');
+const courseFilter = ref('');
+const yearFilter = ref('');
+const locationFilter = ref('');
+const savedOnly = ref(false);
 
 const providerTypes = computed(() => [
     'all',
     ...new Set(scholarships.value.map((scholarship) => scholarship.provider?.type).filter(Boolean)),
 ]);
-const filteredScholarships = computed(() => scholarships.value.filter((scholarship) => {
-    const keyword = search.value.trim().toLowerCase();
-    const matchesSearch = !keyword || [
-        scholarship.title,
-        scholarship.description,
-        scholarship.provider?.name,
-        scholarship.eligibility,
-    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword));
-    const matchesProvider = selectedProviderType.value === 'all' || scholarship.provider?.type === selectedProviderType.value;
-    const studentGwa = Number(maxGwa.value);
-    const minimumGwa = Number(scholarship.minimum_gwa);
-    const matchesGwa = !maxGwa.value
-        || !scholarship.minimum_gwa
-        || (studentGwa <= 5 && minimumGwa <= 5 ? studentGwa <= minimumGwa : minimumGwa <= studentGwa);
+const categories = computed(() => [
+    'all',
+    ...new Set(scholarships.value.map((scholarship) => scholarship.category).filter(Boolean)),
+]);
+const incomeRequirements = computed(() => [
+    'all',
+    ...new Set(scholarships.value.map((scholarship) => scholarship.income_requirement).filter(Boolean)),
+]);
+const filteredScholarships = computed(() => scholarships.value
+    .filter((scholarship) => {
+        const keyword = search.value.trim().toLowerCase();
+        const matchScore = Number(scholarship.eligibility_match?.score ?? 0);
+        const matchesSearch = !keyword || [
+            scholarship.title,
+            scholarship.description,
+            scholarship.provider?.name,
+            scholarship.category,
+            scholarship.eligibility,
+            scholarship.eligible_courses,
+            scholarship.eligible_year_levels,
+            scholarship.eligible_locations,
+            scholarship.income_requirement,
+            scholarship.requirements,
+        ].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword));
+        const matchesProvider = selectedProviderType.value === 'all' || scholarship.provider?.type === selectedProviderType.value;
+        const matchesCategory = selectedCategory.value === 'all' || scholarship.category === selectedCategory.value;
+        const studentGwa = Number(maxGwa.value);
+        const minimumGwa = Number(scholarship.minimum_gwa);
+        const matchesGwa = !maxGwa.value
+            || !scholarship.minimum_gwa
+            || (studentGwa <= 5 && minimumGwa <= 5 ? studentGwa <= minimumGwa : minimumGwa <= studentGwa);
+        const matchesMinimum = !minimumMatch.value || matchScore >= Number(minimumMatch.value);
+        const matchesCourse = textMatches(scholarship.eligible_courses, courseFilter.value);
+        const matchesYear = textMatches(scholarship.eligible_year_levels, yearFilter.value);
+        const matchesLocation = textMatches(scholarship.eligible_locations, locationFilter.value);
+        const matchesIncome = selectedIncome.value === 'all' || textMatches(scholarship.income_requirement, selectedIncome.value);
+        const matchesSaved = !savedOnly.value || scholarship.is_saved;
+        const matchesDeadline = deadlineMatches(scholarship);
 
-    return matchesSearch && matchesProvider && matchesGwa;
-}));
+        return matchesSearch
+            && matchesProvider
+            && matchesCategory
+            && matchesGwa
+            && matchesMinimum
+            && matchesCourse
+            && matchesYear
+            && matchesLocation
+            && matchesIncome
+            && matchesSaved
+            && matchesDeadline;
+    })
+    .sort((first, second) => {
+        const scoreDifference = Number(second.eligibility_match?.score ?? 0) - Number(first.eligibility_match?.score ?? 0);
+
+        return scoreDifference || deadlineValue(first) - deadlineValue(second);
+    }));
 
 function formatAmount(amount) {
     if (amount === null || amount === undefined || amount === '') {
@@ -90,6 +137,55 @@ function criterionClass(status) {
     }
 
     return 'border-slate-200 bg-slate-50 text-slate-600';
+}
+
+function textMatches(value, filter) {
+    const needle = String(filter ?? '').trim().toLowerCase();
+
+    if (!needle) {
+        return true;
+    }
+
+    const haystack = String(value ?? '').toLowerCase();
+
+    return haystack === '' || haystack.includes(needle) || needle.includes(haystack);
+}
+
+function deadlineValue(scholarship) {
+    const parsed = Date.parse(scholarship.deadline ?? '');
+
+    return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+}
+
+function deadlineDays(scholarship) {
+    const due = deadlineValue(scholarship);
+
+    if (!Number.isFinite(due)) {
+        return null;
+    }
+
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+
+    return Math.ceil((due - startOfToday) / 86400000);
+}
+
+function deadlineMatches(scholarship) {
+    const days = deadlineDays(scholarship);
+
+    if (deadlineFilter.value === 'no_deadline') {
+        return days === null;
+    }
+
+    if (deadlineFilter.value === 'next_7_days') {
+        return days !== null && days >= 0 && days <= 7;
+    }
+
+    if (deadlineFilter.value === 'next_30_days') {
+        return days !== null && days >= 0 && days <= 30;
+    }
+
+    return true;
 }
 
 async function toggleSave(scholarship) {
@@ -191,12 +287,15 @@ onMounted(loadScholarships);
                         <h3 class="mt-2 text-xl font-bold text-slate-950">
                             {{ filteredScholarships.length }} of {{ scholarships.length }} program{{ scholarships.length === 1 ? '' : 's' }} available
                         </h3>
-                        <div class="mt-4 grid gap-3 md:grid-cols-[1fr_14rem_12rem]">
+                        <p class="mt-2 text-sm text-slate-500">
+                            Results are ranked by eligibility match first, then nearest deadline.
+                        </p>
+                        <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                             <input
                                 v-model="search"
                                 type="search"
                                 placeholder="Search title, provider, or eligibility"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100 xl:col-span-2"
                             >
                             <select
                                 v-model="selectedProviderType"
@@ -210,6 +309,18 @@ onMounted(loadScholarships);
                                     {{ type === 'all' ? 'All provider types' : providerTypeLabel(type) }}
                                 </option>
                             </select>
+                            <select
+                                v-model="selectedCategory"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                            >
+                                <option
+                                    v-for="category in categories"
+                                    :key="category"
+                                    :value="category"
+                                >
+                                    {{ category === 'all' ? 'All categories' : category }}
+                                </option>
+                            </select>
                             <input
                                 v-model="maxGwa"
                                 type="number"
@@ -219,6 +330,62 @@ onMounted(loadScholarships);
                                 placeholder="My GWA / avg"
                                 class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
                             >
+                            <input
+                                v-model="minimumMatch"
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="1"
+                                placeholder="Min match %"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                            >
+                            <input
+                                v-model="courseFilter"
+                                type="search"
+                                placeholder="Course / strand"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                            >
+                            <input
+                                v-model="yearFilter"
+                                type="search"
+                                placeholder="Year level"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                            >
+                            <input
+                                v-model="locationFilter"
+                                type="search"
+                                placeholder="City, province, or region"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                            >
+                            <select
+                                v-model="selectedIncome"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                            >
+                                <option
+                                    v-for="income in incomeRequirements"
+                                    :key="income"
+                                    :value="income"
+                                >
+                                    {{ income === 'all' ? 'All income rules' : income }}
+                                </option>
+                            </select>
+                            <select
+                                v-model="deadlineFilter"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                            >
+                                <option value="all">All deadlines</option>
+                                <option value="next_7_days">Due in 7 days</option>
+                                <option value="next_30_days">Due in 30 days</option>
+                                <option value="no_deadline">No deadline</option>
+                            </select>
+                            <label class="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700">
+                                <input
+                                    v-model="savedOnly"
+                                    type="checkbox"
+                                    class="h-4 w-4 rounded border-slate-300 text-sky-700 focus:ring-sky-200"
+                                >
+                                Saved only
+                            </label>
                         </div>
                     </div>
 
@@ -308,7 +475,7 @@ onMounted(loadScholarships);
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
                                         <p class="font-semibold text-slate-700">
-                                            Eligibility match
+                                            Eligibility pre-check
                                         </p>
                                         <p class="mt-1 leading-6 text-slate-600">
                                             {{ scholarship.eligibility_match?.summary || scholarship.eligibility_guide?.note || 'Review the listed requirements before applying.' }}
@@ -319,14 +486,26 @@ onMounted(loadScholarships);
                                     </span>
                                 </div>
 
-                                <div v-if="scholarship.eligibility_match?.criteria?.length" class="mt-3 flex flex-wrap gap-2">
-                                    <span
+                                <div v-if="scholarship.eligibility_match?.criteria?.length" class="mt-3 grid gap-2 sm:grid-cols-2">
+                                    <div
                                         v-for="criterion in scholarship.eligibility_match.criteria"
                                         :key="criterion.key"
-                                        :class="['rounded-md border px-2.5 py-1.5 text-xs font-bold', criterionClass(criterion.status)]"
+                                        :class="['rounded-md border p-2.5 text-xs', criterionClass(criterion.status)]"
                                     >
-                                        {{ criterion.label }}: {{ criterion.status }}
-                                    </span>
+                                        <div class="flex items-center justify-between gap-2">
+                                            <span class="font-bold">{{ criterion.label }}</span>
+                                            <span class="font-bold uppercase">{{ criterion.status }}</span>
+                                        </div>
+                                        <p class="mt-1 leading-5">
+                                            Profile: {{ criterion.student_value || criterion.studentValue || 'Not set' }}
+                                        </p>
+                                        <p v-if="criterion.requirement" class="mt-1 leading-5">
+                                            Required: {{ criterion.requirement }}
+                                        </p>
+                                        <p class="mt-1 leading-5 opacity-80">
+                                            {{ criterion.note }}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
 

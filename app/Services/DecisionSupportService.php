@@ -130,12 +130,13 @@ class DecisionSupportService
 
         $studentGwa = (float) $gwa;
         $requiredGwa = (float) $minimumGwa;
+        $gradingScale = $application->applicant?->studentProfile?->grading_scale;
 
         if ($studentGwa <= 0 || $requiredGwa <= 0) {
             return 60;
         }
 
-        if ($studentGwa <= 5 && $requiredGwa <= 5) {
+        if ($gradingScale === 'grade_point' || ($gradingScale !== 'percentage' && $studentGwa <= 5 && $requiredGwa <= 5)) {
             return $this->clamp((int) round(($requiredGwa / $studentGwa) * 100));
         }
 

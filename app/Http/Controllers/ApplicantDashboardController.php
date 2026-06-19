@@ -109,11 +109,13 @@ class ApplicantDashboardController extends Controller
             'year_level' => ['nullable', 'string', 'max:100'],
             'enrollment_status' => ['nullable', 'string', 'max:100'],
             'gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'grading_scale' => ['nullable', Rule::in(['percentage', 'grade_point'])],
             'income_bracket' => ['nullable', 'string', 'max:100'],
             'address' => ['nullable', 'string', 'max:500'],
             'barangay' => ['nullable', 'string', 'max:255'],
             'city' => ['nullable', 'string', 'max:255'],
             'province' => ['nullable', 'string', 'max:255'],
+            'region' => ['nullable', 'string', 'max:255'],
             'birthdate' => ['nullable', 'date', 'before:today'],
             'guardian_name' => ['nullable', 'string', 'max:255'],
             'guardian_contact' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
@@ -125,6 +127,13 @@ class ApplicantDashboardController extends Controller
             ...$validated,
             'middle_initial' => strtoupper($validated['middle_initial']),
         ]);
+        $request->user()->unsetRelation('studentProfile');
+
+        ScholarshipApplication::query()
+            ->with(['applicant.studentProfile', 'documents', 'scholarship'])
+            ->where('applicant_id', $request->user()->id)
+            ->get()
+            ->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
 
         ActivityLog::record(
             $request->user(),
@@ -584,7 +593,8 @@ class ApplicantDashboardController extends Controller
             if ($studentGwa === null) {
                 $addCriterion('gwa', 'GWA / average', 'missing', null, (string) $scholarship->minimum_gwa, 'Add your GWA in your profile to improve matching.');
             } else {
-                $usesGradePointScale = $studentGwa <= 5 && $minimumGwa <= 5;
+                $usesGradePointScale = $profile?->grading_scale === 'grade_point'
+                    || ($profile?->grading_scale !== 'percentage' && $studentGwa <= 5 && $minimumGwa <= 5);
                 $isPassing = $usesGradePointScale ? $studentGwa <= $minimumGwa : $studentGwa >= $minimumGwa;
                 $addCriterion(
                     'gwa',
@@ -633,7 +643,7 @@ class ApplicantDashboardController extends Controller
 
         $locationOptions = $this->splitOptions($scholarship->eligible_locations);
         if ($locationOptions !== []) {
-            $studentLocation = collect([$profile?->barangay, $profile?->city, $profile?->province, $profile?->address])->filter()->implode(', ');
+            $studentLocation = collect([$profile?->barangay, $profile?->city, $profile?->province, $profile?->region, $profile?->address])->filter()->implode(', ');
             $matchesLocation = filled($studentLocation) && $this->matchesAnyOption($studentLocation, $locationOptions);
             $addCriterion(
                 'location',
@@ -644,7 +654,7 @@ class ApplicantDashboardController extends Controller
                 $matchesLocation ? 'Your location matches the scholarship coverage.' : 'Your location may be outside the listed coverage.',
             );
         } else {
-            $addCriterion('location', 'Location', 'info', $profile?->province ?? $profile?->city, null, 'No location restriction listed.', false);
+            $addCriterion('location', 'Location', 'info', $profile?->region ?? $profile?->province ?? $profile?->city, null, 'No location restriction listed.', false);
         }
 
         if (filled($scholarship->income_requirement) && ! in_array(strtolower($scholarship->income_requirement), ['any', 'none', 'no preference'], true)) {
