@@ -48,7 +48,7 @@
 
     .student-hero::before {
         content: '';
-        @apply absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-sky-600 via-emerald-500 to-amber-300;
+        @apply absolute inset-x-0 top-0 h-1 bg-slate-900;
     }
 
     .student-card {

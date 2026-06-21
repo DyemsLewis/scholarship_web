@@ -214,6 +214,38 @@ function handleProfileLocationResolved(location) {
     locationMessage.value = 'Address found on the map. Save your profile to keep this map point.';
 }
 
+function handleProfileLocationPicked(location) {
+    const address = location.address ?? {};
+    const streetAddress = [
+        address.house_number,
+        address.road,
+    ].filter(Boolean).join(' ');
+
+    form.value.latitude = Number(location.latitude).toFixed(7);
+    form.value.longitude = Number(location.longitude).toFixed(7);
+    form.value.address = streetAddress || location.displayName || form.value.address;
+    form.value.barangay = address.neighbourhood
+        || address.suburb
+        || address.quarter
+        || address.village
+        || form.value.barangay;
+    form.value.city = address.city
+        || address.municipality
+        || address.town
+        || address.city_district
+        || form.value.city;
+    form.value.province = address.province
+        || address.state
+        || address.county
+        || form.value.province;
+    form.value.region = address.region
+        || address.state
+        || form.value.region;
+    locationMessage.value = location.displayName
+        ? 'Pin set. Address fields were filled from the selected map point.'
+        : 'Pin set. Save your profile to keep this map point.';
+}
+
 function handleProfileLocationError(message) {
     locationMessage.value = message;
 }
@@ -479,7 +511,7 @@ onMounted(loadProfile);
                                             Address map preview
                                         </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Search your typed address using OpenStreetMap. The app stores the map point silently if one is found.
+                                            Search your typed address or click the map to set a pin. The address fields update from the selected pin.
                                         </p>
                                     </div>
                                     <button
@@ -499,7 +531,9 @@ onMounted(loadProfile);
                                     title="Student address map preview"
                                     marker-text="Student address"
                                     :geocode-trigger="addressLookupTrigger"
+                                    picker
                                     @resolved="handleProfileLocationResolved"
+                                    @picked="handleProfileLocationPicked"
                                     @error="handleProfileLocationError"
                                 />
 

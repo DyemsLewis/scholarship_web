@@ -8,14 +8,6 @@ const updatingId = ref(null);
 const errorMessage = ref('');
 const statusMessage = ref('');
 const user = ref(null);
-const stats = ref({
-    scholarships: 0,
-    applications: 0,
-    drafts: 0,
-    average_match_score: 0,
-    average_dss_score: 0,
-    pending_documents: 0,
-});
 const scholarships = ref([]);
 const applications = ref([]);
 const reviewNotes = ref({});
@@ -24,7 +16,6 @@ const documentStatuses = ref({});
 const documentNotes = ref({});
 const documentUpdatingId = ref(null);
 
-const publishedPrograms = computed(() => scholarships.value.filter((scholarship) => scholarship.status === 'published'));
 const rankedApplications = computed(() => [...applications.value].sort((first, second) => Number(second.dss_score ?? 0) - Number(first.dss_score ?? 0)));
 const statusOptions = [
     { value: 'submitted', label: 'Submitted' },
@@ -150,7 +141,6 @@ async function loadProviderData() {
         const response = await window.axios.get('/provider/applications/data');
 
         user.value = response.data.user;
-        stats.value = response.data.stats;
         scholarships.value = response.data.scholarships;
         applications.value = response.data.applications;
         reviewNotes.value = Object.fromEntries(
@@ -266,45 +256,8 @@ onMounted(loadProviderData);
                         {{ statusMessage }}
                     </div>
 
-                    <div class="grid gap-4 md:grid-cols-4">
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">
-                                Total Applications
-                            </p>
-                            <p class="mt-3 font-display text-3xl font-bold text-emerald-700">
-                                {{ stats.applications }}
-                            </p>
-                        </article>
-
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">
-                                Published Programs
-                            </p>
-                            <p class="mt-3 font-display text-3xl font-bold text-sky-700">
-                                {{ publishedPrograms.length }}
-                            </p>
-                        </article>
-
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">
-                                Draft Programs
-                            </p>
-                            <p class="mt-3 font-display text-3xl font-bold text-amber-600">
-                                {{ stats.drafts }}
-                            </p>
-                        </article>
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">
-                                DSS Avg Score
-                            </p>
-                            <p class="mt-3 font-display text-3xl font-bold text-indigo-700">
-                                {{ stats.average_dss_score || 0 }}%
-                            </p>
-                        </article>
-                    </div>
-
                     <section class="rounded-lg border border-indigo-100 bg-white p-6 shadow-sm">
-                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
                                     Decision Support Formula
@@ -316,9 +269,6 @@ onMounted(loadProviderData);
                                     Applications are sorted by DSS score to help reviewers prioritize complete and eligible records. Final decisions still require provider review.
                                 </p>
                             </div>
-                            <span class="h-fit rounded-md bg-indigo-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-indigo-700">
-                                {{ stats.average_dss_score || 0 }}% avg
-                            </span>
                         </div>
                         <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                             <div
@@ -326,11 +276,11 @@ onMounted(loadProviderData);
                                 :key="item.label"
                                 class="rounded-md border border-slate-200 bg-slate-50 p-3"
                             >
-                                <p class="font-display text-2xl font-bold text-indigo-700">
-                                    {{ item.weight }}
-                                </p>
-                                <p class="mt-1 text-sm font-bold text-slate-950">
+                                <p class="text-sm font-bold text-slate-950">
                                     {{ item.label }}
+                                </p>
+                                <p class="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-indigo-700">
+                                    Weight {{ item.weight }}
                                 </p>
                                 <p class="mt-2 text-xs leading-5 text-slate-500">
                                     {{ item.detail }}
@@ -391,8 +341,8 @@ onMounted(loadProviderData);
                                             DSS recommendation
                                         </p>
                                         <div class="mt-2 flex flex-wrap items-center gap-2">
-                                            <span class="font-display text-2xl font-bold text-indigo-950">
-                                                {{ application.dss_score ?? 0 }}%
+                                            <span class="rounded-md bg-white px-2.5 py-1 text-xs font-bold uppercase text-indigo-800 ring-1 ring-indigo-100">
+                                                DSS {{ application.dss_score ?? 0 }}%
                                             </span>
                                             <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', recommendationClass(application.dss_recommendation)]">
                                                 {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
@@ -446,8 +396,8 @@ onMounted(loadProviderData);
                                                     {{ criterion.weight }}%
                                                 </p>
                                             </div>
-                                            <p class="mt-2 font-display text-2xl font-bold text-slate-950">
-                                                {{ criterion.score }}%
+                                            <p class="mt-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
+                                                Score {{ criterion.score }}%
                                             </p>
                                             <p class="mt-1 text-xs leading-5 text-slate-500">
                                                 {{ criterion.note }}

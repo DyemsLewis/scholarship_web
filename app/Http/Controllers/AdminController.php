@@ -12,6 +12,7 @@ use App\Services\DecisionSupportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class AdminController extends Controller
@@ -38,6 +39,17 @@ class AdminController extends Controller
         return view('admin-users');
     }
 
+    public function accountForm(Request $request): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isAdmin(), 403);
+
+        return view('admin-account-form');
+    }
+
     public function reviews(Request $request): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -58,6 +70,17 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         return view('admin-logs');
+    }
+
+    public function platformAnalytics(Request $request): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isAdmin(), 403);
+
+        return view('admin-platform-analytics');
     }
 
     public function users(Request $request): JsonResponse
@@ -90,6 +113,15 @@ class AdminController extends Controller
         ]);
     }
 
+    public function showUser(Request $request, User $user): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return response()->json([
+            'user' => $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+        ]);
+    }
+
     public function analytics(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
@@ -100,7 +132,7 @@ class AdminController extends Controller
             ->get(['id', 'email', 'username', 'role', 'created_at']);
         $scholarships = Scholarship::query()
             ->withCount('bookmarks')
-            ->get(['id', 'title', 'provider_id', 'status', 'deadline', 'created_at']);
+            ->get(['id', 'title', 'provider_id', 'status', 'deadline', 'created_at', 'location_name', 'location_address', 'eligible_locations']);
         $applications = ScholarshipApplication::query()
             ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
             ->latest('submitted_at')
@@ -222,10 +254,55 @@ class AdminController extends Controller
                         'label' => $month->format('M Y'),
                         'total' => $applications
                             ->filter(fn (ScholarshipApplication $application) => $application->submitted_at?->format('Y-m') === $month->format('Y-m'))
-                            ->count(),
+                        ->count(),
                     ];
                 })
                 ->values(),
+            'provider_performance' => $users
+                ->where('role', 'provider')
+                ->map(function (User $provider) use ($scholarships, $applications) {
+                    $providerScholarships = $scholarships->where('provider_id', $provider->id);
+                    $providerApplications = $applications->filter(fn (ScholarshipApplication $application) => $application->scholarship?->provider_id === $provider->id);
+
+                    return [
+                        'id' => $provider->id,
+                        'name' => $provider->provider_name ?? $provider->name,
+                        'status' => $provider->providerProfile?->verification_status ?? 'pending',
+                        'programs' => $providerScholarships->count(),
+                        'published_programs' => $providerScholarships->where('status', 'published')->count(),
+                        'applications' => $providerApplications->count(),
+                        'approved' => $providerApplications->where('status', 'approved')->count(),
+                        'average_dss_score' => round((float) $providerApplications->avg('dss_score'), 1),
+                    ];
+                })
+                ->sortByDesc('applications')
+                ->values(),
+            'coverage_summary' => $scholarships
+                ->where('status', 'published')
+                ->groupBy(fn (Scholarship $scholarship) => $scholarship->location_name ?: $scholarship->eligible_locations ?: $scholarship->location_address ?: 'Unspecified')
+                ->map(function ($items, string $location) use ($applications) {
+                    $scholarshipIds = $items->pluck('id');
+
+                    return [
+                        'location' => $location,
+                        'programs' => $items->count(),
+                        'saved_count' => $items->sum(fn (Scholarship $scholarship) => $scholarship->bookmarks_count ?? 0),
+                        'applications' => $applications->whereIn('scholarship_id', $scholarshipIds)->count(),
+                    ];
+                })
+                ->sortByDesc('programs')
+                ->values(),
+            'dss_audit' => [
+                'average_score' => $applications->isEmpty() ? 0 : round((float) $applications->avg('dss_score'), 1),
+                'high_recommendations' => $dssRecommendations['highly_recommended'] ?? 0,
+                'needs_review' => $dssRecommendations['needs_review'] ?? 0,
+                'not_recommended' => $dssRecommendations['not_recommended'] ?? 0,
+                'provider_decisions' => [
+                    'approved' => $applicationStatuses['approved'] ?? 0,
+                    'rejected' => $applicationStatuses['rejected'] ?? 0,
+                    'under_review' => $applicationStatuses['under_review'] ?? 0,
+                ],
+            ],
         ]);
     }
 
@@ -378,6 +455,82 @@ class AdminController extends Controller
             'message' => 'Account created successfully.',
             'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ], 201);
+    }
+
+    public function updateUser(Request $request, User $user): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $validated = $request->validate([
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
+            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'role' => ['required', 'string', 'in:applicant,provider,admin'],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $previousRole = $user->role;
+        $middleInitial = strtoupper($validated['middle_initial']);
+        $displayName = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
+        $userPayload = [
+            'email' => $validated['email'],
+            'username' => $validated['username'],
+            'role' => $validated['role'],
+        ];
+
+        if (filled($validated['password'] ?? null)) {
+            $userPayload['password'] = $validated['password'];
+        }
+
+        $user->update($userPayload);
+
+        $profile = [
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'middle_initial' => $middleInitial,
+            'contact_number' => $validated['contact_number'],
+        ];
+
+        match ($user->role) {
+            'admin' => $user->adminProfile()->updateOrCreate([
+                'user_id' => $user->id,
+            ], [
+                ...$profile,
+                'display_name' => $displayName,
+            ]),
+            'provider' => $user->providerProfile()->updateOrCreate([
+                'user_id' => $user->id,
+            ], [
+                ...$profile,
+                'provider_name' => $user->providerProfile?->provider_name ?: $displayName,
+                'verification_status' => $user->providerProfile?->verification_status ?: 'approved',
+                'verified_by' => $user->providerProfile?->verified_by ?: $request->user()->id,
+                'verified_at' => $user->providerProfile?->verified_at ?: now(),
+            ]),
+            default => $user->studentProfile()->updateOrCreate([
+                'user_id' => $user->id,
+            ], $profile),
+        };
+
+        ActivityLog::record(
+            $request->user(),
+            'account_updated',
+            "{$request->user()->name} updated {$user->role} account {$user->email}.",
+            $request,
+            [
+                'updated_user_id' => $user->id,
+                'previous_role' => $previousRole,
+                'current_role' => $user->role,
+            ],
+        );
+
+        return response()->json([
+            'message' => 'Account updated successfully.',
+            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+        ]);
     }
 
     public function logEntries(Request $request): JsonResponse

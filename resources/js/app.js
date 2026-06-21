@@ -1,7 +1,9 @@
 import './bootstrap';
 import { createApp } from 'vue';
+import AdminAccountFormPage from './pages/AdminAccountFormPage.vue';
 import AdminPage from './pages/AdminPage.vue';
 import AdminLogsPage from './pages/AdminLogsPage.vue';
+import AdminAnalyticsPage from './pages/AdminAnalyticsPage.vue';
 import AdminReviewsPage from './pages/AdminReviewsPage.vue';
 import AdminUsersPage from './pages/AdminUsersPage.vue';
 import AccountSetupPage from './pages/AccountSetupPage.vue';
@@ -9,7 +11,10 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage.vue';
 import LandingPage from './pages/LandingPage.vue';
 import LoginPage from './pages/LoginPage.vue';
 import ProviderApplicationsPage from './pages/ProviderApplicationsPage.vue';
+import ProviderInsightsPage from './pages/ProviderInsightsPage.vue';
 import ProviderPage from './pages/ProviderPage.vue';
+import ProviderProgramFormPage from './pages/ProviderProgramFormPage.vue';
+import ProviderProfilePage from './pages/ProviderProfilePage.vue';
 import ProviderProgramsPage from './pages/ProviderProgramsPage.vue';
 import RegisterPage from './pages/RegisterPage.vue';
 import ResetPasswordPage from './pages/ResetPasswordPage.vue';
@@ -23,6 +28,8 @@ const appElement = document.getElementById('app');
 const pages = {
     accountSetup: AccountSetupPage,
     admin: AdminPage,
+    adminAccountForm: AdminAccountFormPage,
+    adminAnalytics: AdminAnalyticsPage,
     adminLogs: AdminLogsPage,
     adminReviews: AdminReviewsPage,
     adminUsers: AdminUsersPage,
@@ -36,6 +43,9 @@ const pages = {
     login: LoginPage,
     provider: ProviderPage,
     providerApplications: ProviderApplicationsPage,
+    providerInsights: ProviderInsightsPage,
+    providerProgramForm: ProviderProgramFormPage,
+    providerProfile: ProviderProfilePage,
     providerPrograms: ProviderProgramsPage,
     register: RegisterPage,
     resetPassword: ResetPasswordPage,

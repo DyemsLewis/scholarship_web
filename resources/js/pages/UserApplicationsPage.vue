@@ -31,7 +31,7 @@ const uploadFiles = ref({});
 const uploadingId = ref(null);
 
 const steps = [
-    { label: 'Program', detail: 'Choose scholarship' },
+    { label: 'Program', detail: 'Use selected scholarship' },
     { label: 'Details', detail: 'Review requirements' },
     { label: 'Documents', detail: 'Confirm checklist' },
     { label: 'Submit', detail: 'Final review' },
@@ -49,17 +49,18 @@ const selectedRequirements = computed(() => documentRequirements(selectedScholar
 const appliedScholarshipIds = computed(() => new Set(applications.value.map((application) => application.scholarship?.id).filter(Boolean)));
 const selectedAlreadyApplied = computed(() => selectedScholarship.value && appliedScholarshipIds.value.has(selectedScholarship.value.id));
 const allDocumentsChecked = computed(() => selectedRequirements.value.every((requirement) => documentChecklist.value.includes(requirement)));
+const checkedDocumentCount = computed(() => selectedRequirements.value.filter((requirement) => documentChecklist.value.includes(requirement)).length);
 const canApply = computed(() => profileReadiness.value.complete);
 const canGoNext = computed(() => {
-    if (currentStep.value === 0) {
-        return canApply.value && Boolean(selectedScholarship.value) && !selectedAlreadyApplied.value;
+    if (!canApply.value || !selectedScholarship.value || selectedAlreadyApplied.value) {
+        return false;
     }
 
     if (currentStep.value === 2) {
         return allDocumentsChecked.value;
     }
 
-    return Boolean(selectedScholarship.value);
+    return true;
 });
 
 function canOpenWizardStep(index) {
@@ -104,12 +105,6 @@ function formatAmount(amount) {
         currency: 'PHP',
         maximumFractionDigits: 2,
     }).format(Number(amount));
-}
-
-function providerTypeLabel(type) {
-    return String(type ?? 'Provider')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function statusLabel(status) {
@@ -243,24 +238,6 @@ function handleFileChange(application, event) {
     uploadFiles.value[application.id] = event.target.files?.[0] ?? null;
 }
 
-function chooseScholarship(scholarship) {
-    if (!canApply.value) {
-        errorMessage.value = 'Complete your student profile before choosing a scholarship to apply for.';
-        return;
-    }
-
-    if (appliedScholarshipIds.value.has(scholarship.id)) {
-        return;
-    }
-
-    selectedScholarshipId.value = String(scholarship.id);
-    documentChecklist.value = [];
-    notes.value = '';
-    errorMessage.value = '';
-    submitMessage.value = '';
-    currentStep.value = 1;
-}
-
 function nextStep() {
     if (currentStep.value < steps.length - 1 && canGoNext.value) {
         currentStep.value += 1;
@@ -277,8 +254,21 @@ function resetWizard() {
     selectedScholarshipId.value = '';
     documentChecklist.value = [];
     notes.value = '';
+    errorMessage.value = '';
     submitMessage.value = '';
     currentStep.value = 0;
+
+    if (window.location.search) {
+        window.history.replaceState({}, '', window.location.pathname);
+    }
+}
+
+function selectAllDocuments() {
+    documentChecklist.value = [...selectedRequirements.value];
+}
+
+function clearDocumentChecklist() {
+    documentChecklist.value = [];
 }
 
 async function loadApplications() {
@@ -300,9 +290,18 @@ async function loadApplications() {
         if (requestedScholarshipId) {
             const requestedScholarship = scholarships.value.find((scholarship) => scholarship.id === Number(requestedScholarshipId));
 
-            if (canApply.value && requestedScholarship && !appliedScholarshipIds.value.has(requestedScholarship.id)) {
-                selectedScholarshipId.value = requestedScholarshipId;
+            if (requestedScholarship) {
+                selectedScholarshipId.value = String(requestedScholarship.id);
+                documentChecklist.value = [];
+                notes.value = '';
                 currentStep.value = 1;
+
+                if (appliedScholarshipIds.value.has(requestedScholarship.id)) {
+                    errorMessage.value = 'You already submitted an application for this scholarship.';
+                    currentStep.value = 0;
+                }
+            } else {
+                errorMessage.value = 'The selected scholarship was not found. Please choose a published scholarship from the scholarship page.';
             }
         }
     } catch (error) {
@@ -599,119 +598,62 @@ onMounted(loadApplications);
 
                         <div class="mt-6">
                             <div v-if="currentStep === 0">
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                                    <div>
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
-                                            Choose Program
-                                        </p>
-                                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                            Select one scholarship to apply for
-                                        </h3>
-                                    </div>
-                                    <a
-                                        href="/dashboard/scholarships"
-                                        class="text-sm font-bold text-sky-700 transition hover:text-sky-900"
-                                    >
-                                        Browse scholarship details
-                                    </a>
-                                </div>
-
-                                <div v-if="scholarships.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
-                                    No published scholarships are available yet.
-                                </div>
-
-                                <div v-else class="mt-5 grid gap-4 lg:grid-cols-2">
-                                    <article
-                                        v-for="scholarship in scholarships"
-                                        :key="scholarship.id"
-                                        :class="[
-                                            'rounded-lg border p-4 transition',
-                                            selectedScholarship?.id === scholarship.id
-                                                ? 'border-sky-300 bg-sky-50 shadow-sm'
-                                                : 'border-slate-200 bg-[#f6faf8]',
-                                            appliedScholarshipIds.has(scholarship.id) ? 'opacity-70' : 'hover:border-sky-200 hover:bg-white',
-                                        ]"
-                                    >
-                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                            <div>
-                                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
-                                                    {{ scholarship.provider?.name || 'Scholarship Provider' }}
-                                                </p>
-                                                <h4 class="mt-2 text-lg font-bold text-slate-950">
-                                                    {{ scholarship.title }}
-                                                </h4>
-                                                <p class="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                                                    {{ providerTypeLabel(scholarship.provider?.type) }}
-                                                </p>
-                                            </div>
-                                            <span class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
-                                                {{ scholarship.deadline || 'No deadline' }}
-                                            </span>
-                                            <span
-                                                v-if="scholarship.distance_label"
-                                                class="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800"
-                                            >
-                                                {{ scholarship.distance_label }}
-                                            </span>
-                                        </div>
-
-                                        <p class="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
-                                            {{ scholarship.description }}
-                                        </p>
-
-                                        <div class="mt-4 grid gap-2 text-sm sm:grid-cols-4">
-                                            <div class="rounded-md bg-white p-3">
-                                                <p class="font-semibold text-slate-500">
-                                                    Award
-                                                </p>
-                                                <p class="mt-1 font-bold text-slate-950">
-                                                    {{ formatAmount(scholarship.award_amount) }}
-                                                </p>
-                                            </div>
-                                            <div class="rounded-md bg-white p-3">
-                                                <p class="font-semibold text-slate-500">
-                                                    Min GWA
-                                                </p>
-                                                <p class="mt-1 font-bold text-slate-950">
-                                                    {{ scholarship.minimum_gwa || 'Not set' }}
-                                                </p>
-                                            </div>
-                                            <div class="rounded-md bg-white p-3">
-                                                <p class="font-semibold text-slate-500">
-                                                    Documents
-                                                </p>
-                                                <p class="mt-1 font-bold text-slate-950">
-                                                    {{ documentRequirements(scholarship.requirements).length }}
-                                                </p>
-                                            </div>
-                                            <div class="rounded-md bg-white p-3">
-                                                <p class="font-semibold text-slate-500">
-                                                    Match
-                                                </p>
-                                                <p :class="['mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
-                                                    {{ scholarship.eligibility_match?.score ?? 0 }}%
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div class="mt-4 rounded-md border border-sky-100 bg-white p-3 text-sm">
-                                            <p class="font-semibold text-slate-500">
-                                                Eligibility guide
+                                <div class="rounded-lg border border-slate-200 bg-[#f6faf8] p-5">
+                                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                        <div>
+                                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                                Selected Program
                                             </p>
-                                            <p class="mt-1 leading-6 text-slate-700">
-                                                {{ scholarship.eligibility_guide?.note || 'Review the listed eligibility before applying.' }}
+                                            <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                                Choose from Scholarships first
+                                            </h3>
+                                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                                Applications now use the program selected from the Scholarships page, so this area stays focused on review, checklist, and submission.
                                             </p>
                                         </div>
-
-                                        <button
-                                            type="button"
-                                            :disabled="!canApply || appliedScholarshipIds.has(scholarship.id)"
-                                            class="mt-4 w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                                            @click="chooseScholarship(scholarship)"
+                                        <a
+                                            href="/dashboard/scholarships"
+                                            class="inline-flex justify-center rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                                         >
-                                            {{ !canApply ? 'Complete profile first' : appliedScholarshipIds.has(scholarship.id) ? 'Already submitted' : 'Use this scholarship' }}
-                                        </button>
-                                    </article>
+                                            Choose scholarship
+                                        </a>
+                                    </div>
+
+                                    <div v-if="selectedScholarship" class="mt-5 rounded-lg border border-sky-100 bg-white p-4">
+                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                                            {{ selectedScholarship.provider?.name || 'Scholarship Provider' }}
+                                        </p>
+                                        <h4 class="mt-2 text-lg font-bold text-slate-950">
+                                            {{ selectedScholarship.title }}
+                                        </h4>
+                                        <p class="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
+                                            {{ selectedScholarship.description }}
+                                        </p>
+                                        <div class="mt-4 grid gap-2 text-sm sm:grid-cols-4">
+                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                                <p class="font-semibold text-slate-500">Award</p>
+                                                <p class="mt-1 font-bold text-slate-950">{{ formatAmount(selectedScholarship.award_amount) }}</p>
+                                            </div>
+                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                                <p class="font-semibold text-slate-500">Deadline</p>
+                                                <p class="mt-1 font-bold text-slate-950">{{ selectedScholarship.deadline || 'No deadline' }}</p>
+                                            </div>
+                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                                <p class="font-semibold text-slate-500">Documents</p>
+                                                <p class="mt-1 font-bold text-slate-950">{{ selectedRequirements.length }}</p>
+                                            </div>
+                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                                <p class="font-semibold text-slate-500">Match</p>
+                                                <p :class="['mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold', matchClass(selectedScholarship.eligibility_match?.score)]">
+                                                    {{ selectedScholarship.eligibility_match?.score ?? 0 }}%
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div v-else class="mt-5 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+                                        No scholarship is selected yet. Open Scholarships, pick a program, then start the application from there.
+                                    </div>
                                 </div>
                             </div>
 
@@ -843,36 +785,82 @@ onMounted(loadApplications);
                             </div>
 
                             <div v-else-if="currentStep === 2 && selectedScholarship">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Document Checklist
-                                </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Confirm prepared documents
-                                </h3>
-                                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Check each document you have prepared. This saves your checklist with the application record.
-                                </p>
+                                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                            Document Checklist
+                                        </p>
+                                        <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                            Confirm prepared documents
+                                        </h3>
+                                        <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                            Mark only the documents you already have. The checklist will be saved with your application record.
+                                        </p>
+                                    </div>
+                                    <div class="rounded-md border border-slate-200 bg-[#f6faf8] px-4 py-3 text-sm">
+                                        <p class="font-bold text-slate-950">
+                                            {{ checkedDocumentCount }} / {{ selectedRequirements.length }}
+                                        </p>
+                                        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                            Prepared
+                                        </p>
+                                    </div>
+                                </div>
 
                                 <div v-if="selectedRequirements.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
                                     This scholarship has no listed document requirements, so you can continue to review.
                                 </div>
 
-                                <div v-else class="mt-5 grid gap-2 md:grid-cols-2">
-                                    <label
-                                        v-for="requirement in selectedRequirements"
-                                        :key="requirement"
-                                        class="flex cursor-pointer gap-3 rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm transition hover:border-sky-200 hover:bg-white"
-                                    >
-                                        <input
-                                            v-model="documentChecklist"
-                                            type="checkbox"
-                                            :value="requirement"
-                                            class="mt-1"
+                                <div v-else class="mt-5 space-y-3">
+                                    <div class="flex flex-col gap-2 rounded-lg border border-slate-200 bg-[#f6faf8] p-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <p class="text-sm font-semibold text-slate-700">
+                                            Checklist progress: {{ checkedDocumentCount }} prepared, {{ selectedRequirements.length - checkedDocumentCount }} remaining.
+                                        </p>
+                                        <div class="flex gap-2">
+                                            <button
+                                                type="button"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                                @click="selectAllDocuments"
+                                            >
+                                                Mark all prepared
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                                @click="clearDocumentChecklist"
+                                            >
+                                                Clear
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid gap-2 md:grid-cols-2">
+                                        <label
+                                            v-for="requirement in selectedRequirements"
+                                            :key="requirement"
+                                            :class="[
+                                                'flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition',
+                                                documentChecklist.includes(requirement)
+                                                    ? 'border-sky-300 bg-sky-50 shadow-sm ring-1 ring-sky-100'
+                                                    : 'border-slate-200 bg-[#f6faf8] hover:border-sky-200 hover:bg-white',
+                                            ]"
                                         >
-                                        <span class="font-semibold text-slate-700">
-                                            {{ requirement }}
-                                        </span>
-                                    </label>
+                                            <input
+                                                v-model="documentChecklist"
+                                                type="checkbox"
+                                                :value="requirement"
+                                                class="mt-1 rounded border-slate-300 text-sky-700 focus:ring-sky-200"
+                                            >
+                                            <span class="flex-1">
+                                                <span class="block font-semibold text-slate-800">
+                                                    {{ requirement }}
+                                                </span>
+                                                <span :class="['mt-1 inline-flex rounded-md px-2 py-0.5 text-xs font-bold', documentChecklist.includes(requirement) ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-500']">
+                                                    {{ documentChecklist.includes(requirement) ? 'Prepared' : 'Needed' }}
+                                                </span>
+                                            </span>
+                                        </label>
+                                    </div>
                                 </div>
 
                                 <div class="mt-5">

@@ -34,10 +34,15 @@ Route::get('/documents/{document}/download', [ApplicationDocumentController::cla
 Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->middleware('auth')->name('notifications.read');
 Route::get('/admin', [AdminController::class, 'index'])->name('admin.index');
 Route::get('/admin/manage-users', [AdminController::class, 'manageUsers'])->name('admin.manage-users');
+Route::get('/admin/accounts/create', [AdminController::class, 'accountForm'])->name('admin.accounts.create');
+Route::get('/admin/accounts/{user}/edit', [AdminController::class, 'accountForm'])->name('admin.accounts.edit');
 Route::get('/admin/reviews', [AdminController::class, 'reviews'])->name('admin.reviews');
 Route::get('/admin/logs', [AdminController::class, 'logs'])->name('admin.logs');
+Route::get('/admin/platform-analytics', [AdminController::class, 'platformAnalytics'])->name('admin.platform-analytics');
 Route::get('/admin/users', [AdminController::class, 'users'])->middleware('auth')->name('admin.users');
 Route::post('/admin/users', [AdminController::class, 'storeUser'])->middleware('auth')->name('admin.users.store');
+Route::get('/admin/users/{user}', [AdminController::class, 'showUser'])->middleware('auth')->name('admin.users.show');
+Route::patch('/admin/users/{user}', [AdminController::class, 'updateUser'])->middleware('auth')->name('admin.users.update');
 Route::get('/admin/analytics', [AdminController::class, 'analytics'])->middleware('auth')->name('admin.analytics');
 Route::get('/admin/reviews/data', [AdminController::class, 'reviewsData'])->middleware('auth')->name('admin.reviews.data');
 Route::patch('/admin/providers/{provider}/verification', [AdminController::class, 'updateProviderVerification'])->middleware('auth')->name('admin.providers.verification');
@@ -46,14 +51,21 @@ Route::get('/admin/export/applications', [AdminController::class, 'exportApplica
 Route::get('/admin/log-entries', [AdminController::class, 'logEntries'])->middleware('auth')->name('admin.log-entries');
 Route::get('/provider', [ProviderController::class, 'index'])->name('provider.index');
 Route::get('/provider/programs', [ProviderController::class, 'programs'])->name('provider.programs');
+Route::get('/provider/programs/create', [ProviderController::class, 'programForm'])->name('provider.programs.create');
+Route::get('/provider/programs/{scholarship}/edit', [ProviderController::class, 'programForm'])->name('provider.programs.edit');
 Route::get('/provider/applications', [ProviderController::class, 'applications'])->name('provider.applications');
+Route::get('/provider/profile', [ProviderController::class, 'profile'])->middleware('auth')->name('provider.profile');
+Route::redirect('/provider/insights', '/provider/review');
+Route::get('/provider/review', [ProviderController::class, 'insights'])->middleware('auth')->name('provider.review');
+Route::get('/provider/profile/data', [ProviderController::class, 'profileData'])->middleware('auth')->name('provider.profile.data');
+Route::get('/provider/insights/data', [ProviderController::class, 'insightsData'])->middleware('auth')->name('provider.insights.data');
 Route::get('/provider/applications/data', [ProviderController::class, 'applicationsData'])->middleware('auth')->name('provider.applications.data');
 Route::patch('/provider/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->middleware('auth')->name('provider.applications.status');
 Route::patch('/provider/documents/{document}/status', [ProviderController::class, 'updateDocumentStatus'])->middleware('auth')->name('provider.documents.status');
 Route::get('/provider/export/applications', [ProviderController::class, 'exportApplications'])->middleware('auth')->name('provider.export.applications');
-Route::get('/provider/profile', [ProviderController::class, 'profile'])->middleware('auth')->name('provider.profile');
 Route::get('/provider/scholarships', [ProviderController::class, 'scholarships'])->middleware('auth')->name('provider.scholarships');
 Route::post('/provider/scholarships', [ProviderController::class, 'storeScholarship'])->middleware('auth')->name('provider.scholarships.store');
+Route::get('/provider/scholarships/{scholarship}', [ProviderController::class, 'showScholarship'])->middleware('auth')->name('provider.scholarships.show');
 Route::put('/provider/scholarships/{scholarship}', [ProviderController::class, 'updateScholarship'])->middleware('auth')->name('provider.scholarships.update');
 
 Route::post('/login', [AuthController::class, 'login'])->name('login.store');

@@ -413,7 +413,7 @@ onMounted(loadScholarships);
                                 :key="scholarship.id"
                                 class="group relative overflow-hidden rounded-lg border border-slate-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
                             >
-                                <div class="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-sky-500 via-emerald-400 to-amber-300"></div>
+                                <div class="absolute inset-y-0 left-0 w-1.5 bg-slate-900"></div>
                                 <div class="pl-3">
                                     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                         <div>
@@ -445,7 +445,7 @@ onMounted(loadScholarships);
                                         {{ scholarship.description }}
                                     </p>
 
-                                    <div class="mt-4 grid gap-3 text-sm md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+                                    <div class="mt-4 grid gap-3 text-sm md:grid-cols-3">
                                         <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70">
                                             <p class="font-semibold text-slate-500">Award</p>
                                             <p class="mt-1 font-bold text-slate-950">{{ formatAmount(scholarship.award_amount) }}</p>
@@ -458,22 +458,37 @@ onMounted(loadScholarships);
                                             <p class="font-semibold text-slate-500">Requirements</p>
                                             <p class="mt-1 font-bold text-slate-950">{{ requirementsLabel(scholarship.requirements) }}</p>
                                         </div>
-                                        <div class="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
-                                            <button
-                                                type="button"
-                                                :disabled="savingId === scholarship.id"
-                                                class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="toggleSave(scholarship)"
-                                            >
-                                                {{ savingId === scholarship.id ? 'Saving...' : scholarship.is_saved ? 'Remove saved' : 'Save' }}
-                                            </button>
-                                            <a
-                                                :href="`/dashboard/scholarships/${scholarship.id}`"
-                                                class="block rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                                            >
-                                                View details
-                                            </a>
-                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-3">
+                                        <button
+                                            type="button"
+                                            :disabled="savingId === scholarship.id"
+                                            class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="toggleSave(scholarship)"
+                                        >
+                                            {{ savingId === scholarship.id ? 'Saving...' : scholarship.is_saved ? 'Remove saved' : 'Save' }}
+                                        </button>
+                                        <a
+                                            :href="`/dashboard/scholarships/${scholarship.id}`"
+                                            class="block rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                                        >
+                                            View details
+                                        </a>
+                                        <a
+                                            v-if="scholarship.has_applied"
+                                            href="/dashboard/applications"
+                                            class="block rounded-md bg-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-600"
+                                        >
+                                            Already applied
+                                        </a>
+                                        <a
+                                            v-else
+                                            :href="`/dashboard/applications?scholarship=${scholarship.id}`"
+                                            class="block rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                                        >
+                                            Start application
+                                        </a>
                                     </div>
                                 </div>
                             </article>

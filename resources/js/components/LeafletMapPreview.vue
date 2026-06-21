@@ -34,9 +34,29 @@ const props = defineProps({
         type: Number,
         default: 0,
     },
+    picker: {
+        type: Boolean,
+        default: false,
+    },
+    reverseGeocodeOnPick: {
+        type: Boolean,
+        default: true,
+    },
+    defaultLatitude: {
+        type: [Number, String],
+        default: 12.8797,
+    },
+    defaultLongitude: {
+        type: [Number, String],
+        default: 121.7740,
+    },
+    defaultZoom: {
+        type: Number,
+        default: 6,
+    },
 });
 
-const emit = defineEmits(['resolved', 'error']);
+const emit = defineEmits(['resolved', 'picked', 'error']);
 
 const mapElement = ref(null);
 const statusMessage = ref('Loading map...');
@@ -150,18 +170,87 @@ async function geocodeAddress() {
     }
 }
 
+async function reverseGeocodeCoordinates(coordinates) {
+    statusMessage.value = 'Finding address from selected pin...';
+
+    try {
+        const params = new URLSearchParams({
+            format: 'jsonv2',
+            addressdetails: '1',
+            lat: String(coordinates.latitude),
+            lon: String(coordinates.longitude),
+            'accept-language': 'en',
+        });
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params.toString()}`, {
+            headers: {
+                Accept: 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Unable to find address from pin.');
+        }
+
+        const result = await response.json();
+
+        return {
+            ...coordinates,
+            displayName: result.display_name ?? '',
+            address: result.address ?? {},
+        };
+    } catch (error) {
+        statusMessage.value = 'Pin set, but address lookup is unavailable. Check internet connection and try again.';
+        emit('error', statusMessage.value);
+        return null;
+    }
+}
+
+function defaultCoordinates() {
+    return {
+        latitude: numberOrNull(props.defaultLatitude) ?? 12.8797,
+        longitude: numberOrNull(props.defaultLongitude) ?? 121.7740,
+    };
+}
+
+function enablePickerEvents() {
+    if (!mapInstance.value || !props.picker) {
+        return;
+    }
+
+    mapInstance.value.off('click', handleMapClick);
+    mapInstance.value.on('click', handleMapClick);
+}
+
+function updateMarker(coordinates) {
+    const position = [coordinates.latitude, coordinates.longitude];
+
+    if (!markerInstance.value) {
+        markerInstance.value = window.L.marker(position, {
+            draggable: props.picker,
+        }).addTo(mapInstance.value);
+    } else {
+        markerInstance.value.setLatLng(position);
+    }
+
+    if (props.picker) {
+        markerInstance.value.dragging?.enable();
+        markerInstance.value.off('dragend', handleMarkerDragEnd);
+        markerInstance.value.on('dragend', handleMarkerDragEnd);
+    } else {
+        markerInstance.value.dragging?.disable();
+    }
+
+    const popupContent = document.createElement('span');
+    popupContent.textContent = markerLabel();
+    markerInstance.value.bindPopup(popupContent);
+}
+
 async function renderMap(coordinates = currentCoordinates()) {
     if (!isMounted || !mapElement.value) {
         return;
     }
 
     await ensureLeaflet();
-
-    if (!coordinates) {
-        statusMessage.value = props.address ? 'Use address search to preview this location.' : 'Add an address to preview the map.';
-        return;
-    }
-
     await nextTick();
 
     if (!mapInstance.value) {
@@ -175,23 +264,68 @@ async function renderMap(coordinates = currentCoordinates()) {
         }).addTo(mapInstance.value);
     }
 
-    const position = [coordinates.latitude, coordinates.longitude];
-    mapInstance.value.setView(position, 15);
+    enablePickerEvents();
 
-    if (!markerInstance.value) {
-        markerInstance.value = window.L.marker(position).addTo(mapInstance.value);
-    } else {
-        markerInstance.value.setLatLng(position);
+    if (!coordinates) {
+        const fallback = defaultCoordinates();
+        mapInstance.value.setView([fallback.latitude, fallback.longitude], props.defaultZoom);
+        statusMessage.value = props.picker
+            ? 'Click the map to set a pin, or search an address first.'
+            : props.address ? 'Use address search to preview this location.' : 'Add an address to preview the map.';
+
+        setTimeout(() => {
+            mapInstance.value?.invalidateSize();
+        }, 100);
+
+        return;
     }
 
-    const popupContent = document.createElement('span');
-    popupContent.textContent = markerLabel();
-    markerInstance.value.bindPopup(popupContent);
-    statusMessage.value = '';
+    const position = [coordinates.latitude, coordinates.longitude];
+    mapInstance.value.setView(position, 15);
+    updateMarker(coordinates);
+    statusMessage.value = props.picker ? 'Pin set. You can drag it to adjust the location.' : '';
 
     setTimeout(() => {
         mapInstance.value?.invalidateSize();
     }, 100);
+}
+
+async function setPickedCoordinates(coordinates) {
+    await renderMap(coordinates);
+
+    if (!props.reverseGeocodeOnPick) {
+        emit('picked', coordinates);
+        statusMessage.value = 'Pin set. Save to keep this map point.';
+        return;
+    }
+
+    const location = await reverseGeocodeCoordinates(coordinates);
+
+    if (location) {
+        emit('picked', location);
+        statusMessage.value = location.displayName
+            ? 'Pin set. Address fields were filled from this map point.'
+            : 'Pin set. Save to keep this map point.';
+        return;
+    }
+
+    emit('picked', coordinates);
+}
+
+async function handleMapClick(event) {
+    await setPickedCoordinates({
+        latitude: Number(event.latlng.lat),
+        longitude: Number(event.latlng.lng),
+    });
+}
+
+async function handleMarkerDragEnd(event) {
+    const position = event.target.getLatLng();
+
+    await setPickedCoordinates({
+        latitude: Number(position.lat),
+        longitude: Number(position.lng),
+    });
 }
 
 async function previewAddress() {
@@ -228,11 +362,18 @@ onMounted(async () => {
         return;
     }
 
+    if (props.picker) {
+        await renderMap();
+        return;
+    }
+
     statusMessage.value = props.address ? 'Use address search to preview this location.' : 'Add an address to preview the map.';
 });
 
 onUnmounted(() => {
     isMounted = false;
+    mapInstance.value?.off('click', handleMapClick);
+    markerInstance.value?.off('dragend', handleMarkerDragEnd);
     mapInstance.value?.remove();
     mapInstance.value = null;
     markerInstance.value = null;
@@ -249,6 +390,9 @@ onUnmounted(() => {
         ></div>
         <p v-if="statusMessage" class="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
             {{ statusMessage }}
+        </p>
+        <p v-if="picker" class="border-t border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-500">
+            Tip: click the map to set a pin, then drag the marker for a more exact location.
         </p>
     </div>
 </template>

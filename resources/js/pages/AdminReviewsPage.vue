@@ -145,33 +145,6 @@ onMounted(loadReviewData);
                         {{ statusMessage }}
                     </p>
 
-                    <div class="grid gap-4 md:grid-cols-6">
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">Providers</p>
-                            <p class="mt-3 font-display text-3xl font-bold text-slate-950">{{ stats.providers }}</p>
-                        </article>
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">Pending</p>
-                            <p class="mt-3 font-display text-3xl font-bold text-amber-600">{{ stats.pending_providers }}</p>
-                        </article>
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">Approved</p>
-                            <p class="mt-3 font-display text-3xl font-bold text-emerald-700">{{ stats.approved_providers }}</p>
-                        </article>
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">Recent Apps</p>
-                            <p class="mt-3 font-display text-3xl font-bold text-sky-700">{{ stats.recent_applications }}</p>
-                        </article>
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">DSS Avg</p>
-                            <p class="mt-3 font-display text-3xl font-bold text-indigo-700">{{ stats.average_dss_score || 0 }}%</p>
-                        </article>
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">Pending Docs</p>
-                            <p class="mt-3 font-display text-3xl font-bold text-amber-600">{{ stats.pending_documents || 0 }}</p>
-                        </article>
-                    </div>
-
                     <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="border-b border-slate-200 p-5">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">

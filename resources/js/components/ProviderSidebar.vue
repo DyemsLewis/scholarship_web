@@ -3,67 +3,67 @@ const emit = defineEmits(['logout']);
 const currentPath = window.location.pathname.replace(/\/$/, '') || '/provider';
 
 const navLinks = [
-    { href: '/provider', label: 'Dashboard', detail: 'Provider overview' },
-    { href: '/provider/programs', label: 'Programs', detail: 'Scholarship workspace' },
-    { href: '/provider/applications', label: 'Applications', detail: 'Applicant activity' },
+    { href: '/provider', label: 'Dashboard' },
+    { href: '/provider/programs', label: 'Programs' },
+    { href: '/provider/applications', label: 'Applications' },
+    { href: '/provider/review', label: 'Review' },
+    { href: '/provider/profile', label: 'Profile' },
 ];
 
 function isActive(href) {
+    if (href === '/provider/programs') {
+        return currentPath === href || currentPath.startsWith('/provider/programs/');
+    }
+
     return currentPath === href;
 }
 </script>
 
 <template>
-    <aside class="relative overflow-hidden bg-[#081426] text-white lg:min-h-screen">
-        <div class="absolute inset-0 bg-[radial-gradient(circle_at_16%_12%,_rgba(45,212,191,0.18),_transparent_30%),radial-gradient(circle_at_92%_16%,_rgba(250,204,21,0.14),_transparent_26%),linear-gradient(180deg,_rgba(8,20,38,0.98),_rgba(15,23,42,0.96))]"></div>
-        <div class="relative flex h-full flex-col gap-8 px-5 py-6">
-            <div class="font-display text-2xl font-bold text-white">
-                Provider Panel
+    <aside class="relative overflow-hidden border-r border-slate-800 bg-slate-950 text-white lg:sticky lg:top-0 lg:h-screen">
+        <div class="absolute inset-x-0 top-0 h-px bg-amber-300/70"></div>
+
+        <div class="relative flex min-h-72 flex-col px-5 py-6 lg:h-full">
+            <div class="flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-md bg-amber-300 text-sm font-black text-slate-950">
+                    SP
+                </div>
+                <div>
+                    <p class="font-display text-xl font-bold text-white">
+                        Provider
+                    </p>
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        Scholarship Desk
+                    </p>
+                </div>
             </div>
 
-            <div>
-                <p class="inline-flex rounded-md border border-emerald-200/25 bg-emerald-300/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-100">
-                    Scholarship Provider
-                </p>
-                <h1 class="mt-5 font-display text-3xl leading-tight font-bold text-white">
-                    Program Workspace
-                </h1>
-                <p class="mt-4 text-sm leading-6 text-slate-300">
-                    Manage provider tools from a workspace separate from the admin panel.
-                </p>
-            </div>
-
-            <nav class="grid gap-2">
+            <nav class="mt-8 grid gap-1.5 lg:overflow-y-auto">
                 <a
                     v-for="link in navLinks"
                     :key="link.href"
                     :href="link.href"
                     :class="[
-                        'rounded-md border px-4 py-3 transition hover:border-emerald-200/30 hover:bg-white/10 hover:text-white',
+                        'group relative rounded-md px-3 py-2.5 text-sm font-bold transition',
                         isActive(link.href)
-                            ? 'border-emerald-200/40 bg-emerald-300/10 text-white'
-                            : 'border-white/10 bg-white/[0.04] text-slate-300',
+                            ? 'bg-white text-slate-950'
+                            : 'text-slate-400 hover:bg-white/5 hover:text-white',
                     ]"
                 >
-                    <span class="block text-sm font-bold">
+                    <span
+                        v-if="isActive(link.href)"
+                        class="absolute inset-y-2 left-0 w-1 rounded-r-full bg-amber-500"
+                    ></span>
+                    <span class="pl-2">
                         {{ link.label }}
-                    </span>
-                    <span class="mt-1 block text-xs text-slate-400">
-                        {{ link.detail }}
                     </span>
                 </a>
             </nav>
 
-            <div class="mt-auto rounded-lg border border-white/10 bg-white/[0.04] p-4">
-                <p class="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-100/80">
-                    Provider Access
-                </p>
-                <p class="mt-3 text-sm leading-6 text-slate-300">
-                    Signed in to the scholarship provider workspace.
-                </p>
+            <div class="mt-6 border-t border-white/10 pt-4 lg:mt-auto">
                 <button
                     type="button"
-                    class="mt-4 w-full rounded-md border border-white/20 px-4 py-2.5 text-sm font-bold text-white transition hover:border-emerald-200/50 hover:bg-white/10"
+                    class="w-full rounded-md border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300 transition hover:border-amber-300/40 hover:bg-white/5 hover:text-white"
                     @click="emit('logout')"
                 >
                     Logout

@@ -39,6 +39,17 @@ class ProviderController extends Controller
         return view('provider-programs');
     }
 
+    public function programForm(Request $request): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isProvider(), 403);
+
+        return view('provider-program-form');
+    }
+
     public function applications(Request $request): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -50,7 +61,29 @@ class ProviderController extends Controller
         return view('provider-applications');
     }
 
-    public function profile(Request $request): JsonResponse
+    public function profile(Request $request): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isProvider(), 403);
+
+        return view('provider-profile');
+    }
+
+    public function insights(Request $request): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isProvider(), 403);
+
+        return view('provider-insights');
+    }
+
+    public function profileData(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
 
@@ -71,6 +104,105 @@ class ProviderController extends Controller
                 'drafts' => $scholarships->where('status', 'draft')->count(),
             ],
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
+        ]);
+    }
+
+    public function insightsData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $scholarships = Scholarship::query()
+            ->where('provider_id', $request->user()->id)
+            ->withCount('bookmarks')
+            ->latest()
+            ->get();
+        $applications = ScholarshipApplication::query()
+            ->with(['documents', 'scholarship'])
+            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id))
+            ->latest('submitted_at')
+            ->get();
+        $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
+        $recommendationCounts = $applications
+            ->groupBy('dss_recommendation')
+            ->map(fn ($items) => $items->count());
+        $submitted = $applications->count();
+        $completeApplications = $applications
+            ->filter(fn (ScholarshipApplication $application) => $this->documentReadiness($application)['percent'] === 100)
+            ->count();
+        $approved = $applications->where('status', 'approved')->count();
+        $totalViews = $scholarships->sum(fn (Scholarship $scholarship) => $scholarship->views_count ?? 0);
+        $totalSaves = $scholarships->sum(fn (Scholarship $scholarship) => $scholarship->bookmarks_count ?? 0);
+        $missingDocuments = $applications
+            ->flatMap(fn (ScholarshipApplication $application) => $this->documentReadiness($application)['missing'])
+            ->countBy()
+            ->sortDesc()
+            ->take(8)
+            ->map(fn (int $total, string $document) => [
+                'document' => $document,
+                'total' => $total,
+            ])
+            ->values();
+        $documentIssues = $applications
+            ->flatMap(fn (ScholarshipApplication $application) => $application->documents)
+            ->filter(fn (ApplicationDocument $document) => in_array($document->status, ['pending', 'rejected', 'needs_replacement'], true))
+            ->groupBy('document_name')
+            ->map(fn ($items, string $document) => [
+                'document' => $document,
+                'total' => $items->count(),
+                'pending' => $items->where('status', 'pending')->count(),
+                'needs_replacement' => $items->where('status', 'needs_replacement')->count(),
+                'rejected' => $items->where('status', 'rejected')->count(),
+            ])
+            ->sortByDesc('total')
+            ->values()
+            ->take(8);
+
+        return response()->json([
+            'user' => $request->user()->loadMissing(['providerProfile'])->publicPayload(),
+            'summary' => [
+                'programs' => $scholarships->count(),
+                'published_programs' => $scholarships->where('status', 'published')->count(),
+                'total_views' => $totalViews,
+                'total_saves' => $totalSaves,
+                'applications' => $submitted,
+                'complete_applications' => $completeApplications,
+                'approved_applications' => $approved,
+                'average_dss_score' => round((float) $applications->avg('dss_score'), 1),
+            ],
+            'funnel' => [
+                ['label' => 'Views', 'value' => $totalViews],
+                ['label' => 'Saved', 'value' => $totalSaves],
+                ['label' => 'Submitted', 'value' => $submitted],
+                ['label' => 'Complete checklist', 'value' => $completeApplications],
+                ['label' => 'Approved', 'value' => $approved],
+            ],
+            'program_insights' => $scholarships->map(function (Scholarship $scholarship) use ($applications) {
+                $programApplications = $applications->filter(fn (ScholarshipApplication $application) => $application->scholarship_id === $scholarship->id);
+                $completeApplications = $programApplications
+                    ->filter(fn (ScholarshipApplication $application) => $this->documentReadiness($application)['percent'] === 100)
+                    ->count();
+
+                return [
+                    'id' => $scholarship->id,
+                    'title' => $scholarship->title,
+                    'status' => $scholarship->status,
+                    'views' => $scholarship->views_count ?? 0,
+                    'saves' => $scholarship->bookmarks_count ?? 0,
+                    'applications' => $programApplications->count(),
+                    'complete_applications' => $completeApplications,
+                    'average_match_score' => round((float) $programApplications->avg('eligibility_score'), 1),
+                    'average_dss_score' => round((float) $programApplications->avg('dss_score'), 1),
+                ];
+            })->sortByDesc('applications')->values(),
+            'top_missing_documents' => $missingDocuments,
+            'document_issues' => $documentIssues,
+            'dss_summary' => [
+                'average_score' => round((float) $applications->avg('dss_score'), 1),
+                'highly_recommended' => $recommendationCounts['highly_recommended'] ?? 0,
+                'recommended' => $recommendationCounts['recommended'] ?? 0,
+                'needs_review' => $recommendationCounts['needs_review'] ?? 0,
+                'not_recommended' => $recommendationCounts['not_recommended'] ?? 0,
+            ],
         ]);
     }
 
@@ -313,6 +445,16 @@ class ProviderController extends Controller
 
         return response()->json([
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
+        ]);
+    }
+
+    public function showScholarship(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+
+        return response()->json([
+            'scholarship' => $this->scholarshipPayload($scholarship->loadCount('bookmarks')),
         ]);
     }
 

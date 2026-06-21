@@ -109,10 +109,6 @@ class DatabaseSeeder extends Seeder
             'eligible_year_levels' => 'Any year level',
             'eligible_locations' => 'Philippines',
             'income_requirement' => 'Any',
-            'location_name' => 'Demo Scholarship Office',
-            'location_address' => 'Quezon City, Metro Manila',
-            'latitude' => 14.6760000,
-            'longitude' => 121.0437000,
             'requirements' => implode("\n", [
                 'Certificate of enrollment',
                 'Latest report card or grades',
@@ -125,12 +121,35 @@ class DatabaseSeeder extends Seeder
             'status' => 'published',
             'views_count' => 0,
         ];
+        $demoLocations = [
+            1 => [
+                'location_name' => 'Demo Scholarship Office - Manila',
+                'location_address' => 'Manila City Hall, Padre Burgos Avenue, Ermita, Manila, Metro Manila',
+                'latitude' => 14.5896000,
+                'longitude' => 120.9817000,
+            ],
+            2 => [
+                'location_name' => 'Demo Scholarship Office - Cebu',
+                'location_address' => 'Cebu City Hall, M.C. Briones Street, Cebu City, Cebu',
+                'latitude' => 10.2929000,
+                'longitude' => 123.9016000,
+            ],
+            3 => [
+                'location_name' => 'Demo Scholarship Office - Davao',
+                'location_address' => 'Davao City Hall, San Pedro Street, Davao City, Davao del Sur',
+                'latitude' => 7.0644000,
+                'longitude' => 125.6086000,
+            ],
+        ];
 
         foreach ([1, 2, 3] as $programNumber) {
             Scholarship::query()->updateOrCreate([
                 'provider_id' => $provider->id,
                 'title' => "Demo Program {$programNumber}",
-            ], $demoProgram);
+            ], [
+                ...$demoProgram,
+                ...$demoLocations[$programNumber],
+            ]);
         }
     }
 }
