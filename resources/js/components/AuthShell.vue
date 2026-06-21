@@ -48,6 +48,10 @@ defineProps({
         required: true,
     },
 });
+
+function assetUrl(path) {
+    return window.appAssetUrl ? window.appAssetUrl(path) : path;
+}
 </script>
 
 <template>
@@ -80,8 +84,8 @@ defineProps({
                             </p>
 
                             <img
-                            :src="'/images/auth-portal.jpg'"
-                            alt="Student study desk"
+                                :src="assetUrl('/images/auth-portal.jpg')"
+                                alt="Student study desk"
                                 class="mt-6 w-full rounded-lg border border-white/10 bg-white/[0.04] object-cover shadow-2xl shadow-slate-950/25"
                             >
                         </div>

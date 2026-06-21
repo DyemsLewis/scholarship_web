@@ -6,40 +6,8 @@ import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 const isLoading = ref(true);
 const errorMessage = ref('');
 const user = ref(null);
-const stats = ref({
-    available_scholarships: 0,
-    applications: 0,
-    saved: 0,
-});
 const nextSteps = ref([]);
 const notifications = ref([]);
-
-const statCards = computed(() => [
-    {
-        label: 'Available Scholarships',
-        value: stats.value.available_scholarships,
-        description: 'Published programs currently visible to applicants.',
-        href: '/dashboard/scholarships',
-        className: 'text-sky-700',
-        accent: 'bg-sky-600',
-    },
-    {
-        label: 'My Applications',
-        value: stats.value.applications,
-        description: 'Applications will appear here once submissions are added.',
-        href: '/dashboard/applications',
-        className: 'text-emerald-700',
-        accent: 'bg-emerald-600',
-    },
-    {
-        label: 'Unread Updates',
-        value: notifications.value.filter((notification) => !notification.read_at).length,
-        description: 'Unread portal updates from providers and admins.',
-        href: '/dashboard/scholarships',
-        className: 'text-amber-600',
-        accent: 'bg-amber-500',
-    },
-]);
 
 const profileFields = computed(() => [
     { label: 'First name', value: user.value?.first_name },
@@ -61,7 +29,6 @@ async function loadDashboard() {
         const response = await window.axios.get('/dashboard/data');
 
         user.value = response.data.user;
-        stats.value = response.data.stats;
         nextSteps.value = response.data.next_steps;
         notifications.value = response.data.notifications ?? [];
     } catch (error) {
@@ -80,53 +47,50 @@ onMounted(loadDashboard);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900">
+    <main class="student-shell">
         <ApplicantSidebar @logout="logout" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
-                <header class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                    <div class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
-                                Applicant Dashboard
+        <section class="student-page">
+            <div class="student-container">
+                <header class="student-hero">
+                    <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                        <div class="max-w-2xl">
+                            <p class="student-kicker">
+                                Dashboard
                             </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
+                            <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
                                 Welcome back, {{ user?.first_name || 'Scholar' }}
                             </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                This overview keeps only the important details. Scholarships, applications, and profile records now have their own pages.
+                            <p class="mt-2 text-sm leading-6 text-slate-600">
+                                Quick overview only. Use the tabs above when you need full scholarship, application, or profile details.
                             </p>
                         </div>
 
-                        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                            <img
-                                :src="'/images/student-dashboard.jpg'"
-                                alt="Students working together"
-                                class="mb-4 h-36 w-full rounded-md object-cover"
-                            >
-                            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                Profile Readiness
-                            </p>
-                            <div class="mt-3 flex items-end justify-between gap-4">
-                                <p class="font-display text-4xl font-bold text-slate-950">
+                        <div class="student-soft-card w-full p-4 lg:max-w-sm">
+                            <div class="flex items-center justify-between gap-4">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                        Profile readiness
+                                    </p>
+                                    <p class="mt-1 text-sm text-slate-500">
+                                        {{ completedProfileFields }}/{{ profileFields.length }} details complete
+                                    </p>
+                                </div>
+                                <p class="font-display text-3xl font-bold text-slate-950">
                                     {{ profileCompletion }}%
                                 </p>
-                                <p class="pb-1 text-sm text-slate-500">
-                                    {{ completedProfileFields }}/{{ profileFields.length }} details complete
-                                </p>
                             </div>
-                            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
-                                <div
-                                    class="h-full rounded-full bg-sky-600 transition-all"
-                                    :style="{ width: `${profileCompletion}%` }"
-                                ></div>
+                            <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                                <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${profileCompletion}%` }"></div>
                             </div>
+                            <a href="/dashboard/profile" class="mt-3 inline-flex text-sm font-semibold text-slate-900 hover:text-sky-700">
+                                Update profile
+                            </a>
                         </div>
                     </div>
                 </header>
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading applicant dashboard...
                 </div>
 
@@ -135,44 +99,21 @@ onMounted(loadDashboard);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <div class="grid gap-4 md:grid-cols-3">
-                        <a
-                            v-for="card in statCards"
-                            :key="card.label"
-                            :href="card.href"
-                            class="group relative overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-                        >
-                            <div :class="['absolute left-0 top-0 h-full w-1', card.accent]"></div>
-                            <p class="text-sm font-semibold text-slate-500">
-                                {{ card.label }}
-                            </p>
-                            <p :class="['mt-3 font-display text-3xl font-bold', card.className]">
-                                {{ card.value }}
-                            </p>
-                            <p class="mt-3 text-sm leading-5 text-slate-500">
-                                {{ card.description }}
-                            </p>
-                            <p class="mt-4 text-sm font-bold text-slate-900 group-hover:text-sky-700">
-                                Open {{ card.label.toLowerCase() }}
-                            </p>
-                        </a>
-                    </div>
-
-                    <section class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-                        <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                    <section class="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+                        <div class="student-card p-5">
+                            <p class="student-kicker">
                                 Next Steps
                             </p>
-                            <h3 class="mt-2 text-xl font-bold text-slate-950">
+                            <h3 class="mt-2 text-lg font-bold text-slate-950">
                                 Continue your scholarship work
                             </h3>
-                            <div class="mt-5 grid gap-3">
+                            <div class="mt-4 grid gap-2">
                                 <div
                                     v-for="(step, index) in nextSteps"
                                     :key="step"
-                                    class="flex gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"
+                                    class="flex gap-3 rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70"
                                 >
-                                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 text-sm font-bold text-white">
+                                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-sm font-bold text-slate-700 ring-1 ring-slate-200">
                                         {{ index + 1 }}
                                     </span>
                                     <p class="text-sm leading-6 text-slate-600">
@@ -182,11 +123,11 @@ onMounted(loadDashboard);
                             </div>
                         </div>
 
-                        <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                        <div class="student-card p-5">
+                            <p class="student-kicker">
                                 Notifications
                             </p>
-                            <h3 class="mt-2 text-xl font-bold text-slate-950">
+                            <h3 class="mt-2 text-lg font-bold text-slate-950">
                                 Recent portal updates
                             </h3>
                             <div v-if="notifications.length === 0" class="mt-5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
@@ -197,7 +138,7 @@ onMounted(loadDashboard);
                                     v-for="notification in notifications"
                                     :key="notification.id"
                                     :href="notification.action_url || '/dashboard/applications'"
-                                    class="rounded-md border border-slate-200 bg-slate-50 p-4 transition hover:border-sky-200 hover:bg-sky-50"
+                                    class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-4 transition hover:bg-white"
                                 >
                                     <p class="font-bold text-slate-950">
                                         {{ notification.title }}

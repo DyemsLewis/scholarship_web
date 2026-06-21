@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 
@@ -19,6 +20,8 @@ const scholarships = ref([]);
 const scholarshipFormElement = ref(null);
 const scholarshipForm = ref(emptyScholarshipForm());
 const selectedMapScholarship = ref(null);
+const providerLocationMessage = ref('');
+const providerAddressLookupTrigger = ref(0);
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
@@ -58,6 +61,22 @@ const programStats = computed(() => [
 ]);
 const selectedRequirementCount = computed(() => scholarshipForm.value.requirements.length);
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
+const scholarshipFormMapAddress = computed(() => {
+    const parts = [
+        scholarshipForm.value.locationName,
+        scholarshipForm.value.locationAddress,
+    ].filter(Boolean);
+
+    return parts.length ? [...parts, 'Philippines'].join(', ') : '';
+});
+const selectedMapAddress = computed(() => {
+    const parts = [
+        selectedMapScholarship.value?.location_address,
+        selectedMapScholarship.value?.location_name,
+    ].filter(Boolean);
+
+    return parts.length ? [...parts, 'Philippines'].join(', ') : '';
+});
 
 function emptyScholarshipForm() {
     return {
@@ -118,6 +137,40 @@ function closeMapModal() {
     selectedMapScholarship.value = null;
 }
 
+function clearScholarshipMapPoint() {
+    scholarshipForm.value.latitude = '';
+    scholarshipForm.value.longitude = '';
+    providerLocationMessage.value = '';
+}
+
+function lookupScholarshipAddress() {
+    if (!scholarshipFormMapAddress.value) {
+        providerLocationMessage.value = 'Enter the scholarship location address first.';
+        return;
+    }
+
+    providerLocationMessage.value = 'Searching scholarship address on the map...';
+    providerAddressLookupTrigger.value += 1;
+}
+
+function handleScholarshipLocationResolved(location) {
+    scholarshipForm.value.latitude = Number(location.latitude).toFixed(7);
+    scholarshipForm.value.longitude = Number(location.longitude).toFixed(7);
+    providerLocationMessage.value = 'Address found on the map. Save the scholarship to keep this map point.';
+}
+
+function handleScholarshipLocationError(message) {
+    providerLocationMessage.value = message;
+}
+
+function hasScholarshipMapPreview(scholarship) {
+    return Boolean(
+        (scholarship.latitude && scholarship.longitude)
+        || scholarship.location_address
+        || scholarship.location_name,
+    );
+}
+
 function statusLabel(status) {
     return String(status ?? 'draft')
         .replace(/_/g, ' ')
@@ -170,12 +223,14 @@ function resetScholarshipForm() {
     scholarshipForm.value = emptyScholarshipForm();
     formMessage.value = '';
     formError.value = '';
+    providerLocationMessage.value = '';
 }
 
 function editScholarship(scholarship) {
     editingId.value = scholarship.id;
     formMessage.value = '';
     formError.value = '';
+    providerLocationMessage.value = '';
     scholarshipForm.value = {
         title: scholarship.title ?? '',
         category: scholarship.category ?? '',
@@ -536,12 +591,24 @@ onMounted(loadProviderData);
                             </fieldset>
 
                             <fieldset class="rounded-lg border border-sky-100 bg-sky-50/60 p-4">
-                                <legend class="text-sm font-semibold text-slate-700">
-                                    Map location
-                                </legend>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">
-                                    Add the office, campus, or scholarship service location. Coordinates allow students to estimate distance from their saved location.
-                                </p>
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <legend class="text-sm font-semibold text-slate-700">
+                                            Map location
+                                        </legend>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            Add the office, campus, or service address. Use address search to save the map point automatically.
+                                        </p>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                        @click="lookupScholarshipAddress"
+                                    >
+                                        Find address on map
+                                    </button>
+                                </div>
 
                                 <div class="mt-4 grid gap-4 lg:grid-cols-2">
                                     <div>
@@ -554,6 +621,7 @@ onMounted(loadProviderData);
                                             type="text"
                                             placeholder="Example: City Scholarship Office"
                                             :class="inputClass"
+                                            @input="clearScholarshipMapPoint"
                                         >
                                     </div>
 
@@ -567,41 +635,26 @@ onMounted(loadProviderData);
                                             type="text"
                                             placeholder="Street, city, province"
                                             :class="inputClass"
-                                        >
-                                    </div>
-
-                                    <div>
-                                        <label :class="labelClass" for="scholarship-latitude">
-                                            Latitude
-                                        </label>
-                                        <input
-                                            id="scholarship-latitude"
-                                            v-model="scholarshipForm.latitude"
-                                            type="number"
-                                            min="-90"
-                                            max="90"
-                                            step="0.0000001"
-                                            placeholder="14.599512"
-                                            :class="inputClass"
-                                        >
-                                    </div>
-
-                                    <div>
-                                        <label :class="labelClass" for="scholarship-longitude">
-                                            Longitude
-                                        </label>
-                                        <input
-                                            id="scholarship-longitude"
-                                            v-model="scholarshipForm.longitude"
-                                            type="number"
-                                            min="-180"
-                                            max="180"
-                                            step="0.0000001"
-                                            placeholder="120.984222"
-                                            :class="inputClass"
+                                            @input="clearScholarshipMapPoint"
                                         >
                                     </div>
                                 </div>
+
+                                <LeafletMapPreview
+                                    class="mt-4"
+                                    :address="scholarshipFormMapAddress"
+                                    :latitude="scholarshipForm.latitude"
+                                    :longitude="scholarshipForm.longitude"
+                                    title="Scholarship address map preview"
+                                    :marker-text="scholarshipForm.locationName || 'Scholarship location'"
+                                    :geocode-trigger="providerAddressLookupTrigger"
+                                    @resolved="handleScholarshipLocationResolved"
+                                    @error="handleScholarshipLocationError"
+                                />
+
+                                <p v-if="providerLocationMessage" class="mt-3 text-xs font-semibold text-slate-700">
+                                    {{ providerLocationMessage }}
+                                </p>
                             </fieldset>
 
                             <fieldset class="rounded-lg border border-slate-200 bg-white p-4">
@@ -827,13 +880,10 @@ onMounted(loadProviderData);
                                             <p class="mt-1 leading-6 text-slate-700">
                                                 {{ scholarship.location_address || 'No address added yet.' }}
                                             </p>
-                                            <p v-if="scholarship.latitude && scholarship.longitude" class="mt-1 text-xs font-semibold text-slate-500">
-                                                {{ scholarship.latitude }}, {{ scholarship.longitude }}
-                                            </p>
                                         </div>
 
                                         <button
-                                            v-if="scholarship.embed_map_url"
+                                            v-if="hasScholarshipMapPreview(scholarship)"
                                             type="button"
                                             class="rounded-md border border-sky-200 px-3 py-2 text-center text-xs font-bold text-sky-700 transition hover:bg-sky-50"
                                             @click="openMapModal(scholarship)"
@@ -868,9 +918,6 @@ onMounted(loadProviderData);
                         <p class="mt-1 text-sm leading-6 text-slate-600">
                             {{ selectedMapScholarship.location_address || 'No map address added yet.' }}
                         </p>
-                        <p v-if="selectedMapScholarship.latitude && selectedMapScholarship.longitude" class="mt-1 text-xs font-semibold text-slate-500">
-                            {{ selectedMapScholarship.latitude }}, {{ selectedMapScholarship.longitude }}
-                        </p>
                     </div>
 
                     <button
@@ -883,22 +930,20 @@ onMounted(loadProviderData);
                 </div>
 
                 <div class="bg-slate-100 p-4">
-                    <iframe
-                        v-if="selectedMapScholarship.embed_map_url"
-                        :src="selectedMapScholarship.embed_map_url"
-                        class="h-[55vh] min-h-80 w-full rounded-md border border-slate-200 bg-white"
-                        loading="lazy"
-                        referrerpolicy="no-referrer-when-downgrade"
-                        title="Provider scholarship map preview"
-                    ></iframe>
-                    <div v-else class="rounded-md border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-                        No embeddable map is available for this scholarship yet.
-                    </div>
+                    <LeafletMapPreview
+                        :address="selectedMapAddress"
+                        :latitude="selectedMapScholarship.latitude"
+                        :longitude="selectedMapScholarship.longitude"
+                        :title="selectedMapScholarship.location_name || selectedMapScholarship.title"
+                        :marker-text="selectedMapScholarship.location_name || selectedMapScholarship.title"
+                        height="55vh"
+                        auto-geocode
+                    />
                 </div>
 
                 <div class="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p class="text-xs leading-5 text-slate-500">
-                        This is the map preview students will see when browsing scholarship locations.
+                        This Leaflet/OpenStreetMap preview is similar to what students will see when browsing scholarship locations.
                     </p>
                     <a
                         v-if="selectedMapScholarship.map_url"

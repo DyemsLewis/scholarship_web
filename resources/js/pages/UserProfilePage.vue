@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -10,6 +11,8 @@ const statusMessage = ref('');
 const locationMessage = ref('');
 const user = ref(null);
 const form = ref(emptyForm());
+const currentStep = ref(0);
+const addressLookupTrigger = ref(0);
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
@@ -21,31 +24,59 @@ const gradingScaleOptions = [
     { value: 'grade_point', label: 'GWA grade point' },
 ];
 
-const profileFields = computed(() => [
-    { label: 'First name', value: user.value?.first_name },
-    { label: 'Last name', value: user.value?.last_name },
-    { label: 'Middle initial', value: user.value?.middle_initial },
-    { label: 'Contact number', value: user.value?.contact_number },
-    { label: 'School', value: user.value?.school },
-    { label: 'Course / strand', value: user.value?.course_or_strand },
-    { label: 'Year level', value: user.value?.year_level },
-    { label: 'Enrollment status', value: user.value?.enrollment_status },
-    { label: 'GWA / average', value: user.value?.gwa },
-    { label: 'Grading scale', value: gradingScaleLabel(user.value?.grading_scale) },
-    { label: 'Income bracket', value: user.value?.income_bracket },
-    { label: 'Address', value: user.value?.address },
-    { label: 'Barangay', value: user.value?.barangay },
-    { label: 'City', value: user.value?.city },
-    { label: 'Province', value: user.value?.province },
-    { label: 'Region', value: user.value?.region },
-    { label: 'Latitude', value: user.value?.latitude },
-    { label: 'Longitude', value: user.value?.longitude },
-    { label: 'Birthdate', value: user.value?.birthdate },
-    { label: 'Guardian name', value: user.value?.guardian_name },
-    { label: 'Guardian contact', value: user.value?.guardian_contact },
-]);
-const completedProfileFields = computed(() => profileFields.value.filter((field) => Boolean(field.value)).length);
+const fieldLabels = {
+    first_name: 'First name',
+    last_name: 'Last name',
+    middle_initial: 'Middle initial',
+    contact_number: 'Contact number',
+    birthdate: 'Birthdate',
+    school: 'School',
+    course_or_strand: 'Course / strand',
+    year_level: 'Year level',
+    enrollment_status: 'Enrollment status',
+    gwa: 'GWA / average',
+    grading_scale: 'Grading scale',
+    income_bracket: 'Household income bracket',
+    address: 'Address',
+    barangay: 'Barangay',
+    city: 'City / municipality',
+    province: 'Province',
+    region: 'Region',
+    guardian_name: 'Guardian name',
+    guardian_contact: 'Guardian contact',
+};
+const profileSteps = [
+    { label: 'Personal', detail: 'Identity and contact', fields: ['first_name', 'middle_initial', 'last_name', 'birthdate', 'contact_number'] },
+    { label: 'Academic', detail: 'School, course, GWA', fields: ['school', 'course_or_strand', 'year_level', 'enrollment_status', 'grading_scale', 'gwa'] },
+    { label: 'Address', detail: 'Income and home location', fields: ['income_bracket', 'address', 'barangay', 'city', 'province', 'region'] },
+    { label: 'Guardian', detail: 'Final review', fields: ['guardian_name', 'guardian_contact'] },
+];
+const requiredProfileFields = profileSteps.flatMap((step) => step.fields);
+const currentProfileStep = computed(() => profileSteps[currentStep.value]);
+const profileFields = computed(() => requiredProfileFields.map((key) => ({
+    key,
+    label: fieldLabels[key],
+    value: form.value[key],
+})));
+const completedProfileFields = computed(() => profileFields.value.filter((field) => hasValue(field.value)).length);
 const profileCompletion = computed(() => Math.round((completedProfileFields.value / profileFields.value.length) * 100));
+const missingProfileFields = computed(() => profileFields.value.filter((field) => !hasValue(field.value)));
+const currentStepMissingFields = computed(() => currentProfileStep.value.fields
+    .map((key) => ({ key, label: fieldLabels[key], value: form.value[key] }))
+    .filter((field) => !hasValue(field.value)));
+const currentStepComplete = computed(() => currentStepMissingFields.value.length === 0);
+const isLastStep = computed(() => currentStep.value === profileSteps.length - 1);
+const profileMapAddress = computed(() => {
+    const parts = [
+        form.value.address,
+        form.value.barangay,
+        form.value.city,
+        form.value.province,
+        form.value.region,
+    ].filter(hasValue);
+
+    return parts.length ? [...parts, 'Philippines'].join(', ') : '';
+});
 
 function emptyForm() {
     return {
@@ -71,6 +102,56 @@ function emptyForm() {
         guardian_name: '',
         guardian_contact: '',
     };
+}
+
+function hasValue(value) {
+    return value !== null && value !== undefined && String(value).trim() !== '';
+}
+
+function stepProgress(step) {
+    const completed = step.fields.filter((field) => hasValue(form.value[field])).length;
+
+    return {
+        completed,
+        total: step.fields.length,
+        complete: completed === step.fields.length,
+    };
+}
+
+function canOpenStep(index) {
+    if (index <= currentStep.value) {
+        return true;
+    }
+
+    return profileSteps
+        .slice(0, index)
+        .every((step) => stepProgress(step).complete);
+}
+
+function goToStep(index) {
+    if (canOpenStep(index)) {
+        currentStep.value = index;
+        errorMessage.value = '';
+    }
+}
+
+function nextStep() {
+    if (!currentStepComplete.value) {
+        errorMessage.value = `Complete ${currentStepMissingFields.value.map((field) => field.label).join(', ')} before continuing.`;
+        return;
+    }
+
+    if (!isLastStep.value) {
+        currentStep.value += 1;
+        errorMessage.value = '';
+    }
+}
+
+function previousStep() {
+    if (currentStep.value > 0) {
+        currentStep.value -= 1;
+        errorMessage.value = '';
+    }
 }
 
 function gradingScaleLabel(value) {
@@ -111,30 +192,30 @@ function handlePhoneInput(key, event) {
     form.value[key] = event.target.value.replace(/[^\d+\s().-]/g, '');
 }
 
-function useCurrentLocation() {
+function clearProfileMapPoint() {
+    form.value.latitude = '';
+    form.value.longitude = '';
     locationMessage.value = '';
+}
 
-    if (!navigator.geolocation) {
-        locationMessage.value = 'Location is not supported by this browser.';
+function lookupProfileAddress() {
+    if (!profileMapAddress.value) {
+        locationMessage.value = 'Enter your address first so the map can search it.';
         return;
     }
 
-    locationMessage.value = 'Getting your current location...';
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            form.value.latitude = position.coords.latitude.toFixed(7);
-            form.value.longitude = position.coords.longitude.toFixed(7);
-            locationMessage.value = 'Location added. Save your profile to keep it.';
-        },
-        () => {
-            locationMessage.value = 'Unable to get location. You can enter latitude and longitude manually.';
-        },
-        {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 60000,
-        },
-    );
+    locationMessage.value = 'Searching your address on the map...';
+    addressLookupTrigger.value += 1;
+}
+
+function handleProfileLocationResolved(location) {
+    form.value.latitude = Number(location.latitude).toFixed(7);
+    form.value.longitude = Number(location.longitude).toFixed(7);
+    locationMessage.value = 'Address found on the map. Save your profile to keep this map point.';
+}
+
+function handleProfileLocationError(message) {
+    locationMessage.value = message;
 }
 
 async function loadProfile() {
@@ -153,7 +234,12 @@ async function loadProfile() {
     }
 }
 
-async function saveProfile() {
+async function saveProfile(requireComplete = false) {
+    if (requireComplete && missingProfileFields.value.length > 0) {
+        errorMessage.value = `Complete ${missingProfileFields.value.slice(0, 4).map((field) => field.label).join(', ')}${missingProfileFields.value.length > 4 ? ', and the remaining fields' : ''} before applying.`;
+        return;
+    }
+
     isSaving.value = true;
     statusMessage.value = '';
     errorMessage.value = '';
@@ -163,7 +249,9 @@ async function saveProfile() {
 
         user.value = response.data.user;
         fillForm(response.data.user);
-        statusMessage.value = response.data.message ?? 'Profile updated.';
+        statusMessage.value = requireComplete
+            ? 'Profile completed. You can now apply for scholarships.'
+            : response.data.message ?? 'Profile progress saved.';
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to update applicant profile.';
     } finally {
@@ -180,67 +268,98 @@ onMounted(loadProfile);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900">
+    <main class="student-shell">
         <ApplicantSidebar @logout="logout" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
-                <header class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                    <div class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Applicant Profile
+        <section class="student-page">
+            <div class="student-container">
+                <header class="student-hero">
+                    <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                        <div class="max-w-2xl">
+                            <p class="student-kicker">
+                                Profile Setup
                             </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Complete your scholarship profile
+                            <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
+                                Set up your student profile
                             </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Providers use these details when reviewing eligibility, documents, and award decisions.
+                            <p class="mt-2 text-sm leading-6 text-slate-600">
+                                You can explore scholarships anytime. Finish these details when you are ready to submit an application.
                             </p>
                         </div>
 
-                        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                            <img
-                                :src="'/images/student-dashboard.jpg'"
-                                alt="Students collaborating"
-                                class="mb-4 h-36 w-full rounded-md object-cover"
-                            >
-                            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                Profile Readiness
-                            </p>
-                            <div class="mt-3 flex items-end justify-between gap-4">
-                                <p class="font-display text-4xl font-bold text-slate-950">
+                        <div class="student-soft-card w-full p-4 lg:max-w-sm">
+                            <div class="flex items-center justify-between gap-4">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                        Profile readiness
+                                    </p>
+                                    <p class="mt-1 text-sm text-slate-500">
+                                        {{ completedProfileFields }}/{{ profileFields.length }} required details
+                                    </p>
+                                </div>
+                                <p class="font-display text-3xl font-bold text-slate-950">
                                     {{ profileCompletion }}%
                                 </p>
-                                <p class="pb-1 text-sm text-slate-500">
-                                    {{ completedProfileFields }}/{{ profileFields.length }} details complete
-                                </p>
                             </div>
-                            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
-                                <div
-                                    class="h-full rounded-full bg-amber-500 transition-all"
-                                    :style="{ width: `${profileCompletion}%` }"
-                                ></div>
+                            <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                                <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${profileCompletion}%` }"></div>
                             </div>
                         </div>
                     </div>
                 </header>
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading profile...
                 </div>
 
-                <div v-else class="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
-                            Editable Details
-                        </p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                            Student record
-                        </h3>
+                <div v-else class="mt-6 space-y-4">
+                    <section class="student-card p-5">
+                        <div class="grid gap-3 md:grid-cols-4">
+                            <button
+                                v-for="(step, index) in profileSteps"
+                                :key="step.label"
+                                type="button"
+                                :disabled="!canOpenStep(index)"
+                                :class="[
+                                    'rounded-lg border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50',
+                                    currentStep === index
+                                        ? 'border-sky-300 bg-sky-50 shadow-sm'
+                                        : stepProgress(step).complete
+                                            ? 'border-emerald-200 bg-emerald-50'
+                                            : 'border-slate-200 bg-[#f6faf8]',
+                                ]"
+                                @click="goToStep(index)"
+                            >
+                                <span class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                                    Step {{ index + 1 }}
+                                </span>
+                                <span class="mt-1 block font-bold text-slate-950">
+                                    {{ step.label }}
+                                </span>
+                                <span class="mt-1 block text-xs text-slate-500">
+                                    {{ stepProgress(step).completed }}/{{ stepProgress(step).total }} complete
+                                </span>
+                            </button>
+                        </div>
+                    </section>
 
-                        <form class="mt-5 grid gap-4" @submit.prevent="saveProfile">
-                            <div class="grid gap-4 md:grid-cols-[1fr_5rem_1fr] md:items-end">
+                    <section class="student-card p-5">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <p class="student-kicker">
+                                    {{ currentProfileStep.detail }}
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    Step {{ currentStep + 1 }}: {{ currentProfileStep.label }}
+                                </h3>
+                            </div>
+                            <p class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
+                                Needed for applications
+                            </p>
+                        </div>
+
+                        <form class="mt-5 grid gap-4" @submit.prevent="saveProfile(true)">
+                            <div v-if="currentStep === 0" class="grid gap-4 md:grid-cols-[1fr_5rem_1fr] md:items-end">
                                 <div>
                                     <label :class="labelClass" for="profile-first-name">First name</label>
                                     <input id="profile-first-name" v-model="form.first_name" required :class="inputClass">
@@ -262,15 +381,15 @@ onMounted(loadProfile);
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-3">
-                                <div>
+                            <div v-if="currentStep === 0 || currentStep === 1" class="grid gap-4 md:grid-cols-3">
+                                <div v-if="currentStep === 0">
                                     <label :class="labelClass" for="profile-contact">Contact number</label>
                                     <input id="profile-contact" :value="form.contact_number" required :class="inputClass" @input="handlePhoneInput('contact_number', $event)">
                                 </div>
-                                <div>
+                                <div v-if="currentStep === 1">
                                     <label :class="labelClass" for="profile-grading-scale">Grading scale</label>
                                     <select id="profile-grading-scale" v-model="form.grading_scale" :class="inputClass">
-                                        <option value="">Auto detect scale</option>
+                                        <option value="">Select grading scale</option>
                                         <option
                                             v-for="option in gradingScaleOptions"
                                             :key="option.value"
@@ -280,13 +399,13 @@ onMounted(loadProfile);
                                         </option>
                                     </select>
                                 </div>
-                                <div>
+                                <div v-if="currentStep === 1">
                                     <label :class="labelClass" for="profile-gwa">GWA / average</label>
                                     <input id="profile-gwa" v-model="form.gwa" type="number" min="0" max="100" step="0.01" placeholder="92.50 or 1.75" :class="inputClass">
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-3">
+                            <div v-if="currentStep === 1" class="grid gap-4 md:grid-cols-3">
                                 <div>
                                     <label :class="labelClass" for="profile-school">School</label>
                                     <input id="profile-school" v-model="form.school" placeholder="School name" :class="inputClass">
@@ -301,8 +420,8 @@ onMounted(loadProfile);
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-2">
-                                <div>
+                            <div v-if="currentStep === 1 || currentStep === 2" class="grid gap-4 md:grid-cols-2">
+                                <div v-if="currentStep === 1">
                                     <label :class="labelClass" for="profile-enrollment">Enrollment status</label>
                                     <select id="profile-enrollment" v-model="form.enrollment_status" :class="inputClass">
                                         <option value="">Select status</option>
@@ -315,7 +434,7 @@ onMounted(loadProfile);
                                         </option>
                                     </select>
                                 </div>
-                                <div>
+                                <div v-if="currentStep === 2">
                                     <label :class="labelClass" for="profile-income">Household income bracket</label>
                                     <select id="profile-income" v-model="form.income_bracket" :class="inputClass">
                                         <option value="">Select income bracket</option>
@@ -330,72 +449,73 @@ onMounted(loadProfile);
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-4">
+                            <div v-if="currentStep === 2" class="grid gap-4 md:grid-cols-4">
+                                <div class="md:col-span-4">
+                                    <label :class="labelClass" for="profile-address">Address</label>
+                                    <input id="profile-address" v-model="form.address" placeholder="Home address" :class="inputClass" @input="clearProfileMapPoint">
+                                </div>
                                 <div>
                                     <label :class="labelClass" for="profile-barangay">Barangay</label>
-                                    <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass">
+                                    <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass" @input="clearProfileMapPoint">
                                 </div>
                                 <div>
                                     <label :class="labelClass" for="profile-city">City / municipality</label>
-                                    <input id="profile-city" v-model="form.city" placeholder="City or municipality" :class="inputClass">
+                                    <input id="profile-city" v-model="form.city" placeholder="City or municipality" :class="inputClass" @input="clearProfileMapPoint">
                                 </div>
                                 <div>
                                     <label :class="labelClass" for="profile-province">Province</label>
-                                    <input id="profile-province" v-model="form.province" placeholder="Province" :class="inputClass">
+                                    <input id="profile-province" v-model="form.province" placeholder="Province" :class="inputClass" @input="clearProfileMapPoint">
                                 </div>
                                 <div>
                                     <label :class="labelClass" for="profile-region">Region</label>
-                                    <input id="profile-region" v-model="form.region" placeholder="NCR / Region IV-A" :class="inputClass">
+                                    <input id="profile-region" v-model="form.region" placeholder="NCR / Region IV-A" :class="inputClass" @input="clearProfileMapPoint">
                                 </div>
                             </div>
 
-                            <div class="rounded-lg border border-sky-100 bg-sky-50/70 p-4">
+                            <div v-if="currentStep === 2" class="student-soft-card p-4">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
-                                            Map coordinates
+                                            Address map preview
                                         </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Save your coordinates so the portal can estimate how far scholarship locations are from you.
+                                            Search your typed address using OpenStreetMap. The app stores the map point silently if one is found.
                                         </p>
                                     </div>
                                     <button
                                         type="button"
-                                        class="rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50"
-                                        @click="useCurrentLocation"
+                                        class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                        @click="lookupProfileAddress"
                                     >
-                                        Use my current location
+                                        Find address on map
                                     </button>
                                 </div>
 
-                                <div class="mt-4 grid gap-4 md:grid-cols-2">
-                                    <div>
-                                        <label :class="labelClass" for="profile-latitude">Latitude</label>
-                                        <input id="profile-latitude" v-model="form.latitude" type="number" min="-90" max="90" step="0.0000001" placeholder="14.599512" :class="inputClass">
-                                    </div>
-                                    <div>
-                                        <label :class="labelClass" for="profile-longitude">Longitude</label>
-                                        <input id="profile-longitude" v-model="form.longitude" type="number" min="-180" max="180" step="0.0000001" placeholder="120.984222" :class="inputClass">
-                                    </div>
-                                </div>
+                                <LeafletMapPreview
+                                    class="mt-4"
+                                    :address="profileMapAddress"
+                                    :latitude="form.latitude"
+                                    :longitude="form.longitude"
+                                    title="Student address map preview"
+                                    marker-text="Student address"
+                                    :geocode-trigger="addressLookupTrigger"
+                                    @resolved="handleProfileLocationResolved"
+                                    @error="handleProfileLocationError"
+                                />
 
-                                <p v-if="locationMessage" class="mt-3 text-xs font-semibold text-sky-800">
+                                <p v-if="locationMessage" class="mt-3 text-xs font-semibold text-slate-700">
                                     {{ locationMessage }}
                                 </p>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-2">
+                            <div v-if="currentStep === 0" class="grid gap-4 md:grid-cols-2">
                                 <div>
                                     <label :class="labelClass" for="profile-birthdate">Birthdate</label>
                                     <input id="profile-birthdate" v-model="form.birthdate" type="date" :class="inputClass">
                                 </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-address">Address</label>
-                                    <input id="profile-address" v-model="form.address" placeholder="Home address" :class="inputClass">
-                                </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-2">
+                            <div v-if="currentStep === 3" class="grid gap-4 md:grid-cols-2">
                                 <div>
                                     <label :class="labelClass" for="profile-guardian">Guardian name</label>
                                     <input id="profile-guardian" v-model="form.guardian_name" placeholder="Parent or guardian" :class="inputClass">
@@ -412,40 +532,76 @@ onMounted(loadProfile);
                                     <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
                                 </div>
 
-                                <button
-                                    type="submit"
-                                    :disabled="isSaving"
-                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                >
-                                    {{ isSaving ? 'Saving profile...' : 'Save profile' }}
-                                </button>
+                                <div class="flex flex-col gap-2 sm:flex-row">
+                                    <button
+                                        type="button"
+                                        :disabled="currentStep === 0"
+                                        class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                        @click="previousStep"
+                                    >
+                                        Back
+                                    </button>
+                                    <button
+                                        type="button"
+                                        :disabled="isSaving"
+                                        class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                        @click="saveProfile(false)"
+                                    >
+                                        {{ isSaving ? 'Saving...' : 'Save progress' }}
+                                    </button>
+                                    <button
+                                        v-if="!isLastStep"
+                                        type="button"
+                                        class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                        @click="nextStep"
+                                    >
+                                        Continue
+                                    </button>
+                                    <button
+                                        v-else
+                                        type="submit"
+                                        :disabled="isSaving || missingProfileFields.length > 0"
+                                        class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                    >
+                                        {{ isSaving ? 'Saving...' : 'Complete profile' }}
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                            Readiness Checklist
-                        </p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                            Completed details
-                        </h3>
+                    <details class="student-card p-5">
+                        <summary class="cursor-pointer list-none">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p class="student-kicker">
+                                        Readiness Checklist
+                                    </p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                        View missing profile details
+                                    </h3>
+                                </div>
+                                <p class="text-sm font-semibold text-slate-600">
+                                    {{ completedProfileFields }}/{{ profileFields.length }} complete
+                                </p>
+                            </div>
+                        </summary>
 
-                        <div class="mt-5 grid gap-3">
+                        <div class="mt-4 grid gap-2 md:grid-cols-2">
                             <div
                                 v-for="field in profileFields"
-                                :key="field.label"
-                                class="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+                                :key="field.key"
+                                class="flex items-center justify-between gap-3 rounded-md bg-[#f6faf8] px-3 py-2.5 text-sm ring-1 ring-slate-200/70"
                             >
                                 <span class="font-semibold text-slate-500">
                                     {{ field.label }}
                                 </span>
-                                <span :class="field.value ? 'font-bold text-slate-950' : 'font-semibold text-rose-600'">
-                                    {{ field.value || 'Missing' }}
+                                <span :class="hasValue(field.value) ? 'font-bold text-slate-950' : 'font-semibold text-rose-600'">
+                                    {{ hasValue(field.value) ? field.value : 'Missing' }}
                                 </span>
                             </div>
                         </div>
-                    </section>
+                    </details>
                 </div>
 
                 <ApplicantFooter />

@@ -47,6 +47,10 @@ const heroSlides = [
 
 const currentSlide = computed(() => heroSlides[activeSlide.value]);
 
+function assetUrl(path) {
+    return window.appAssetUrl ? window.appAssetUrl(path) : path;
+}
+
 function goToSlide(index) {
     activeSlide.value = (index + heroSlides.length) % heroSlides.length;
     restartCarousel();
@@ -121,7 +125,7 @@ const audiences = [
 
 <template>
     <main class="min-h-screen bg-white text-slate-900">
-        <section class="relative flex min-h-[86vh] flex-col overflow-hidden bg-slate-900 text-white">
+        <section class="relative flex h-[720px] min-h-[640px] flex-col overflow-hidden bg-slate-900 text-white sm:h-[760px] lg:h-[86vh] lg:min-h-[700px]">
             <div class="absolute inset-0">
                 <div
                     v-for="(slide, index) in heroSlides"
@@ -130,7 +134,7 @@ const audiences = [
                         'absolute inset-0 bg-cover bg-center transition-opacity duration-700 ease-out',
                         activeSlide === index ? 'opacity-100' : 'opacity-0',
                     ]"
-                    :style="{ backgroundImage: `url(${slide.image})` }"
+                    :style="{ backgroundImage: `url('${assetUrl(slide.image)}')` }"
                 ></div>
                 <div class="absolute inset-0 bg-[linear-gradient(90deg,_rgba(8,20,38,0.9),_rgba(8,20,38,0.62),_rgba(8,20,38,0.18))]"></div>
                 <div class="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-slate-950/70 to-transparent"></div>
@@ -138,20 +142,20 @@ const audiences = [
 
             <SiteNavbar variant="transparent" />
 
-            <div class="relative z-10 mx-auto grid w-full max-w-6xl flex-1 items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_22rem] lg:px-8">
-                <div class="max-w-2xl">
+            <div class="relative z-10 mx-auto flex w-full max-w-6xl flex-1 items-center px-4 pt-10 pb-24 sm:px-6 sm:pt-12 sm:pb-28 lg:px-8">
+                <div class="max-w-3xl">
                     <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-200">
                         {{ currentSlide.eyebrow }}
                     </p>
                     <h1
                         :key="currentSlide.title"
-                        class="mt-5 animate-[fadeIn_0.55s_ease-out] font-display text-4xl leading-tight font-bold text-white sm:text-5xl lg:text-6xl"
+                        class="mt-5 min-h-[9rem] animate-[fadeIn_0.55s_ease-out] font-display text-4xl leading-tight font-bold text-white sm:min-h-[11.25rem] sm:text-5xl lg:min-h-[13.5rem] lg:text-6xl"
                     >
                         {{ currentSlide.title }}
                     </h1>
                     <p
                         :key="currentSlide.text"
-                        class="mt-5 max-w-xl animate-[fadeIn_0.65s_ease-out] text-lg leading-8 text-slate-100"
+                        class="mt-5 min-h-[6rem] max-w-xl animate-[fadeIn_0.65s_ease-out] text-lg leading-8 text-slate-100"
                     >
                         {{ currentSlide.text }}
                     </p>
@@ -172,25 +176,10 @@ const audiences = [
                     </div>
                 </div>
 
-                <aside class="rounded-lg border border-white/15 bg-white/10 p-5 shadow-2xl shadow-slate-950/30 backdrop-blur-md">
-                    <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-200">
-                        {{ currentSlide.metric }}
-                    </p>
-                    <p class="mt-3 text-sm leading-6 text-slate-100">
-                        {{ currentSlide.metricText }}
-                    </p>
-                    <div class="mt-5 overflow-hidden rounded-md border border-white/10">
-                        <img
-                            :src="currentSlide.image"
-                            :alt="currentSlide.title"
-                            class="h-44 w-full object-cover"
-                        >
-                    </div>
-                </aside>
             </div>
 
-            <div class="relative z-10 mx-auto mb-8 flex w-full max-w-6xl flex-col gap-4 px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between gap-4">
+            <div class="absolute inset-x-0 bottom-6 z-10 px-4 sm:px-6 lg:bottom-8 lg:px-8">
+                <div class="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
                     <div class="flex gap-2">
                         <button
                             v-for="(slide, index) in heroSlides"
@@ -284,7 +273,7 @@ const audiences = [
                         :key="audience.label"
                         class="overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
                     >
-                        <img :src="audience.image" :alt="audience.title" class="h-52 w-full object-cover">
+                        <img :src="assetUrl(audience.image)" :alt="audience.title" class="h-52 w-full object-cover">
                         <div class="p-6">
                             <p class="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
                                 {{ audience.label }}
@@ -324,7 +313,7 @@ const audiences = [
                         :key="step.title"
                         class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
                     >
-                        <img :src="step.image" :alt="step.title" class="h-36 w-full object-cover">
+                        <img :src="assetUrl(step.image)" :alt="step.title" class="h-36 w-full object-cover">
                         <div class="p-5">
                             <h3 class="text-lg font-bold text-slate-950">
                                 {{ step.title }}

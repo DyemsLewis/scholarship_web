@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 
 const appElement = document.getElementById('app');
 const scholarshipId = appElement?.dataset.scholarshipId;
@@ -12,8 +13,29 @@ const isSaving = ref(false);
 const user = ref(null);
 const scholarship = ref(null);
 const showMapModal = ref(false);
+const profileReadiness = ref({
+    complete: false,
+    completed: 0,
+    total: 0,
+    percent: 0,
+    missing: [],
+});
 
 const documentItems = computed(() => documentRequirements(scholarship.value?.requirements));
+const canApply = computed(() => profileReadiness.value.complete);
+const scholarshipMapAddress = computed(() => {
+    const parts = [
+        scholarship.value?.location_address,
+        scholarship.value?.location_name,
+    ].filter(Boolean);
+
+    return parts.length ? [...parts, 'Philippines'].join(', ') : '';
+});
+const hasMapPreview = computed(() => Boolean(
+    (scholarship.value?.latitude && scholarship.value?.longitude)
+    || scholarship.value?.location_address
+    || scholarship.value?.location_name,
+));
 
 function formatAmount(amount) {
     if (amount === null || amount === undefined || amount === '') {
@@ -80,6 +102,7 @@ async function loadScholarship() {
         const response = await window.axios.get(`/dashboard/scholarships/${scholarshipId}/data`);
 
         user.value = response.data.user;
+        profileReadiness.value = response.data.profile_readiness ?? profileReadiness.value;
         scholarship.value = response.data.scholarship;
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load scholarship details.';
@@ -120,18 +143,18 @@ onMounted(loadScholarship);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900">
+    <main class="student-shell">
         <ApplicantSidebar @logout="logout" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="student-page">
+            <div class="student-container">
                 <div class="mb-4">
                     <a href="/dashboard/scholarships" class="text-sm font-bold text-sky-700 transition hover:text-sky-900">
                         Back to scholarships
                     </a>
                 </div>
 
-                <div v-if="isLoading" class="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="student-card p-6 text-sm text-slate-500">
                     Loading scholarship details...
                 </div>
 
@@ -140,20 +163,20 @@ onMounted(loadScholarship);
                 </div>
 
                 <div v-else-if="scholarship" class="space-y-6">
-                    <header class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="grid lg:grid-cols-[1.05fr_0.95fr]">
-                            <div class="p-6 lg:p-8">
-                                <p class="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
+                    <header class="student-hero">
+                        <div class="grid gap-5 lg:grid-cols-[1fr_18rem] lg:items-start">
+                            <div>
+                                <p class="student-kicker">
                                     {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
                                 </p>
-                                <h1 class="mt-3 font-display text-4xl font-bold text-slate-950">
+                                <h1 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
                                     {{ scholarship.title }}
                                 </h1>
-                                <p class="mt-4 max-w-3xl text-sm leading-6 text-slate-600">
+                                <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
                                     {{ scholarship.description }}
                                 </p>
 
-                                <div class="mt-5 flex flex-wrap gap-2">
+                                <div class="mt-4 flex flex-wrap gap-2">
                                     <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
                                         {{ scholarship.eligibility_match?.score ?? 0 }}% match
                                     </span>
@@ -166,25 +189,25 @@ onMounted(loadScholarship);
                                 </div>
                             </div>
 
-                            <div class="bg-slate-950 p-6 text-white lg:p-8">
-                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
-                                    Scholarship Provider
+                            <div class="student-soft-card p-4">
+                                <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                    Provider
                                 </p>
-                                <h2 class="mt-2 text-2xl font-bold">
+                                <h2 class="mt-1 text-lg font-bold text-slate-950">
                                     {{ scholarship.provider?.name || 'Scholarship Provider' }}
                                 </h2>
-                                <p class="mt-2 text-sm text-slate-300">
+                                <p class="mt-1 text-sm text-slate-500">
                                     {{ providerTypeLabel(scholarship.provider?.type) }}
                                 </p>
 
-                                <div class="mt-6 grid gap-3 text-sm">
-                                    <div class="rounded-md bg-white/10 p-3">
-                                        <p class="font-semibold text-slate-300">Award</p>
-                                        <p class="mt-1 text-xl font-bold">{{ formatAmount(scholarship.award_amount) }}</p>
+                                <div class="mt-4 grid gap-3 text-sm">
+                                    <div>
+                                        <p class="font-semibold text-slate-500">Award</p>
+                                        <p class="mt-1 font-bold text-slate-950">{{ formatAmount(scholarship.award_amount) }}</p>
                                     </div>
-                                    <div class="rounded-md bg-white/10 p-3">
-                                        <p class="font-semibold text-slate-300">Minimum GWA / average</p>
-                                        <p class="mt-1 text-xl font-bold">{{ scholarship.minimum_gwa || 'Not listed yet' }}</p>
+                                    <div>
+                                        <p class="font-semibold text-slate-500">Minimum GWA / average</p>
+                                        <p class="mt-1 font-bold text-slate-950">{{ scholarship.minimum_gwa || 'Not listed yet' }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -195,10 +218,10 @@ onMounted(loadScholarship);
                         {{ statusMessage }}
                     </div>
 
-                    <div class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-                        <section class="space-y-6">
-                            <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                    <div class="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                        <section class="space-y-4">
+                            <article class="student-card p-5">
+                                <p class="student-kicker">
                                     Eligibility
                                 </p>
                                 <p class="mt-3 text-sm leading-6 text-slate-600">
@@ -206,65 +229,70 @@ onMounted(loadScholarship);
                                 </p>
 
                                 <div class="mt-5 grid gap-3 sm:grid-cols-2">
-                                    <div class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
                                         <p class="font-semibold text-slate-500">Courses / strands</p>
                                         <p class="mt-1 text-slate-800">{{ scholarship.eligible_courses || 'Any' }}</p>
                                     </div>
-                                    <div class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
                                         <p class="font-semibold text-slate-500">Year levels</p>
                                         <p class="mt-1 text-slate-800">{{ scholarship.eligible_year_levels || 'Any' }}</p>
                                     </div>
-                                    <div class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
                                         <p class="font-semibold text-slate-500">Eligible locations</p>
                                         <p class="mt-1 text-slate-800">{{ scholarship.eligible_locations || 'Any' }}</p>
                                     </div>
-                                    <div class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
                                         <p class="font-semibold text-slate-500">Income rule</p>
                                         <p class="mt-1 text-slate-800">{{ scholarship.income_requirement || 'Any' }}</p>
                                     </div>
                                 </div>
                             </article>
 
-                            <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                            <article class="student-card p-5">
+                                <p class="student-kicker">
                                     Eligibility Pre-check
                                 </p>
                                 <p class="mt-3 text-sm leading-6 text-slate-600">
                                     {{ scholarship.eligibility_match?.summary || 'Review the listed requirements before applying.' }}
                                 </p>
 
-                                <div v-if="scholarship.eligibility_match?.criteria?.length" class="mt-5 grid gap-3 sm:grid-cols-2">
-                                    <div
-                                        v-for="criterion in scholarship.eligibility_match.criteria"
-                                        :key="criterion.key"
-                                        :class="['rounded-md border p-3 text-sm', criterionClass(criterion.status)]"
-                                    >
-                                        <div class="flex items-center justify-between gap-2">
-                                            <p class="font-bold">{{ criterion.label }}</p>
-                                            <p class="text-xs font-bold uppercase">{{ criterion.status }}</p>
+                                <details v-if="scholarship.eligibility_match?.criteria?.length" class="mt-4 rounded-md border border-slate-200 bg-[#f6faf8] p-3">
+                                    <summary class="cursor-pointer text-sm font-bold text-slate-700">
+                                        View matching checklist
+                                    </summary>
+                                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                        <div
+                                            v-for="criterion in scholarship.eligibility_match.criteria"
+                                            :key="criterion.key"
+                                            :class="['rounded-md border p-3 text-sm', criterionClass(criterion.status)]"
+                                        >
+                                            <div class="flex items-center justify-between gap-2">
+                                                <p class="font-bold">{{ criterion.label }}</p>
+                                                <p class="text-xs font-bold uppercase">{{ criterion.status }}</p>
+                                            </div>
+                                            <p class="mt-2 text-xs leading-5">
+                                                Profile: {{ criterion.student_value || criterion.studentValue || 'Not set' }}
+                                            </p>
+                                            <p v-if="criterion.requirement" class="mt-1 text-xs leading-5">
+                                                Required: {{ criterion.requirement }}
+                                            </p>
+                                            <p class="mt-1 text-xs leading-5 opacity-80">
+                                                {{ criterion.note }}
+                                            </p>
                                         </div>
-                                        <p class="mt-2 text-xs leading-5">
-                                            Profile: {{ criterion.student_value || criterion.studentValue || 'Not set' }}
-                                        </p>
-                                        <p v-if="criterion.requirement" class="mt-1 text-xs leading-5">
-                                            Required: {{ criterion.requirement }}
-                                        </p>
-                                        <p class="mt-1 text-xs leading-5 opacity-80">
-                                            {{ criterion.note }}
-                                        </p>
                                     </div>
-                                </div>
+                                </details>
                             </article>
 
-                            <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                            <article class="student-card p-5">
+                                <p class="student-kicker">
                                     Document Requirements
                                 </p>
                                 <div class="mt-4 flex flex-wrap gap-2">
                                     <span
                                         v-for="requirement in documentItems"
                                         :key="requirement"
-                                        class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700"
+                                        class="rounded-md border border-slate-200 bg-[#f6faf8] px-3 py-2 text-xs font-bold text-slate-700"
                                     >
                                         {{ requirement }}
                                     </span>
@@ -272,9 +300,9 @@ onMounted(loadScholarship);
                             </article>
                         </section>
 
-                        <aside class="space-y-6">
-                            <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                        <aside class="space-y-4">
+                            <article class="student-card p-5">
+                                <p class="student-kicker">
                                     Map Location
                                 </p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -288,7 +316,7 @@ onMounted(loadScholarship);
                                 </p>
 
                                 <button
-                                    v-if="scholarship.embed_map_url"
+                                    v-if="hasMapPreview"
                                     type="button"
                                     class="mt-4 w-full rounded-md border border-sky-200 px-4 py-2.5 text-sm font-bold text-sky-700 transition hover:bg-sky-50"
                                     @click="showMapModal = true"
@@ -297,8 +325,8 @@ onMounted(loadScholarship);
                                 </button>
                             </article>
 
-                            <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                            <article class="student-card p-5">
+                                <p class="student-kicker">
                                     Actions
                                 </p>
                                 <div class="mt-4 grid gap-3">
@@ -311,16 +339,29 @@ onMounted(loadScholarship);
                                         {{ isSaving ? 'Saving...' : scholarship.is_saved ? 'Remove saved' : 'Save scholarship' }}
                                     </button>
                                     <a
-                                        :href="`/dashboard/applications?scholarship=${scholarship.id}`"
-                                        :class="[
-                                            'rounded-md px-4 py-2.5 text-center text-sm font-bold transition',
-                                            scholarship.has_applied
-                                                ? 'bg-slate-300 text-slate-600'
-                                                : 'bg-slate-900 text-white hover:bg-slate-800',
-                                        ]"
+                                        v-if="scholarship.has_applied"
+                                        href="/dashboard/applications"
+                                        class="rounded-md bg-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-600"
                                     >
-                                        {{ scholarship.has_applied ? 'Already applied' : 'Start application wizard' }}
+                                        Already applied
                                     </a>
+                                    <a
+                                        v-else-if="canApply"
+                                        :href="`/dashboard/applications?scholarship=${scholarship.id}`"
+                                        class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                                    >
+                                        Start application wizard
+                                    </a>
+                                    <a
+                                        v-else
+                                        href="/dashboard/profile"
+                                        class="rounded-md bg-amber-500 px-4 py-2.5 text-center text-sm font-bold text-slate-950 transition hover:bg-amber-400"
+                                    >
+                                        Complete profile first
+                                    </a>
+                                    <p v-if="!canApply && !scholarship.has_applied" class="text-xs leading-5 text-slate-500">
+                                        Your profile is {{ profileReadiness.percent }}% complete. Finish it before applying.
+                                    </p>
                                 </div>
                             </article>
                         </aside>
@@ -357,19 +398,20 @@ onMounted(loadScholarship);
                 </div>
 
                 <div class="bg-slate-100 p-4">
-                    <iframe
-                        v-if="scholarship.embed_map_url"
-                        :src="scholarship.embed_map_url"
-                        class="h-[55vh] min-h-80 w-full rounded-md border border-slate-200 bg-white"
-                        loading="lazy"
-                        referrerpolicy="no-referrer-when-downgrade"
-                        title="Scholarship map preview"
-                    ></iframe>
+                    <LeafletMapPreview
+                        :address="scholarshipMapAddress"
+                        :latitude="scholarship.latitude"
+                        :longitude="scholarship.longitude"
+                        :title="scholarship.location_name || scholarship.title"
+                        :marker-text="scholarship.location_name || scholarship.title"
+                        height="55vh"
+                        auto-geocode
+                    />
                 </div>
 
                 <div class="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p class="text-xs leading-5 text-slate-500">
-                        Map preview uses Google Maps based on the provider's saved coordinates or address.
+                        Map preview uses Leaflet CDN with OpenStreetMap address search.
                     </p>
                     <a
                         v-if="scholarship.map_url"

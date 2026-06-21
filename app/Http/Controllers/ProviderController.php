@@ -527,27 +527,23 @@ class ProviderController extends Controller
     private function mapUrl(Scholarship $scholarship): ?string
     {
         if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
-            return 'https://www.google.com/maps/search/?api=1&query='.rawurlencode("{$scholarship->latitude},{$scholarship->longitude}");
+            return "https://www.openstreetmap.org/?mlat={$scholarship->latitude}&mlon={$scholarship->longitude}#map=15/{$scholarship->latitude}/{$scholarship->longitude}";
         }
 
         $query = $scholarship->location_address ?: $scholarship->location_name;
 
         return filled($query)
-            ? 'https://www.google.com/maps/search/?api=1&query='.rawurlencode($query)
+            ? 'https://www.openstreetmap.org/search?query='.rawurlencode($query)
             : null;
     }
 
     private function embedMapUrl(Scholarship $scholarship): ?string
     {
         if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
-            return 'https://maps.google.com/maps?q='.rawurlencode("{$scholarship->latitude},{$scholarship->longitude}").'&z=15&output=embed';
+            return "https://www.openstreetmap.org/export/embed.html?marker={$scholarship->latitude},{$scholarship->longitude}&layer=mapnik";
         }
 
-        $query = $scholarship->location_address ?: $scholarship->location_name;
-
-        return filled($query)
-            ? 'https://maps.google.com/maps?q='.rawurlencode($query).'&z=15&output=embed'
-            : null;
+        return null;
     }
 
     private function documentPayload(ApplicationDocument $document): array

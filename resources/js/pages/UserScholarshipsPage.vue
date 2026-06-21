@@ -20,6 +20,7 @@ const courseFilter = ref('');
 const yearFilter = ref('');
 const locationFilter = ref('');
 const savedOnly = ref(false);
+const showAdvancedFilters = ref(false);
 
 const providerTypes = computed(() => [
     'all',
@@ -33,6 +34,19 @@ const incomeRequirements = computed(() => [
     'all',
     ...new Set(scholarships.value.map((scholarship) => scholarship.income_requirement).filter(Boolean)),
 ]);
+const activeFilterCount = computed(() => [
+    search.value.trim(),
+    selectedProviderType.value !== 'all',
+    selectedCategory.value !== 'all',
+    selectedIncome.value !== 'all',
+    deadlineFilter.value !== 'all',
+    maxGwa.value,
+    minimumMatch.value,
+    courseFilter.value.trim(),
+    yearFilter.value.trim(),
+    locationFilter.value.trim(),
+    savedOnly.value,
+].filter(Boolean).length);
 const filteredScholarships = computed(() => scholarships.value
     .filter((scholarship) => {
         const keyword = search.value.trim().toLowerCase();
@@ -180,6 +194,20 @@ function deadlineMatches(scholarship) {
     return true;
 }
 
+function resetFilters() {
+    search.value = '';
+    selectedProviderType.value = 'all';
+    selectedCategory.value = 'all';
+    selectedIncome.value = 'all';
+    deadlineFilter.value = 'all';
+    maxGwa.value = '';
+    minimumMatch.value = '';
+    courseFilter.value = '';
+    yearFilter.value = '';
+    locationFilter.value = '';
+    savedOnly.value = false;
+}
+
 async function toggleSave(scholarship) {
     savingId.value = scholarship.id;
     errorMessage.value = '';
@@ -224,42 +252,31 @@ onMounted(loadScholarships);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900">
+    <main class="student-shell">
         <ApplicantSidebar @logout="logout" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
-                <header class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <section class="student-page">
+            <div class="student-container">
+                <header class="student-hero">
+                    <p class="student-kicker">
+                        Scholarships
+                    </p>
+                    <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
-                                Scholarships
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Available scholarship programs
+                            <h2 class="font-display text-2xl font-bold text-slate-950 sm:text-3xl">
+                                Find a program that fits
                             </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Browse published scholarship programs from providers. Open a program to review full requirements, map details, and application steps.
+                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                Search first, then open details only when a scholarship looks relevant.
                             </p>
                         </div>
-
-                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                            <img
-                                :src="'/images/scholarship-cards.jpg'"
-                                alt="Students in a learning space"
-                                class="mb-3 h-28 w-full rounded-md object-cover sm:w-56"
-                            >
-                            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                Applicant
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-slate-950">
-                                {{ user?.name || 'Applicant' }}
-                            </p>
-                        </div>
+                        <p class="student-chip">
+                            {{ filteredScholarships.length }} of {{ scholarships.length }} shown
+                        </p>
                     </div>
                 </header>
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading scholarships...
                 </div>
 
@@ -267,226 +284,201 @@ onMounted(loadScholarships);
                     {{ errorMessage }}
                 </div>
 
-                <section v-else class="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
-                    <div v-if="statusMessage" class="border-b border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
-                        {{ statusMessage }}
-                    </div>
+                <section v-else class="mt-6 grid gap-5 xl:grid-cols-[18rem_1fr]">
+                    <aside class="student-card h-fit overflow-hidden xl:sticky xl:top-6">
+                        <div class="bg-slate-950 p-5 text-white">
+                            <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
+                                Finder Controls
+                            </p>
+                            <h3 class="mt-2 font-display text-xl font-bold">
+                                Narrow the list
+                            </h3>
+                            <p class="mt-2 text-sm leading-6 text-slate-300">
+                                Use simple filters first. Open a full program only when it looks worth reviewing.
+                            </p>
+                        </div>
 
-                    <div class="border-b border-slate-200 p-5">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                            Published Programs
-                        </p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                            {{ filteredScholarships.length }} of {{ scholarships.length }} program{{ scholarships.length === 1 ? '' : 's' }} available
-                        </h3>
-                        <p class="mt-2 text-sm text-slate-500">
-                            Results are ranked by eligibility match first, then nearest deadline.
-                        </p>
-                        <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div class="grid gap-3 p-4">
                             <input
                                 v-model="search"
                                 type="search"
-                                placeholder="Search title, provider, or eligibility"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100 xl:col-span-2"
-                            >
-                            <select
-                                v-model="selectedProviderType"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                            >
-                                <option
-                                    v-for="type in providerTypes"
-                                    :key="type"
-                                    :value="type"
-                                >
-                                    {{ type === 'all' ? 'All provider types' : providerTypeLabel(type) }}
-                                </option>
-                            </select>
-                            <select
-                                v-model="selectedCategory"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                            >
-                                <option
-                                    v-for="category in categories"
-                                    :key="category"
-                                    :value="category"
-                                >
-                                    {{ category === 'all' ? 'All categories' : category }}
-                                </option>
-                            </select>
-                            <input
-                                v-model="maxGwa"
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.01"
-                                placeholder="My GWA / avg"
+                                placeholder="Search program or provider"
                                 class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
                             >
-                            <input
-                                v-model="minimumMatch"
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="1"
-                                placeholder="Min match %"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                            >
-                            <input
-                                v-model="courseFilter"
-                                type="search"
-                                placeholder="Course / strand"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                            >
-                            <input
-                                v-model="yearFilter"
-                                type="search"
-                                placeholder="Year level"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                            >
-                            <input
-                                v-model="locationFilter"
-                                type="search"
-                                placeholder="City, province, or region"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                            >
-                            <select
-                                v-model="selectedIncome"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                            >
-                                <option
-                                    v-for="income in incomeRequirements"
-                                    :key="income"
-                                    :value="income"
-                                >
-                                    {{ income === 'all' ? 'All income rules' : income }}
-                                </option>
-                            </select>
-                            <select
-                                v-model="deadlineFilter"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                            >
-                                <option value="all">All deadlines</option>
-                                <option value="next_7_days">Due in 7 days</option>
-                                <option value="next_30_days">Due in 30 days</option>
-                                <option value="no_deadline">No deadline</option>
-                            </select>
-                            <label class="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700">
+
+                            <label class="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-[#f6faf8] px-3.5 py-2.5 text-sm font-semibold text-slate-700">
+                                <span>Saved only</span>
                                 <input
                                     v-model="savedOnly"
                                     type="checkbox"
                                     class="h-4 w-4 rounded border-slate-300 text-sky-700 focus:ring-sky-200"
                                 >
-                                Saved only
                             </label>
-                        </div>
-                    </div>
 
-                    <div v-if="scholarships.length === 0" class="p-6">
-                        <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                            No published scholarships yet. Once providers publish programs, they will show up here.
-                        </div>
-                    </div>
+                            <select v-model="selectedCategory" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <option v-for="category in categories" :key="category" :value="category">
+                                    {{ category === 'all' ? 'All categories' : category }}
+                                </option>
+                            </select>
 
-                    <div v-else-if="filteredScholarships.length === 0" class="p-6">
-                        <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                            No scholarships match your filters.
-                        </div>
-                    </div>
+                            <select v-model="selectedProviderType" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <option v-for="type in providerTypes" :key="type" :value="type">
+                                    {{ type === 'all' ? 'All provider types' : providerTypeLabel(type) }}
+                                </option>
+                            </select>
 
-                    <div v-else class="grid gap-4 p-4 lg:grid-cols-2">
-                        <article
-                            v-for="scholarship in filteredScholarships"
-                            :key="scholarship.id"
-                            class="rounded-lg border border-slate-200 bg-slate-50 p-4"
-                        >
-                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <button
+                                type="button"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                                @click="showAdvancedFilters = !showAdvancedFilters"
+                            >
+                                {{ showAdvancedFilters ? 'Hide advanced' : 'Show advanced' }}
+                            </button>
+
+                            <div v-if="showAdvancedFilters" class="grid gap-3 border-t border-slate-200 pt-3">
+                                <input v-model="maxGwa" type="number" min="0" max="100" step="0.01" placeholder="My GWA / avg" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <input v-model="minimumMatch" type="number" min="0" max="100" step="1" placeholder="Minimum match %" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <input v-model="courseFilter" type="search" placeholder="Course / strand" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <input v-model="yearFilter" type="search" placeholder="Year level" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <input v-model="locationFilter" type="search" placeholder="City, province, or region" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <select v-model="selectedIncome" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                    <option v-for="income in incomeRequirements" :key="income" :value="income">
+                                        {{ income === 'all' ? 'All income rules' : income }}
+                                    </option>
+                                </select>
+                                <select v-model="deadlineFilter" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                    <option value="all">All deadlines</option>
+                                    <option value="next_7_days">Due in 7 days</option>
+                                    <option value="next_30_days">Due in 30 days</option>
+                                    <option value="no_deadline">No deadline</option>
+                                </select>
+                            </div>
+
+                            <button type="button" class="rounded-md bg-slate-900 px-3.5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="resetFilters">
+                                Reset filters
+                            </button>
+                        </div>
+                    </aside>
+
+                    <section class="space-y-4">
+                        <div v-if="statusMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 shadow-sm">
+                            {{ statusMessage }}
+                        </div>
+
+                        <div class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
+                            <div class="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
                                 <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
-                                        {{ scholarship.provider?.name || 'Scholarship Provider' }}
+                                    <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
+                                        Program Catalog
                                     </p>
-                                    <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                        {{ scholarship.title }}
+                                    <h3 class="mt-2 font-display text-2xl font-bold">
+                                        {{ filteredScholarships.length }} programs matched
                                     </h3>
-                                    <p class="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                                        {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
+                                    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+                                        Sorted by eligibility match first, then upcoming deadlines.
                                     </p>
                                 </div>
-
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <span :class="['inline-flex rounded-md px-2.5 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
-                                        {{ scholarship.eligibility_match?.score ?? 0 }}% match
-                                    </span>
-                                    <span class="inline-flex rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
-                                        {{ scholarship.deadline || 'No deadline' }}
-                                    </span>
-                                    <span
-                                        v-if="scholarship.distance_label"
-                                        class="inline-flex rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800"
-                                    >
-                                        {{ scholarship.distance_label }}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <p class="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
-                                {{ scholarship.description }}
-                            </p>
-
-                            <div class="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                                <div class="rounded-md bg-white p-3">
-                                    <p class="font-semibold text-slate-500">
-                                        Award
-                                    </p>
-                                    <p class="mt-1 font-bold text-slate-950">
-                                        {{ formatAmount(scholarship.award_amount) }}
-                                    </p>
-                                </div>
-
-                                <div class="rounded-md bg-white p-3">
-                                    <p class="font-semibold text-slate-500">
-                                        Minimum GWA / avg
-                                    </p>
-                                    <p class="mt-1 font-bold text-slate-950">
-                                        {{ scholarship.minimum_gwa || 'Not listed yet' }}
-                                    </p>
-                                </div>
-                                <div class="rounded-md bg-white p-3">
-                                    <p class="font-semibold text-slate-500">
-                                        Requirements
-                                    </p>
-                                    <p class="mt-1 font-bold text-slate-950">
-                                        {{ requirementsLabel(scholarship.requirements) }}
-                                    </p>
+                                <div class="grid grid-cols-2 gap-2 text-center sm:grid-cols-3">
+                                    <div class="rounded-md bg-white/10 px-3 py-2">
+                                        <p class="text-xl font-bold">{{ scholarships.length }}</p>
+                                        <p class="text-xs text-slate-300">Total</p>
+                                    </div>
+                                    <div class="rounded-md bg-white/10 px-3 py-2">
+                                        <p class="text-xl font-bold">{{ activeFilterCount }}</p>
+                                        <p class="text-xs text-slate-300">Filters</p>
+                                    </div>
+                                    <div class="rounded-md bg-white/10 px-3 py-2">
+                                        <p class="text-xl font-bold">{{ scholarships.filter((item) => item.is_saved).length }}</p>
+                                        <p class="text-xs text-slate-300">Saved</p>
+                                    </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="mt-4 rounded-lg border border-slate-200 bg-white p-3 text-sm">
-                                <p class="font-semibold text-slate-700">
-                                    Quick note
-                                </p>
-                                <p class="mt-1 leading-6 text-slate-600">
-                                    {{ scholarship.eligibility_match?.summary || scholarship.eligibility_guide?.note || 'Open the full page to review eligibility, documents, and map details.' }}
-                                </p>
+                        <div v-if="scholarships.length === 0" class="student-card p-6">
+                            <div class="rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
+                                No published scholarships yet. Once providers publish programs, they will show up here.
                             </div>
+                        </div>
 
-                            <div class="mt-4 grid gap-2 sm:grid-cols-[auto_1fr]">
-                                <button
-                                    type="button"
-                                    :disabled="savingId === scholarship.id"
-                                    class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                                    @click="toggleSave(scholarship)"
-                                >
-                                    {{ savingId === scholarship.id ? 'Saving...' : scholarship.is_saved ? 'Remove saved' : 'Save' }}
-                                </button>
-                                <a
-                                    :href="`/dashboard/scholarships/${scholarship.id}`"
-                                    class="block rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                                >
-                                    View scholarship
-                                </a>
+                        <div v-else-if="filteredScholarships.length === 0" class="student-card p-6">
+                            <div class="rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
+                                No scholarships match your filters.
                             </div>
-                        </article>
-                    </div>
+                        </div>
+
+                        <div v-else class="grid gap-4">
+                            <article
+                                v-for="scholarship in filteredScholarships"
+                                :key="scholarship.id"
+                                class="group relative overflow-hidden rounded-lg border border-slate-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
+                            >
+                                <div class="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-sky-500 via-emerald-400 to-amber-300"></div>
+                                <div class="pl-3">
+                                    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                                                {{ scholarship.provider?.name || 'Scholarship Provider' }}
+                                            </p>
+                                            <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                                {{ scholarship.title }}
+                                            </h3>
+                                            <p class="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                                {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
+                                            </p>
+                                        </div>
+
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span :class="['inline-flex rounded-md px-2.5 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
+                                                {{ scholarship.eligibility_match?.score ?? 0 }}% match
+                                            </span>
+                                            <span class="inline-flex rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                                {{ scholarship.deadline || 'No deadline' }}
+                                            </span>
+                                            <span v-if="scholarship.distance_label" class="inline-flex rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800">
+                                                {{ scholarship.distance_label }}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <p class="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
+                                        {{ scholarship.description }}
+                                    </p>
+
+                                    <div class="mt-4 grid gap-3 text-sm md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+                                        <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70">
+                                            <p class="font-semibold text-slate-500">Award</p>
+                                            <p class="mt-1 font-bold text-slate-950">{{ formatAmount(scholarship.award_amount) }}</p>
+                                        </div>
+                                        <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70">
+                                            <p class="font-semibold text-slate-500">GWA / avg</p>
+                                            <p class="mt-1 font-bold text-slate-950">{{ scholarship.minimum_gwa || 'Not listed yet' }}</p>
+                                        </div>
+                                        <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70">
+                                            <p class="font-semibold text-slate-500">Requirements</p>
+                                            <p class="mt-1 font-bold text-slate-950">{{ requirementsLabel(scholarship.requirements) }}</p>
+                                        </div>
+                                        <div class="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
+                                            <button
+                                                type="button"
+                                                :disabled="savingId === scholarship.id"
+                                                class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="toggleSave(scholarship)"
+                                            >
+                                                {{ savingId === scholarship.id ? 'Saving...' : scholarship.is_saved ? 'Remove saved' : 'Save' }}
+                                            </button>
+                                            <a
+                                                :href="`/dashboard/scholarships/${scholarship.id}`"
+                                                class="block rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                                            >
+                                                View details
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+                        </div>
+                    </section>
                 </section>
 
                 <ApplicantFooter />

@@ -194,6 +194,62 @@ class User extends Authenticatable
         ];
     }
 
+    public static function applicantProfileRequiredFields(): array
+    {
+        return [
+            'first_name' => 'First name',
+            'last_name' => 'Last name',
+            'middle_initial' => 'Middle initial',
+            'contact_number' => 'Contact number',
+            'birthdate' => 'Birthdate',
+            'school' => 'School',
+            'course_or_strand' => 'Course / strand',
+            'year_level' => 'Year level',
+            'enrollment_status' => 'Enrollment status',
+            'gwa' => 'GWA / average',
+            'grading_scale' => 'Grading scale',
+            'income_bracket' => 'Household income bracket',
+            'address' => 'Address',
+            'barangay' => 'Barangay',
+            'city' => 'City / municipality',
+            'province' => 'Province',
+            'region' => 'Region',
+            'guardian_name' => 'Guardian name',
+            'guardian_contact' => 'Guardian contact',
+        ];
+    }
+
+    public function applicantProfileReadiness(): array
+    {
+        $this->loadMissing('studentProfile');
+
+        $payload = $this->publicPayload();
+        $fields = self::applicantProfileRequiredFields();
+        $missing = collect($fields)
+            ->reject(fn (string $label, string $key) => filled($payload[$key] ?? null))
+            ->map(fn (string $label, string $key) => [
+                'key' => $key,
+                'label' => $label,
+            ])
+            ->values()
+            ->all();
+        $total = count($fields);
+        $completed = $total - count($missing);
+
+        return [
+            'complete' => $missing === [],
+            'completed' => $completed,
+            'total' => $total,
+            'percent' => $total === 0 ? 100 : (int) round(($completed / $total) * 100),
+            'missing' => $missing,
+        ];
+    }
+
+    public function hasCompleteApplicantProfile(): bool
+    {
+        return $this->applicantProfileReadiness()['complete'];
+    }
+
     private function profileRecord()
     {
         return match ($this->role) {

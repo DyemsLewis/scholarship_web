@@ -15,6 +15,13 @@ const stats = ref({
 });
 const scholarships = ref([]);
 const applications = ref([]);
+const profileReadiness = ref({
+    complete: false,
+    completed: 0,
+    total: 0,
+    percent: 0,
+    missing: [],
+});
 const currentStep = ref(0);
 const selectedScholarshipId = ref('');
 const documentChecklist = ref([]);
@@ -22,7 +29,6 @@ const notes = ref('');
 const uploadForms = ref({});
 const uploadFiles = ref({});
 const uploadingId = ref(null);
-const selectedMapScholarship = ref(null);
 
 const steps = [
     { label: 'Program', detail: 'Choose scholarship' },
@@ -43,9 +49,10 @@ const selectedRequirements = computed(() => documentRequirements(selectedScholar
 const appliedScholarshipIds = computed(() => new Set(applications.value.map((application) => application.scholarship?.id).filter(Boolean)));
 const selectedAlreadyApplied = computed(() => selectedScholarship.value && appliedScholarshipIds.value.has(selectedScholarship.value.id));
 const allDocumentsChecked = computed(() => selectedRequirements.value.every((requirement) => documentChecklist.value.includes(requirement)));
+const canApply = computed(() => profileReadiness.value.complete);
 const canGoNext = computed(() => {
     if (currentStep.value === 0) {
-        return Boolean(selectedScholarship.value) && !selectedAlreadyApplied.value;
+        return canApply.value && Boolean(selectedScholarship.value) && !selectedAlreadyApplied.value;
     }
 
     if (currentStep.value === 2) {
@@ -54,6 +61,38 @@ const canGoNext = computed(() => {
 
     return Boolean(selectedScholarship.value);
 });
+
+function canOpenWizardStep(index) {
+    if (index === 0) {
+        return true;
+    }
+
+    if (!canApply.value || !selectedScholarship.value || selectedAlreadyApplied.value) {
+        return false;
+    }
+
+    if (index === 1 || index === 2) {
+        return true;
+    }
+
+    if (index === 3) {
+        return allDocumentsChecked.value;
+    }
+
+    return false;
+}
+
+function goToWizardStep(index) {
+    if (canOpenWizardStep(index)) {
+        currentStep.value = index;
+        errorMessage.value = '';
+        return;
+    }
+
+    errorMessage.value = canApply.value
+        ? 'Complete the current application step before moving forward.'
+        : 'Complete your student profile before starting an application.';
+}
 
 function formatAmount(amount) {
     if (amount === null || amount === undefined || amount === '') {
@@ -205,6 +244,11 @@ function handleFileChange(application, event) {
 }
 
 function chooseScholarship(scholarship) {
+    if (!canApply.value) {
+        errorMessage.value = 'Complete your student profile before choosing a scholarship to apply for.';
+        return;
+    }
+
     if (appliedScholarshipIds.value.has(scholarship.id)) {
         return;
     }
@@ -212,6 +256,7 @@ function chooseScholarship(scholarship) {
     selectedScholarshipId.value = String(scholarship.id);
     documentChecklist.value = [];
     notes.value = '';
+    errorMessage.value = '';
     submitMessage.value = '';
     currentStep.value = 1;
 }
@@ -236,14 +281,6 @@ function resetWizard() {
     currentStep.value = 0;
 }
 
-function openMapModal(scholarship) {
-    selectedMapScholarship.value = scholarship;
-}
-
-function closeMapModal() {
-    selectedMapScholarship.value = null;
-}
-
 async function loadApplications() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -252,6 +289,7 @@ async function loadApplications() {
         const response = await window.axios.get('/dashboard/applications/data');
 
         user.value = response.data.user;
+        profileReadiness.value = response.data.profile_readiness ?? profileReadiness.value;
         stats.value = response.data.stats;
         scholarships.value = response.data.scholarships;
         applications.value = response.data.applications;
@@ -262,7 +300,7 @@ async function loadApplications() {
         if (requestedScholarshipId) {
             const requestedScholarship = scholarships.value.find((scholarship) => scholarship.id === Number(requestedScholarshipId));
 
-            if (requestedScholarship && !appliedScholarshipIds.value.has(requestedScholarship.id)) {
+            if (canApply.value && requestedScholarship && !appliedScholarshipIds.value.has(requestedScholarship.id)) {
                 selectedScholarshipId.value = requestedScholarshipId;
                 currentStep.value = 1;
             }
@@ -275,6 +313,11 @@ async function loadApplications() {
 }
 
 async function submitApplication() {
+    if (!canApply.value) {
+        errorMessage.value = 'Complete your student profile before submitting an application.';
+        return;
+    }
+
     if (!selectedScholarship.value || !allDocumentsChecked.value) {
         return;
     }
@@ -296,6 +339,9 @@ async function submitApplication() {
         submitMessage.value = message;
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to submit application.';
+        if (error.response?.data?.profile_readiness) {
+            profileReadiness.value = error.response.data.profile_readiness;
+        }
     } finally {
         isSubmitting.value = false;
     }
@@ -362,42 +408,40 @@ onMounted(loadApplications);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900">
+    <main class="student-shell">
         <ApplicantSidebar @logout="logout" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
-                <header class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <section class="student-page">
+            <div class="student-container">
+                <header class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-white shadow-[0_24px_70px_rgba(15,23,42,0.22)]">
+                    <div class="grid gap-5 p-5 lg:grid-cols-[1fr_18rem] lg:items-end">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
-                                Application Wizard
+                            <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-200">
+                                Application Desk
                             </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Submit a scholarship application
+                            <h2 class="mt-2 font-display text-2xl font-bold sm:text-3xl">
+                                Build one clean submission
                             </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Follow the guided steps to choose a scholarship, confirm requirements, and submit your application record.
+                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+                                Pick a program, confirm the requirements, then submit a trackable application record.
                             </p>
                         </div>
 
-                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                            <img
-                                :src="'/images/application-documents.jpg'"
-                                alt="Scholarship document review photo"
-                                class="mb-3 h-28 w-full rounded-md object-cover sm:w-56"
-                            >
-                            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                Applicant
+                        <div class="rounded-lg border border-white/10 bg-white/10 p-4">
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
+                                Current step
                             </p>
-                            <p class="mt-1 text-sm font-bold text-slate-950">
-                                {{ user?.name || 'Applicant' }}
+                            <p class="mt-1 font-display text-3xl font-bold">
+                                {{ currentStep + 1 }} / {{ steps.length }}
+                            </p>
+                            <p class="mt-1 text-sm text-slate-300">
+                                {{ steps[currentStep]?.detail }}
                             </p>
                         </div>
                     </div>
                 </header>
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading application wizard...
                 </div>
 
@@ -410,57 +454,91 @@ onMounted(loadApplications);
                         {{ submitMessage }}
                     </div>
 
-                    <div class="grid gap-4 md:grid-cols-3">
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">
-                                Submitted
-                            </p>
-                            <p class="mt-3 font-display text-3xl font-bold text-emerald-700">
-                                {{ stats.applications }}
-                            </p>
+                    <div v-if="!canApply" class="student-card border-amber-200 bg-amber-50/90 p-5">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
+                                    Profile required
+                                </p>
+                                <h3 class="mt-2 text-lg font-bold text-slate-950">
+                                    Complete your student profile before applying
+                                </h3>
+                                <p class="mt-2 text-sm leading-6 text-slate-700">
+                                    Your profile is {{ profileReadiness.percent }}% complete. Missing:
+                                    {{ profileReadiness.missing.slice(0, 4).map((field) => field.label).join(', ') }}{{ profileReadiness.missing.length > 4 ? ', and more' : '' }}.
+                                </p>
+                            </div>
+                            <a
+                                href="/dashboard/profile"
+                                class="inline-flex justify-center rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                            >
+                                Complete profile
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-3 md:grid-cols-3">
+                        <article class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <span class="flex h-10 w-10 items-center justify-center rounded-md bg-slate-950 font-display text-xl font-bold text-white">
+                                    {{ stats.applications }}
+                                </span>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-950">Submitted</p>
+                                    <p class="text-xs text-slate-500">Application records</p>
+                                </div>
+                            </div>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">
-                                Available Programs
-                            </p>
-                            <p class="mt-3 font-display text-3xl font-bold text-sky-700">
-                                {{ stats.available_scholarships }}
-                            </p>
+                        <article class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <span class="flex h-10 w-10 items-center justify-center rounded-md bg-sky-100 font-display text-xl font-bold text-sky-800">
+                                    {{ stats.available_scholarships }}
+                                </span>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-950">Available</p>
+                                    <p class="text-xs text-slate-500">Programs to choose</p>
+                                </div>
+                            </div>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-sm font-semibold text-slate-500">
-                                Wizard Step
-                            </p>
-                            <p class="mt-3 font-display text-2xl font-bold text-amber-600">
-                                {{ currentStep + 1 }} of {{ steps.length }}
-                            </p>
+                        <article class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <span class="flex h-10 w-10 items-center justify-center rounded-md bg-amber-100 font-display text-xl font-bold text-amber-800">
+                                    {{ profileReadiness.percent }}%
+                                </span>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-950">Profile ready</p>
+                                    <p class="text-xs text-slate-500">Needed before applying</p>
+                                </div>
+                            </div>
                         </article>
                     </div>
 
-                    <section class="rounded-lg border border-indigo-100 bg-white p-6 shadow-sm">
-                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
-                                    Decision Support System
-                                </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    How the recommendation score is computed
-                                </h3>
-                                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                    DSS helps rank applications for review. It does not replace provider validation or final scholarship decisions.
-                                </p>
+                    <details class="rounded-lg border border-indigo-100 bg-indigo-50/80 p-5 shadow-sm">
+                        <summary class="cursor-pointer list-none">
+                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                                        Decision Support System
+                                    </p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                        How recommendation scores work
+                                    </h3>
+                                    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                        Optional context. DSS is guidance only and providers still make final decisions.
+                                    </p>
+                                </div>
+                                <span class="h-fit rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
+                                    Show details
+                                </span>
                             </div>
-                            <span class="h-fit rounded-md bg-indigo-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-indigo-700">
-                                Guidance only
-                            </span>
-                        </div>
-                        <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                        </summary>
+                        <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                             <div
                                 v-for="item in dssFormula"
                                 :key="item.label"
-                                class="rounded-md border border-slate-200 bg-slate-50 p-3"
+                                class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3"
                             >
                                 <p class="font-display text-2xl font-bold text-indigo-700">
                                     {{ item.weight }}
@@ -473,35 +551,51 @@ onMounted(loadApplications);
                                 </p>
                             </div>
                         </div>
-                    </section>
+                    </details>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <div class="grid gap-3 md:grid-cols-4">
+                    <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
+                        <div class="grid lg:grid-cols-[16rem_1fr]">
+                            <aside class="p-4 text-white">
+                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
+                                    Process
+                                </p>
+                                <h3 class="mt-2 font-display text-xl font-bold">
+                                    Application flow
+                                </h3>
+                                <p class="mt-2 text-sm leading-6 text-slate-300">
+                                    Move through the checklist from top to bottom.
+                                </p>
+
+                                <div class="mt-4 grid gap-2">
                             <button
                                 v-for="(step, index) in steps"
                                 :key="step.label"
                                 type="button"
+                                :disabled="!canOpenWizardStep(index)"
                                 :class="[
-                                    'rounded-lg border p-3 text-left transition',
+                                    'rounded-md border p-3 text-left text-current transition disabled:cursor-not-allowed disabled:opacity-50',
                                     currentStep === index
-                                        ? 'border-sky-300 bg-sky-50'
+                                        ? 'border-amber-300 bg-amber-300 text-slate-950 shadow-sm'
                                         : index < currentStep
-                                            ? 'border-emerald-200 bg-emerald-50'
-                                            : 'border-slate-200 bg-slate-50',
+                                            ? 'border-emerald-300/40 bg-emerald-300/10 text-emerald-100'
+                                            : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10',
                                 ]"
-                                @click="currentStep = index"
+                                @click="goToWizardStep(index)"
                             >
-                                <span class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                                <span class="text-xs font-bold uppercase tracking-[0.16em] opacity-70">
                                     Step {{ index + 1 }}
                                 </span>
-                                <span class="mt-1 block font-bold text-slate-950">
+                                <span class="mt-1 block font-bold">
                                     {{ step.label }}
                                 </span>
-                                <span class="mt-1 block text-xs text-slate-500">
+                                <span class="mt-1 block text-xs opacity-75">
                                     {{ step.detail }}
                                 </span>
                             </button>
-                        </div>
+                                </div>
+                            </aside>
+
+                            <div class="bg-white p-5">
 
                         <div class="mt-6">
                             <div v-if="currentStep === 0">
@@ -522,7 +616,7 @@ onMounted(loadApplications);
                                     </a>
                                 </div>
 
-                                <div v-if="scholarships.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+                                <div v-if="scholarships.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
                                     No published scholarships are available yet.
                                 </div>
 
@@ -533,8 +627,8 @@ onMounted(loadApplications);
                                         :class="[
                                             'rounded-lg border p-4 transition',
                                             selectedScholarship?.id === scholarship.id
-                                                ? 'border-sky-300 bg-sky-50'
-                                                : 'border-slate-200 bg-slate-50',
+                                                ? 'border-sky-300 bg-sky-50 shadow-sm'
+                                                : 'border-slate-200 bg-[#f6faf8]',
                                             appliedScholarshipIds.has(scholarship.id) ? 'opacity-70' : 'hover:border-sky-200 hover:bg-white',
                                         ]"
                                     >
@@ -609,48 +703,21 @@ onMounted(loadApplications);
                                             </p>
                                         </div>
 
-                                        <div class="mt-4 rounded-md border border-sky-100 bg-white p-3 text-sm">
-                                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                                <div>
-                                                    <p class="font-semibold text-slate-500">
-                                                        Map location
-                                                    </p>
-                                                    <p class="mt-1 font-bold text-slate-950">
-                                                        {{ scholarship.location_name || 'Location not named' }}
-                                                    </p>
-                                                    <p class="mt-1 leading-6 text-slate-600">
-                                                        {{ scholarship.location_address || 'No map address added yet.' }}
-                                                    </p>
-                                                    <p v-if="scholarship.distance_label" class="mt-1 text-xs font-bold text-sky-700">
-                                                        About {{ scholarship.distance_label }} from your saved location.
-                                                    </p>
-                                                </div>
-                                                <button
-                                                    v-if="scholarship.embed_map_url"
-                                                    type="button"
-                                                    class="rounded-md border border-sky-200 px-3 py-2 text-center text-xs font-bold text-sky-700 transition hover:bg-sky-50"
-                                                    @click="openMapModal(scholarship)"
-                                                >
-                                                    Preview Map
-                                                </button>
-                                            </div>
-                                        </div>
-
                                         <button
                                             type="button"
-                                            :disabled="appliedScholarshipIds.has(scholarship.id)"
+                                            :disabled="!canApply || appliedScholarshipIds.has(scholarship.id)"
                                             class="mt-4 w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                                             @click="chooseScholarship(scholarship)"
                                         >
-                                            {{ appliedScholarshipIds.has(scholarship.id) ? 'Already submitted' : 'Use this scholarship' }}
+                                            {{ !canApply ? 'Complete profile first' : appliedScholarshipIds.has(scholarship.id) ? 'Already submitted' : 'Use this scholarship' }}
                                         </button>
                                     </article>
                                 </div>
                             </div>
 
                             <div v-else-if="currentStep === 1 && selectedScholarship" class="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-                                <section class="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                <section class="rounded-lg border border-slate-200/80 bg-[#f6faf8] p-5">
+                                    <p class="student-kicker">
                                         Scholarship Details
                                     </p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -731,15 +798,15 @@ onMounted(loadApplications);
                                     </div>
                                 </section>
 
-                                <section class="rounded-lg border border-slate-200 bg-white p-5">
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                <section class="rounded-lg border border-slate-200/80 bg-white/90 p-5">
+                                    <p class="student-kicker">
                                         Applicant Record
                                     </p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">
                                         Confirm your details
                                     </h3>
                                     <div class="mt-4 grid gap-3 text-sm">
-                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                        <div class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Name
                                             </p>
@@ -747,7 +814,7 @@ onMounted(loadApplications);
                                                 {{ user?.name }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                        <div class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Email
                                             </p>
@@ -755,7 +822,7 @@ onMounted(loadApplications);
                                                 {{ user?.email }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                        <div class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Contact number
                                             </p>
@@ -763,7 +830,7 @@ onMounted(loadApplications);
                                                 {{ user?.contact_number || 'Not provided' }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                        <div class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Academic details
                                             </p>
@@ -786,7 +853,7 @@ onMounted(loadApplications);
                                     Check each document you have prepared. This saves your checklist with the application record.
                                 </p>
 
-                                <div v-if="selectedRequirements.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+                                <div v-if="selectedRequirements.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
                                     This scholarship has no listed document requirements, so you can continue to review.
                                 </div>
 
@@ -794,7 +861,7 @@ onMounted(loadApplications);
                                     <label
                                         v-for="requirement in selectedRequirements"
                                         :key="requirement"
-                                        class="flex cursor-pointer gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm transition hover:border-sky-200 hover:bg-white"
+                                        class="flex cursor-pointer gap-3 rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm transition hover:border-sky-200 hover:bg-white"
                                     >
                                         <input
                                             v-model="documentChecklist"
@@ -824,8 +891,8 @@ onMounted(loadApplications);
                             </div>
 
                             <div v-else-if="currentStep === 3 && selectedScholarship" class="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
-                                <section class="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                <section class="rounded-lg border border-slate-200/80 bg-[#f6faf8] p-5">
+                                    <p class="student-kicker">
                                         Final Review
                                     </p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -867,17 +934,17 @@ onMounted(loadApplications);
                                     </div>
                                 </section>
 
-                                <section class="rounded-lg border border-slate-200 bg-white p-5">
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                <section class="rounded-lg border border-slate-200/80 bg-white/90 p-5">
+                                    <p class="student-kicker">
                                         Notes
                                     </p>
-                                    <p class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+                                    <p class="mt-3 rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm leading-6 text-slate-600">
                                         {{ notes || 'No note added.' }}
                                     </p>
 
                                     <button
                                         type="button"
-                                        :disabled="isSubmitting || !allDocumentsChecked"
+                                        :disabled="isSubmitting || !allDocumentsChecked || !canApply"
                                         class="mt-5 w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                                         @click="submitApplication"
                                     >
@@ -916,25 +983,32 @@ onMounted(loadApplications);
                                 </button>
                             </div>
                         </div>
+                            </div>
+                        </div>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
-                            Submitted Applications
-                        </p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                            Application records
-                        </h3>
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="border-b border-slate-200 bg-[#f6faf8] p-5">
+                            <p class="student-kicker">
+                                Submitted Applications
+                            </p>
+                            <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                Review timeline
+                            </h3>
+                            <p class="mt-2 text-sm leading-6 text-slate-600">
+                                Submitted records, document uploads, and provider review movement stay here.
+                            </p>
+                        </div>
 
-                        <div v-if="applications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+                        <div v-if="applications.length === 0" class="m-5 rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
                             No submitted applications yet. Complete the wizard above to create one.
                         </div>
 
-                        <div v-else class="mt-5 grid gap-4 lg:grid-cols-2">
+                        <div v-else class="grid gap-4 p-5">
                             <article
                                 v-for="application in applications"
                                 :key="application.id"
-                                class="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                                class="rounded-lg border border-slate-200 border-l-4 border-l-slate-900 bg-white p-4 shadow-sm"
                             >
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
@@ -1157,67 +1231,5 @@ onMounted(loadApplications);
                 <ApplicantFooter />
             </div>
         </section>
-
-        <div
-            v-if="selectedMapScholarship"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6"
-            @click.self="closeMapModal"
-        >
-            <section class="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl">
-                <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
-                            Map Preview
-                        </p>
-                        <h3 class="mt-1 text-xl font-bold text-slate-950">
-                            {{ selectedMapScholarship.location_name || selectedMapScholarship.title }}
-                        </h3>
-                        <p class="mt-1 text-sm leading-6 text-slate-600">
-                            {{ selectedMapScholarship.location_address || 'No map address added yet.' }}
-                        </p>
-                        <p v-if="selectedMapScholarship.distance_label" class="mt-1 text-xs font-bold text-sky-700">
-                            About {{ selectedMapScholarship.distance_label }} from your saved location.
-                        </p>
-                    </div>
-
-                    <button
-                        type="button"
-                        class="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                        @click="closeMapModal"
-                    >
-                        Close
-                    </button>
-                </div>
-
-                <div class="bg-slate-100 p-4">
-                    <iframe
-                        v-if="selectedMapScholarship.embed_map_url"
-                        :src="selectedMapScholarship.embed_map_url"
-                        class="h-[55vh] min-h-80 w-full rounded-md border border-slate-200 bg-white"
-                        loading="lazy"
-                        referrerpolicy="no-referrer-when-downgrade"
-                        title="Scholarship map preview"
-                    ></iframe>
-                    <div v-else class="rounded-md border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-                        No embeddable map is available for this scholarship yet.
-                    </div>
-                </div>
-
-                <div class="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p class="text-xs leading-5 text-slate-500">
-                        Map preview uses Google Maps based on the provider's saved coordinates or address.
-                    </p>
-                    <a
-                        v-if="selectedMapScholarship.map_url"
-                        :href="selectedMapScholarship.map_url"
-                        target="_blank"
-                        rel="noreferrer"
-                        class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                    >
-                        Open Full Map
-                    </a>
-                </div>
-            </section>
-        </div>
     </main>
 </template>

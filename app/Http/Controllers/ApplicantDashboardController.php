@@ -60,6 +60,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'user' => $this->userPayload($request),
+            'profile_readiness' => $request->user()->applicantProfileReadiness(),
             'stats' => $this->statsPayload($request),
             'scholarship' => $this->scholarshipPayload($scholarship, $request->user()),
         ]);
@@ -91,6 +92,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'user' => $this->userPayload($request),
+            'profile_readiness' => $request->user()->applicantProfileReadiness(),
             'stats' => $this->statsPayload($request),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))->values(),
             'notifications' => $this->notificationsPayload($request),
@@ -115,6 +117,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'user' => $this->userPayload($request),
+            'profile_readiness' => $request->user()->applicantProfileReadiness(),
             'stats' => $this->statsPayload($request),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))->values(),
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
@@ -174,12 +177,23 @@ class ApplicantDashboardController extends Controller
         return response()->json([
             'message' => 'Applicant profile updated.',
             'user' => $this->userPayload($request),
+            'profile_readiness' => $request->user()->applicantProfileReadiness(),
         ]);
     }
 
     public function storeApplication(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isApplicant(), 403);
+
+        $profileReadiness = $request->user()->applicantProfileReadiness();
+
+        if (! $profileReadiness['complete']) {
+            return response()->json([
+                'message' => 'Complete your student profile before applying.',
+                'missing_fields' => $profileReadiness['missing'],
+                'profile_readiness' => $profileReadiness,
+            ], 422);
+        }
 
         $validated = $request->validate([
             'scholarship_id' => [
@@ -487,27 +501,23 @@ class ApplicantDashboardController extends Controller
     private function mapUrl(Scholarship $scholarship): ?string
     {
         if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
-            return 'https://www.google.com/maps/search/?api=1&query='.rawurlencode("{$scholarship->latitude},{$scholarship->longitude}");
+            return "https://www.openstreetmap.org/?mlat={$scholarship->latitude}&mlon={$scholarship->longitude}#map=15/{$scholarship->latitude}/{$scholarship->longitude}";
         }
 
         $query = $scholarship->location_address ?: $scholarship->location_name;
 
         return filled($query)
-            ? 'https://www.google.com/maps/search/?api=1&query='.rawurlencode($query)
+            ? 'https://www.openstreetmap.org/search?query='.rawurlencode($query)
             : null;
     }
 
     private function embedMapUrl(Scholarship $scholarship): ?string
     {
         if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
-            return 'https://maps.google.com/maps?q='.rawurlencode("{$scholarship->latitude},{$scholarship->longitude}").'&z=15&output=embed';
+            return "https://www.openstreetmap.org/export/embed.html?marker={$scholarship->latitude},{$scholarship->longitude}&layer=mapnik";
         }
 
-        $query = $scholarship->location_address ?: $scholarship->location_name;
-
-        return filled($query)
-            ? 'https://maps.google.com/maps?q='.rawurlencode($query).'&z=15&output=embed'
-            : null;
+        return null;
     }
 
     private function distanceKm($profile, Scholarship $scholarship): ?float
