@@ -9,12 +9,14 @@ use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
+use App\Models\StudentDocument;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -75,6 +77,15 @@ class ApplicantDashboardController extends Controller
         return view('dashboard-applications');
     }
 
+    public function documents(Request $request): View|RedirectResponse
+    {
+        if ($redirect = $this->ensureApplicant($request)) {
+            return $redirect;
+        }
+
+        return view('dashboard-documents');
+    }
+
     public function profile(Request $request): View|RedirectResponse
     {
         if ($redirect = $this->ensureApplicant($request)) {
@@ -123,6 +134,113 @@ class ApplicantDashboardController extends Controller
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
             'notifications' => $this->notificationsPayload($request),
         ]);
+    }
+
+    public function documentsData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        $applications = ScholarshipApplication::query()
+            ->with(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
+            ->where('applicant_id', $request->user()->id)
+            ->latest('submitted_at')
+            ->get();
+        $documents = $applications->flatMap(fn (ScholarshipApplication $application) => $application->documents);
+        $studentDocuments = StudentDocument::query()
+            ->where('user_id', $request->user()->id)
+            ->latest('uploaded_at')
+            ->get();
+
+        return response()->json([
+            'user' => $this->userPayload($request),
+            'stats' => [
+                'applications' => $applications->count(),
+                'prepared' => $studentDocuments->count(),
+                'uploaded' => $documents->count(),
+                'accepted' => $documents->where('status', 'accepted')->count(),
+                'pending' => $documents->where('status', 'pending')->count(),
+                'needs_attention' => $documents->whereIn('status', ['rejected', 'needs_replacement'])->count(),
+            ],
+            'document_options' => $this->documentLibraryOptions($request),
+            'prepared_documents' => $studentDocuments->map(fn (StudentDocument $document) => $this->studentDocumentPayload($document))->values(),
+            'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
+        ]);
+    }
+
+    public function uploadPreparedDocument(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        $validated = $request->validate([
+            'document_name' => ['required', 'string', 'max:255'],
+            'document_file' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
+        ]);
+
+        $documentName = trim($validated['document_name']);
+        $file = $validated['document_file'];
+        $existing = StudentDocument::query()
+            ->where('user_id', $request->user()->id)
+            ->where('document_name', $documentName)
+            ->first();
+
+        if ($existing) {
+            Storage::disk('local')->delete($existing->path);
+        }
+
+        $path = $file->store("student-documents/{$request->user()->id}");
+        $document = StudentDocument::query()->updateOrCreate([
+            'user_id' => $request->user()->id,
+            'document_name' => $documentName,
+        ], [
+            'original_name' => $file->getClientOriginalName(),
+            'path' => $path,
+            'mime_type' => $file->getClientMimeType(),
+            'size' => $file->getSize(),
+            'uploaded_at' => now(),
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'prepared_document_uploaded',
+            "{$request->user()->name} uploaded prepared document {$document->document_name}.",
+            $request,
+            ['student_document_id' => $document->id],
+        );
+
+        return response()->json([
+            'message' => 'Prepared document saved.',
+            'document' => $this->studentDocumentPayload($document),
+        ]);
+    }
+
+    public function deletePreparedDocument(Request $request, StudentDocument $document): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($document->user_id === $request->user()->id, 403);
+
+        Storage::disk('local')->delete($document->path);
+        $documentName = $document->document_name;
+        $document->delete();
+
+        ActivityLog::record(
+            $request->user(),
+            'prepared_document_deleted',
+            "{$request->user()->name} removed prepared document {$documentName}.",
+            $request,
+        );
+
+        return response()->json([
+            'message' => 'Prepared document removed.',
+        ]);
+    }
+
+    public function downloadPreparedDocument(Request $request, StudentDocument $document)
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($document->user_id === $request->user()->id, 403);
+        abort_unless(Storage::disk('local')->exists($document->path), 404);
+
+        return Storage::disk('local')->download($document->path, $document->original_name);
     }
 
     public function updateProfile(Request $request): JsonResponse
@@ -239,6 +357,7 @@ class ApplicantDashboardController extends Controller
             'changed_at' => now(),
         ]);
 
+        $this->attachPreparedDocumentsToApplication($request->user(), $application, $validated['document_checklist'] ?? []);
         app(DecisionSupportService::class)->syncApplication($application);
 
         ActivityLog::record(
@@ -443,6 +562,7 @@ class ApplicantDashboardController extends Controller
     private function scholarshipPayload(Scholarship $scholarship, ?User $user = null): array
     {
         $match = $this->eligibilityMatch($scholarship, $user);
+        $preparedDocuments = $this->preparedDocumentReadiness($scholarship, $user);
         $distanceKm = $this->distanceKm($user?->studentProfile, $scholarship);
         $saved = $user
             ? ScholarshipBookmark::query()
@@ -459,6 +579,8 @@ class ApplicantDashboardController extends Controller
 
         return [
             'id' => $scholarship->id,
+            'image_path' => $scholarship->image_path,
+            'image_url' => $this->scholarshipImageUrl($scholarship),
             'title' => $scholarship->title,
             'category' => $scholarship->category,
             'description' => $scholarship->description,
@@ -483,10 +605,12 @@ class ApplicantDashboardController extends Controller
             'is_saved' => $saved,
             'has_applied' => $hasApplied,
             'eligibility_match' => $match,
+            'prepared_documents' => $preparedDocuments,
             'eligibility_guide' => [
                 'requires_gwa' => filled($scholarship->minimum_gwa),
                 'minimum_gwa' => $scholarship->minimum_gwa,
                 'required_documents' => count($this->documentRequirements($scholarship)),
+                'prepared_documents' => $preparedDocuments['uploaded'],
                 'note' => filled($scholarship->minimum_gwa)
                     ? "Check that your GWA or average meets {$scholarship->minimum_gwa} before applying."
                     : 'No minimum GWA or average is listed for this scholarship.',
@@ -496,6 +620,15 @@ class ApplicantDashboardController extends Controller
                 'type' => $scholarship->provider?->provider_type,
             ],
         ];
+    }
+
+    private function scholarshipImageUrl(Scholarship $scholarship): string
+    {
+        if (filled($scholarship->image_path)) {
+            return asset(ltrim($scholarship->image_path, '/'));
+        }
+
+        return asset('uploads/scholarship-default.jpg');
     }
 
     private function mapUrl(Scholarship $scholarship): ?string
@@ -609,15 +742,137 @@ class ApplicantDashboardController extends Controller
 
     private function documentRequirements(?Scholarship $scholarship): array
     {
-        if (! $scholarship?->requirements) {
+        return $this->splitDocumentRequirements($scholarship?->requirements);
+    }
+
+    private function splitDocumentRequirements(?string $requirements): array
+    {
+        if (! $requirements) {
             return [];
         }
 
-        return collect(preg_split('/\r\n|\r|\n|,/', $scholarship->requirements))
+        return collect(preg_split('/\r\n|\r|\n|,/', $requirements))
             ->map(fn (string $requirement) => trim($requirement))
             ->filter()
             ->values()
             ->all();
+    }
+
+    private function documentLibraryOptions(Request $request): array
+    {
+        $commonDocuments = [
+            'Completed application form',
+            'Certificate of enrollment',
+            'Latest report card or grades',
+            'School ID',
+            'Proof of income',
+            'Certificate of indigency',
+            'Parent or guardian valid ID',
+            'Recommendation letter',
+        ];
+        $publishedRequirements = Scholarship::query()
+            ->where('status', 'published')
+            ->whereNotNull('requirements')
+            ->pluck('requirements')
+            ->flatMap(fn (?string $requirements) => $this->splitDocumentRequirements($requirements));
+        $applicationRequirements = ScholarshipApplication::query()
+            ->with('scholarship')
+            ->where('applicant_id', $request->user()->id)
+            ->get()
+            ->flatMap(fn (ScholarshipApplication $application) => $this->documentRequirements($application->scholarship));
+
+        return collect($commonDocuments)
+            ->merge($publishedRequirements)
+            ->merge($applicationRequirements)
+            ->map(fn (string $document) => trim($document))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
+    private function preparedDocumentReadiness(Scholarship $scholarship, ?User $user): array
+    {
+        $requiredDocuments = $this->documentRequirements($scholarship);
+
+        if (! $user) {
+            return [
+                'required' => count($requiredDocuments),
+                'uploaded' => 0,
+                'percent' => $requiredDocuments === [] ? 100 : 0,
+                'required_documents' => $requiredDocuments,
+                'matched' => [],
+                'missing' => $requiredDocuments,
+            ];
+        }
+
+        $user->loadMissing('studentDocuments');
+        $preparedNames = $user->studentDocuments
+            ->map(fn (StudentDocument $document) => $document->document_name)
+            ->values();
+        $matched = collect($requiredDocuments)
+            ->filter(fn (string $requirement) => $preparedNames->contains($requirement))
+            ->values()
+            ->all();
+        $missing = collect($requiredDocuments)
+            ->reject(fn (string $requirement) => in_array($requirement, $matched, true))
+            ->values()
+            ->all();
+        $requiredCount = count($requiredDocuments);
+        $uploadedCount = count($matched);
+
+        return [
+            'required' => $requiredCount,
+            'uploaded' => $uploadedCount,
+            'percent' => $requiredCount === 0 ? 100 : (int) round(($uploadedCount / $requiredCount) * 100),
+            'required_documents' => $requiredDocuments,
+            'matched' => $matched,
+            'missing' => $missing,
+        ];
+    }
+
+    private function attachPreparedDocumentsToApplication(User $user, ScholarshipApplication $application, array $confirmedDocuments): void
+    {
+        $application->loadMissing('scholarship');
+        $requirements = $confirmedDocuments !== []
+            ? collect($confirmedDocuments)->map(fn (string $document) => trim($document))->filter()->values()->all()
+            : $this->documentRequirements($application->scholarship);
+
+        if ($requirements === []) {
+            return;
+        }
+
+        $user->loadMissing('studentDocuments');
+        $preparedDocuments = $user->studentDocuments
+            ->filter(fn (StudentDocument $document) => in_array($document->document_name, $requirements, true));
+
+        foreach ($preparedDocuments as $studentDocument) {
+            if (! Storage::disk('local')->exists($studentDocument->path)) {
+                continue;
+            }
+
+            $extension = pathinfo($studentDocument->original_name, PATHINFO_EXTENSION);
+            Storage::disk('local')->makeDirectory("application-documents/{$application->id}");
+            $targetPath = 'application-documents/'.$application->id.'/'.(string) Str::uuid().($extension ? ".{$extension}" : '');
+
+            Storage::disk('local')->copy($studentDocument->path, $targetPath);
+            ApplicationDocument::query()->updateOrCreate([
+                'scholarship_application_id' => $application->id,
+                'document_name' => $studentDocument->document_name,
+            ], [
+                'uploaded_by' => $user->id,
+                'original_name' => $studentDocument->original_name,
+                'path' => $targetPath,
+                'mime_type' => $studentDocument->mime_type,
+                'size' => $studentDocument->size,
+                'status' => 'pending',
+                'review_notes' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+                'uploaded_at' => now(),
+            ]);
+        }
     }
 
     private function documentPayload(ApplicationDocument $document): array
@@ -632,6 +887,18 @@ class ApplicantDashboardController extends Controller
             'reviewed_at' => $document->reviewed_at?->format('M d, Y h:i A'),
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'download_url' => route('documents.download', $document),
+        ];
+    }
+
+    private function studentDocumentPayload(StudentDocument $document): array
+    {
+        return [
+            'id' => $document->id,
+            'document_name' => $document->document_name,
+            'original_name' => $document->original_name,
+            'size' => $document->size,
+            'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'download_url' => route('dashboard.student-documents.download', $document),
         ];
     }
 
@@ -776,6 +1043,23 @@ class ApplicantDashboardController extends Controller
             );
         } else {
             $addCriterion('income', 'Income bracket', 'info', $profile?->income_bracket, $scholarship->income_requirement, 'No income restriction listed.', false);
+        }
+
+        $documentReadiness = $this->preparedDocumentReadiness($scholarship, $user);
+        if ($documentReadiness['required'] > 0) {
+            $documentsReady = $documentReadiness['uploaded'] >= $documentReadiness['required'];
+            $addCriterion(
+                'documents',
+                'Prepared documents',
+                $documentsReady ? 'pass' : 'missing',
+                "{$documentReadiness['uploaded']} of {$documentReadiness['required']} uploaded",
+                implode(', ', $documentReadiness['required_documents']),
+                $documentsReady
+                    ? 'Your document library already covers this program requirement.'
+                    : 'Upload matching documents in Documents to improve readiness before applying.',
+            );
+        } else {
+            $addCriterion('documents', 'Prepared documents', 'info', null, null, 'No document requirements listed.', false);
         }
 
         $score = $applicable === 0 ? 100 : (int) round(($passed / $applicable) * 100);

@@ -9,6 +9,7 @@ const navLinks = [
     { href: '/dashboard', label: 'Dashboard', detail: 'Applicant overview' },
     { href: '/dashboard/scholarships', label: 'Scholarships', detail: 'Available programs' },
     { href: '/dashboard/applications', label: 'Applications', detail: 'Submission status' },
+    { href: '/dashboard/documents', label: 'Documents', detail: 'Uploaded files' },
     { href: '/dashboard/profile', label: 'Profile', detail: 'Applicant record' },
 ];
 

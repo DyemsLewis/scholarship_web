@@ -4,6 +4,7 @@ import AdminAccountFormPage from './pages/AdminAccountFormPage.vue';
 import AdminPage from './pages/AdminPage.vue';
 import AdminLogsPage from './pages/AdminLogsPage.vue';
 import AdminAnalyticsPage from './pages/AdminAnalyticsPage.vue';
+import AdminProfilePage from './pages/AdminProfilePage.vue';
 import AdminReviewsPage from './pages/AdminReviewsPage.vue';
 import AdminUsersPage from './pages/AdminUsersPage.vue';
 import AccountSetupPage from './pages/AccountSetupPage.vue';
@@ -20,6 +21,7 @@ import RegisterPage from './pages/RegisterPage.vue';
 import ResetPasswordPage from './pages/ResetPasswordPage.vue';
 import UserApplicationsPage from './pages/UserApplicationsPage.vue';
 import UserDashboardPage from './pages/UserDashboardPage.vue';
+import UserDocumentsPage from './pages/UserDocumentsPage.vue';
 import UserProfilePage from './pages/UserProfilePage.vue';
 import UserScholarshipDetailPage from './pages/UserScholarshipDetailPage.vue';
 import UserScholarshipsPage from './pages/UserScholarshipsPage.vue';
@@ -31,10 +33,12 @@ const pages = {
     adminAccountForm: AdminAccountFormPage,
     adminAnalytics: AdminAnalyticsPage,
     adminLogs: AdminLogsPage,
+    adminProfile: AdminProfilePage,
     adminReviews: AdminReviewsPage,
     adminUsers: AdminUsersPage,
     dashboard: UserDashboardPage,
     dashboardApplications: UserApplicationsPage,
+    dashboardDocuments: UserDocumentsPage,
     dashboardProfile: UserProfilePage,
     dashboardScholarshipDetail: UserScholarshipDetailPage,
     dashboardScholarships: UserScholarshipsPage,

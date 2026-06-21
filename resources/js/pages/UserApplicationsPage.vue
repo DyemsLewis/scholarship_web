@@ -620,6 +620,11 @@ onMounted(loadApplications);
                                     </div>
 
                                     <div v-if="selectedScholarship" class="mt-5 rounded-lg border border-sky-100 bg-white p-4">
+                                        <img
+                                            :src="selectedScholarship.image_url"
+                                            :alt="selectedScholarship.title"
+                                            class="mb-3 h-14 w-14 rounded-md bg-[#f8fafc] object-contain p-1.5 ring-1 ring-slate-200"
+                                        >
                                         <p class="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
                                             {{ selectedScholarship.provider?.name || 'Scholarship Provider' }}
                                         </p>
@@ -659,6 +664,11 @@ onMounted(loadApplications);
 
                             <div v-else-if="currentStep === 1 && selectedScholarship" class="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
                                 <section class="rounded-lg border border-slate-200/80 bg-[#f6faf8] p-5">
+                                    <img
+                                        :src="selectedScholarship.image_url"
+                                        :alt="selectedScholarship.title"
+                                        class="mb-3 h-16 w-16 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200"
+                                    >
                                     <p class="student-kicker">
                                         Scholarship Details
                                     </p>
@@ -999,13 +1009,23 @@ onMounted(loadApplications);
                                 class="rounded-lg border border-slate-200 border-l-4 border-l-slate-900 bg-white p-4 shadow-sm"
                             >
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                        <h4 class="font-bold text-slate-950">
-                                            {{ application.scholarship?.title || 'Scholarship' }}
-                                        </h4>
-                                        <p class="mt-1 text-sm text-slate-500">
-                                            Submitted {{ application.submitted_at || 'recently' }}
-                                        </p>
+                                    <div class="flex min-w-0 gap-3">
+                                        <img
+                                            :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
+                                            :alt="application.scholarship?.title || 'Scholarship'"
+                                            class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                        >
+                                        <div class="min-w-0">
+                                            <h4 class="truncate font-bold text-slate-950">
+                                                {{ application.scholarship?.title || 'Scholarship' }}
+                                            </h4>
+                                            <p class="mt-1 text-sm text-slate-500">
+                                                Submitted {{ application.submitted_at || 'recently' }}
+                                            </p>
+                                            <p class="mt-1 truncate text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                                {{ application.scholarship?.provider?.name || 'Scholarship provider' }}
+                                            </p>
+                                        </div>
                                     </div>
                                     <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
                                         {{ statusLabel(application.status) }}

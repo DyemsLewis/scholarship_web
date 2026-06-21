@@ -47,11 +47,11 @@ class DatabaseSeeder extends Seeder
         $provider->providerProfile()->updateOrCreate([
             'user_id' => $provider->id,
         ], [
-            'first_name' => 'NCR',
-            'last_name' => 'Grants',
+            'first_name' => 'Provider',
+            'last_name' => 'Account',
             'middle_initial' => 'P',
             'contact_number' => '09170000001',
-            'provider_name' => 'NCR Scholarship Foundation',
+            'provider_name' => 'Provider',
             'provider_type' => 'foundation',
             'provider_website' => 'https://example.com',
             'provider_address' => 'Manila City Hall, Padre Burgos Avenue, Manila',

@@ -416,16 +416,23 @@ onMounted(loadScholarships);
                                 <div class="absolute inset-y-0 left-0 w-1.5 bg-slate-900"></div>
                                 <div class="pl-3">
                                     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
-                                                {{ scholarship.provider?.name || 'Scholarship Provider' }}
-                                            </p>
-                                            <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                                {{ scholarship.title }}
-                                            </h3>
-                                            <p class="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                                                {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
-                                            </p>
+                                        <div class="flex min-w-0 gap-3">
+                                            <img
+                                                :src="scholarship.image_url"
+                                                :alt="scholarship.title"
+                                                class="mt-0.5 h-14 w-14 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200/80"
+                                            >
+                                            <div class="min-w-0">
+                                                <p class="truncate text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                                                    {{ scholarship.provider?.name || 'Scholarship Provider' }}
+                                                </p>
+                                                <h3 class="mt-1 truncate text-xl font-bold text-slate-950">
+                                                    {{ scholarship.title }}
+                                                </h3>
+                                                <p class="mt-1 truncate text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                                    {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
+                                                </p>
+                                            </div>
                                         </div>
 
                                         <div class="flex flex-wrap items-center gap-2">
@@ -457,6 +464,9 @@ onMounted(loadScholarships);
                                         <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70">
                                             <p class="font-semibold text-slate-500">Requirements</p>
                                             <p class="mt-1 font-bold text-slate-950">{{ requirementsLabel(scholarship.requirements) }}</p>
+                                            <p v-if="scholarship.prepared_documents?.required" class="mt-1 text-xs font-semibold text-sky-700">
+                                                {{ scholarship.prepared_documents.uploaded }} ready in Documents
+                                            </p>
                                         </div>
                                     </div>
 

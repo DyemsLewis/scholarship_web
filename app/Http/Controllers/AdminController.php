@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\ApplicationDocument;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
@@ -48,6 +49,17 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         return view('admin-account-form');
+    }
+
+    public function profile(Request $request): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isAdmin(), 403);
+
+        return view('admin-profile');
     }
 
     public function reviews(Request $request): View|RedirectResponse
@@ -119,6 +131,61 @@ class AdminController extends Controller
 
         return response()->json([
             'user' => $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+        ]);
+    }
+
+    public function profileData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return response()->json([
+            'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+        ]);
+    }
+
+    public function updateProfile(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $user = $request->user();
+        $validated = $request->validate([
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'display_name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
+            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+        ]);
+
+        $middleInitial = strtoupper($validated['middle_initial']);
+
+        $user->update([
+            'email' => $validated['email'],
+            'username' => $validated['username'],
+        ]);
+
+        $user->adminProfile()->updateOrCreate([
+            'user_id' => $user->id,
+        ], [
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'middle_initial' => $middleInitial,
+            'contact_number' => $validated['contact_number'],
+            'display_name' => $validated['display_name'],
+        ]);
+
+        ActivityLog::record(
+            $user,
+            'admin_profile_updated',
+            "{$validated['display_name']} updated their admin profile.",
+            $request,
+            ['admin_id' => $user->id],
+        );
+
+        return response()->json([
+            'message' => 'Admin profile updated successfully.',
+            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ]);
     }
 
@@ -238,7 +305,11 @@ class AdminController extends Controller
             'recent_applications_list' => $applications->take(5)->map(fn (ScholarshipApplication $application) => [
                 'id' => $application->id,
                 'applicant' => $application->applicant?->name,
+                'scholarship_id' => $application->scholarship?->id,
                 'scholarship' => $application->scholarship?->title,
+                'scholarship_image_url' => $application->scholarship
+                    ? $this->scholarshipImageUrl($application->scholarship)
+                    : asset('uploads/scholarship-default.jpg'),
                 'status' => $application->status,
                 'dss_score' => $application->dss_score,
                 'dss_recommendation' => $application->dss_recommendation,
@@ -316,7 +387,7 @@ class AdminController extends Controller
             ->latest()
             ->get(['id', 'email', 'username', 'role', 'created_at']);
         $applications = ScholarshipApplication::query()
-            ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
+            ->with(['applicant.studentProfile', 'documents.reviewer', 'scholarship.provider.providerProfile'])
             ->latest('submitted_at')
             ->limit(8)
             ->get();
@@ -340,7 +411,11 @@ class AdminController extends Controller
             'applications' => $applications->map(fn (ScholarshipApplication $application) => [
                 'id' => $application->id,
                 'applicant' => $application->applicant?->name,
+                'scholarship_id' => $application->scholarship?->id,
                 'scholarship' => $application->scholarship?->title,
+                'scholarship_image_url' => $application->scholarship
+                    ? $this->scholarshipImageUrl($application->scholarship)
+                    : asset('uploads/scholarship-default.jpg'),
                 'provider' => $application->scholarship?->provider?->name,
                 'status' => $application->status,
                 'dss_score' => $application->dss_score,
@@ -349,6 +424,9 @@ class AdminController extends Controller
                 'decision_reason' => $application->decision_reason,
                 'documents_uploaded' => $application->documents->count(),
                 'documents_pending' => $application->documents->where('status', 'pending')->count(),
+                'documents' => $application->documents
+                    ->map(fn (ApplicationDocument $document) => $this->documentPayload($document))
+                    ->values(),
                 'review_notes' => $application->review_notes,
                 'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             ])->values(),
@@ -664,6 +742,31 @@ class AdminController extends Controller
         return collect($metadata)
             ->map(fn ($value, string $key) => "{$key}: {$value}")
             ->implode(' | ');
+    }
+
+    private function scholarshipImageUrl(Scholarship $scholarship): string
+    {
+        if (filled($scholarship->image_path)) {
+            return asset(ltrim($scholarship->image_path, '/'));
+        }
+
+        return asset('uploads/scholarship-default.jpg');
+    }
+
+    private function documentPayload(ApplicationDocument $document): array
+    {
+        return [
+            'id' => $document->id,
+            'document_name' => $document->document_name,
+            'original_name' => $document->original_name,
+            'size' => $document->size,
+            'status' => $document->status,
+            'review_notes' => $document->review_notes,
+            'reviewed_by' => $document->reviewer?->name,
+            'reviewed_at' => $document->reviewed_at?->format('M d, Y h:i A'),
+            'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'download_url' => route('documents.download', $document),
+        ];
     }
 
     private function labelFromKey(string $value): string

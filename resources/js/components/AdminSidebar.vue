@@ -13,6 +13,7 @@ const navLinks = [
     { key: 'users', href: '/admin/manage-users', label: 'Manage Users' },
     { key: 'reviews', href: '/admin/reviews', label: 'Reviews' },
     { key: 'logs', href: '/admin/logs', label: 'Logs' },
+    { key: 'profile', href: '/admin/profile', label: 'Profile' },
 ];
 
 function navLinkClass(link) {

@@ -107,6 +107,65 @@ class ProviderController extends Controller
         ]);
     }
 
+    public function updateProfile(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $user = $request->user();
+        $validated = $request->validate([
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
+            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'provider_name' => ['required', 'string', 'max:255'],
+            'provider_type' => ['nullable', Rule::in(['school', 'foundation', 'government', 'company', 'non_profit', 'other'])],
+            'provider_website' => ['nullable', 'string', 'max:255'],
+            'provider_address' => ['nullable', 'string', 'max:500'],
+            'provider_description' => ['nullable', 'string', 'max:1500'],
+        ]);
+
+        $middleInitial = strtoupper($validated['middle_initial']);
+
+        $user->update([
+            'email' => $validated['email'],
+            'username' => $validated['username'],
+        ]);
+
+        $profile = $user->providerProfile;
+        $user->providerProfile()->updateOrCreate([
+            'user_id' => $user->id,
+        ], [
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'middle_initial' => $middleInitial,
+            'contact_number' => $validated['contact_number'],
+            'provider_name' => $validated['provider_name'],
+            'provider_type' => $validated['provider_type'] ?? null,
+            'provider_website' => $validated['provider_website'] ?? null,
+            'provider_address' => $validated['provider_address'] ?? null,
+            'provider_description' => $validated['provider_description'] ?? null,
+            'verification_status' => $profile?->verification_status ?? 'pending',
+            'verification_notes' => $profile?->verification_notes,
+            'verified_by' => $profile?->verified_by,
+            'verified_at' => $profile?->verified_at,
+        ]);
+
+        ActivityLog::record(
+            $user,
+            'provider_profile_updated',
+            "{$validated['provider_name']} updated their provider profile.",
+            $request,
+            ['provider_id' => $user->id],
+        );
+
+        return response()->json([
+            'message' => 'Provider profile updated successfully.',
+            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+        ]);
+    }
+
     public function insightsData(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -117,7 +176,7 @@ class ProviderController extends Controller
             ->latest()
             ->get();
         $applications = ScholarshipApplication::query()
-            ->with(['documents', 'scholarship'])
+            ->with(['applicant.studentProfile', 'documents.reviewer', 'scholarship'])
             ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id))
             ->latest('submitted_at')
             ->get();
@@ -156,6 +215,27 @@ class ProviderController extends Controller
             ->sortByDesc('total')
             ->values()
             ->take(8);
+        $documentReviewQueue = $applications
+            ->flatMap(fn (ScholarshipApplication $application) => $application->documents->map(fn (ApplicationDocument $document) => [
+                ...$this->documentPayload($document),
+                'application_id' => $application->id,
+                'application_status' => $application->status,
+                'applicant' => $application->applicant?->name,
+                'applicant_email' => $application->applicant?->email,
+                'scholarship' => $application->scholarship?->title,
+                'scholarship_image_url' => $application->scholarship
+                    ? $this->scholarshipImageUrl($application->scholarship)
+                    : asset('uploads/scholarship-default.jpg'),
+                'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
+            ]))
+            ->sortBy(fn (array $document) => [
+                'pending' => 0,
+                'needs_replacement' => 1,
+                'rejected' => 2,
+                'accepted' => 3,
+            ][$document['status'] ?? 'pending'] ?? 4)
+            ->values()
+            ->take(12);
 
         return response()->json([
             'user' => $request->user()->loadMissing(['providerProfile'])->publicPayload(),
@@ -196,6 +276,7 @@ class ProviderController extends Controller
             })->sortByDesc('applications')->values(),
             'top_missing_documents' => $missingDocuments,
             'document_issues' => $documentIssues,
+            'document_review_queue' => $documentReviewQueue,
             'dss_summary' => [
                 'average_score' => round((float) $applications->avg('dss_score'), 1),
                 'highly_recommended' => $recommendationCounts['highly_recommended'] ?? 0,
@@ -464,9 +545,13 @@ class ProviderController extends Controller
         $this->ensureProviderCanPost($request);
 
         $validated = $this->validateScholarship($request);
+        $imagePath = $this->storeScholarshipImage($request);
+
+        unset($validated['image_file']);
 
         $scholarship = Scholarship::create([
             ...$validated,
+            'image_path' => $imagePath,
             'provider_id' => $request->user()->id,
         ]);
 
@@ -491,6 +576,13 @@ class ProviderController extends Controller
         $this->ensureProviderCanPost($request);
 
         $validated = $this->validateScholarship($request);
+        $imagePath = $this->storeScholarshipImage($request, $scholarship);
+
+        unset($validated['image_file']);
+
+        if ($imagePath) {
+            $validated['image_path'] = $imagePath;
+        }
 
         $scholarship->update($validated);
 
@@ -528,7 +620,35 @@ class ProviderController extends Controller
             'minimum_gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'deadline' => ['nullable', 'date'],
             'status' => ['required', Rule::in(['draft', 'published', 'closed'])],
+            'image_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
         ]);
+    }
+
+    private function storeScholarshipImage(Request $request, ?Scholarship $scholarship = null): ?string
+    {
+        if (! $request->hasFile('image_file')) {
+            return null;
+        }
+
+        $file = $request->file('image_file');
+        $directory = public_path('uploads/scholarships');
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $filename = $file->hashName();
+        $file->move($directory, $filename);
+
+        if ($scholarship?->image_path) {
+            $oldPath = public_path($scholarship->image_path);
+
+            if (is_file($oldPath)) {
+                @unlink($oldPath);
+            }
+        }
+
+        return "uploads/scholarships/{$filename}";
     }
 
     private function applicationPayload(ScholarshipApplication $application): array
@@ -631,6 +751,8 @@ class ProviderController extends Controller
     {
         return [
             'id' => $scholarship->id,
+            'image_path' => $scholarship->image_path,
+            'image_url' => $this->scholarshipImageUrl($scholarship),
             'title' => $scholarship->title,
             'category' => $scholarship->category,
             'description' => $scholarship->description,
@@ -655,6 +777,15 @@ class ProviderController extends Controller
             'created_at' => $scholarship->created_at?->format('M d, Y'),
             'updated_at' => $scholarship->updated_at?->format('M d, Y'),
         ];
+    }
+
+    private function scholarshipImageUrl(Scholarship $scholarship): string
+    {
+        if (filled($scholarship->image_path)) {
+            return asset(ltrim($scholarship->image_path, '/'));
+        }
+
+        return asset('uploads/scholarship-default.jpg');
     }
 
     private function ensureProviderCanPost(Request $request): void

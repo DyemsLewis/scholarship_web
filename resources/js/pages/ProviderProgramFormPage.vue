@@ -13,7 +13,10 @@ const formMessage = ref('');
 const formError = ref('');
 const user = ref(null);
 const scholarshipFormElement = ref(null);
+const imageInputElement = ref(null);
 const scholarshipForm = ref(emptyScholarshipForm());
+const imageFile = ref(null);
+const imagePreviewUrl = ref('');
 const providerLocationMessage = ref('');
 const providerAddressLookupTrigger = ref(0);
 
@@ -38,6 +41,7 @@ const documentRequirementOptions = [
 
 const selectedRequirementCount = computed(() => scholarshipForm.value.requirements.length);
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
+const scholarshipImagePreview = computed(() => imagePreviewUrl.value || scholarshipForm.value.imageUrl || '/uploads/scholarship-default.jpg');
 const scholarshipFormMapAddress = computed(() => {
     const parts = [
         scholarshipForm.value.locationName,
@@ -66,6 +70,7 @@ function emptyScholarshipForm() {
         minimumGwa: '',
         deadline: '',
         status: 'draft',
+        imageUrl: '/uploads/scholarship-default.jpg',
     };
 }
 
@@ -99,7 +104,10 @@ function fillScholarshipForm(scholarship) {
         minimumGwa: scholarship.minimum_gwa ?? '',
         deadline: scholarship.deadline ?? '',
         status: scholarship.status ?? 'draft',
+        imageUrl: scholarship.image_url ?? '/uploads/scholarship-default.jpg',
     };
+    imageFile.value = null;
+    imagePreviewUrl.value = '';
 }
 
 function isRequirementSelected(requirement) {
@@ -174,9 +182,27 @@ function handleScholarshipLocationError(message) {
 
 function resetScholarshipForm() {
     scholarshipForm.value = emptyScholarshipForm();
+    imageFile.value = null;
+    imagePreviewUrl.value = '';
     formMessage.value = '';
     formError.value = '';
     providerLocationMessage.value = '';
+
+    if (imageInputElement.value) {
+        imageInputElement.value.value = '';
+    }
+}
+
+function handleImageFile(event) {
+    const file = event.target.files?.[0] ?? null;
+
+    imageFile.value = file;
+
+    if (imagePreviewUrl.value) {
+        URL.revokeObjectURL(imagePreviewUrl.value);
+    }
+
+    imagePreviewUrl.value = file ? URL.createObjectURL(file) : '';
 }
 
 async function loadFormData() {
@@ -210,29 +236,42 @@ async function saveScholarship() {
 
     isSaving.value = true;
 
-    const payload = {
+    const payload = new FormData();
+    const fields = {
         title: scholarshipForm.value.title,
-        category: scholarshipForm.value.category || null,
+        category: scholarshipForm.value.category || '',
         description: scholarshipForm.value.description,
         eligibility: scholarshipForm.value.eligibility,
         eligible_courses: scholarshipForm.value.eligibleCourses,
         eligible_year_levels: scholarshipForm.value.eligibleYearLevels,
         eligible_locations: scholarshipForm.value.eligibleLocations,
         income_requirement: scholarshipForm.value.incomeRequirement || 'Any',
-        location_name: scholarshipForm.value.locationName || null,
-        location_address: scholarshipForm.value.locationAddress || null,
-        latitude: scholarshipForm.value.latitude || null,
-        longitude: scholarshipForm.value.longitude || null,
+        location_name: scholarshipForm.value.locationName || '',
+        location_address: scholarshipForm.value.locationAddress || '',
+        latitude: scholarshipForm.value.latitude || '',
+        longitude: scholarshipForm.value.longitude || '',
         requirements: scholarshipForm.value.requirements.join('\n'),
-        award_amount: scholarshipForm.value.awardAmount || null,
-        minimum_gwa: scholarshipForm.value.minimumGwa || null,
-        deadline: scholarshipForm.value.deadline || null,
+        award_amount: scholarshipForm.value.awardAmount || '',
+        minimum_gwa: scholarshipForm.value.minimumGwa || '',
+        deadline: scholarshipForm.value.deadline || '',
         status: scholarshipForm.value.status,
     };
 
+    Object.entries(fields).forEach(([key, value]) => {
+        payload.append(key, value);
+    });
+
+    if (imageFile.value) {
+        payload.append('image_file', imageFile.value);
+    }
+
+    if (isEditMode.value) {
+        payload.append('_method', 'PUT');
+    }
+
     try {
         const response = isEditMode.value
-            ? await window.axios.put(`/provider/scholarships/${scholarshipId}`, payload)
+            ? await window.axios.post(`/provider/scholarships/${scholarshipId}`, payload)
             : await window.axios.post('/provider/scholarships', payload);
 
         formMessage.value = response.data.message ?? 'Scholarship saved successfully.';
@@ -336,6 +375,30 @@ onMounted(loadFormData);
                                     placeholder="Scholarship title"
                                     :class="inputClass"
                                 >
+                            </div>
+
+                            <div class="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[5rem_1fr] lg:items-center">
+                                <img
+                                    :src="scholarshipImagePreview"
+                                    alt="Scholarship program preview"
+                                    class="h-16 w-16 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200"
+                                >
+                                <div>
+                                    <label :class="labelClass" for="scholarship-image">
+                                        Program logo
+                                    </label>
+                                    <input
+                                        id="scholarship-image"
+                                        ref="imageInputElement"
+                                        type="file"
+                                        accept="image/jpeg,image/png,image/webp"
+                                        class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-slate-800"
+                                        @change="handleImageFile"
+                                    >
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        Optional. JPG, PNG, or WebP up to 4MB. If no logo is uploaded, the default scholarship logo will be used.
+                                    </p>
+                                </div>
                             </div>
 
                             <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

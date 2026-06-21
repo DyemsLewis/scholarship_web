@@ -189,25 +189,42 @@ onMounted(loadScholarship);
                                 </div>
                             </div>
 
-                            <div class="student-soft-card p-4">
-                                <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                                    Provider
-                                </p>
-                                <h2 class="mt-1 text-lg font-bold text-slate-950">
-                                    {{ scholarship.provider?.name || 'Scholarship Provider' }}
-                                </h2>
-                                <p class="mt-1 text-sm text-slate-500">
-                                    {{ providerTypeLabel(scholarship.provider?.type) }}
-                                </p>
+                            <div class="space-y-3">
+                                <img
+                                    :src="scholarship.image_url"
+                                    :alt="scholarship.title"
+                                    class="h-16 w-16 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200/80"
+                                >
 
-                                <div class="mt-4 grid gap-3 text-sm">
-                                    <div>
-                                        <p class="font-semibold text-slate-500">Award</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ formatAmount(scholarship.award_amount) }}</p>
-                                    </div>
-                                    <div>
-                                        <p class="font-semibold text-slate-500">Minimum GWA / average</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ scholarship.minimum_gwa || 'Not listed yet' }}</p>
+                                <div class="student-soft-card p-4">
+                                    <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                        Provider
+                                    </p>
+                                    <h2 class="mt-1 text-lg font-bold text-slate-950">
+                                        {{ scholarship.provider?.name || 'Scholarship Provider' }}
+                                    </h2>
+                                    <p class="mt-1 text-sm text-slate-500">
+                                        {{ providerTypeLabel(scholarship.provider?.type) }}
+                                    </p>
+
+                                    <div class="mt-4 grid gap-3 text-sm">
+                                        <div>
+                                            <p class="font-semibold text-slate-500">Award</p>
+                                            <p class="mt-1 font-bold text-slate-950">{{ formatAmount(scholarship.award_amount) }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold text-slate-500">Minimum GWA / average</p>
+                                            <p class="mt-1 font-bold text-slate-950">{{ scholarship.minimum_gwa || 'Not listed yet' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold text-slate-500">Prepared documents</p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ scholarship.prepared_documents?.uploaded ?? 0 }} of {{ scholarship.prepared_documents?.required ?? 0 }}
+                                            </p>
+                                            <a href="/dashboard/documents" class="mt-1 inline-flex text-xs font-bold text-sky-700 hover:text-sky-900">
+                                                Manage documents
+                                            </a>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

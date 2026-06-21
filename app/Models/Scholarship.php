@@ -10,6 +10,7 @@ class Scholarship extends Model
 {
     protected $fillable = [
         'provider_id',
+        'image_path',
         'title',
         'category',
         'description',

@@ -7,8 +7,9 @@ const isLoading = ref(true);
 const updatingId = ref(null);
 const errorMessage = ref('');
 const statusMessage = ref('');
-const selectedStatus = ref('all');
+const selectedStatus = ref('pending');
 const providerNotes = ref({});
+const hiddenProviderIds = ref([]);
 const stats = ref({
     providers: 0,
     pending_providers: 0,
@@ -23,17 +24,19 @@ const providers = ref([]);
 const applications = ref([]);
 
 const filteredProviders = computed(() => {
+    const visibleProviders = providers.value.filter((provider) => !hiddenProviderIds.value.includes(provider.id));
+
     if (selectedStatus.value === 'all') {
-        return providers.value;
+        return visibleProviders;
     }
 
-    return providers.value.filter((provider) => provider.verification_status === selectedStatus.value);
+    return visibleProviders.filter((provider) => provider.verification_status === selectedStatus.value);
 });
 const statusFilters = computed(() => [
-    { value: 'all', label: 'All providers', count: stats.value.providers },
     { value: 'pending', label: 'Pending', count: stats.value.pending_providers },
     { value: 'approved', label: 'Approved', count: stats.value.approved_providers },
     { value: 'rejected', label: 'Rejected', count: stats.value.rejected_providers },
+    { value: 'all', label: 'All providers', count: stats.value.providers },
 ]);
 
 function statusClass(status) {
@@ -48,18 +51,77 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function documentStatusClass(status) {
+    if (status === 'accepted') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (status === 'needs_replacement') {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-sky-100 text-sky-800';
+}
+
 function statusLabel(status) {
     return String(status ?? 'pending')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-async function loadReviewData() {
+function formatFileSize(size) {
+    if (!size) {
+        return '0 KB';
+    }
+
+    return `${Math.max(1, Math.round(Number(size) / 1024))} KB`;
+}
+
+function providerActionOptions(provider) {
+    const status = provider.verification_status ?? 'pending';
+    const actions = [];
+
+    if (status !== 'approved') {
+        actions.push({
+            status: 'approved',
+            label: 'Approve provider',
+            className: 'bg-emerald-700 text-white hover:bg-emerald-800',
+        });
+    }
+
+    if (status !== 'rejected') {
+        actions.push({
+            status: 'rejected',
+            label: 'Reject',
+            className: 'bg-rose-700 text-white hover:bg-rose-800',
+        });
+    }
+
+    if (status !== 'pending') {
+        actions.push({
+            status: 'pending',
+            label: 'Move to pending',
+            className: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100',
+        });
+    }
+
+    return actions;
+}
+
+async function loadReviewData(resetHiddenProviders = true) {
     isLoading.value = true;
     errorMessage.value = '';
 
     try {
         const response = await window.axios.get('/admin/reviews/data');
+
+        if (resetHiddenProviders) {
+            hiddenProviderIds.value = [];
+        }
 
         stats.value = response.data.stats;
         providers.value = response.data.providers;
@@ -75,6 +137,10 @@ async function loadReviewData() {
 }
 
 async function updateProvider(provider, verificationStatus) {
+    if ((provider.verification_status ?? 'pending') === verificationStatus) {
+        return;
+    }
+
     updatingId.value = provider.id;
     errorMessage.value = '';
     statusMessage.value = '';
@@ -86,8 +152,9 @@ async function updateProvider(provider, verificationStatus) {
         });
 
         providers.value = providers.value.map((item) => (item.id === provider.id ? response.data.provider : item));
-        statusMessage.value = response.data.message ?? 'Provider verification updated.';
-        await loadReviewData();
+        hiddenProviderIds.value = [...new Set([...hiddenProviderIds.value, provider.id])];
+        statusMessage.value = response.data.message ?? `Provider marked as ${statusLabel(verificationStatus)}.`;
+        await loadReviewData(false);
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to update provider verification.';
     } finally {
@@ -159,98 +226,94 @@ onMounted(loadReviewData);
                                     :key="filter.value"
                                     type="button"
                                     :class="[
-                                        'rounded-md border px-3 py-2 text-sm font-semibold transition',
+                                        'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
                                         selectedStatus === filter.value
                                             ? 'border-slate-900 bg-slate-900 text-white'
                                             : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
                                     ]"
                                     @click="selectedStatus = filter.value"
                                 >
-                                    {{ filter.label }} ({{ filter.count }})
+                                    {{ filter.label }}
                                 </button>
                             </div>
                         </div>
 
                         <div v-if="filteredProviders.length === 0" class="p-6 text-sm text-slate-500">
-                            No providers for this filter.
+                            No providers for this filter. Updated providers are hidden until you refresh.
                         </div>
 
-                        <div v-else class="grid gap-4 p-4 xl:grid-cols-2">
+                        <div v-else class="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-3">
                             <article
                                 v-for="provider in filteredProviders"
                                 :key="provider.id"
-                                class="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                                class="rounded-md border border-slate-200 bg-slate-50 p-3"
                             >
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <p class="truncate text-[11px] font-bold uppercase tracking-[0.14em] text-sky-700">
                                             {{ provider.provider_type || 'provider' }}
                                         </p>
-                                        <h4 class="mt-2 text-lg font-bold text-slate-950">
+                                        <h4 class="mt-1 truncate text-base font-bold text-slate-950">
                                             {{ provider.provider_name || provider.name }}
                                         </h4>
-                                        <p class="mt-1 text-sm text-slate-500">
+                                        <p class="mt-0.5 truncate text-xs text-slate-500">
                                             {{ provider.email }}
                                         </p>
                                     </div>
-                                    <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(provider.verification_status)]">
+                                    <span :class="['shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase', statusClass(provider.verification_status)]">
                                         {{ statusLabel(provider.verification_status) }}
                                     </span>
                                 </div>
 
-                                <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                                    <div class="rounded-md bg-white p-3">
-                                        <p class="font-semibold text-slate-500">Website</p>
-                                        <p class="mt-1 break-words text-slate-700">{{ provider.provider_website || 'Not provided' }}</p>
-                                    </div>
-                                    <div class="rounded-md bg-white p-3">
-                                        <p class="font-semibold text-slate-500">Address</p>
-                                        <p class="mt-1 text-slate-700">{{ provider.provider_address || 'Not provided' }}</p>
-                                    </div>
+                                <div class="mt-3 space-y-1.5 text-xs text-slate-600">
+                                    <p class="truncate">
+                                        <span class="font-semibold text-slate-500">Website:</span>
+                                        {{ provider.provider_website || 'Not provided' }}
+                                    </p>
+                                    <p class="line-clamp-1">
+                                        <span class="font-semibold text-slate-500">Address:</span>
+                                        {{ provider.provider_address || 'Not provided' }}
+                                    </p>
                                 </div>
 
-                                <label class="mt-4 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                    Admin note
-                                </label>
-                                <textarea
-                                    v-model="providerNotes[provider.id]"
-                                    rows="3"
-                                    maxlength="1500"
-                                    placeholder="Optional note for provider verification."
-                                    class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                ></textarea>
+                                <div class="mt-3 rounded-md border border-slate-200 bg-white p-2.5">
+                                    <label class="block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                                        Admin note
+                                    </label>
+                                    <textarea
+                                        v-model="providerNotes[provider.id]"
+                                        rows="1"
+                                        maxlength="1500"
+                                        placeholder="Optional note for this provider."
+                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                    ></textarea>
+                                </div>
 
-                                <div class="mt-4 flex flex-col gap-2 sm:flex-row">
-                                    <button
-                                        type="button"
-                                        :disabled="updatingId === provider.id"
-                                        class="rounded-md bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:opacity-70"
-                                        @click="updateProvider(provider, 'approved')"
-                                    >
-                                        Approve
-                                    </button>
-                                    <button
-                                        type="button"
-                                        :disabled="updatingId === provider.id"
-                                        class="rounded-md bg-rose-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-rose-800 disabled:opacity-70"
-                                        @click="updateProvider(provider, 'rejected')"
-                                    >
-                                        Reject
-                                    </button>
-                                    <button
-                                        type="button"
-                                        :disabled="updatingId === provider.id"
-                                        class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-white disabled:opacity-70"
-                                        @click="updateProvider(provider, 'pending')"
-                                    >
-                                        Mark pending
-                                    </button>
+                                <div class="mt-3 border-t border-slate-200 pt-3">
+                                    <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                                        Verification action
+                                    </p>
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        <button
+                                            v-for="action in providerActionOptions(provider)"
+                                            :key="action.status"
+                                            type="button"
+                                            :disabled="updatingId === provider.id"
+                                            :class="[
+                                                'rounded-md px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-70',
+                                                action.className,
+                                            ]"
+                                            @click="updateProvider(provider, action.status)"
+                                        >
+                                            {{ updatingId === provider.id ? 'Saving...' : action.label }}
+                                        </button>
+                                    </div>
                                 </div>
                             </article>
                         </div>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
                             Application Review Snapshot
                         </p>
@@ -262,36 +325,76 @@ onMounted(loadReviewData);
                             No applications yet.
                         </div>
 
-                        <div v-else class="mt-5 grid gap-3">
+                        <div v-else class="mt-4 grid gap-2 md:grid-cols-2">
                             <div
                                 v-for="application in applications"
                                 :key="application.id"
-                                class="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm lg:grid-cols-[1fr_10rem_8rem_8rem]"
+                                class="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm"
                             >
-                                <div>
-                                    <p class="font-bold text-slate-950">{{ application.scholarship }}</p>
-                                    <p class="mt-1 text-slate-500">
-                                        {{ application.applicant }} · {{ application.provider }}
-                                    </p>
-                                    <p v-if="application.review_notes" class="mt-2 text-slate-600">
-                                        Note: {{ application.review_notes }}
-                                    </p>
-                                    <p v-if="application.decision_reason" class="mt-2 text-slate-600">
-                                        Reason: {{ statusLabel(application.decision_reason) }}
-                                    </p>
-                                    <p class="mt-2 font-semibold text-indigo-700">
-                                        DSS: {{ application.dss_score ?? 0 }}% - {{ statusLabel(application.dss_recommendation || 'needs_review') }}
-                                    </p>
+                                <div class="flex gap-3">
+                                    <img
+                                        :src="application.scholarship_image_url || '/uploads/scholarship-default.jpg'"
+                                        :alt="application.scholarship || 'Scholarship'"
+                                        class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                    >
+                                    <div class="min-w-0">
+                                        <p class="truncate font-bold text-slate-950">{{ application.scholarship }}</p>
+                                        <p class="mt-1 truncate text-xs text-slate-500">
+                                            {{ application.applicant }} - {{ application.provider }}
+                                        </p>
+                                        <p v-if="application.review_notes" class="mt-1 line-clamp-1 text-xs text-slate-500">
+                                            Note: {{ application.review_notes }}
+                                        </p>
+                                        <p v-if="application.decision_reason" class="mt-1 truncate text-xs text-slate-500">
+                                            Reason: {{ statusLabel(application.decision_reason) }}
+                                        </p>
+                                        <p class="mt-2 inline-flex w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-indigo-700 ring-1 ring-indigo-100">
+                                            DSS: {{ application.dss_score ?? 0 }}% - {{ statusLabel(application.dss_recommendation || 'needs_review') }}
+                                        </p>
+                                    </div>
                                 </div>
-                                <span :class="['h-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
+                                <span :class="['h-fit w-fit rounded-md px-2.5 py-1 text-[11px] font-bold uppercase', statusClass(application.status)]">
                                     {{ statusLabel(application.status) }}
                                 </span>
-                                <p class="text-slate-500 lg:text-right">
+                                <p class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
                                     {{ application.eligibility_score ?? 0 }}% match
                                 </p>
-                                <p class="text-slate-500 lg:text-right">
+                                <p class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
                                     {{ application.documents_uploaded }} files
                                     <span v-if="application.documents_pending">({{ application.documents_pending }} pending)</span>
+                                </p>
+                                <div v-if="application.documents?.length" class="mt-1 grid gap-2">
+                                    <div
+                                        v-for="document in application.documents"
+                                        :key="document.id"
+                                        class="flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-2.5 sm:flex-row sm:items-center sm:justify-between"
+                                    >
+                                        <div class="min-w-0">
+                                            <p class="truncate text-xs font-bold text-slate-950">
+                                                {{ document.document_name }}
+                                            </p>
+                                            <p class="mt-0.5 truncate text-[11px] text-slate-500">
+                                                {{ document.original_name }} - {{ formatFileSize(document.size) }}
+                                            </p>
+                                            <p v-if="document.review_notes" class="mt-1 line-clamp-1 text-[11px] font-semibold text-amber-700">
+                                                Note: {{ document.review_notes }}
+                                            </p>
+                                        </div>
+                                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', documentStatusClass(document.status)]">
+                                                {{ statusLabel(document.status || 'pending') }}
+                                            </span>
+                                            <a
+                                                :href="document.download_url"
+                                                class="rounded-md border border-slate-300 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-100"
+                                            >
+                                                Download
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p v-else class="mt-1 rounded-md border border-dashed border-slate-300 bg-white p-2.5 text-xs text-slate-500">
+                                    No uploaded documents yet.
                                 </p>
                             </div>
                         </div>

@@ -423,6 +423,8 @@ class MobileAuthController extends Controller
 
         return [
             'id' => $scholarship->id,
+            'image_path' => $scholarship->image_path,
+            'image_url' => $this->scholarshipImageUrl($scholarship),
             'title' => $scholarship->title,
             'category' => $scholarship->category,
             'description' => $scholarship->description,
@@ -455,6 +457,15 @@ class MobileAuthController extends Controller
                 'type' => $scholarship->provider?->provider_type,
             ],
         ];
+    }
+
+    private function scholarshipImageUrl(Scholarship $scholarship): string
+    {
+        if (filled($scholarship->image_path)) {
+            return asset(ltrim($scholarship->image_path, '/'));
+        }
+
+        return asset('uploads/scholarship-default.jpg');
     }
 
     private function mapUrl(Scholarship $scholarship): ?string

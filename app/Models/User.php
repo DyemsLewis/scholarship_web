@@ -75,6 +75,11 @@ class User extends Authenticatable
         return $this->hasMany(ScholarshipBookmark::class);
     }
 
+    public function studentDocuments(): HasMany
+    {
+        return $this->hasMany(StudentDocument::class);
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
@@ -164,6 +169,7 @@ class User extends Authenticatable
             'email' => $this->email,
             'username' => $this->username,
             'contact_number' => $this->contact_number,
+            'display_name' => $this->adminProfile?->display_name,
             'provider_name' => $this->provider_name,
             'provider_type' => $this->provider_type,
             'provider_website' => $this->provider_website,

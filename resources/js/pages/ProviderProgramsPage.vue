@@ -180,6 +180,12 @@ onMounted(loadProviderData);
                                 :key="scholarship.id"
                                 class="flex flex-col rounded-lg border border-slate-200 bg-slate-50 p-3"
                             >
+                                <img
+                                    :src="scholarship.image_url"
+                                    :alt="scholarship.title"
+                                    class="mb-3 h-14 w-14 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                >
+
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0">
                                         <h4 class="truncate text-base font-bold text-slate-950">
