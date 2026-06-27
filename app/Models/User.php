@@ -214,9 +214,9 @@ class User extends Authenticatable
         ];
     }
 
-    public static function applicantProfileRequiredFields(): array
+    public static function applicantProfileRequiredFields(?array $payload = null): array
     {
-        return [
+        $fields = [
             'first_name' => 'First name',
             'last_name' => 'Last name',
             'middle_initial' => 'Middle initial',
@@ -224,7 +224,6 @@ class User extends Authenticatable
             'birthdate' => 'Birthdate',
             'education_level' => 'Education level',
             'school' => 'School / learning institution',
-            'course_or_strand' => 'Track / strand / course',
             'year_level' => 'Grade / year level',
             'enrollment_status' => 'Enrollment status',
             'gwa' => 'GWA / general average',
@@ -238,6 +237,16 @@ class User extends Authenticatable
             'guardian_name' => 'Guardian name',
             'guardian_contact' => 'Guardian contact',
         ];
+
+        $educationLevel = $payload['education_level'] ?? null;
+
+        if (in_array($educationLevel, ['senior_high_school', 'college', 'tvet'], true)) {
+            $fields = array_slice($fields, 0, 7, true)
+                + ['course_or_strand' => 'Track / strand / course / program']
+                + array_slice($fields, 7, null, true);
+        }
+
+        return $fields;
     }
 
     public function applicantProfileReadiness(): array
@@ -245,7 +254,7 @@ class User extends Authenticatable
         $this->loadMissing('studentProfile');
 
         $payload = $this->publicPayload();
-        $fields = self::applicantProfileRequiredFields();
+        $fields = self::applicantProfileRequiredFields($payload);
         $missing = collect($fields)
             ->reject(fn (string $label, string $key) => filled($payload[$key] ?? null))
             ->map(fn (string $label, string $key) => [

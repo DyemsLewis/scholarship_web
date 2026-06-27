@@ -51,12 +51,20 @@ class DecisionSupportService
     public function syncApplication(ScholarshipApplication $application): array
     {
         $score = $this->scoreApplication($application);
+        $eligibilitySnapshot = $this->currentEligibilitySnapshot($application);
 
-        $application->forceFill([
+        $updates = [
             'dss_score' => $score['score'],
             'dss_recommendation' => $score['recommendation'],
             'dss_breakdown' => $score,
-        ])->saveQuietly();
+        ];
+
+        if ($eligibilitySnapshot !== null) {
+            $updates['eligibility_score'] = $eligibilitySnapshot['score'];
+            $updates['eligibility_breakdown'] = $eligibilitySnapshot;
+        }
+
+        $application->forceFill($updates)->saveQuietly();
 
         return $score;
     }
@@ -77,6 +85,12 @@ class DecisionSupportService
 
     private function eligibilityScore(ScholarshipApplication $application): int
     {
+        $currentSnapshot = $this->currentEligibilitySnapshot($application);
+
+        if ($currentSnapshot !== null) {
+            return $this->clamp((int) $currentSnapshot['score']);
+        }
+
         if ($application->eligibility_score !== null) {
             return $this->clamp((int) round((float) $application->eligibility_score));
         }
@@ -84,6 +98,128 @@ class DecisionSupportService
         $breakdown = $application->eligibility_breakdown ?? [];
 
         return $this->clamp((int) ($breakdown['score'] ?? 60));
+    }
+
+    private function currentEligibilitySnapshot(ScholarshipApplication $application): ?array
+    {
+        $profile = $application->applicant?->studentProfile;
+        $scholarship = $application->scholarship;
+
+        if (! $profile || ! $scholarship) {
+            return null;
+        }
+
+        $criteria = [];
+        $passed = 0;
+        $applicable = 0;
+
+        $addCriterion = function (string $key, string $label, string $status, ?string $studentValue, ?string $requirement, string $note, bool $counts = true) use (&$criteria, &$passed, &$applicable): void {
+            $criteria[] = [
+                'key' => $key,
+                'label' => $label,
+                'status' => $status,
+                'student_value' => $studentValue,
+                'requirement' => $requirement,
+                'note' => $note,
+            ];
+
+            if (! $counts) {
+                return;
+            }
+
+            $applicable++;
+
+            if ($status === 'pass') {
+                $passed++;
+            }
+        };
+
+        $addOptionCriterion = function (string $key, string $label, ?string $studentValue, ?string $requirements, string $openNote) use ($addCriterion): void {
+            $options = $this->splitOptions($requirements);
+
+            if ($this->hasOpenOption($options)) {
+                $addCriterion($key, $label, 'info', $studentValue, implode(', ', $options), $openNote, false);
+
+                return;
+            }
+
+            if ($options === []) {
+                $addCriterion($key, $label, 'info', $studentValue, null, "No {$label} restriction listed.", false);
+
+                return;
+            }
+
+            $matches = filled($studentValue) && $this->matchesAnyOption($studentValue, $options);
+            $addCriterion(
+                $key,
+                $label,
+                filled($studentValue) ? ($matches ? 'pass' : 'fail') : 'missing',
+                $studentValue,
+                implode(', ', $options),
+                $matches ? "{$label} matches this scholarship." : "{$label} needs reviewer confirmation.",
+            );
+        };
+
+        if (filled($scholarship->minimum_gwa)) {
+            $studentGwa = $profile->gwa === null ? null : (float) $profile->gwa;
+            $minimumGwa = (float) $scholarship->minimum_gwa;
+
+            if ($studentGwa === null) {
+                $addCriterion('gwa', 'GWA / general average', 'missing', null, (string) $scholarship->minimum_gwa, 'Applicant has not added a GWA or general average yet.');
+            } else {
+                $usesGradePointScale = $profile->grading_scale === 'grade_point'
+                    || ($profile->grading_scale !== 'percentage' && $studentGwa <= 5 && $minimumGwa <= 5);
+                $isPassing = $usesGradePointScale ? $studentGwa <= $minimumGwa : $studentGwa >= $minimumGwa;
+                $addCriterion(
+                    'gwa',
+                    'GWA / general average',
+                    $isPassing ? 'pass' : 'fail',
+                    (string) $profile->gwa,
+                    (string) $scholarship->minimum_gwa,
+                    $isPassing ? 'Academic average meets the listed requirement.' : 'Academic average may need provider review.',
+                );
+            }
+        } else {
+            $addCriterion('gwa', 'GWA / general average', 'info', $profile->gwa === null ? null : (string) $profile->gwa, null, 'No minimum GWA or general average listed.', false);
+        }
+
+        $addOptionCriterion('education_level', 'Education level', $profile->education_level, $scholarship->eligible_education_levels, 'This scholarship is open to all education levels.');
+        $addOptionCriterion('course', 'Track / strand / course', $profile->course_or_strand, $scholarship->eligible_courses, 'This scholarship accepts any track, strand, or course.');
+        $addOptionCriterion('school_type', 'School type', $profile->school_type, $scholarship->eligible_school_types, 'This scholarship accepts any school type.');
+        $addOptionCriterion('year_level', 'Grade / year level', $profile->year_level, $scholarship->eligible_year_levels, 'This scholarship accepts any grade or year level.');
+
+        $studentLocation = collect([$profile->barangay, $profile->city, $profile->province, $profile->region, $profile->address])
+            ->filter()
+            ->implode(', ');
+        $addOptionCriterion('location', 'Location', $studentLocation ?: null, $scholarship->eligible_locations, 'This scholarship is open nationwide or has no location restriction.');
+
+        if (filled($scholarship->income_requirement) && ! $this->isOpenOption($scholarship->income_requirement)) {
+            $income = $profile->income_bracket;
+            $matchesIncome = filled($income) && $this->matchesAnyOption($income, [$scholarship->income_requirement]);
+            $addCriterion(
+                'income',
+                'Income bracket',
+                filled($income) ? ($matchesIncome ? 'pass' : 'fail') : 'missing',
+                $income,
+                $scholarship->income_requirement,
+                $matchesIncome ? 'Income bracket matches the listed preference.' : 'Income bracket needs provider review.',
+            );
+        } else {
+            $addCriterion('income', 'Income bracket', 'info', $profile->income_bracket, $scholarship->income_requirement, 'No income restriction listed.', false);
+        }
+
+        $score = $applicable === 0 ? 100 : (int) round(($passed / $applicable) * 100);
+
+        return [
+            'score' => $score,
+            'passed' => $passed,
+            'applicable' => $applicable,
+            'label' => $score >= 80 ? 'Strong match' : ($score >= 50 ? 'Needs review' : 'Low match'),
+            'summary' => $applicable === 0
+                ? 'This scholarship has no structured matching rules yet.'
+                : "{$passed} of {$applicable} structured criteria match the applicant profile.",
+            'criteria' => $criteria,
+        ];
     }
 
     private function documentScore(ScholarshipApplication $application): int
@@ -161,8 +297,8 @@ class DecisionSupportService
             default => 60,
         };
 
-        if ($requirement !== '' && ! in_array($requirement, ['any', 'none', 'no preference'], true)) {
-            return str_contains($income, $requirement) || str_contains($requirement, $income)
+        if ($requirement !== '' && ! $this->isOpenOption($requirement)) {
+            return $this->matchesAnyOption($income, [$requirement])
                 ? min(100, $score + 10)
                 : max(25, $score - 20);
         }
@@ -247,11 +383,94 @@ class DecisionSupportService
             return [];
         }
 
-        return collect(preg_split('/\r\n|\r|\n|,/', $scholarship->requirements))
-            ->map(fn (string $requirement) => trim($requirement))
+        $requirements = $this->splitOptions($scholarship->requirements);
+
+        return $this->hasOpenOption($requirements) ? [] : $requirements;
+    }
+
+    private function splitOptions(?string $value): array
+    {
+        if (! $value) {
+            return [];
+        }
+
+        return collect(preg_split('/\r\n|\r|\n|,/', $value))
+            ->map(fn (string $option) => trim($option))
             ->filter()
             ->values()
             ->all();
+    }
+
+    private function matchesAnyOption(string $value, array $options): bool
+    {
+        $normalizedValue = str($value)->lower()->squish()->toString();
+
+        if ($this->hasOpenOption($options)) {
+            return true;
+        }
+
+        return collect($options)->contains(function (string $option) use ($normalizedValue) {
+            $normalizedOption = str($option)->lower()->squish()->toString();
+
+            return str_contains($normalizedValue, $normalizedOption) || str_contains($normalizedOption, $normalizedValue);
+        });
+    }
+
+    private function hasOpenOption(array $options): bool
+    {
+        return collect($options)->contains(fn (string $option) => $this->isOpenOption($option));
+    }
+
+    private function isOpenOption(?string $option): bool
+    {
+        if (! filled($option)) {
+            return false;
+        }
+
+        $normalized = strtolower((string) preg_replace('/\s+/', ' ', trim(str_replace(['.', ';', ':'], '', $option))));
+
+        return in_array($normalized, [
+            'any',
+            'all',
+            'none',
+            'n/a',
+            'na',
+            'not applicable',
+            'no preference',
+            'no restriction',
+            'no restrictions',
+            'open to all',
+            'all students',
+            'any student',
+            'all applicants',
+            'any applicant',
+            'all education levels',
+            'any education level',
+            'all levels',
+            'any level',
+            'all courses',
+            'any course',
+            'all strands',
+            'any strand',
+            'all tracks',
+            'any track',
+            'all grades',
+            'any grade',
+            'all years',
+            'any year',
+            'all school types',
+            'any school type',
+            'all locations',
+            'any location',
+            'all regions',
+            'any region',
+            'nationwide',
+            'no income requirement',
+        ], true)
+            || str_contains($normalized, 'open to all')
+            || str_contains($normalized, 'no restriction')
+            || str_contains($normalized, 'no preference')
+            || str_contains($normalized, 'not applicable');
     }
 
     private function requirementPercent(array $requirements, array $completed): int

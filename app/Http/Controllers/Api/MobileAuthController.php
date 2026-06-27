@@ -849,7 +849,7 @@ class MobileAuthController extends Controller
         $studentLocation = collect([$profile?->barangay, $profile?->city, $profile?->province, $profile?->region, $profile?->address])->filter()->implode(', ');
         $this->addOptionCriterion($addCriterion, 'location', 'Location', $studentLocation ?: null, $scholarship->eligible_locations);
 
-        if (filled($scholarship->income_requirement) && ! in_array(strtolower($scholarship->income_requirement), ['any', 'none', 'no preference'], true)) {
+        if (filled($scholarship->income_requirement) && ! $this->isOpenOption($scholarship->income_requirement)) {
             $income = $profile?->income_bracket;
             $matchesIncome = filled($income) && $this->matchesAnyOption($income, [$scholarship->income_requirement]);
             $addCriterion('income', 'Income bracket', filled($income) ? ($matchesIncome ? 'pass' : 'fail') : 'missing', $income, $scholarship->income_requirement, $matchesIncome ? 'Income bracket matches.' : 'Review income requirement.');
@@ -875,6 +875,12 @@ class MobileAuthController extends Controller
             return;
         }
 
+        if ($this->hasOpenOption($options)) {
+            $addCriterion($key, $label, 'info', $studentValue, implode(', ', $options), "{$label} is open to all applicants.", false);
+
+            return;
+        }
+
         $matches = filled($studentValue) && $this->matchesAnyOption($studentValue, $options);
         $addCriterion($key, $label, filled($studentValue) ? ($matches ? 'pass' : 'fail') : 'missing', $studentValue, implode(', ', $options), $matches ? "{$label} matches." : "{$label} may need review.");
     }
@@ -892,11 +898,72 @@ class MobileAuthController extends Controller
     {
         $normalizedValue = str($value)->lower()->squish()->toString();
 
+        if ($this->hasOpenOption($options)) {
+            return true;
+        }
+
         return collect($options)->contains(function (string $option) use ($normalizedValue) {
             $normalizedOption = str($option)->lower()->squish()->toString();
 
             return str_contains($normalizedValue, $normalizedOption) || str_contains($normalizedOption, $normalizedValue);
         });
+    }
+
+    private function hasOpenOption(array $options): bool
+    {
+        return collect($options)->contains(fn (string $option) => $this->isOpenOption($option));
+    }
+
+    private function isOpenOption(?string $option): bool
+    {
+        if (! filled($option)) {
+            return false;
+        }
+
+        $normalized = strtolower((string) preg_replace('/\s+/', ' ', trim(str_replace(['.', ';', ':'], '', $option))));
+
+        return in_array($normalized, [
+            'any',
+            'all',
+            'none',
+            'n/a',
+            'na',
+            'not applicable',
+            'no preference',
+            'no restriction',
+            'no restrictions',
+            'open to all',
+            'all students',
+            'any student',
+            'all applicants',
+            'any applicant',
+            'all education levels',
+            'any education level',
+            'all levels',
+            'any level',
+            'all courses',
+            'any course',
+            'all strands',
+            'any strand',
+            'all tracks',
+            'any track',
+            'all grades',
+            'any grade',
+            'all years',
+            'any year',
+            'all school types',
+            'any school type',
+            'all locations',
+            'any location',
+            'all regions',
+            'any region',
+            'nationwide',
+            'no income requirement',
+        ], true)
+            || str_contains($normalized, 'open to all')
+            || str_contains($normalized, 'no restriction')
+            || str_contains($normalized, 'no preference')
+            || str_contains($normalized, 'not applicable');
     }
 
     private function documentRequirements(?Scholarship $scholarship): array
@@ -905,7 +972,9 @@ class MobileAuthController extends Controller
             return [];
         }
 
-        return $this->splitOptions($scholarship->requirements);
+        $requirements = $this->splitOptions($scholarship->requirements);
+
+        return $this->hasOpenOption($requirements) ? [] : $requirements;
     }
 
     private function preparedDocumentReadiness(Scholarship $scholarship, User $user): array

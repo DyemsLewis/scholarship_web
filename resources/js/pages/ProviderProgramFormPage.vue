@@ -31,6 +31,7 @@ const applicationModeOptions = [
     { value: 'provider_review', label: 'Provider review only' },
 ];
 const educationLevelOptions = [
+    { value: 'preschool', label: 'Preschool / Kindergarten' },
     { value: 'elementary', label: 'Elementary' },
     { value: 'junior_high_school', label: 'Junior High School' },
     { value: 'senior_high_school', label: 'Senior High School' },
@@ -39,6 +40,7 @@ const educationLevelOptions = [
     { value: 'als', label: 'ALS / Alternative Learning' },
 ];
 const schoolTypeOptions = [
+    { value: 'daycare_learning_center', label: 'Daycare / learning center' },
     { value: 'public', label: 'Public school' },
     { value: 'private', label: 'Private school' },
     { value: 'state_university', label: 'State university / college' },

@@ -788,11 +788,13 @@ class ApplicantDashboardController extends Controller
             return [];
         }
 
-        return collect(preg_split('/\r\n|\r|\n|,/', $requirements))
+        $requirements = collect(preg_split('/\r\n|\r|\n|,/', $requirements))
             ->map(fn (string $requirement) => trim($requirement))
             ->filter()
             ->values()
             ->all();
+
+        return $this->hasOpenOption($requirements) ? [] : $requirements;
     }
 
     private function documentLibraryOptions(Request $request): array
@@ -1020,7 +1022,9 @@ class ApplicantDashboardController extends Controller
         }
 
         $educationLevelOptions = $this->splitOptions($scholarship->eligible_education_levels);
-        if ($educationLevelOptions !== []) {
+        if ($this->hasOpenOption($educationLevelOptions)) {
+            $addCriterion('education_level', 'Education level', 'info', $profile?->education_level, implode(', ', $educationLevelOptions), 'This program is open to all education levels.', false);
+        } elseif ($educationLevelOptions !== []) {
             $studentEducationLevel = $profile?->education_level;
             $matchesEducationLevel = filled($studentEducationLevel) && $this->matchesAnyOption($studentEducationLevel, $educationLevelOptions);
             $addCriterion(
@@ -1036,7 +1040,9 @@ class ApplicantDashboardController extends Controller
         }
 
         $courseOptions = $this->splitOptions($scholarship->eligible_courses);
-        if ($courseOptions !== []) {
+        if ($this->hasOpenOption($courseOptions)) {
+            $addCriterion('course', 'Track / strand / course', 'info', $profile?->course_or_strand, implode(', ', $courseOptions), 'This program accepts any track, strand, or course.', false);
+        } elseif ($courseOptions !== []) {
             $studentCourse = $profile?->course_or_strand;
             $matchesCourse = filled($studentCourse) && $this->matchesAnyOption($studentCourse, $courseOptions);
             $addCriterion(
@@ -1052,7 +1058,9 @@ class ApplicantDashboardController extends Controller
         }
 
         $schoolTypeOptions = $this->splitOptions($scholarship->eligible_school_types);
-        if ($schoolTypeOptions !== []) {
+        if ($this->hasOpenOption($schoolTypeOptions)) {
+            $addCriterion('school_type', 'School type', 'info', $profile?->school_type, implode(', ', $schoolTypeOptions), 'This program accepts any school type.', false);
+        } elseif ($schoolTypeOptions !== []) {
             $studentSchoolType = $profile?->school_type;
             $matchesSchoolType = filled($studentSchoolType) && $this->matchesAnyOption($studentSchoolType, $schoolTypeOptions);
             $addCriterion(
@@ -1068,7 +1076,9 @@ class ApplicantDashboardController extends Controller
         }
 
         $yearOptions = $this->splitOptions($scholarship->eligible_year_levels);
-        if ($yearOptions !== []) {
+        if ($this->hasOpenOption($yearOptions)) {
+            $addCriterion('year_level', 'Grade / year level', 'info', $profile?->year_level, implode(', ', $yearOptions), 'This program accepts any grade or year level.', false);
+        } elseif ($yearOptions !== []) {
             $studentYear = $profile?->year_level;
             $matchesYear = filled($studentYear) && $this->matchesAnyOption($studentYear, $yearOptions);
             $addCriterion(
@@ -1084,7 +1094,9 @@ class ApplicantDashboardController extends Controller
         }
 
         $locationOptions = $this->splitOptions($scholarship->eligible_locations);
-        if ($locationOptions !== []) {
+        if ($this->hasOpenOption($locationOptions)) {
+            $addCriterion('location', 'Location', 'info', $profile?->region ?? $profile?->province ?? $profile?->city, implode(', ', $locationOptions), 'This program is open to all listed locations.', false);
+        } elseif ($locationOptions !== []) {
             $studentLocation = collect([$profile?->barangay, $profile?->city, $profile?->province, $profile?->region, $profile?->address])->filter()->implode(', ');
             $matchesLocation = filled($studentLocation) && $this->matchesAnyOption($studentLocation, $locationOptions);
             $addCriterion(
@@ -1099,7 +1111,7 @@ class ApplicantDashboardController extends Controller
             $addCriterion('location', 'Location', 'info', $profile?->region ?? $profile?->province ?? $profile?->city, null, 'No location restriction listed.', false);
         }
 
-        if (filled($scholarship->income_requirement) && ! in_array(strtolower($scholarship->income_requirement), ['any', 'none', 'no preference'], true)) {
+        if (filled($scholarship->income_requirement) && ! $this->isOpenOption($scholarship->income_requirement)) {
             $income = $profile?->income_bracket;
             $matchesIncome = filled($income) && $this->matchesAnyOption($income, [$scholarship->income_requirement]);
             $addCriterion(
@@ -1162,11 +1174,72 @@ class ApplicantDashboardController extends Controller
     {
         $normalizedValue = str($value)->lower()->squish()->toString();
 
+        if ($this->hasOpenOption($options)) {
+            return true;
+        }
+
         return collect($options)->contains(function (string $option) use ($normalizedValue) {
             $normalizedOption = str($option)->lower()->squish()->toString();
 
             return str_contains($normalizedValue, $normalizedOption) || str_contains($normalizedOption, $normalizedValue);
         });
+    }
+
+    private function hasOpenOption(array $options): bool
+    {
+        return collect($options)->contains(fn (string $option) => $this->isOpenOption($option));
+    }
+
+    private function isOpenOption(?string $option): bool
+    {
+        if (! filled($option)) {
+            return false;
+        }
+
+        $normalized = strtolower((string) preg_replace('/\s+/', ' ', trim(str_replace(['.', ';', ':'], '', $option))));
+
+        return in_array($normalized, [
+            'any',
+            'all',
+            'none',
+            'n/a',
+            'na',
+            'not applicable',
+            'no preference',
+            'no restriction',
+            'no restrictions',
+            'open to all',
+            'all students',
+            'any student',
+            'all applicants',
+            'any applicant',
+            'all education levels',
+            'any education level',
+            'all levels',
+            'any level',
+            'all courses',
+            'any course',
+            'all strands',
+            'any strand',
+            'all tracks',
+            'any track',
+            'all grades',
+            'any grade',
+            'all years',
+            'any year',
+            'all school types',
+            'any school type',
+            'all locations',
+            'any location',
+            'all regions',
+            'any region',
+            'nationwide',
+            'no income requirement',
+        ], true)
+            || str_contains($normalized, 'open to all')
+            || str_contains($normalized, 'no restriction')
+            || str_contains($normalized, 'no preference')
+            || str_contains($normalized, 'not applicable');
     }
 
     private function notificationsPayload(Request $request): array
