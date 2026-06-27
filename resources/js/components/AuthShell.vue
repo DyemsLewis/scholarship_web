@@ -48,10 +48,6 @@ defineProps({
         required: true,
     },
 });
-
-function assetUrl(path) {
-    return window.appAssetUrl ? window.appAssetUrl(path) : path;
-}
 </script>
 
 <template>
@@ -82,12 +78,6 @@ function assetUrl(path) {
                             <p class="mt-4 max-w-md text-sm leading-7 text-slate-300">
                                 {{ panelText }}
                             </p>
-
-                            <img
-                                :src="assetUrl('/images/auth-portal.jpg')"
-                                alt="Student study desk"
-                                class="mt-6 w-full rounded-lg border border-white/10 bg-white/[0.04] object-cover shadow-2xl shadow-slate-950/25"
-                            >
                         </div>
 
                         <div class="space-y-4">

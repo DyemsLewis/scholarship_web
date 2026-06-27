@@ -9,6 +9,11 @@ const errorMessage = ref('');
 const statusMessage = ref('');
 const validationErrors = ref({});
 const user = ref(null);
+const verificationDocuments = ref([]);
+const verificationDocumentType = ref('organization_registration');
+const verificationDocumentFile = ref(null);
+const isUploadingDocument = ref(false);
+const deletingDocumentId = ref(null);
 const form = reactive({
     first_name: '',
     last_name: '',
@@ -32,6 +37,13 @@ const providerTypeOptions = [
     { value: 'non_profit', label: 'Non-profit Organization' },
     { value: 'other', label: 'Other Provider' },
 ];
+const verificationDocumentOptions = [
+    { value: 'organization_registration', label: 'Organization registration' },
+    { value: 'authorization_letter', label: 'Authorization letter' },
+    { value: 'valid_id', label: 'Authorized representative ID' },
+    { value: 'school_or_office_proof', label: 'School / office proof' },
+    { value: 'other', label: 'Other proof document' },
+];
 const providerTypeLabels = Object.fromEntries(
     providerTypeOptions.filter((option) => option.value).map((option) => [option.value, option.label]),
 );
@@ -51,6 +63,10 @@ function applyUser(payload) {
     form.provider_website = payload?.provider_website ?? '';
     form.provider_address = payload?.provider_address ?? '';
     form.provider_description = payload?.provider_description ?? '';
+}
+
+function applyVerificationDocuments(documents) {
+    verificationDocuments.value = documents ?? [];
 }
 
 function fieldError(field) {
@@ -75,6 +91,23 @@ function verificationClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function documentTypeLabel(type) {
+    return verificationDocumentOptions.find((option) => option.value === type)?.label
+        ?? String(type ?? 'Document').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatFileSize(size) {
+    if (!size) {
+        return '0 KB';
+    }
+
+    return `${Math.max(1, Math.round(Number(size) / 1024))} KB`;
+}
+
+function handleVerificationFile(event) {
+    verificationDocumentFile.value = event.target.files?.[0] ?? null;
+}
+
 async function loadProviderProfile() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -84,10 +117,59 @@ async function loadProviderProfile() {
         const response = await window.axios.get('/provider/profile/data');
 
         applyUser(response.data.user);
+        applyVerificationDocuments(response.data.verification_documents);
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider profile.';
     } finally {
         isLoading.value = false;
+    }
+}
+
+async function uploadVerificationDocument() {
+    if (!verificationDocumentFile.value) {
+        errorMessage.value = 'Choose a verification file before uploading.';
+        return;
+    }
+
+    isUploadingDocument.value = true;
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    const payload = new FormData();
+    payload.append('document_type', verificationDocumentType.value);
+    payload.append('document_file', verificationDocumentFile.value);
+
+    try {
+        const response = await window.axios.post('/provider/verification-documents', payload, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+
+        applyVerificationDocuments(response.data.verification_documents);
+        verificationDocumentFile.value = null;
+        statusMessage.value = response.data.message ?? 'Verification document uploaded.';
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to upload verification document.';
+    } finally {
+        isUploadingDocument.value = false;
+    }
+}
+
+async function deleteVerificationDocument(document) {
+    deletingDocumentId.value = document.id;
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    try {
+        const response = await window.axios.delete(`/provider/verification-documents/${document.id}`);
+
+        applyVerificationDocuments(response.data.verification_documents);
+        statusMessage.value = response.data.message ?? 'Verification document removed.';
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to remove verification document.';
+    } finally {
+        deletingDocumentId.value = null;
     }
 }
 
@@ -167,6 +249,94 @@ onMounted(loadProviderProfile);
                             <span :class="['w-fit rounded-md px-3 py-1.5 text-xs font-bold uppercase', verificationClass(user?.verification_status)]">
                                 {{ verificationLabel(user?.verification_status) }}
                             </span>
+                        </div>
+                    </section>
+
+                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                    Verification Documents
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    Upload proof for admin review
+                                </h3>
+                                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                    Add organization registration, authorization letter, representative ID, or school/office proof. Admins can use these files before approving scholarship publishing access.
+                                </p>
+                            </div>
+                            <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+                                {{ verificationDocuments.length }} file{{ verificationDocuments.length === 1 ? '' : 's' }}
+                            </span>
+                        </div>
+
+                        <div class="mt-5 grid gap-3 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
+                            <label>
+                                <span :class="labelClass">Document type</span>
+                                <select v-model="verificationDocumentType" :class="inputClass">
+                                    <option
+                                        v-for="option in verificationDocumentOptions"
+                                        :key="option.value"
+                                        :value="option.value"
+                                    >
+                                        {{ option.label }}
+                                    </option>
+                                </select>
+                            </label>
+                            <label>
+                                <span :class="labelClass">File</span>
+                                <input
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                    class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white"
+                                    @change="handleVerificationFile"
+                                >
+                            </label>
+                            <button
+                                type="button"
+                                :disabled="isUploadingDocument"
+                                class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                @click="uploadVerificationDocument"
+                            >
+                                {{ isUploadingDocument ? 'Uploading...' : 'Upload proof' }}
+                            </button>
+                        </div>
+
+                        <div v-if="verificationDocuments.length === 0" class="mt-5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                            No verification documents uploaded yet.
+                        </div>
+
+                        <div v-else class="mt-5 grid gap-3">
+                            <div
+                                v-for="document in verificationDocuments"
+                                :key="document.id"
+                                class="flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                                <div class="min-w-0">
+                                    <p class="font-bold text-slate-950">
+                                        {{ documentTypeLabel(document.document_type) }}
+                                    </p>
+                                    <p class="mt-1 truncate text-xs text-slate-500">
+                                        {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at || 'Recently uploaded' }}
+                                    </p>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <a
+                                        :href="document.download_url"
+                                        class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                    >
+                                        Download
+                                    </a>
+                                    <button
+                                        type="button"
+                                        :disabled="deletingDocumentId === document.id"
+                                        class="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                        @click="deleteVerificationDocument(document)"
+                                    >
+                                        {{ deletingDocumentId === document.id ? 'Removing...' : 'Remove' }}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </section>
 

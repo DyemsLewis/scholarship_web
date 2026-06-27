@@ -14,6 +14,11 @@ const stats = ref({
     scholarships: 0,
     applications: 0,
     pending_providers: 0,
+    documents_pending_review: 0,
+    documents_needing_replacement: 0,
+    upcoming_deadlines: 0,
+    expired_published: 0,
+    needs_review_applications: 0,
 });
 const users = ref([]);
 
@@ -38,6 +43,52 @@ const focusItems = computed(() => [
     },
 ]);
 const recentUsers = computed(() => users.value.slice(0, 4));
+const platformSignals = computed(() => [
+    {
+        label: 'Provider approval queue',
+        tone: (stats.value.pending_providers || 0) > 0 ? 'warn' : 'good',
+        detail: (stats.value.pending_providers || 0) > 0
+            ? `${stats.value.pending_providers} provider account${stats.value.pending_providers === 1 ? '' : 's'} waiting for verification.`
+            : 'No provider approvals waiting.',
+        href: '/admin/reviews',
+        action: 'Open reviews',
+    },
+    {
+        label: 'Document review backlog',
+        tone: (stats.value.documents_pending_review || 0) > 0 || (stats.value.documents_needing_replacement || 0) > 0 ? 'warn' : 'good',
+        detail: `${stats.value.documents_pending_review || 0} pending review, ${stats.value.documents_needing_replacement || 0} needing replacement.`,
+        href: '/admin/reviews',
+        action: 'Check documents',
+    },
+    {
+        label: 'Deadline monitoring',
+        tone: (stats.value.expired_published || 0) > 0 || (stats.value.upcoming_deadlines || 0) > 0 ? 'warn' : 'good',
+        detail: `${stats.value.upcoming_deadlines || 0} upcoming deadline${(stats.value.upcoming_deadlines || 0) === 1 ? '' : 's'}, ${stats.value.expired_published || 0} expired published program${(stats.value.expired_published || 0) === 1 ? '' : 's'}.`,
+        href: '/admin/platform-analytics',
+        action: 'View analytics',
+    },
+    {
+        label: 'DSS review load',
+        tone: (stats.value.needs_review_applications || 0) > 0 ? 'info' : 'good',
+        detail: (stats.value.needs_review_applications || 0) > 0
+            ? `${stats.value.needs_review_applications} application${stats.value.needs_review_applications === 1 ? '' : 's'} need closer review.`
+            : 'No DSS review load detected.',
+        href: '/admin/reviews',
+        action: 'Review applications',
+    },
+]);
+
+function signalClass(tone) {
+    if (tone === 'good') {
+        return 'border-emerald-100 bg-emerald-50 text-emerald-800';
+    }
+
+    if (tone === 'warn') {
+        return 'border-amber-100 bg-amber-50 text-amber-900';
+    }
+
+    return 'border-sky-100 bg-sky-50 text-sky-800';
+}
 
 function roleClass(role) {
     if (role === 'admin') {
@@ -136,6 +187,41 @@ onMounted(loadAdminData);
                                 </p>
                                 <p class="mt-4 text-sm font-bold text-slate-700">
                                     {{ item.action }}
+                                </p>
+                            </a>
+                        </div>
+                    </section>
+
+                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                    Platform Risk Signals
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    Data checks that need admin attention
+                                </h3>
+                            </div>
+                            <p class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+                                Reviews, documents, deadlines, DSS
+                            </p>
+                        </div>
+
+                        <div class="mt-5 grid gap-3 lg:grid-cols-4">
+                            <a
+                                v-for="signal in platformSignals"
+                                :key="signal.label"
+                                :href="signal.href"
+                                :class="['rounded-lg border p-4 transition hover:bg-white', signalClass(signal.tone)]"
+                            >
+                                <p class="text-sm font-bold">
+                                    {{ signal.label }}
+                                </p>
+                                <p class="mt-2 min-h-12 text-sm leading-6 opacity-85">
+                                    {{ signal.detail }}
+                                </p>
+                                <p class="mt-4 text-sm font-bold">
+                                    {{ signal.action }}
                                 </p>
                             </a>
                         </div>

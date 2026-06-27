@@ -31,6 +31,16 @@ const documentStatusOptions = [
     { value: 'needs_replacement', label: 'Needs replacement' },
     { value: 'rejected', label: 'Rejected' },
 ];
+const prioritizedDocumentReviewQueue = computed(() => [...documentReviewQueue.value].sort((first, second) => {
+    const priority = {
+        rejected: 4,
+        needs_replacement: 3,
+        pending: 2,
+        accepted: 0,
+    };
+
+    return (priority[second.status ?? 'pending'] ?? 1) - (priority[first.status ?? 'pending'] ?? 1);
+}));
 
 function barWidth(value, max) {
     const numericValue = Number(value ?? 0);
@@ -65,6 +75,38 @@ function documentStatusClass(status) {
 
     if (status === 'needs_replacement') {
         return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-sky-100 text-sky-800';
+}
+
+function documentPriorityLabel(document) {
+    if (document.status === 'needs_replacement') {
+        return 'Replacement needed';
+    }
+
+    if (document.status === 'rejected') {
+        return 'Rejected file';
+    }
+
+    if (document.status === 'accepted') {
+        return 'Checked';
+    }
+
+    return 'Needs decision';
+}
+
+function documentPriorityClass(document) {
+    if (document.status === 'needs_replacement') {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    if (document.status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (document.status === 'accepted') {
+        return 'bg-emerald-100 text-emerald-800';
     }
 
     return 'bg-sky-100 text-sky-800';
@@ -258,7 +300,7 @@ onMounted(loadInsights);
 
                         <div v-else class="mt-5 grid gap-3 lg:grid-cols-2">
                             <article
-                                v-for="document in documentReviewQueue"
+                                v-for="document in prioritizedDocumentReviewQueue"
                                 :key="document.id"
                                 class="rounded-md border border-slate-200 bg-slate-50 p-3"
                             >
@@ -281,9 +323,14 @@ onMounted(loadInsights);
                                                     {{ document.applicant || 'Applicant' }} - {{ document.original_name }}
                                                 </p>
                                             </div>
-                                            <span :class="['h-fit w-fit rounded-md px-2.5 py-1 text-[11px] font-bold uppercase', documentStatusClass(document.status)]">
-                                                {{ labelFromKey(document.status || 'pending') }}
-                                            </span>
+                                            <div class="flex flex-wrap gap-2">
+                                                <span :class="['h-fit w-fit rounded-md px-2.5 py-1 text-[11px] font-bold uppercase', documentPriorityClass(document)]">
+                                                    {{ documentPriorityLabel(document) }}
+                                                </span>
+                                                <span :class="['h-fit w-fit rounded-md px-2.5 py-1 text-[11px] font-bold uppercase', documentStatusClass(document.status)]">
+                                                    {{ labelFromKey(document.status || 'pending') }}
+                                                </span>
+                                            </div>
                                         </div>
 
                                         <div class="mt-3 flex flex-wrap gap-2 text-[11px] font-bold text-slate-600">

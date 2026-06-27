@@ -11,11 +11,13 @@ use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
+use App\Models\StudentDocument;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -124,16 +126,19 @@ class MobileAuthController extends Controller
             ->latest('submitted_at')
             ->get();
         $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
+        $this->syncApplicantReminders($user);
 
         return response()->json([
             'user' => $this->userPayload($user),
             'stats' => $this->statsPayload($user),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $user))->values(),
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
+            'notifications' => $this->notificationsPayload($user),
             'next_steps' => [
                 'Complete your applicant profile for better match scores.',
+                'Upload prepared documents before applying to faster-moving programs.',
                 'Save scholarship programs you want to revisit.',
-                'Use the application wizard on web or mobile to submit requirements.',
+                'Use the application wizard to confirm requirements and submit applications.',
             ],
         ]);
     }
@@ -153,13 +158,22 @@ class MobileAuthController extends Controller
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'education_level' => ['nullable', 'string', 'max:100'],
             'school' => ['nullable', 'string', 'max:255'],
+            'school_type' => ['nullable', 'string', 'max:100'],
+            'learner_reference_number' => ['nullable', 'string', 'max:50', 'regex:/^[A-Za-z0-9_.-]*$/'],
             'course_or_strand' => ['nullable', 'string', 'max:255'],
             'year_level' => ['nullable', 'string', 'max:100'],
             'enrollment_status' => ['nullable', 'string', 'max:100'],
             'gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'grading_scale' => ['nullable', Rule::in(['percentage', 'grade_point'])],
             'income_bracket' => ['nullable', 'string', 'max:100'],
+            'household_size' => ['nullable', 'integer', 'min:1', 'max:30'],
+            'preferred_categories' => ['nullable', 'string', 'max:1000'],
+            'preferred_locations' => ['nullable', 'string', 'max:1000'],
+            'willing_to_relocate' => ['nullable', Rule::in(['yes', 'no', 'depends'])],
+            'support_needs' => ['nullable', 'string', 'max:1500'],
+            'scholarship_goal' => ['nullable', 'string', 'max:1500'],
             'address' => ['nullable', 'string', 'max:500'],
             'barangay' => ['nullable', 'string', 'max:255'],
             'city' => ['nullable', 'string', 'max:255'],
@@ -195,6 +209,129 @@ class MobileAuthController extends Controller
         return response()->json([
             'message' => 'Applicant profile updated.',
             'user' => $this->userPayload($user->fresh()),
+        ]);
+    }
+
+    public function documents(Request $request): JsonResponse
+    {
+        [$token, $user] = $this->resolveToken($request);
+
+        if (! $token || ! $user) {
+            return response()->json([
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
+        $token->forceFill(['last_used_at' => now()])->save();
+        $applications = ScholarshipApplication::query()
+            ->with(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
+            ->where('applicant_id', $user->id)
+            ->latest('submitted_at')
+            ->get();
+        $documents = $applications->flatMap(fn (ScholarshipApplication $application) => $application->documents);
+        $studentDocuments = StudentDocument::query()
+            ->where('user_id', $user->id)
+            ->latest('uploaded_at')
+            ->get();
+        $this->syncApplicantReminders($user);
+
+        return response()->json([
+            'user' => $this->userPayload($user),
+            'stats' => [
+                'applications' => $applications->count(),
+                'prepared' => $studentDocuments->count(),
+                'uploaded' => $documents->count(),
+                'accepted' => $documents->where('status', 'accepted')->count(),
+                'pending' => $documents->where('status', 'pending')->count(),
+                'needs_attention' => $documents->whereIn('status', ['rejected', 'needs_replacement'])->count(),
+            ],
+            'document_options' => $this->documentLibraryOptions($user),
+            'prepared_documents' => $studentDocuments->map(fn (StudentDocument $document) => $this->studentDocumentPayload($document))->values(),
+            'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
+        ]);
+    }
+
+    public function uploadPreparedDocument(Request $request): JsonResponse
+    {
+        [$token, $user] = $this->resolveToken($request);
+
+        if (! $token || ! $user) {
+            return response()->json([
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
+        $validated = $request->validate([
+            'document_name' => ['required', 'string', 'max:255'],
+            'document_file' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
+        ]);
+
+        $documentName = trim($validated['document_name']);
+        $file = $validated['document_file'];
+        $existing = StudentDocument::query()
+            ->where('user_id', $user->id)
+            ->where('document_name', $documentName)
+            ->first();
+
+        if ($existing) {
+            Storage::disk('local')->delete($existing->path);
+        }
+
+        $path = $file->store("student-documents/{$user->id}");
+        $document = StudentDocument::query()->updateOrCreate([
+            'user_id' => $user->id,
+            'document_name' => $documentName,
+        ], [
+            'original_name' => $file->getClientOriginalName(),
+            'path' => $path,
+            'mime_type' => $file->getClientMimeType(),
+            'size' => $file->getSize(),
+            'uploaded_at' => now(),
+        ]);
+
+        ActivityLog::record(
+            $user,
+            'mobile_prepared_document_uploaded',
+            "{$user->name} uploaded prepared document {$document->document_name} from mobile.",
+            $request,
+            ['student_document_id' => $document->id],
+        );
+
+        return response()->json([
+            'message' => 'Prepared document saved.',
+            'document' => $this->studentDocumentPayload($document),
+        ]);
+    }
+
+    public function deletePreparedDocument(Request $request, StudentDocument $document): JsonResponse
+    {
+        [$token, $user] = $this->resolveToken($request);
+
+        if (! $token || ! $user) {
+            return response()->json([
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
+        if ($document->user_id !== $user->id) {
+            return response()->json([
+                'message' => 'Document not found.',
+            ], 404);
+        }
+
+        Storage::disk('local')->delete($document->path);
+        $documentName = $document->document_name;
+        $document->delete();
+
+        ActivityLog::record(
+            $user,
+            'mobile_prepared_document_deleted',
+            "{$user->name} removed prepared document {$documentName} from mobile.",
+            $request,
+        );
+
+        return response()->json([
+            'message' => 'Prepared document removed.',
         ]);
     }
 
@@ -251,6 +388,7 @@ class MobileAuthController extends Controller
             'changed_at' => now(),
         ]);
 
+        $this->attachPreparedDocumentsToApplication($user, $application, $validated['document_checklist'] ?? []);
         app(DecisionSupportService::class)->syncApplication($application);
 
         ActivityLog::record(
@@ -350,6 +488,31 @@ class MobileAuthController extends Controller
         ]);
     }
 
+    public function markNotificationRead(Request $request, PortalNotification $notification): JsonResponse
+    {
+        [$token, $user] = $this->resolveToken($request);
+
+        if (! $token || ! $user) {
+            return response()->json([
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
+        if ($notification->user_id !== $user->id) {
+            return response()->json([
+                'message' => 'Notification not found.',
+            ], 404);
+        }
+
+        $notification->markRead();
+        $token->forceFill(['last_used_at' => now()])->save();
+
+        return response()->json([
+            'message' => 'Notification marked as read.',
+            'notifications' => $this->notificationsPayload($user),
+        ]);
+    }
+
     private function createToken(User $user): string
     {
         $plainToken = Str::random(80);
@@ -413,8 +576,30 @@ class MobileAuthController extends Controller
         ];
     }
 
+    private function notificationsPayload(User $user): array
+    {
+        return PortalNotification::query()
+            ->where('user_id', $user->id)
+            ->latest()
+            ->limit(8)
+            ->get()
+            ->map(fn (PortalNotification $notification) => [
+                'id' => $notification->id,
+                'type' => $notification->type,
+                'title' => $notification->title,
+                'message' => $notification->message,
+                'action_url' => $notification->action_url,
+                'read_at' => $notification->read_at?->format('M d, Y h:i A'),
+                'created_at' => $notification->created_at?->format('M d, Y h:i A'),
+            ])
+            ->values()
+            ->all();
+    }
+
     private function scholarshipPayload(Scholarship $scholarship, User $user): array
     {
+        $match = $this->eligibilityMatch($scholarship, $user);
+        $preparedDocuments = $this->preparedDocumentReadiness($scholarship, $user);
         $distanceKm = $this->distanceKm($user->studentProfile, $scholarship);
         $hasApplied = ScholarshipApplication::query()
             ->where('scholarship_id', $scholarship->id)
@@ -429,7 +614,9 @@ class MobileAuthController extends Controller
             'category' => $scholarship->category,
             'description' => $scholarship->description,
             'eligibility' => $scholarship->eligibility,
+            'eligible_education_levels' => $scholarship->eligible_education_levels,
             'eligible_courses' => $scholarship->eligible_courses,
+            'eligible_school_types' => $scholarship->eligible_school_types,
             'eligible_year_levels' => $scholarship->eligible_year_levels,
             'eligible_locations' => $scholarship->eligible_locations,
             'income_requirement' => $scholarship->income_requirement,
@@ -444,6 +631,11 @@ class MobileAuthController extends Controller
             'requirements' => $scholarship->requirements,
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
+            'slots_available' => $scholarship->slots_available,
+            'application_mode' => $scholarship->application_mode,
+            'renewal_policy' => $scholarship->renewal_policy,
+            'contact_email' => $scholarship->contact_email,
+            'contact_number' => $scholarship->contact_number,
             'deadline' => $scholarship->deadline?->format('M d, Y'),
             'bookmarks_count' => $scholarship->bookmarks_count ?? $scholarship->bookmarks()->count(),
             'is_saved' => ScholarshipBookmark::query()
@@ -451,7 +643,17 @@ class MobileAuthController extends Controller
                 ->where('user_id', $user->id)
                 ->exists(),
             'has_applied' => $hasApplied,
-            'eligibility_match' => $this->eligibilityMatch($scholarship, $user),
+            'eligibility_match' => $match,
+            'prepared_documents' => $preparedDocuments,
+            'eligibility_guide' => [
+                'requires_gwa' => filled($scholarship->minimum_gwa),
+                'minimum_gwa' => $scholarship->minimum_gwa,
+                'required_documents' => count($this->documentRequirements($scholarship)),
+                'prepared_documents' => $preparedDocuments['uploaded'],
+                'note' => filled($scholarship->minimum_gwa)
+                    ? "Check that your GWA or average meets {$scholarship->minimum_gwa} before applying."
+                    : 'No minimum GWA or average is listed for this scholarship.',
+            ],
             'provider' => [
                 'name' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
                 'type' => $scholarship->provider?->provider_type,
@@ -471,27 +673,23 @@ class MobileAuthController extends Controller
     private function mapUrl(Scholarship $scholarship): ?string
     {
         if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
-            return 'https://www.google.com/maps/search/?api=1&query='.rawurlencode("{$scholarship->latitude},{$scholarship->longitude}");
+            return "https://www.openstreetmap.org/?mlat={$scholarship->latitude}&mlon={$scholarship->longitude}#map=15/{$scholarship->latitude}/{$scholarship->longitude}";
         }
 
         $query = $scholarship->location_address ?: $scholarship->location_name;
 
         return filled($query)
-            ? 'https://www.google.com/maps/search/?api=1&query='.rawurlencode($query)
+            ? 'https://www.openstreetmap.org/search?query='.rawurlencode($query)
             : null;
     }
 
     private function embedMapUrl(Scholarship $scholarship): ?string
     {
         if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
-            return 'https://maps.google.com/maps?q='.rawurlencode("{$scholarship->latitude},{$scholarship->longitude}").'&z=15&output=embed';
+            return "https://www.openstreetmap.org/export/embed.html?marker={$scholarship->latitude},{$scholarship->longitude}&layer=mapnik";
         }
 
-        $query = $scholarship->location_address ?: $scholarship->location_name;
-
-        return filled($query)
-            ? 'https://maps.google.com/maps?q='.rawurlencode($query).'&z=15&output=embed'
-            : null;
+        return null;
     }
 
     private function distanceKm($profile, Scholarship $scholarship): ?float
@@ -545,6 +743,9 @@ class MobileAuthController extends Controller
             'notes' => $application->notes,
             'review_notes' => $application->review_notes,
             'decision_reason' => $application->decision_reason,
+            'awarded_amount' => $application->awarded_amount,
+            'outcome_notes' => $application->outcome_notes,
+            'outcome_at' => $application->outcome_at?->format('M d, Y'),
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             'scholarship' => $application->scholarship
@@ -562,6 +763,10 @@ class MobileAuthController extends Controller
             ->filter(fn (ApplicationDocument $document) => $document->status === 'accepted')
             ->map(fn (ApplicationDocument $document) => $document->document_name);
         $requiredCount = count($requiredDocuments);
+        $missingDocuments = collect($requiredDocuments)
+            ->reject(fn (string $requirement) => $uploadedDocuments->contains($requirement))
+            ->values()
+            ->all();
 
         return [
             'required' => $requiredCount,
@@ -571,6 +776,7 @@ class MobileAuthController extends Controller
             'uploaded_percent' => $requiredCount === 0 ? 100 : (int) round(($this->requirementCount($requiredDocuments, $uploadedDocuments->all()) / $requiredCount) * 100),
             'accepted' => $this->requirementCount($requiredDocuments, $acceptedDocuments->all()),
             'accepted_percent' => $requiredCount === 0 ? 100 : (int) round(($this->requirementCount($requiredDocuments, $acceptedDocuments->all()) / $requiredCount) * 100),
+            'missing' => $missingDocuments,
         ];
     }
 
@@ -627,17 +833,19 @@ class MobileAuthController extends Controller
             $minimumGwa = (float) $scholarship->minimum_gwa;
 
             if ($studentGwa === null) {
-                $addCriterion('gwa', 'GWA / average', 'missing', null, (string) $scholarship->minimum_gwa, 'Add your GWA in your profile.');
+                $addCriterion('gwa', 'GWA / general average', 'missing', null, (string) $scholarship->minimum_gwa, 'Add your GWA or general average in your profile.');
             } else {
                 $usesGradePointScale = $profile?->grading_scale === 'grade_point'
                     || ($profile?->grading_scale !== 'percentage' && $studentGwa <= 5 && $minimumGwa <= 5);
                 $isPassing = $usesGradePointScale ? $studentGwa <= $minimumGwa : $studentGwa >= $minimumGwa;
-                $addCriterion('gwa', 'GWA / average', $isPassing ? 'pass' : 'fail', (string) $profile->gwa, (string) $scholarship->minimum_gwa, $isPassing ? 'Your average meets this requirement.' : 'Your average may need review.');
+                $addCriterion('gwa', 'GWA / general average', $isPassing ? 'pass' : 'fail', (string) $profile->gwa, (string) $scholarship->minimum_gwa, $isPassing ? 'Your average meets this requirement.' : 'Your average may need review.');
             }
         }
 
-        $this->addOptionCriterion($addCriterion, 'course', 'Course / strand', $profile?->course_or_strand, $scholarship->eligible_courses);
-        $this->addOptionCriterion($addCriterion, 'year_level', 'Year level', $profile?->year_level, $scholarship->eligible_year_levels);
+        $this->addOptionCriterion($addCriterion, 'education_level', 'Education level', $profile?->education_level, $scholarship->eligible_education_levels);
+        $this->addOptionCriterion($addCriterion, 'course', 'Track / strand / course', $profile?->course_or_strand, $scholarship->eligible_courses);
+        $this->addOptionCriterion($addCriterion, 'school_type', 'School type', $profile?->school_type, $scholarship->eligible_school_types);
+        $this->addOptionCriterion($addCriterion, 'year_level', 'Grade / year level', $profile?->year_level, $scholarship->eligible_year_levels);
         $studentLocation = collect([$profile?->barangay, $profile?->city, $profile?->province, $profile?->region, $profile?->address])->filter()->implode(', ');
         $this->addOptionCriterion($addCriterion, 'location', 'Location', $studentLocation ?: null, $scholarship->eligible_locations);
 
@@ -698,6 +906,194 @@ class MobileAuthController extends Controller
         }
 
         return $this->splitOptions($scholarship->requirements);
+    }
+
+    private function preparedDocumentReadiness(Scholarship $scholarship, User $user): array
+    {
+        $requirements = $this->documentRequirements($scholarship);
+
+        if ($requirements === []) {
+            return [
+                'required' => 0,
+                'uploaded' => 0,
+                'percent' => 100,
+                'matched' => [],
+                'missing' => [],
+            ];
+        }
+
+        $preparedDocuments = StudentDocument::query()
+            ->where('user_id', $user->id)
+            ->pluck('document_name')
+            ->map(fn (string $document) => trim($document))
+            ->filter()
+            ->values()
+            ->all();
+        $matched = collect($requirements)
+            ->filter(fn (string $requirement) => in_array($requirement, $preparedDocuments, true))
+            ->values()
+            ->all();
+        $missing = collect($requirements)
+            ->reject(fn (string $requirement) => in_array($requirement, $preparedDocuments, true))
+            ->values()
+            ->all();
+
+        return [
+            'required' => count($requirements),
+            'uploaded' => count($matched),
+            'percent' => (int) round((count($matched) / count($requirements)) * 100),
+            'matched' => $matched,
+            'missing' => $missing,
+        ];
+    }
+
+    private function syncApplicantReminders(User $user): void
+    {
+        $profileReadiness = $user->applicantProfileReadiness();
+
+        if (! $profileReadiness['complete']) {
+            PortalNotification::updateOrCreate([
+                'user_id' => $user->id,
+                'type' => 'profile_reminder',
+                'title' => 'Complete your student profile',
+            ], [
+                'message' => "Your profile is {$profileReadiness['percent']}% complete. You can explore now, but complete it before submitting applications.",
+                'action_url' => '/dashboard/profile',
+            ]);
+        }
+
+        $applications = ScholarshipApplication::query()
+            ->with(['documents', 'scholarship'])
+            ->where('applicant_id', $user->id)
+            ->whereIn('status', ['submitted', 'under_review', 'qualified', 'shortlisted', 'interview'])
+            ->get();
+
+        foreach ($applications as $application) {
+            $documentReadiness = $this->documentReadiness($application);
+
+            if (($documentReadiness['uploaded_percent'] ?? 100) >= 100) {
+                continue;
+            }
+
+            $missing = collect($documentReadiness['missing'] ?? [])->take(3)->implode(', ');
+
+            PortalNotification::updateOrCreate([
+                'user_id' => $user->id,
+                'type' => 'document_reminder',
+                'title' => "Documents needed for {$application->scholarship?->title}",
+            ], [
+                'message' => $missing
+                    ? "Upload or replace these requirements: {$missing}."
+                    : 'Upload the remaining requirements for this application.',
+                'action_url' => '/dashboard/applications',
+            ]);
+        }
+
+        Scholarship::query()
+            ->where('status', 'published')
+            ->whereNotNull('deadline')
+            ->whereDate('deadline', '>=', now()->toDateString())
+            ->whereDate('deadline', '<=', now()->addDays(7)->toDateString())
+            ->whereHas('bookmarks', fn ($query) => $query->where('user_id', $user->id))
+            ->whereDoesntHave('applications', fn ($query) => $query->where('applicant_id', $user->id))
+            ->get()
+            ->each(fn (Scholarship $scholarship) => PortalNotification::updateOrCreate([
+                'user_id' => $user->id,
+                'type' => 'deadline_reminder',
+                'title' => "Deadline near: {$scholarship->title}",
+            ], [
+                'message' => "This saved scholarship is due on {$scholarship->deadline?->format('M d, Y')}.",
+                'action_url' => "/dashboard/scholarships/{$scholarship->id}",
+            ]));
+    }
+
+    private function documentLibraryOptions(User $user): array
+    {
+        $commonDocuments = [
+            'Completed application form',
+            'Certificate of enrollment',
+            'Latest report card or grades',
+            'School ID',
+            'Proof of income',
+            'Certificate of indigency',
+            'Parent or guardian valid ID',
+            'Recommendation letter',
+        ];
+        $publishedRequirements = Scholarship::query()
+            ->where('status', 'published')
+            ->whereNotNull('requirements')
+            ->pluck('requirements')
+            ->flatMap(fn (?string $requirements) => $this->splitOptions($requirements));
+        $applicationRequirements = ScholarshipApplication::query()
+            ->with('scholarship')
+            ->where('applicant_id', $user->id)
+            ->get()
+            ->flatMap(fn (ScholarshipApplication $application) => $this->documentRequirements($application->scholarship));
+
+        return collect($commonDocuments)
+            ->merge($publishedRequirements)
+            ->merge($applicationRequirements)
+            ->map(fn (string $document) => trim($document))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
+    private function studentDocumentPayload(StudentDocument $document): array
+    {
+        return [
+            'id' => $document->id,
+            'document_name' => $document->document_name,
+            'original_name' => $document->original_name,
+            'size' => $document->size,
+            'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+        ];
+    }
+
+    private function attachPreparedDocumentsToApplication(User $user, ScholarshipApplication $application, array $confirmedDocuments): void
+    {
+        $application->loadMissing('scholarship');
+        $requirements = $confirmedDocuments !== []
+            ? collect($confirmedDocuments)->map(fn (string $document) => trim($document))->filter()->values()->all()
+            : $this->documentRequirements($application->scholarship);
+
+        if ($requirements === []) {
+            return;
+        }
+
+        $preparedDocuments = StudentDocument::query()
+            ->where('user_id', $user->id)
+            ->whereIn('document_name', $requirements)
+            ->get();
+
+        foreach ($preparedDocuments as $studentDocument) {
+            if (! Storage::disk('local')->exists($studentDocument->path)) {
+                continue;
+            }
+
+            $extension = pathinfo($studentDocument->original_name, PATHINFO_EXTENSION);
+            Storage::disk('local')->makeDirectory("application-documents/{$application->id}");
+            $targetPath = 'application-documents/'.$application->id.'/'.(string) Str::uuid().($extension ? ".{$extension}" : '');
+
+            Storage::disk('local')->copy($studentDocument->path, $targetPath);
+            ApplicationDocument::query()->updateOrCreate([
+                'scholarship_application_id' => $application->id,
+                'document_name' => $studentDocument->document_name,
+            ], [
+                'uploaded_by' => $user->id,
+                'original_name' => $studentDocument->original_name,
+                'path' => $targetPath,
+                'mime_type' => $studentDocument->mime_type,
+                'size' => $studentDocument->size,
+                'status' => 'pending',
+                'review_notes' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+                'uploaded_at' => now(),
+            ]);
+        }
     }
 
     private function requirementCount(array $requirements, array $documents): int

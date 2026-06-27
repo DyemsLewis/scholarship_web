@@ -24,6 +24,28 @@ const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
 const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
 const incomeOptions = ['Any', 'Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
+const applicationModeOptions = [
+    { value: 'online', label: 'Online submission' },
+    { value: 'onsite', label: 'On-site submission' },
+    { value: 'hybrid', label: 'Online and on-site' },
+    { value: 'provider_review', label: 'Provider review only' },
+];
+const educationLevelOptions = [
+    { value: 'elementary', label: 'Elementary' },
+    { value: 'junior_high_school', label: 'Junior High School' },
+    { value: 'senior_high_school', label: 'Senior High School' },
+    { value: 'college', label: 'College / University' },
+    { value: 'tvet', label: 'TVET / Vocational' },
+    { value: 'als', label: 'ALS / Alternative Learning' },
+];
+const schoolTypeOptions = [
+    { value: 'public', label: 'Public school' },
+    { value: 'private', label: 'Private school' },
+    { value: 'state_university', label: 'State university / college' },
+    { value: 'local_college', label: 'Local college / university' },
+    { value: 'tvet_center', label: 'TVET center' },
+    { value: 'als_center', label: 'ALS center' },
+];
 const documentRequirementOptions = [
     'Completed application form',
     'Certificate of enrollment',
@@ -50,6 +72,80 @@ const scholarshipFormMapAddress = computed(() => {
 
     return parts.length ? [...parts, 'Philippines'].join(', ') : '';
 });
+const programReadinessItems = computed(() => [
+    {
+        label: 'Basic program details',
+        complete: hasText(scholarshipForm.value.title)
+            && hasText(scholarshipForm.value.category)
+            && hasText(scholarshipForm.value.description)
+            && hasText(scholarshipForm.value.awardAmount)
+            && hasText(scholarshipForm.value.deadline),
+        help: 'Title, category, award amount, deadline, and description.',
+    },
+    {
+        label: 'Eligibility and matching rules',
+        complete: hasText(scholarshipForm.value.eligibility)
+            && (
+                scholarshipForm.value.eligibleEducationLevels.length > 0
+                || hasText(scholarshipForm.value.eligibleCourses)
+                || scholarshipForm.value.eligibleSchoolTypes.length > 0
+                || hasText(scholarshipForm.value.eligibleYearLevels)
+                || hasText(scholarshipForm.value.eligibleLocations)
+                || scholarshipForm.value.incomeRequirement !== 'Any'
+                || hasText(scholarshipForm.value.minimumGwa)
+            ),
+        help: 'Eligibility text plus at least one finder rule or clear open-to-all intent.',
+    },
+    {
+        label: 'Document checklist',
+        complete: selectedRequirementCount.value > 0,
+        help: 'Documents applicants must prepare before submission.',
+    },
+    {
+        label: 'Map location',
+        complete: hasText(scholarshipForm.value.locationName)
+            && hasText(scholarshipForm.value.locationAddress)
+            && hasText(scholarshipForm.value.latitude)
+            && hasText(scholarshipForm.value.longitude),
+        help: 'Address and map pin for distance visualization.',
+    },
+    {
+        label: 'Application workflow',
+        complete: hasText(scholarshipForm.value.applicationMode)
+            && (
+                hasText(scholarshipForm.value.contactEmail)
+                || hasText(scholarshipForm.value.contactNumber)
+            ),
+        help: 'How students apply and who they can contact for questions.',
+    },
+]);
+const completedProgramReadinessItems = computed(() => programReadinessItems.value.filter((item) => item.complete).length);
+const programReadiness = computed(() => Math.round((completedProgramReadinessItems.value / programReadinessItems.value.length) * 100));
+const missingProgramReadinessItems = computed(() => programReadinessItems.value.filter((item) => !item.complete));
+const publishWarnings = computed(() => {
+    if (scholarshipForm.value.status !== 'published') {
+        return [];
+    }
+
+    return missingProgramReadinessItems.value.map((item) => item.label);
+});
+const finderRuleSummary = computed(() => [
+    scholarshipForm.value.eligibleEducationLevels.length ? `${scholarshipForm.value.eligibleEducationLevels.length} education level${scholarshipForm.value.eligibleEducationLevels.length === 1 ? '' : 's'}` : 'All education levels',
+    scholarshipForm.value.eligibleSchoolTypes.length ? `${scholarshipForm.value.eligibleSchoolTypes.length} school type${scholarshipForm.value.eligibleSchoolTypes.length === 1 ? '' : 's'}` : 'All school types',
+    hasText(scholarshipForm.value.minimumGwa) ? `Min avg ${scholarshipForm.value.minimumGwa}` : 'No minimum average',
+    scholarshipForm.value.incomeRequirement && scholarshipForm.value.incomeRequirement !== 'Any' ? scholarshipForm.value.incomeRequirement : 'Any income',
+]);
+const workflowSummary = computed(() => [
+    scholarshipForm.value.applicationMode
+        ? applicationModeOptions.find((option) => option.value === scholarshipForm.value.applicationMode)?.label ?? scholarshipForm.value.applicationMode
+        : 'Application mode not set',
+    hasText(scholarshipForm.value.slotsAvailable) ? `${scholarshipForm.value.slotsAvailable} available slot${Number(scholarshipForm.value.slotsAvailable) === 1 ? '' : 's'}` : 'Slots not listed',
+    hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber) ? 'Contact available' : 'No contact channel',
+]);
+
+function hasText(value) {
+    return value !== null && value !== undefined && String(value).trim() !== '';
+}
 
 function emptyScholarshipForm() {
     return {
@@ -57,7 +153,9 @@ function emptyScholarshipForm() {
         category: '',
         description: '',
         eligibility: '',
+        eligibleEducationLevels: [],
         eligibleCourses: '',
+        eligibleSchoolTypes: [],
         eligibleYearLevels: '',
         eligibleLocations: '',
         incomeRequirement: 'Any',
@@ -68,6 +166,11 @@ function emptyScholarshipForm() {
         requirements: [],
         awardAmount: '',
         minimumGwa: '',
+        slotsAvailable: '',
+        applicationMode: '',
+        renewalPolicy: '',
+        contactEmail: '',
+        contactNumber: '',
         deadline: '',
         status: 'draft',
         imageUrl: '/uploads/scholarship-default.jpg',
@@ -85,13 +188,79 @@ function parseRequirements(requirements) {
         .filter((requirement) => documentRequirementOptions.includes(requirement));
 }
 
+function parseSelections(value, validOptions) {
+    const validValues = validOptions.map((option) => option.value);
+
+    if (!value) {
+        return [];
+    }
+
+    return String(value)
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter((item) => validValues.includes(item));
+}
+
+function toggleSelection(field, value) {
+    const selected = scholarshipForm.value[field];
+
+    scholarshipForm.value[field] = selected.includes(value)
+        ? selected.filter((item) => item !== value)
+        : [...selected, value];
+}
+
+function selectAllOptions(field, options) {
+    scholarshipForm.value[field] = options.map((option) => option.value);
+}
+
+function applyBroadEligibility() {
+    scholarshipForm.value.eligibleEducationLevels = educationLevelOptions.map((option) => option.value);
+    scholarshipForm.value.eligibleSchoolTypes = schoolTypeOptions.map((option) => option.value);
+    scholarshipForm.value.eligibleCourses = 'Any track, strand, or course';
+    scholarshipForm.value.eligibleYearLevels = 'Any grade or year level';
+    scholarshipForm.value.eligibleLocations = 'Philippines';
+    scholarshipForm.value.incomeRequirement = 'Any';
+}
+
+function applyCommonProgramDetails() {
+    if (!scholarshipForm.value.eligibility) {
+        scholarshipForm.value.eligibility = 'Open to currently enrolled learners who meet the academic, location, and document requirements listed by the provider.';
+    }
+
+    if (!scholarshipForm.value.description) {
+        scholarshipForm.value.description = 'A scholarship assistance program for eligible Filipino students. Review the requirements, prepare documents, and submit your application before the deadline.';
+    }
+
+    if (!selectedRequirementCount.value) {
+        selectCommonRequirements();
+    }
+
+    if (!scholarshipForm.value.applicationMode) {
+        scholarshipForm.value.applicationMode = 'online';
+    }
+
+    if (!scholarshipForm.value.renewalPolicy) {
+        scholarshipForm.value.renewalPolicy = 'Renewal depends on continued eligibility, submitted requirements, and available funding.';
+    }
+
+    if (!scholarshipForm.value.contactEmail && user.value?.email) {
+        scholarshipForm.value.contactEmail = user.value.email;
+    }
+
+    if (!scholarshipForm.value.contactNumber && user.value?.contact_number) {
+        scholarshipForm.value.contactNumber = user.value.contact_number;
+    }
+}
+
 function fillScholarshipForm(scholarship) {
     scholarshipForm.value = {
         title: scholarship.title ?? '',
         category: scholarship.category ?? '',
         description: scholarship.description ?? '',
         eligibility: scholarship.eligibility ?? '',
+        eligibleEducationLevels: parseSelections(scholarship.eligible_education_levels, educationLevelOptions),
         eligibleCourses: scholarship.eligible_courses ?? '',
+        eligibleSchoolTypes: parseSelections(scholarship.eligible_school_types, schoolTypeOptions),
         eligibleYearLevels: scholarship.eligible_year_levels ?? '',
         eligibleLocations: scholarship.eligible_locations ?? '',
         incomeRequirement: scholarship.income_requirement ?? 'Any',
@@ -102,6 +271,11 @@ function fillScholarshipForm(scholarship) {
         requirements: parseRequirements(scholarship.requirements),
         awardAmount: scholarship.award_amount ?? '',
         minimumGwa: scholarship.minimum_gwa ?? '',
+        slotsAvailable: scholarship.slots_available ?? '',
+        applicationMode: scholarship.application_mode ?? '',
+        renewalPolicy: scholarship.renewal_policy ?? '',
+        contactEmail: scholarship.contact_email ?? '',
+        contactNumber: scholarship.contact_number ?? '',
         deadline: scholarship.deadline ?? '',
         status: scholarship.status ?? 'draft',
         imageUrl: scholarship.image_url ?? '/uploads/scholarship-default.jpg',
@@ -242,7 +416,9 @@ async function saveScholarship() {
         category: scholarshipForm.value.category || '',
         description: scholarshipForm.value.description,
         eligibility: scholarshipForm.value.eligibility,
+        eligible_education_levels: scholarshipForm.value.eligibleEducationLevels.join('\n'),
         eligible_courses: scholarshipForm.value.eligibleCourses,
+        eligible_school_types: scholarshipForm.value.eligibleSchoolTypes.join('\n'),
         eligible_year_levels: scholarshipForm.value.eligibleYearLevels,
         eligible_locations: scholarshipForm.value.eligibleLocations,
         income_requirement: scholarshipForm.value.incomeRequirement || 'Any',
@@ -253,6 +429,11 @@ async function saveScholarship() {
         requirements: scholarshipForm.value.requirements.join('\n'),
         award_amount: scholarshipForm.value.awardAmount || '',
         minimum_gwa: scholarshipForm.value.minimumGwa || '',
+        slots_available: scholarshipForm.value.slotsAvailable || '',
+        application_mode: scholarshipForm.value.applicationMode || '',
+        renewal_policy: scholarshipForm.value.renewalPolicy || '',
+        contact_email: scholarshipForm.value.contactEmail || '',
+        contact_number: scholarshipForm.value.contactNumber || '',
         deadline: scholarshipForm.value.deadline || '',
         status: scholarshipForm.value.status,
     };
@@ -362,6 +543,99 @@ onMounted(loadFormData);
                             Save as draft while preparing details, publish when ready, or close when applications should stop.
                         </p>
 
+                        <div class="mt-5 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
+                            <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                                            Program readiness
+                                        </p>
+                                        <p class="mt-1 text-sm text-slate-500">
+                                            {{ completedProgramReadinessItems }}/{{ programReadinessItems.length }} sections ready
+                                        </p>
+                                    </div>
+                                    <p class="font-display text-3xl font-bold text-slate-950">
+                                        {{ programReadiness }}%
+                                    </p>
+                                </div>
+                                <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                                    <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${programReadiness}%` }"></div>
+                                </div>
+                                <div class="mt-4 grid gap-2">
+                                    <div
+                                        v-for="item in programReadinessItems"
+                                        :key="item.label"
+                                        class="flex items-start gap-2 rounded-md bg-white px-3 py-2 text-xs ring-1 ring-slate-200"
+                                    >
+                                        <span :class="['mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full', item.complete ? 'bg-emerald-500' : 'bg-amber-400']"></span>
+                                        <span>
+                                            <span class="block font-bold text-slate-800">{{ item.label }}</span>
+                                            <span class="block leading-5 text-slate-500">{{ item.help }}</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="rounded-lg border border-emerald-100 bg-emerald-50/70 p-4">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-950">
+                                            Quick setup
+                                        </p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            Use these helpers when creating a general scholarship, then adjust any field as needed.
+                                        </p>
+                                    </div>
+                                    <div class="flex shrink-0 flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            class="rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50"
+                                            @click="applyCommonProgramDetails"
+                                        >
+                                            Add common details
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50"
+                                            @click="applyBroadEligibility"
+                                        >
+                                            Broad eligibility
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <span
+                                        v-for="summary in finderRuleSummary"
+                                        :key="summary"
+                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-emerald-100"
+                                    >
+                                        {{ summary }}
+                                    </span>
+                                </div>
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <span
+                                        v-for="summary in workflowSummary"
+                                        :key="`workflow-${summary}`"
+                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-emerald-100"
+                                    >
+                                        {{ summary }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="publishWarnings.length"
+                            class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+                        >
+                            <p class="font-bold">
+                                Review before publishing
+                            </p>
+                            <p class="mt-1 leading-6">
+                                This program can still be saved, but these sections are incomplete: {{ publishWarnings.join(', ') }}.
+                            </p>
+                        </div>
+
                         <div class="mt-5 grid gap-4">
                             <div>
                                 <label :class="labelClass" for="scholarship-title">
@@ -401,7 +675,7 @@ onMounted(loadFormData);
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
                                 <div>
                                     <label :class="labelClass" for="scholarship-category">
                                         Category
@@ -437,7 +711,7 @@ onMounted(loadFormData);
 
                                 <div>
                                     <label :class="labelClass" for="scholarship-minimum-gwa">
-                                        Minimum GWA / avg
+                                        Minimum GWA / general average
                                     </label>
                                     <input
                                         id="scholarship-minimum-gwa"
@@ -449,6 +723,39 @@ onMounted(loadFormData);
                                         placeholder="85 or 2.00"
                                         :class="inputClass"
                                     >
+                                </div>
+
+                                <div>
+                                    <label :class="labelClass" for="scholarship-slots">
+                                        Available slots
+                                    </label>
+                                    <input
+                                        id="scholarship-slots"
+                                        v-model="scholarshipForm.slotsAvailable"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        placeholder="Optional"
+                                        :class="inputClass"
+                                    >
+                                </div>
+
+                                <div>
+                                    <label :class="labelClass" for="scholarship-mode">
+                                        Application mode
+                                    </label>
+                                    <select id="scholarship-mode" v-model="scholarshipForm.applicationMode" :class="inputClass">
+                                        <option value="">
+                                            Select mode
+                                        </option>
+                                        <option
+                                            v-for="option in applicationModeOptions"
+                                            :key="option.value"
+                                            :value="option.value"
+                                        >
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
                                 </div>
 
                                 <div>
@@ -508,37 +815,171 @@ onMounted(loadFormData);
                                 ></textarea>
                             </div>
 
+                            <fieldset class="rounded-lg border border-amber-100 bg-amber-50/60 p-4">
+                                <legend class="text-sm font-semibold text-slate-700">
+                                    Application workflow
+                                </legend>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">
+                                    Add the practical details students need after they decide a scholarship fits them.
+                                </p>
+
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <span
+                                        v-for="summary in workflowSummary"
+                                        :key="`workflow-detail-${summary}`"
+                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-100"
+                                    >
+                                        {{ summary }}
+                                    </span>
+                                </div>
+
+                                <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-contact-email">
+                                            Contact email
+                                        </label>
+                                        <input
+                                            id="scholarship-contact-email"
+                                            v-model="scholarshipForm.contactEmail"
+                                            type="email"
+                                            placeholder="scholarship.office@example.com"
+                                            :class="inputClass"
+                                        >
+                                    </div>
+
+                                    <div>
+                                        <label :class="labelClass" for="scholarship-contact-number">
+                                            Contact number
+                                        </label>
+                                        <input
+                                            id="scholarship-contact-number"
+                                            v-model="scholarshipForm.contactNumber"
+                                            type="text"
+                                            placeholder="0917 123 4567"
+                                            :class="inputClass"
+                                        >
+                                    </div>
+
+                                    <div class="lg:col-span-2">
+                                        <label :class="labelClass" for="scholarship-renewal">
+                                            Renewal or continuation policy
+                                        </label>
+                                        <textarea
+                                            id="scholarship-renewal"
+                                            v-model="scholarshipForm.renewalPolicy"
+                                            rows="3"
+                                            placeholder="Example: Renewable every semester if the learner maintains eligibility and submits updated requirements."
+                                            :class="inputClass"
+                                        ></textarea>
+                                    </div>
+                                </div>
+                            </fieldset>
+
                             <fieldset class="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4">
                                 <legend class="text-sm font-semibold text-slate-700">
                                     Matching criteria
                                 </legend>
                                 <p class="mt-1 text-xs leading-5 text-slate-500">
-                                    These fields power the student match score and admin analytics. Use commas or new lines for multiple entries.
+                                    These fields power the student match score and finder filters. Leave a section blank when the program is open to everyone.
                                 </p>
 
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <span
+                                        v-for="summary in finderRuleSummary"
+                                        :key="`matching-${summary}`"
+                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 ring-1 ring-emerald-100"
+                                    >
+                                        {{ summary }}
+                                    </span>
+                                </div>
+
                                 <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                                    <div class="rounded-md border border-emerald-100 bg-white p-3 lg:col-span-2">
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                            <label class="text-sm font-semibold text-slate-700">
+                                                Eligible education levels
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <button type="button" class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100" @click="selectAllOptions('eligibleEducationLevels', educationLevelOptions)">
+                                                    Select all
+                                                </button>
+                                                <button type="button" class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100" @click="scholarshipForm.eligibleEducationLevels = []">
+                                                    Open to all
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="mt-3 flex flex-wrap gap-2">
+                                            <button
+                                                v-for="option in educationLevelOptions"
+                                                :key="option.value"
+                                                type="button"
+                                                :class="[
+                                                    'rounded-md border px-3 py-2 text-xs font-bold transition',
+                                                    scholarshipForm.eligibleEducationLevels.includes(option.value)
+                                                        ? 'border-emerald-700 bg-emerald-700 text-white'
+                                                        : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-white',
+                                                ]"
+                                                @click="toggleSelection('eligibleEducationLevels', option.value)"
+                                            >
+                                                {{ option.label }}
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <label :class="labelClass" for="scholarship-courses">
-                                            Eligible courses / strands
+                                            Eligible tracks, strands, or courses
                                         </label>
                                         <textarea
                                             id="scholarship-courses"
                                             v-model="scholarshipForm.eligibleCourses"
                                             rows="3"
-                                            placeholder="Example: BSIT, STEM, ABM"
+                                            placeholder="Example: General, STEM, TVL, BSIT"
                                             :class="inputClass"
                                         ></textarea>
                                     </div>
 
+                                    <div class="rounded-md border border-emerald-100 bg-white p-3">
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                            <label class="text-sm font-semibold text-slate-700">
+                                                Eligible school types
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <button type="button" class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100" @click="selectAllOptions('eligibleSchoolTypes', schoolTypeOptions)">
+                                                    Select all
+                                                </button>
+                                                <button type="button" class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100" @click="scholarshipForm.eligibleSchoolTypes = []">
+                                                    Open to all
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="mt-3 flex flex-wrap gap-2">
+                                            <button
+                                                v-for="option in schoolTypeOptions"
+                                                :key="option.value"
+                                                type="button"
+                                                :class="[
+                                                    'rounded-md border px-3 py-2 text-xs font-bold transition',
+                                                    scholarshipForm.eligibleSchoolTypes.includes(option.value)
+                                                        ? 'border-emerald-700 bg-emerald-700 text-white'
+                                                        : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-white',
+                                                ]"
+                                                @click="toggleSelection('eligibleSchoolTypes', option.value)"
+                                            >
+                                                {{ option.label }}
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <label :class="labelClass" for="scholarship-years">
-                                            Eligible year levels
+                                            Eligible grade / year levels
                                         </label>
                                         <textarea
                                             id="scholarship-years"
                                             v-model="scholarshipForm.eligibleYearLevels"
                                             rows="3"
-                                            placeholder="Example: 1st year, Grade 12"
+                                            placeholder="Example: Grade 7, Grade 12, 1st year"
                                             :class="inputClass"
                                         ></textarea>
                                     </div>

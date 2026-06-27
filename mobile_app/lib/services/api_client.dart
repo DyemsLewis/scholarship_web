@@ -72,8 +72,32 @@ class ApiClient {
     return _get('/profile');
   }
 
-  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> updateProfile(
+    Map<String, dynamic> payload,
+  ) async {
     return _patch('/profile', payload);
+  }
+
+  Future<Map<String, dynamic>> documents() async {
+    return _get('/documents');
+  }
+
+  Future<Map<String, dynamic>> uploadPreparedDocument({
+    required String documentName,
+    required String filePath,
+    String? fileName,
+  }) async {
+    return _multipartPost(
+      '/student-documents',
+      {'document_name': documentName},
+      fileField: 'document_file',
+      filePath: filePath,
+      fileName: fileName,
+    );
+  }
+
+  Future<Map<String, dynamic>> deletePreparedDocument(int documentId) async {
+    return _delete('/student-documents/$documentId');
   }
 
   Future<Map<String, dynamic>> submitApplication({
@@ -94,6 +118,10 @@ class ApiClient {
 
   Future<Map<String, dynamic>> unsaveScholarship(int scholarshipId) async {
     return _delete('/scholarships/$scholarshipId/save');
+  }
+
+  Future<Map<String, dynamic>> markNotificationRead(int notificationId) async {
+    return _patch('/notifications/$notificationId/read', {});
   }
 
   Future<void> logout() async {
@@ -144,6 +172,30 @@ class ApiClient {
     return _decode(response);
   }
 
+  Future<Map<String, dynamic>> _multipartPost(
+    String path,
+    Map<String, String> fields, {
+    required String fileField,
+    required String filePath,
+    String? fileName,
+  }) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'));
+    request.headers.addAll(_multipartHeaders());
+    request.fields.addAll(fields);
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        fileField,
+        filePath,
+        filename: fileName,
+      ),
+    );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    return _decode(response);
+  }
+
   Future<Map<String, dynamic>> _patch(
     String path,
     Map<String, dynamic> payload,
@@ -170,6 +222,13 @@ class ApiClient {
     return {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
+      if (hasToken) 'Authorization': 'Bearer $_token',
+    };
+  }
+
+  Map<String, String> _multipartHeaders() {
+    return {
+      'Accept': 'application/json',
       if (hasToken) 'Authorization': 'Bearer $_token',
     };
   }

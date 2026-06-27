@@ -13,6 +13,8 @@ const search = ref('');
 const selectedProviderType = ref('all');
 const selectedCategory = ref('all');
 const selectedIncome = ref('all');
+const selectedEducationLevel = ref('all');
+const selectedSchoolType = ref('all');
 const deadlineFilter = ref('all');
 const maxGwa = ref('');
 const minimumMatch = ref('');
@@ -21,6 +23,12 @@ const yearFilter = ref('');
 const locationFilter = ref('');
 const savedOnly = ref(false);
 const showAdvancedFilters = ref(false);
+const applicationModeOptions = [
+    { value: 'online', label: 'Online submission' },
+    { value: 'onsite', label: 'On-site submission' },
+    { value: 'hybrid', label: 'Online and on-site' },
+    { value: 'provider_review', label: 'Provider review only' },
+];
 
 const providerTypes = computed(() => [
     'all',
@@ -34,11 +42,25 @@ const incomeRequirements = computed(() => [
     'all',
     ...new Set(scholarships.value.map((scholarship) => scholarship.income_requirement).filter(Boolean)),
 ]);
+const educationLevels = computed(() => [
+    'all',
+    ...new Set(scholarships.value
+        .flatMap((scholarship) => splitOptions(scholarship.eligible_education_levels))
+        .filter(Boolean)),
+]);
+const schoolTypes = computed(() => [
+    'all',
+    ...new Set(scholarships.value
+        .flatMap((scholarship) => splitOptions(scholarship.eligible_school_types))
+        .filter(Boolean)),
+]);
 const activeFilterCount = computed(() => [
     search.value.trim(),
     selectedProviderType.value !== 'all',
     selectedCategory.value !== 'all',
     selectedIncome.value !== 'all',
+    selectedEducationLevel.value !== 'all',
+    selectedSchoolType.value !== 'all',
     deadlineFilter.value !== 'all',
     maxGwa.value,
     minimumMatch.value,
@@ -57,13 +79,19 @@ const filteredScholarships = computed(() => scholarships.value
             scholarship.provider?.name,
             scholarship.category,
             scholarship.eligibility,
+            scholarship.eligible_education_levels,
             scholarship.eligible_courses,
+            scholarship.eligible_school_types,
             scholarship.eligible_year_levels,
             scholarship.eligible_locations,
             scholarship.income_requirement,
             scholarship.location_name,
             scholarship.location_address,
             scholarship.requirements,
+            scholarship.application_mode,
+            scholarship.renewal_policy,
+            scholarship.contact_email,
+            scholarship.contact_number,
         ].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword));
         const matchesProvider = selectedProviderType.value === 'all' || scholarship.provider?.type === selectedProviderType.value;
         const matchesCategory = selectedCategory.value === 'all' || scholarship.category === selectedCategory.value;
@@ -75,6 +103,8 @@ const filteredScholarships = computed(() => scholarships.value
         const matchesMinimum = !minimumMatch.value || matchScore >= Number(minimumMatch.value);
         const matchesCourse = textMatches(scholarship.eligible_courses, courseFilter.value);
         const matchesYear = textMatches(scholarship.eligible_year_levels, yearFilter.value);
+        const matchesEducationLevel = selectedEducationLevel.value === 'all' || textMatches(scholarship.eligible_education_levels, selectedEducationLevel.value);
+        const matchesSchoolType = selectedSchoolType.value === 'all' || textMatches(scholarship.eligible_school_types, selectedSchoolType.value);
         const matchesLocation = textMatches([scholarship.eligible_locations, scholarship.location_name, scholarship.location_address].filter(Boolean).join(' '), locationFilter.value);
         const matchesIncome = selectedIncome.value === 'all' || textMatches(scholarship.income_requirement, selectedIncome.value);
         const matchesSaved = !savedOnly.value || scholarship.is_saved;
@@ -85,6 +115,8 @@ const filteredScholarships = computed(() => scholarships.value
             && matchesCategory
             && matchesGwa
             && matchesMinimum
+            && matchesEducationLevel
+            && matchesSchoolType
             && matchesCourse
             && matchesYear
             && matchesLocation
@@ -114,6 +146,33 @@ function providerTypeLabel(type) {
     return String(type ?? 'Provider')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function labelFromKey(value) {
+    return String(value ?? '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function applicationModeLabel(value) {
+    return applicationModeOptions.find((option) => option.value === value)?.label ?? labelFromKey(value || 'not_listed');
+}
+
+function splitOptions(value) {
+    if (!value) {
+        return [];
+    }
+
+    return String(value)
+        .split(/\r?\n|,/)
+        .map((option) => option.trim())
+        .filter(Boolean);
+}
+
+function criteriaLabel(value, fallback = 'Open to all') {
+    const items = splitOptions(value).map(labelFromKey);
+
+    return items.length ? items.join(', ') : fallback;
 }
 
 function documentRequirements(requirements) {
@@ -199,6 +258,8 @@ function resetFilters() {
     selectedProviderType.value = 'all';
     selectedCategory.value = 'all';
     selectedIncome.value = 'all';
+    selectedEducationLevel.value = 'all';
+    selectedSchoolType.value = 'all';
     deadlineFilter.value = 'all';
     maxGwa.value = '';
     minimumMatch.value = '';
@@ -336,10 +397,20 @@ onMounted(loadScholarships);
                             </button>
 
                             <div v-if="showAdvancedFilters" class="grid gap-3 border-t border-slate-200 pt-3">
-                                <input v-model="maxGwa" type="number" min="0" max="100" step="0.01" placeholder="My GWA / avg" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <select v-model="selectedEducationLevel" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                    <option v-for="level in educationLevels" :key="level" :value="level">
+                                        {{ level === 'all' ? 'All education levels' : labelFromKey(level) }}
+                                    </option>
+                                </select>
+                                <select v-model="selectedSchoolType" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                    <option v-for="type in schoolTypes" :key="type" :value="type">
+                                        {{ type === 'all' ? 'All school types' : labelFromKey(type) }}
+                                    </option>
+                                </select>
+                                <input v-model="maxGwa" type="number" min="0" max="100" step="0.01" placeholder="My GWA / general average" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
                                 <input v-model="minimumMatch" type="number" min="0" max="100" step="1" placeholder="Minimum match %" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
-                                <input v-model="courseFilter" type="search" placeholder="Course / strand" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
-                                <input v-model="yearFilter" type="search" placeholder="Year level" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <input v-model="courseFilter" type="search" placeholder="Track / strand / course" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <input v-model="yearFilter" type="search" placeholder="Grade / year level" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
                                 <input v-model="locationFilter" type="search" placeholder="City, province, or region" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
                                 <select v-model="selectedIncome" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
                                     <option v-for="income in incomeRequirements" :key="income" :value="income">
@@ -452,6 +523,15 @@ onMounted(loadScholarships);
                                         {{ scholarship.description }}
                                     </p>
 
+                                    <div class="mt-3 grid gap-2 text-xs font-bold text-slate-600 md:grid-cols-2">
+                                        <p class="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200/80">
+                                            Education: {{ criteriaLabel(scholarship.eligible_education_levels) }}
+                                        </p>
+                                        <p class="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200/80">
+                                            School type: {{ criteriaLabel(scholarship.eligible_school_types) }}
+                                        </p>
+                                    </div>
+
                                     <div class="mt-4 grid gap-3 text-sm md:grid-cols-3">
                                         <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70">
                                             <p class="font-semibold text-slate-500">Award</p>
@@ -468,6 +548,18 @@ onMounted(loadScholarships);
                                                 {{ scholarship.prepared_documents.uploaded }} ready in Documents
                                             </p>
                                         </div>
+                                    </div>
+
+                                    <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-600">
+                                        <span class="rounded-md bg-white px-2.5 py-1 ring-1 ring-slate-200">
+                                            {{ applicationModeLabel(scholarship.application_mode) }}
+                                        </span>
+                                        <span class="rounded-md bg-white px-2.5 py-1 ring-1 ring-slate-200">
+                                            Slots: {{ scholarship.slots_available ?? 'Not listed' }}
+                                        </span>
+                                        <span v-if="scholarship.contact_email || scholarship.contact_number" class="rounded-md bg-white px-2.5 py-1 ring-1 ring-slate-200">
+                                            Contact available
+                                        </span>
                                     </div>
 
                                     <div class="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-3">

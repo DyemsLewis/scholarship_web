@@ -20,6 +20,12 @@ const profileReadiness = ref({
     percent: 0,
     missing: [],
 });
+const applicationModeOptions = [
+    { value: 'online', label: 'Online submission' },
+    { value: 'onsite', label: 'On-site submission' },
+    { value: 'hybrid', label: 'Online and on-site' },
+    { value: 'provider_review', label: 'Provider review only' },
+];
 
 const documentItems = computed(() => documentRequirements(scholarship.value?.requirements));
 const canApply = computed(() => profileReadiness.value.complete);
@@ -53,6 +59,30 @@ function providerTypeLabel(type) {
     return String(type ?? 'Provider')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function labelFromKey(value) {
+    return String(value ?? '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function applicationModeLabel(value) {
+    return applicationModeOptions.find((option) => option.value === value)?.label ?? labelFromKey(value || 'not_listed');
+}
+
+function criteriaLabel(value) {
+    if (!value) {
+        return 'Any';
+    }
+
+    const items = String(value)
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map(labelFromKey);
+
+    return items.length ? items.join(', ') : 'Any';
 }
 
 function documentRequirements(requirements) {
@@ -213,8 +243,16 @@ onMounted(loadScholarship);
                                             <p class="mt-1 font-bold text-slate-950">{{ formatAmount(scholarship.award_amount) }}</p>
                                         </div>
                                         <div>
-                                            <p class="font-semibold text-slate-500">Minimum GWA / average</p>
+                                            <p class="font-semibold text-slate-500">Minimum GWA / general average</p>
                                             <p class="mt-1 font-bold text-slate-950">{{ scholarship.minimum_gwa || 'Not listed yet' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold text-slate-500">Available slots</p>
+                                            <p class="mt-1 font-bold text-slate-950">{{ scholarship.slots_available ?? 'Not listed yet' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold text-slate-500">Application mode</p>
+                                            <p class="mt-1 font-bold text-slate-950">{{ applicationModeLabel(scholarship.application_mode) }}</p>
                                         </div>
                                         <div>
                                             <p class="font-semibold text-slate-500">Prepared documents</p>
@@ -247,11 +285,19 @@ onMounted(loadScholarship);
 
                                 <div class="mt-5 grid gap-3 sm:grid-cols-2">
                                     <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
-                                        <p class="font-semibold text-slate-500">Courses / strands</p>
+                                        <p class="font-semibold text-slate-500">Education levels</p>
+                                        <p class="mt-1 text-slate-800">{{ criteriaLabel(scholarship.eligible_education_levels) }}</p>
+                                    </div>
+                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
+                                        <p class="font-semibold text-slate-500">School types</p>
+                                        <p class="mt-1 text-slate-800">{{ criteriaLabel(scholarship.eligible_school_types) }}</p>
+                                    </div>
+                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
+                                        <p class="font-semibold text-slate-500">Tracks / strands / courses</p>
                                         <p class="mt-1 text-slate-800">{{ scholarship.eligible_courses || 'Any' }}</p>
                                     </div>
                                     <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
-                                        <p class="font-semibold text-slate-500">Year levels</p>
+                                        <p class="font-semibold text-slate-500">Grade / year levels</p>
                                         <p class="mt-1 text-slate-800">{{ scholarship.eligible_year_levels || 'Any' }}</p>
                                     </div>
                                     <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
@@ -318,6 +364,30 @@ onMounted(loadScholarship);
                         </section>
 
                         <aside class="space-y-4">
+                            <article class="student-card p-5">
+                                <p class="student-kicker">
+                                    Application Details
+                                </p>
+                                <div class="mt-4 grid gap-3 text-sm">
+                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3">
+                                        <p class="font-semibold text-slate-500">How to apply</p>
+                                        <p class="mt-1 font-bold text-slate-950">{{ applicationModeLabel(scholarship.application_mode) }}</p>
+                                    </div>
+                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3">
+                                        <p class="font-semibold text-slate-500">Contact email</p>
+                                        <p class="mt-1 break-words font-bold text-slate-950">{{ scholarship.contact_email || 'Not listed yet' }}</p>
+                                    </div>
+                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3">
+                                        <p class="font-semibold text-slate-500">Contact number</p>
+                                        <p class="mt-1 font-bold text-slate-950">{{ scholarship.contact_number || 'Not listed yet' }}</p>
+                                    </div>
+                                </div>
+                                <div v-if="scholarship.renewal_policy" class="mt-3 rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
+                                    <p class="font-semibold text-slate-500">Renewal / continuation</p>
+                                    <p class="mt-1 leading-6 text-slate-800">{{ scholarship.renewal_policy }}</p>
+                                </div>
+                            </article>
+
                             <article class="student-card p-5">
                                 <p class="student-kicker">
                                     Map Location

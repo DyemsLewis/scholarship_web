@@ -54,6 +54,26 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function labelFromKey(value) {
+    return String(value ?? '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function criteriaLabel(value, fallback = 'Open to all') {
+    if (!value) {
+        return fallback;
+    }
+
+    const items = String(value)
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map(labelFromKey);
+
+    return items.length ? items.join(', ') : fallback;
+}
+
 function formatAmount(amount) {
     if (amount === null || amount === undefined || amount === '') {
         return 'Not set';
@@ -204,6 +224,15 @@ onMounted(loadProviderData);
                                 <p class="mt-3 line-clamp-2 text-sm leading-5 text-slate-600">
                                     {{ scholarship.description }}
                                 </p>
+
+                                <div class="mt-3 grid gap-2 text-xs font-bold text-slate-600">
+                                    <p class="line-clamp-1 rounded-md bg-white px-3 py-2">
+                                        Education: {{ criteriaLabel(scholarship.eligible_education_levels) }}
+                                    </p>
+                                    <p class="line-clamp-1 rounded-md bg-white px-3 py-2">
+                                        School type: {{ criteriaLabel(scholarship.eligible_school_types) }}
+                                    </p>
+                                </div>
 
                                 <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
                                     <div class="rounded-md bg-white px-3 py-2">

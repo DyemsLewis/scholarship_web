@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api_client.dart';
@@ -20,16 +21,27 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool isLoading = true;
   bool isSaving = false;
+  bool isDocumentsLoading = false;
+  bool isDocumentSaving = false;
+  bool documentsLoaded = false;
   String? errorMessage;
+  String? documentsErrorMessage;
   int selectedTab = 0;
   Map<String, dynamic> user = {};
   Map<String, dynamic> stats = {};
+  Map<String, dynamic> documentStats = {};
   List<Map<String, dynamic>> scholarships = [];
   List<Map<String, dynamic>> applications = [];
+  List<Map<String, dynamic>> notifications = [];
+  List<Map<String, dynamic>> preparedDocuments = [];
+  List<Map<String, dynamic>> documentApplications = [];
+  List<String> documentOptions = [];
   List<dynamic> nextSteps = [];
   String programSearch = '';
   String selectedCategory = 'all';
   String selectedProviderType = 'all';
+  String selectedEducationLevel = 'all';
+  String selectedSchoolType = 'all';
   String selectedIncomeRule = 'all';
   String selectedDeadline = 'all';
   String minimumMatch = '';
@@ -55,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
         stats = asMap(data['stats']);
         scholarships = asMapList(data['scholarships']);
         applications = asMapList(data['applications']);
+        notifications = asMapList(data['notifications']);
         nextSteps = data['next_steps'] is List
             ? data['next_steps'] as List
             : [];
@@ -77,6 +90,40 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> loadDocuments({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() {
+        isDocumentsLoading = true;
+        documentsErrorMessage = null;
+      });
+    }
+
+    try {
+      final data = await widget.apiClient.documents();
+
+      setState(() {
+        documentStats = asMap(data['stats']);
+        preparedDocuments = asMapList(data['prepared_documents']);
+        documentApplications = asMapList(data['applications']);
+        documentOptions = stringList(data['document_options']);
+        documentsLoaded = true;
+        documentsErrorMessage = null;
+      });
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() {
+          documentsErrorMessage = error.message;
+        });
+      }
+    } finally {
+      if (mounted && showLoading) {
+        setState(() {
+          isDocumentsLoading = false;
         });
       }
     }
@@ -129,6 +176,82 @@ class _HomeScreenState extends State<HomeScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> markNotificationRead(Map<String, dynamic> notification) async {
+    final notificationId = intValue(notification['id']);
+
+    if (notificationId == 0) {
+      return;
+    }
+
+    try {
+      final response = await widget.apiClient.markNotificationRead(
+        notificationId,
+      );
+
+      setState(() {
+        notifications = asMapList(response['notifications']);
+      });
+    } on ApiException catch (error) {
+      showMessage(error.message);
+    }
+  }
+
+  Future<void> openPreparedDocumentUploader() async {
+    if (documentOptions.isEmpty) {
+      await loadDocuments();
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    final uploaded = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _PreparedDocumentSheet(
+        documentOptions: documentOptions,
+        apiClient: widget.apiClient,
+      ),
+    );
+
+    if (uploaded == true) {
+      showMessage('Prepared document uploaded.');
+      await loadDocuments(showLoading: false);
+      await loadPortal();
+    }
+  }
+
+  Future<void> deletePreparedDocument(Map<String, dynamic> document) async {
+    final documentId = intValue(document['id']);
+
+    if (documentId == 0) {
+      return;
+    }
+
+    setState(() => isDocumentSaving = true);
+
+    try {
+      final response = await widget.apiClient.deletePreparedDocument(
+        documentId,
+      );
+      showMessage(
+        stringValue(
+          response['message'],
+          fallback: 'Prepared document removed.',
+        ),
+      );
+      await loadDocuments(showLoading: false);
+      await loadPortal();
+    } on ApiException catch (error) {
+      showMessage(error.message);
+    } finally {
+      if (mounted) {
+        setState(() => isDocumentSaving = false);
+      }
+    }
+  }
+
   Future<void> openScholarshipDetail(Map<String, dynamic> scholarship) async {
     final scholarshipId = intValue(scholarship['id']);
     final alreadyApplied =
@@ -159,7 +282,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedTab,
-        onDestinationSelected: (index) => setState(() => selectedTab = index),
+        onDestinationSelected: (index) {
+          setState(() => selectedTab = index);
+
+          if (index == 2 && !documentsLoaded) {
+            loadDocuments();
+          }
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
@@ -170,6 +299,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.school_outlined),
             selectedIcon: Icon(Icons.school),
             label: 'Programs',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.folder_outlined),
+            selectedIcon: Icon(Icons.folder),
+            label: 'Docs',
           ),
           NavigationDestination(
             icon: Icon(Icons.assignment_outlined),
@@ -194,7 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: SafeArea(
           child: RefreshIndicator(
-            onRefresh: loadPortal,
+            onRefresh: selectedTab == 2 ? loadDocuments : loadPortal,
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
@@ -224,6 +358,8 @@ class _HomeScreenState extends State<HomeScreen> {
         search: programSearch,
         category: selectedCategory,
         providerType: selectedProviderType,
+        educationLevel: selectedEducationLevel,
+        schoolType: selectedSchoolType,
         incomeRule: selectedIncomeRule,
         deadline: selectedDeadline,
         minimumMatch: minimumMatch,
@@ -243,6 +379,8 @@ class _HomeScreenState extends State<HomeScreen> {
           search: programSearch,
           selectedCategory: selectedCategory,
           selectedProviderType: selectedProviderType,
+          selectedEducationLevel: selectedEducationLevel,
+          selectedSchoolType: selectedSchoolType,
           selectedIncomeRule: selectedIncomeRule,
           selectedDeadline: selectedDeadline,
           minimumMatch: minimumMatch,
@@ -256,6 +394,14 @@ class _HomeScreenState extends State<HomeScreen> {
             (scholarship) =>
                 stringValue(asMap(scholarship['provider'])['type']),
           ),
+          educationLevels: criteriaFilterOptions(
+            scholarships,
+            'eligible_education_levels',
+          ),
+          schoolTypes: criteriaFilterOptions(
+            scholarships,
+            'eligible_school_types',
+          ),
           incomeRules: filterOptions(
             scholarships,
             (scholarship) => stringValue(scholarship['income_requirement']),
@@ -265,6 +411,10 @@ class _HomeScreenState extends State<HomeScreen> {
               setState(() => selectedCategory = value ?? 'all'),
           onProviderChanged: (value) =>
               setState(() => selectedProviderType = value ?? 'all'),
+          onEducationLevelChanged: (value) =>
+              setState(() => selectedEducationLevel = value ?? 'all'),
+          onSchoolTypeChanged: (value) =>
+              setState(() => selectedSchoolType = value ?? 'all'),
           onIncomeChanged: (value) =>
               setState(() => selectedIncomeRule = value ?? 'all'),
           onDeadlineChanged: (value) =>
@@ -277,6 +427,8 @@ class _HomeScreenState extends State<HomeScreen> {
             programSearch = '';
             selectedCategory = 'all';
             selectedProviderType = 'all';
+            selectedEducationLevel = 'all';
+            selectedSchoolType = 'all';
             selectedIncomeRule = 'all';
             selectedDeadline = 'all';
             minimumMatch = '';
@@ -313,6 +465,38 @@ class _HomeScreenState extends State<HomeScreen> {
         _PhotoBanner(
           imageUrl:
               '${ApiClient.assetBaseUrl}/images/application-documents.jpg',
+          title: 'Prepared Documents',
+          subtitle:
+              'Upload documents before applying so matching and submission are easier.',
+        ),
+        const SizedBox(height: 16),
+        if (isDocumentsLoading)
+          const _LoadingCard()
+        else if (documentsErrorMessage != null)
+          _ErrorCard(
+            message: documentsErrorMessage!,
+            onRetry: () => loadDocuments(),
+          )
+        else if (!documentsLoaded)
+          const _LoadingCard()
+        else ...[
+          _DocumentHubCard(
+            stats: documentStats,
+            preparedDocuments: preparedDocuments,
+            applications: documentApplications,
+            isSaving: isDocumentSaving,
+            onUpload: openPreparedDocumentUploader,
+            onDelete: deletePreparedDocument,
+          ),
+        ],
+      ];
+    }
+
+    if (selectedTab == 3) {
+      return [
+        _PhotoBanner(
+          imageUrl:
+              '${ApiClient.assetBaseUrl}/images/application-documents.jpg',
           title: 'Applications',
           subtitle: 'Track DSS guidance, provider review, and document status.',
         ),
@@ -327,7 +511,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ];
     }
 
-    if (selectedTab == 3) {
+    if (selectedTab == 4) {
       return [
         _PhotoBanner(
           imageUrl: '${ApiClient.assetBaseUrl}/images/student-dashboard.jpg',
@@ -349,6 +533,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _StatsGrid(stats: stats),
       const SizedBox(height: 16),
       _ProfileSummary(user: user),
+      const SizedBox(height: 16),
+      _NotificationsCard(
+        notifications: notifications,
+        onMarkRead: markNotificationRead,
+      ),
       const SizedBox(height: 16),
       _NextStepsCard(steps: nextSteps),
       const SizedBox(height: 16),
@@ -550,16 +739,22 @@ class _FinderFiltersCard extends StatelessWidget {
     required this.search,
     required this.selectedCategory,
     required this.selectedProviderType,
+    required this.selectedEducationLevel,
+    required this.selectedSchoolType,
     required this.selectedIncomeRule,
     required this.selectedDeadline,
     required this.minimumMatch,
     required this.savedOnly,
     required this.categories,
     required this.providerTypes,
+    required this.educationLevels,
+    required this.schoolTypes,
     required this.incomeRules,
     required this.onSearchChanged,
     required this.onCategoryChanged,
     required this.onProviderChanged,
+    required this.onEducationLevelChanged,
+    required this.onSchoolTypeChanged,
     required this.onIncomeChanged,
     required this.onDeadlineChanged,
     required this.onMinimumMatchChanged,
@@ -572,16 +767,22 @@ class _FinderFiltersCard extends StatelessWidget {
   final String search;
   final String selectedCategory;
   final String selectedProviderType;
+  final String selectedEducationLevel;
+  final String selectedSchoolType;
   final String selectedIncomeRule;
   final String selectedDeadline;
   final String minimumMatch;
   final bool savedOnly;
   final List<String> categories;
   final List<String> providerTypes;
+  final List<String> educationLevels;
+  final List<String> schoolTypes;
   final List<String> incomeRules;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<String?> onCategoryChanged;
   final ValueChanged<String?> onProviderChanged;
+  final ValueChanged<String?> onEducationLevelChanged;
+  final ValueChanged<String?> onSchoolTypeChanged;
   final ValueChanged<String?> onIncomeChanged;
   final ValueChanged<String?> onDeadlineChanged;
   final ValueChanged<String> onMinimumMatchChanged;
@@ -626,7 +827,7 @@ class _FinderFiltersCard extends StatelessWidget {
               controller: TextEditingController(text: search)
                 ..selection = TextSelection.collapsed(offset: search.length),
               decoration: const InputDecoration(
-                labelText: 'Search title, provider, course, or location',
+                labelText: 'Search title, provider, track, grade, or location',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(),
               ),
@@ -644,6 +845,20 @@ class _FinderFiltersCard extends StatelessWidget {
               value: dropdownValue(providerTypes, selectedProviderType),
               options: providerTypes,
               onChanged: onProviderChanged,
+            ),
+            const SizedBox(height: 12),
+            _FilterDropdown(
+              label: 'Education level',
+              value: dropdownValue(educationLevels, selectedEducationLevel),
+              options: educationLevels,
+              onChanged: onEducationLevelChanged,
+            ),
+            const SizedBox(height: 12),
+            _FilterDropdown(
+              label: 'School type',
+              value: dropdownValue(schoolTypes, selectedSchoolType),
+              options: schoolTypes,
+              onChanged: onSchoolTypeChanged,
             ),
             const SizedBox(height: 12),
             _FilterDropdown(
@@ -810,7 +1025,9 @@ class _ProfileSummary extends StatelessWidget {
       'first_name',
       'last_name',
       'contact_number',
+      'education_level',
       'school',
+      'school_type',
       'course_or_strand',
       'year_level',
       'gwa',
@@ -856,6 +1073,150 @@ class _ProfileSummary extends StatelessWidget {
   }
 }
 
+class _NotificationsCard extends StatelessWidget {
+  const _NotificationsCard({
+    required this.notifications,
+    required this.onMarkRead,
+  });
+
+  final List<Map<String, dynamic>> notifications;
+  final ValueChanged<Map<String, dynamic>> onMarkRead;
+
+  @override
+  Widget build(BuildContext context) {
+    final unreadCount = notifications
+        .where((notification) => stringValue(notification['read_at']).isEmpty)
+        .length;
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Notifications',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                  ),
+                ),
+                if (unreadCount > 0)
+                  _StatusPill(label: '$unreadCount new', status: 'submitted'),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (notifications.isEmpty)
+              const Text(
+                'No portal reminders yet.',
+                style: TextStyle(color: Color(0xFF64748B)),
+              )
+            else
+              for (final notification in notifications.take(5))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _NotificationTile(
+                    notification: notification,
+                    onMarkRead: () => onMarkRead(notification),
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationTile extends StatelessWidget {
+  const _NotificationTile({
+    required this.notification,
+    required this.onMarkRead,
+  });
+
+  final Map<String, dynamic> notification;
+  final VoidCallback onMarkRead;
+
+  @override
+  Widget build(BuildContext context) {
+    final isRead = stringValue(notification['read_at']).isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isRead ? const Color(0xFFF8FAFC) : const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isRead ? const Color(0xFFE2E8F0) : const Color(0xFFFDE68A),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                isRead
+                    ? Icons.notifications_none
+                    : Icons.notifications_active_outlined,
+                color: isRead
+                    ? const Color(0xFF64748B)
+                    : const Color(0xFF92400E),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      stringValue(
+                        notification['title'],
+                        fallback: 'Portal update',
+                      ),
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      stringValue(notification['message']),
+                      style: const TextStyle(
+                        color: Color(0xFF475569),
+                        height: 1.35,
+                      ),
+                    ),
+                    if (stringValue(notification['created_at']).isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          stringValue(notification['created_at']),
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (!isRead) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: onMarkRead,
+                child: const Text('Mark read'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileCard extends StatelessWidget {
   const _ProfileCard({required this.user, required this.onEdit});
 
@@ -871,23 +1232,56 @@ class _ProfileCard extends StatelessWidget {
         'Contact',
         stringValue(user['contact_number'], fallback: 'Not provided'),
       ),
-      _Detail('School', stringValue(user['school'], fallback: 'Not provided')),
+      _Detail('Education level', profileLabelFromKey(user['education_level'])),
       _Detail(
-        'Course / strand',
+        'School / learning institution',
+        stringValue(user['school'], fallback: 'Not provided'),
+      ),
+      _Detail('School type', profileLabelFromKey(user['school_type'])),
+      _Detail(
+        'LRN / student number',
+        stringValue(user['learner_reference_number'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'Track / strand / course',
         stringValue(user['course_or_strand'], fallback: 'Not provided'),
       ),
       _Detail(
-        'Year level',
+        'Grade / year level',
         stringValue(user['year_level'], fallback: 'Not provided'),
       ),
       _Detail(
-        'GWA / average',
+        'GWA / general average',
         stringValue(user['gwa'], fallback: 'Not provided'),
       ),
       _Detail('Grading scale', gradingScaleLabel(user['grading_scale'])),
       _Detail(
         'Income bracket',
         stringValue(user['income_bracket'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'Household size',
+        stringValue(user['household_size'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'Preferred scholarship categories',
+        stringValue(user['preferred_categories'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'Preferred locations',
+        stringValue(user['preferred_locations'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'Willing to relocate',
+        profileLabelFromKey(user['willing_to_relocate']),
+      ),
+      _Detail(
+        'Support needs',
+        stringValue(user['support_needs'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'Scholarship goal',
+        stringValue(user['scholarship_goal'], fallback: 'Not provided'),
       ),
       _Detail(
         'Location',
@@ -905,6 +1299,10 @@ class _ProfileCard extends StatelessWidget {
       _Detail(
         'Guardian',
         stringValue(user['guardian_name'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'Guardian contact',
+        stringValue(user['guardian_contact'], fallback: 'Not provided'),
       ),
     ];
 
@@ -1000,7 +1398,7 @@ class _DssFormulaCard extends StatelessWidget {
     _DssFormulaItem(
       '35%',
       'Eligibility',
-      'GWA, course, year, location, and income fit.',
+      'Average, track, grade/year, location, and income fit.',
     ),
     _DssFormulaItem(
       '25%',
@@ -1101,6 +1499,408 @@ class _DssFormulaItem {
   final String detail;
 }
 
+class _DocumentHubCard extends StatelessWidget {
+  const _DocumentHubCard({
+    required this.stats,
+    required this.preparedDocuments,
+    required this.applications,
+    required this.isSaving,
+    required this.onUpload,
+    required this.onDelete,
+  });
+
+  final Map<String, dynamic> stats;
+  final List<Map<String, dynamic>> preparedDocuments;
+  final List<Map<String, dynamic>> applications;
+  final bool isSaving;
+  final VoidCallback onUpload;
+  final ValueChanged<Map<String, dynamic>> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final statItems = [
+      _StatData('Prepared', stats['prepared'] ?? 0, Colors.blue),
+      _StatData('Uploaded', stats['uploaded'] ?? 0, Colors.green),
+      _StatData('Review', stats['pending'] ?? 0, Colors.amber),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Document wallet',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: onUpload,
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text('Upload'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Prepare common files once, then use them when applying to scholarships.',
+                  style: TextStyle(color: Color(0xFF64748B), height: 1.35),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: statItems
+                      .map(
+                        (item) => Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: item == statItems.last ? 0 : 8,
+                            ),
+                            child: _StatCard(data: item),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Prepared files',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 12),
+                if (preparedDocuments.isEmpty)
+                  const Text(
+                    'No prepared documents yet. Upload common requirements before applying.',
+                    style: TextStyle(color: Color(0xFF64748B)),
+                  )
+                else
+                  for (final document in preparedDocuments)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _PreparedDocumentRow(
+                        document: document,
+                        isSaving: isSaving,
+                        onDelete: () => onDelete(document),
+                      ),
+                    ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Application document status',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 12),
+                if (applications.isEmpty)
+                  const Text(
+                    'Submitted applications will show document review status here.',
+                    style: TextStyle(color: Color(0xFF64748B)),
+                  )
+                else
+                  for (final application in applications)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _ApplicationDocumentStatus(
+                        application: application,
+                      ),
+                    ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PreparedDocumentRow extends StatelessWidget {
+  const _PreparedDocumentRow({
+    required this.document,
+    required this.isSaving,
+    required this.onDelete,
+  });
+
+  final Map<String, dynamic> document;
+  final bool isSaving;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.description_outlined),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  stringValue(document['document_name']),
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${stringValue(document['original_name'], fallback: 'Uploaded file')} - ${formatBytes(document['size'])}',
+                  style: const TextStyle(color: Color(0xFF64748B)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (stringValue(document['uploaded_at']).isNotEmpty)
+                  Text(
+                    stringValue(document['uploaded_at']),
+                    style: const TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 12,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: isSaving ? null : onDelete,
+            icon: const Icon(Icons.delete_outline),
+            color: const Color(0xFFB91C1C),
+            tooltip: 'Remove',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ApplicationDocumentStatus extends StatelessWidget {
+  const _ApplicationDocumentStatus({required this.application});
+
+  final Map<String, dynamic> application;
+
+  @override
+  Widget build(BuildContext context) {
+    final scholarship = asMap(application['scholarship']);
+    final readiness = asMap(application['document_readiness']);
+    final required = intValue(readiness['required']);
+    final uploaded = intValue(readiness['uploaded']);
+    final accepted = intValue(readiness['accepted']);
+    final percent = intValue(readiness['uploaded_percent']);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            stringValue(scholarship['title'], fallback: 'Scholarship'),
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: required == 0 ? 1 : percent / 100,
+              minHeight: 9,
+              backgroundColor: const Color(0xFFE2E8F0),
+              color: const Color(0xFF0284C7),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            required == 0
+                ? 'No listed document requirements.'
+                : '$uploaded of $required uploaded - $accepted accepted',
+            style: const TextStyle(color: Color(0xFF475569)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreparedDocumentSheet extends StatefulWidget {
+  const _PreparedDocumentSheet({
+    required this.documentOptions,
+    required this.apiClient,
+  });
+
+  final List<String> documentOptions;
+  final ApiClient apiClient;
+
+  @override
+  State<_PreparedDocumentSheet> createState() => _PreparedDocumentSheetState();
+}
+
+class _PreparedDocumentSheetState extends State<_PreparedDocumentSheet> {
+  String selectedDocument = '';
+  PlatformFile? pickedFile;
+  bool isUploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedDocument = widget.documentOptions.isNotEmpty
+        ? widget.documentOptions.first
+        : '';
+  }
+
+  Future<void> pickDocumentFile() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+    );
+
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      pickedFile = result.files.single;
+    });
+  }
+
+  Future<void> upload() async {
+    final filePath = pickedFile?.path;
+
+    if (selectedDocument.isEmpty || filePath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a document type and file first.')),
+      );
+      return;
+    }
+
+    setState(() => isUploading = true);
+
+    try {
+      await widget.apiClient.uploadPreparedDocument(
+        documentName: selectedDocument,
+        filePath: filePath,
+        fileName: pickedFile?.name,
+      );
+
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isUploading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Upload prepared document',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 12),
+            if (widget.documentOptions.isEmpty)
+              const Text(
+                'No document types are available yet.',
+                style: TextStyle(color: Color(0xFF64748B)),
+              )
+            else
+              DropdownButtonFormField<String>(
+                initialValue: selectedDocument,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Document type',
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.documentOptions
+                    .map(
+                      (document) => DropdownMenuItem(
+                        value: document,
+                        child: Text(document, overflow: TextOverflow.ellipsis),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  setState(() => selectedDocument = value ?? '');
+                },
+              ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: isUploading ? null : pickDocumentFile,
+              icon: const Icon(Icons.attach_file),
+              label: Text(
+                pickedFile == null ? 'Choose file' : pickedFile!.name,
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: isUploading ? null : upload,
+              child: Text(isUploading ? 'Uploading...' : 'Upload document'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _CriterionColors {
   const _CriterionColors({
     required this.background,
@@ -1196,6 +1996,10 @@ class _ScholarshipCard extends StatelessWidget {
     final requirements = documentRequirements(scholarship['requirements']);
     final score = intValue(match['score']);
     final distanceLabel = stringValue(scholarship['distance_label']);
+    final educationLabel = criteriaLabel(
+      scholarship['eligible_education_levels'],
+    );
+    final schoolTypeLabel = criteriaLabel(scholarship['eligible_school_types']);
     final quickNote = stringValue(
       match['summary'],
       fallback: stringValue(
@@ -1216,6 +2020,10 @@ class _ScholarshipCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _ScholarshipLogo(
+                  imageUrl: stringValue(scholarship['image_url']),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1261,6 +2069,18 @@ class _ScholarshipCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
+                _InfoChip(icon: Icons.school_outlined, label: educationLabel),
+                _InfoChip(
+                  icon: Icons.business_outlined,
+                  label: schoolTypeLabel,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
                 _InfoChip(
                   icon: Icons.payments,
                   label: moneyValue(scholarship['award_amount']),
@@ -1277,6 +2097,18 @@ class _ScholarshipCard extends StatelessWidget {
                     fallback: 'No deadline',
                   ),
                 ),
+                if (intValue(scholarship['slots_available']) > 0)
+                  _InfoChip(
+                    icon: Icons.groups_outlined,
+                    label: '${intValue(scholarship['slots_available'])} slots',
+                  ),
+                if (stringValue(scholarship['application_mode']).isNotEmpty)
+                  _InfoChip(
+                    icon: Icons.assignment_turned_in_outlined,
+                    label: applicationModeLabel(
+                      scholarship['application_mode'],
+                    ),
+                  ),
                 _InfoChip(
                   icon: Icons.description,
                   label: requirements.isEmpty
@@ -1429,9 +2261,14 @@ class _ScholarshipDetailScreenState extends State<_ScholarshipDetailScreen> {
     final match = asMap(scholarship['eligibility_match']);
     final criteria = asMapList(match['criteria']);
     final requirements = documentRequirements(scholarship['requirements']);
+    final prepared = asMap(scholarship['prepared_documents']);
+    final preparedMatched = stringList(prepared['matched']);
     final score = intValue(match['score']);
     final mapUrl = stringValue(scholarship['map_url']);
     final distanceLabel = stringValue(scholarship['distance_label']);
+    final applicationMode = applicationModeLabel(
+      scholarship['application_mode'],
+    );
 
     return Scaffold(
       backgroundColor: const Color(0xFFE8EFF8),
@@ -1454,41 +2291,58 @@ class _ScholarshipDetailScreenState extends State<_ScholarshipDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      stringValue(
-                        scholarship['category'],
-                        fallback: labelFromKey(provider['type']),
-                      ),
-                      style: const TextStyle(
-                        color: Color(0xFFFDE68A),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      stringValue(
-                        scholarship['title'],
-                        fallback: 'Scholarship program',
-                      ),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 27,
-                        fontWeight: FontWeight.w900,
-                        height: 1.05,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      stringValue(
-                        provider['name'],
-                        fallback: 'Scholarship Provider',
-                      ),
-                      style: const TextStyle(
-                        color: Color(0xFFCBD5E1),
-                        fontWeight: FontWeight.w800,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _ScholarshipLogo(
+                          imageUrl: stringValue(scholarship['image_url']),
+                          size: 58,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                stringValue(
+                                  scholarship['category'],
+                                  fallback: labelFromKey(provider['type']),
+                                ),
+                                style: const TextStyle(
+                                  color: Color(0xFFFDE68A),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                stringValue(
+                                  scholarship['title'],
+                                  fallback: 'Scholarship program',
+                                ),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 27,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.05,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                stringValue(
+                                  provider['name'],
+                                  fallback: 'Scholarship Provider',
+                                ),
+                                style: const TextStyle(
+                                  color: Color(0xFFCBD5E1),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     Wrap(
@@ -1545,7 +2399,58 @@ class _ScholarshipDetailScreenState extends State<_ScholarshipDetailScreen> {
                           ? 'Docs not listed'
                           : '${requirements.length} documents',
                     ),
+                    if (intValue(scholarship['slots_available']) > 0)
+                      _InfoChip(
+                        icon: Icons.groups_outlined,
+                        label:
+                            '${intValue(scholarship['slots_available'])} slots',
+                      ),
+                    if (stringValue(scholarship['application_mode']).isNotEmpty)
+                      _InfoChip(
+                        icon: Icons.assignment_turned_in_outlined,
+                        label: applicationMode,
+                      ),
                   ],
+                ),
+              ],
+            ),
+            _DetailSection(
+              title: 'Application Workflow',
+              children: [
+                _DetailTile(
+                  detail: _Detail('Application mode', applicationMode),
+                ),
+                const SizedBox(height: 8),
+                _DetailTile(
+                  detail: _Detail(
+                    'Slots available',
+                    intValue(scholarship['slots_available']) > 0
+                        ? '${intValue(scholarship['slots_available'])}'
+                        : 'Not listed',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _DetailTile(
+                  detail: _Detail(
+                    'Renewal policy',
+                    stringValue(
+                      scholarship['renewal_policy'],
+                      fallback: 'Not listed',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _DetailTile(
+                  detail: _Detail(
+                    'Contact',
+                    [
+                          scholarship['contact_email'],
+                          scholarship['contact_number'],
+                        ]
+                        .map(stringValue)
+                        .where((value) => value.isNotEmpty)
+                        .join(' / '),
+                  ),
                 ),
               ],
             ),
@@ -1562,7 +2467,19 @@ class _ScholarshipDetailScreenState extends State<_ScholarshipDetailScreen> {
                 const SizedBox(height: 14),
                 _DetailTile(
                   detail: _Detail(
-                    'Courses / strands',
+                    'Education levels',
+                    criteriaLabel(scholarship['eligible_education_levels']),
+                  ),
+                ),
+                _DetailTile(
+                  detail: _Detail(
+                    'School types',
+                    criteriaLabel(scholarship['eligible_school_types']),
+                  ),
+                ),
+                _DetailTile(
+                  detail: _Detail(
+                    'Tracks / strands / courses',
                     stringValue(
                       scholarship['eligible_courses'],
                       fallback: 'Any',
@@ -1571,7 +2488,7 @@ class _ScholarshipDetailScreenState extends State<_ScholarshipDetailScreen> {
                 ),
                 _DetailTile(
                   detail: _Detail(
-                    'Year levels',
+                    'Grade / year levels',
                     stringValue(
                       scholarship['eligible_year_levels'],
                       fallback: 'Any',
@@ -1629,12 +2546,22 @@ class _ScholarshipDetailScreenState extends State<_ScholarshipDetailScreen> {
                     runSpacing: 8,
                     children: [
                       for (final requirement in requirements)
-                        Chip(
-                          label: Text(requirement),
-                          side: const BorderSide(color: Color(0xFFE2E8F0)),
+                        _RequirementChip(
+                          label: requirement,
+                          isReady: preparedMatched.contains(requirement),
                         ),
                     ],
                   ),
+                if (requirements.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    '${intValue(prepared['uploaded'])} of ${requirements.length} already uploaded in Documents.',
+                    style: const TextStyle(
+                      color: Color(0xFF475569),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ],
             ),
             _DetailSection(
@@ -1727,10 +2654,17 @@ class _ApplicationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scholarship = asMap(application['scholarship']);
     final dss = asMap(application['dss_breakdown']);
+    final dssCriteria = asMapList(dss['criteria']);
     final readiness = asMap(application['document_readiness']);
     final documents = asMapList(application['documents']);
     final timeline = asMapList(application['timeline']);
     final dssScore = intValue(application['dss_score']);
+    final status = stringValue(application['status'], fallback: 'submitted');
+    final hasOutcome =
+        stringValue(application['awarded_amount']).isNotEmpty ||
+        stringValue(application['outcome_notes']).isNotEmpty ||
+        stringValue(application['outcome_at']).isNotEmpty ||
+        ['awarded', 'not_awarded', 'disbursed', 'renewed'].contains(status);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
@@ -1764,10 +2698,24 @@ class _ApplicationCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                _StatusPill(label: labelFromKey(application['status'])),
+                _StatusPill(label: labelFromKey(status), status: status),
               ],
             ),
             const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Text(
+                statusDescription(status),
+                style: const TextStyle(color: Color(0xFF475569), height: 1.35),
+              ),
+            ),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -1803,6 +2751,14 @@ class _ApplicationCard extends StatelessWidget {
                       fallback: 'DSS helps providers prioritize applications.',
                     ),
                   ),
+                  if (dssCriteria.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    for (final criterion in dssCriteria)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _DssCriterionRow(criterion: criterion),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -1826,6 +2782,63 @@ class _ApplicationCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (hasOutcome) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFA7F3D0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Outcome details',
+                      style: TextStyle(
+                        color: Color(0xFF065F46),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _InfoChip(
+                          icon: Icons.payments_outlined,
+                          label: stringValue(
+                            application['awarded_amount'],
+                            fallback: 'Amount not listed',
+                          ),
+                        ),
+                        _InfoChip(
+                          icon: Icons.event_available_outlined,
+                          label: stringValue(
+                            application['outcome_at'],
+                            fallback: 'Date not listed',
+                          ),
+                        ),
+                        _InfoChip(
+                          icon: Icons.flag_outlined,
+                          label: labelFromKey(status),
+                        ),
+                      ],
+                    ),
+                    if (stringValue(application['outcome_notes']).isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          stringValue(application['outcome_notes']),
+                          style: const TextStyle(color: Color(0xFF166534)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
             if (documents.isNotEmpty) ...[
               const SizedBox(height: 12),
               const Text(
@@ -1861,6 +2874,70 @@ class _ApplicationCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DssCriterionRow extends StatelessWidget {
+  const _DssCriterionRow({required this.criterion});
+
+  final Map<String, dynamic> criterion;
+
+  @override
+  Widget build(BuildContext context) {
+    final score = intValue(criterion['score']);
+    final weight = intValue(criterion['weight']);
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(210),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFC7D2FE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  stringValue(criterion['label'], fallback: 'DSS factor'),
+                  style: const TextStyle(
+                    color: Color(0xFF312E81),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                '$score% / $weight%',
+                style: const TextStyle(
+                  color: Color(0xFF4338CA),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: score / 100,
+              minHeight: 7,
+              backgroundColor: const Color(0xFFE0E7FF),
+              color: const Color(0xFF4F46E5),
+            ),
+          ),
+          if (stringValue(criterion['note']).isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              stringValue(criterion['note']),
+              style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1945,6 +3022,7 @@ class _ApplicationSheet extends StatefulWidget {
 class _ApplicationSheetState extends State<_ApplicationSheet> {
   final notesController = TextEditingController();
   late final List<String> requirements;
+  late final List<String> preparedMatches;
   final Set<String> selected = {};
   bool isSubmitting = false;
 
@@ -1952,6 +3030,10 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
   void initState() {
     super.initState();
     requirements = documentRequirements(widget.scholarship['requirements']);
+    preparedMatches = stringList(
+      asMap(widget.scholarship['prepared_documents'])['matched'],
+    );
+    selected.addAll(preparedMatches);
   }
 
   @override
@@ -2014,9 +3096,27 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Confirm prepared documents. Uploading files is still handled on the web portal.',
+              'Confirm the requirements you have prepared. Files uploaded in the Documents tab are attached automatically when available.',
             ),
             const SizedBox(height: 16),
+            if (requirements.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFC7D2FE)),
+                ),
+                child: Text(
+                  '${preparedMatches.length} of ${requirements.length} requirements already match your Documents wallet.',
+                  style: const TextStyle(
+                    color: Color(0xFF3730A3),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            if (requirements.isNotEmpty) const SizedBox(height: 12),
             if (requirements.isEmpty)
               const Text('No document requirements are listed.')
             else
@@ -2033,6 +3133,11 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
                     });
                   },
                   title: Text(requirement),
+                  subtitle: Text(
+                    preparedMatches.contains(requirement)
+                        ? 'Uploaded in Documents and will be attached.'
+                        : 'Confirm manually or upload it in Documents first.',
+                  ),
                   contentPadding: EdgeInsets.zero,
                 ),
             const SizedBox(height: 12),
@@ -2083,13 +3188,40 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       required: true,
       keyboardType: TextInputType.phone,
     ),
-    _ProfileField('school', 'School'),
-    _ProfileField('course_or_strand', 'Course / strand'),
-    _ProfileField('year_level', 'Year level'),
+    _ProfileField(
+      'education_level',
+      'Education level (elementary / junior_high_school / senior_high_school / college)',
+    ),
+    _ProfileField('school', 'School / learning institution'),
+    _ProfileField('school_type', 'School type'),
+    _ProfileField('learner_reference_number', 'LRN / student number'),
+    _ProfileField('course_or_strand', 'Track / strand / course'),
+    _ProfileField('year_level', 'Grade / year level'),
     _ProfileField('enrollment_status', 'Enrollment status'),
-    _ProfileField('gwa', 'GWA / average', keyboardType: TextInputType.number),
+    _ProfileField(
+      'gwa',
+      'GWA / general average',
+      keyboardType: TextInputType.number,
+    ),
     _ProfileField('grading_scale', 'Grading scale (percentage / grade_point)'),
     _ProfileField('income_bracket', 'Income bracket'),
+    _ProfileField(
+      'household_size',
+      'Household size',
+      keyboardType: TextInputType.number,
+    ),
+    _ProfileField('preferred_categories', 'Preferred categories', maxLines: 2),
+    _ProfileField(
+      'preferred_locations',
+      'Preferred scholarship locations',
+      maxLines: 2,
+    ),
+    _ProfileField(
+      'willing_to_relocate',
+      'Willing to relocate (yes / no / depends)',
+    ),
+    _ProfileField('support_needs', 'Support needs', maxLines: 3),
+    _ProfileField('scholarship_goal', 'Scholarship goal', maxLines: 3),
     _ProfileField('barangay', 'Barangay'),
     _ProfileField('city', 'City / municipality'),
     _ProfileField('province', 'Province'),
@@ -2139,6 +3271,9 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       payload['grading_scale'] = normalizeGradingScale(
         payload['grading_scale'],
       );
+      payload['willing_to_relocate'] = normalizeRelocationChoice(
+        payload['willing_to_relocate'],
+      );
 
       await widget.apiClient.updateProfile(payload);
 
@@ -2184,6 +3319,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                   child: TextFormField(
                     controller: controllers[field.key],
                     maxLength: field.maxLength,
+                    maxLines: field.maxLines,
                     keyboardType: field.keyboardType,
                     decoration: InputDecoration(
                       labelText: field.label,
@@ -2198,6 +3334,14 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                       if (field.key == 'middle_initial' &&
                           !RegExp(r'^[A-Za-z]$').hasMatch(stringValue(value))) {
                         return 'Use 1 letter';
+                      }
+
+                      if (field.key == 'willing_to_relocate') {
+                        final normalized = normalizeRelocationChoice(value);
+                        if (stringValue(value).isNotEmpty &&
+                            normalized.isEmpty) {
+                          return 'Use yes, no, or depends';
+                        }
                       }
 
                       return null;
@@ -2222,6 +3366,7 @@ class _ProfileField {
     this.label, {
     this.required = false,
     this.maxLength,
+    this.maxLines = 1,
     this.keyboardType,
   });
 
@@ -2229,6 +3374,7 @@ class _ProfileField {
   final String label;
   final bool required;
   final int? maxLength;
+  final int maxLines;
   final TextInputType? keyboardType;
 }
 
@@ -2322,6 +3468,65 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
+class _ScholarshipLogo extends StatelessWidget {
+  const _ScholarshipLogo({required this.imageUrl, this.size = 52});
+
+  final String imageUrl;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final safeImageUrl = mobileImageUrl(imageUrl);
+
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: safeImageUrl.isEmpty
+            ? const Icon(Icons.school_outlined, color: Color(0xFF64748B))
+            : Image.network(
+                safeImageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.school_outlined, color: Color(0xFF64748B)),
+              ),
+      ),
+    );
+  }
+}
+
+class _RequirementChip extends StatelessWidget {
+  const _RequirementChip({required this.label, required this.isReady});
+
+  final String label;
+  final bool isReady;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      avatar: Icon(
+        isReady ? Icons.check_circle : Icons.pending_outlined,
+        color: isReady ? const Color(0xFF047857) : const Color(0xFF92400E),
+        size: 16,
+      ),
+      label: Text(label),
+      backgroundColor: isReady
+          ? const Color(0xFFECFDF5)
+          : const Color(0xFFFFFBEB),
+      side: BorderSide(
+        color: isReady ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A),
+      ),
+    );
+  }
+}
+
 class _ScorePill extends StatelessWidget {
   const _ScorePill({required this.score, required this.label});
 
@@ -2351,24 +3556,47 @@ class _ScorePill extends StatelessWidget {
 }
 
 class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.label});
+  const _StatusPill({required this.label, this.status});
 
   final String label;
+  final String? status;
 
   @override
   Widget build(BuildContext context) {
+    final raw = stringValue(status ?? label).toLowerCase().replaceAll(' ', '_');
+    final isPositive = [
+      'approved',
+      'qualified',
+      'awarded',
+      'disbursed',
+      'renewed',
+    ].contains(raw);
+    final isClosed = ['rejected', 'not_awarded'].contains(raw);
+    final isReview = ['under_review', 'shortlisted', 'interview'].contains(raw);
+    final background = isPositive
+        ? const Color(0xFFDCFCE7)
+        : isClosed
+        ? const Color(0xFFFFE4E6)
+        : isReview
+        ? const Color(0xFFE0F2FE)
+        : const Color(0xFFFEF3C7);
+    final text = isPositive
+        ? const Color(0xFF166534)
+        : isClosed
+        ? const Color(0xFF9F1239)
+        : isReview
+        ? const Color(0xFF075985)
+        : const Color(0xFF92400E);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFE0F2FE),
+        color: background,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          color: Color(0xFF075985),
-          fontWeight: FontWeight.w900,
-        ),
+        style: TextStyle(color: text, fontWeight: FontWeight.w900),
       ),
     );
   }
@@ -2438,6 +3666,14 @@ List<Map<String, dynamic>> asMapList(Object? value) {
   return [];
 }
 
+List<String> stringList(Object? value) {
+  if (value is List) {
+    return value.map(stringValue).where((item) => item.isNotEmpty).toList();
+  }
+
+  return [];
+}
+
 List<Map<String, dynamic>> rankedScholarships(
   List<Map<String, dynamic>> scholarships,
 ) {
@@ -2453,6 +3689,8 @@ List<Map<String, dynamic>> filterScholarships({
   required String search,
   required String category,
   required String providerType,
+  required String educationLevel,
+  required String schoolType,
   required String incomeRule,
   required String deadline,
   required String minimumMatch,
@@ -2472,7 +3710,9 @@ List<Map<String, dynamic>> filterScholarships({
           scholarship['description'],
           scholarship['category'],
           scholarship['eligibility'],
+          scholarship['eligible_education_levels'],
           scholarship['eligible_courses'],
+          scholarship['eligible_school_types'],
           scholarship['eligible_year_levels'],
           scholarship['eligible_locations'],
           scholarship['income_requirement'],
@@ -2485,6 +3725,8 @@ List<Map<String, dynamic>> filterScholarships({
     return matchesSearch &&
         optionMatches(scholarship['category'], category) &&
         optionMatches(provider['type'], providerType) &&
+        textMatches(scholarship['eligible_education_levels'], educationLevel) &&
+        textMatches(scholarship['eligible_school_types'], schoolType) &&
         textMatches(scholarship['income_requirement'], incomeRule) &&
         deadlineMatches(scholarship, deadline) &&
         (minimum == null || score >= minimum) &&
@@ -2519,6 +3761,20 @@ List<String> filterOptions(
   return ['all', ...options];
 }
 
+List<String> criteriaFilterOptions(
+  List<Map<String, dynamic>> scholarships,
+  String field,
+) {
+  final options =
+      scholarships
+          .expand((scholarship) => splitCriteriaOptions(scholarship[field]))
+          .toSet()
+          .toList()
+        ..sort();
+
+  return ['all', ...options];
+}
+
 String dropdownValue(List<String> options, String selected) {
   return options.contains(selected) ? selected : 'all';
 }
@@ -2541,6 +3797,26 @@ String friendlyOption(String value) {
   }
 
   return labelFromKey(value);
+}
+
+List<String> splitCriteriaOptions(Object? value) {
+  final text = stringValue(value);
+
+  if (text.isEmpty) {
+    return [];
+  }
+
+  return text
+      .split(RegExp(r'\r?\n|,'))
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toList();
+}
+
+String criteriaLabel(Object? value, {String fallback = 'Open to all'}) {
+  final items = splitCriteriaOptions(value).map(labelFromKey).toList();
+
+  return items.isEmpty ? fallback : items.join(', ');
 }
 
 bool optionMatches(Object? value, String selected) {
@@ -2706,6 +3982,12 @@ String labelFromKey(Object? value) {
       .join(' ');
 }
 
+String profileLabelFromKey(Object? value) {
+  final text = stringValue(value);
+
+  return text.isEmpty ? 'Not provided' : labelFromKey(text);
+}
+
 String gradingScaleLabel(Object? value) {
   final scale = stringValue(value);
 
@@ -2718,6 +4000,57 @@ String gradingScaleLabel(Object? value) {
   }
 
   return 'Not provided';
+}
+
+String applicationModeLabel(Object? value) {
+  final mode = stringValue(value);
+
+  if (mode.isEmpty) {
+    return 'Not listed';
+  }
+
+  return labelFromKey(mode);
+}
+
+String statusDescription(Object? value) {
+  final status = stringValue(value, fallback: 'submitted');
+
+  return switch (status) {
+    'submitted' =>
+      'Your application was received and is waiting for provider review.',
+    'under_review' =>
+      'The provider is checking your details and uploaded documents.',
+    'qualified' =>
+      'Your application passed initial requirements and remains in review.',
+    'shortlisted' => 'You are in a smaller candidate pool for closer review.',
+    'interview' =>
+      'The provider may contact you for interview or follow-up requirements.',
+    'approved' => 'Your application was approved by the provider.',
+    'awarded' => 'The provider recorded an award outcome for this application.',
+    'disbursed' => 'Award release or disbursement has been recorded.',
+    'renewed' => 'This scholarship support was renewed.',
+    'rejected' => 'The application was closed and not approved.',
+    'not_awarded' => 'The application completed review but was not awarded.',
+    _ => 'The provider will update this status as review progresses.',
+  };
+}
+
+String mobileImageUrl(Object? value) {
+  final url = stringValue(value);
+  final source = Uri.tryParse(url);
+  final target = Uri.tryParse(ApiClient.assetBaseUrl);
+
+  if (source == null || target == null) {
+    return url;
+  }
+
+  if (['127.0.0.1', 'localhost'].contains(source.host)) {
+    return source
+        .replace(scheme: target.scheme, host: target.host, port: target.port)
+        .toString();
+  }
+
+  return url;
 }
 
 String coordinateLabel(Object? latitude, Object? longitude) {
@@ -2768,6 +4101,20 @@ String normalizeGradingScale(Object? value) {
   return '';
 }
 
+String normalizeRelocationChoice(Object? value) {
+  final choice = stringValue(value).toLowerCase().trim();
+
+  if (choice.isEmpty) {
+    return '';
+  }
+
+  if (choice == 'yes' || choice == 'no' || choice == 'depends') {
+    return choice;
+  }
+
+  return '';
+}
+
 String moneyValue(Object? value) {
   final amount = double.tryParse(stringValue(value));
   if (amount == null) {
@@ -2775,6 +4122,24 @@ String moneyValue(Object? value) {
   }
 
   return 'PHP ${amount.toStringAsFixed(2)}';
+}
+
+String formatBytes(Object? value) {
+  final bytes = double.tryParse(stringValue(value));
+
+  if (bytes == null || bytes <= 0) {
+    return 'Size unknown';
+  }
+
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  if (bytes >= 1024) {
+    return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  }
+
+  return '${bytes.toStringAsFixed(0)} B';
 }
 
 List<String> documentRequirements(Object? value) {

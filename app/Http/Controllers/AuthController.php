@@ -9,8 +9,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -179,6 +181,23 @@ class AuthController extends Controller
             ]);
 
             $resetUrl = url('/reset-password').'?token='.$token.'&email='.urlencode($validated['email']);
+
+            try {
+                Mail::raw(
+                    "Hello {$user->name},\n\nUse this link to reset your Scholarship Portal password:\n\n{$resetUrl}\n\nThis link expires in one hour. If you did not request this, you can ignore this email.",
+                    fn ($message) => $message
+                        ->to($user->email)
+                        ->subject('Scholarship Portal password reset'),
+                );
+            } catch (Throwable $error) {
+                ActivityLog::record(
+                    $user,
+                    'password_reset_email_failed',
+                    "Password reset email could not be sent to {$user->email}.",
+                    $request,
+                    ['error' => $error->getMessage()],
+                );
+            }
 
             ActivityLog::record(
                 $user,

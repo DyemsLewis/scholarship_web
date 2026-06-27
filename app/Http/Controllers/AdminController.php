@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\ApplicationDocument;
 use App\Models\PortalNotification;
+use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
@@ -13,6 +14,7 @@ use App\Services\DecisionSupportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -382,7 +384,7 @@ class AdminController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
 
         $providers = User::query()
-            ->with('providerProfile')
+            ->with(['providerProfile', 'providerVerificationDocuments'])
             ->where('role', 'provider')
             ->latest()
             ->get(['id', 'email', 'username', 'role', 'created_at']);
@@ -406,6 +408,10 @@ class AdminController extends Controller
             ],
             'providers' => $providers->map(fn (User $user) => [
                 ...$user->publicPayload(),
+                'verification_documents' => $user->providerVerificationDocuments
+                    ->sortByDesc('created_at')
+                    ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))
+                    ->values(),
                 'created_at' => $user->created_at?->format('M d, Y'),
             ])->values(),
             'applications' => $applications->map(fn (ScholarshipApplication $application) => [
@@ -422,6 +428,9 @@ class AdminController extends Controller
                 'dss_recommendation' => $application->dss_recommendation,
                 'eligibility_score' => $application->eligibility_score,
                 'decision_reason' => $application->decision_reason,
+                'awarded_amount' => $application->awarded_amount,
+                'outcome_notes' => $application->outcome_notes,
+                'outcome_at' => $application->outcome_at?->format('M d, Y'),
                 'documents_uploaded' => $application->documents->count(),
                 'documents_pending' => $application->documents->where('status', 'pending')->count(),
                 'documents' => $application->documents
@@ -472,6 +481,14 @@ class AdminController extends Controller
             'message' => 'Provider verification updated.',
             'provider' => $provider->fresh('providerProfile')->publicPayload(),
         ]);
+    }
+
+    public function downloadProviderVerificationDocument(Request $request, ProviderVerificationDocument $document)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless(Storage::disk('local')->exists($document->path), 404);
+
+        return Storage::disk('local')->download($document->path, $document->original_name);
     }
 
     public function storeUser(Request $request): JsonResponse
@@ -700,7 +717,7 @@ class AdminController extends Controller
 
         return response()->streamDownload(function () {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['ID', 'Scholarship', 'Provider', 'Applicant', 'Email', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Pending Documents', 'Applicant Notes', 'Review Notes']);
+            fputcsv($handle, ['ID', 'Scholarship', 'Provider', 'Applicant', 'Email', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Outcome Date', 'Outcome Notes', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Pending Documents', 'Applicant Notes', 'Review Notes']);
 
             ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
@@ -719,6 +736,9 @@ class AdminController extends Controller
                             $application->dss_recommendation,
                             $application->eligibility_score,
                             $application->decision_reason,
+                            $application->awarded_amount,
+                            $application->outcome_at?->format('Y-m-d'),
+                            $application->outcome_notes,
                             $application->submitted_at?->format('Y-m-d H:i:s'),
                             implode('; ', $application->document_checklist ?? []),
                             $application->documents->count(),
@@ -766,6 +786,20 @@ class AdminController extends Controller
             'reviewed_at' => $document->reviewed_at?->format('M d, Y h:i A'),
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'download_url' => route('documents.download', $document),
+        ];
+    }
+
+    private function verificationDocumentPayload(ProviderVerificationDocument $document): array
+    {
+        return [
+            'id' => $document->id,
+            'document_type' => $document->document_type,
+            'original_name' => $document->original_name,
+            'size' => $document->size,
+            'status' => $document->status,
+            'review_notes' => $document->review_notes,
+            'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'download_url' => route('admin.provider-verification-documents.download', $document),
         ];
     }
 

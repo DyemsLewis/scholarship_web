@@ -8,6 +8,8 @@ const updatingId = ref(null);
 const errorMessage = ref('');
 const statusMessage = ref('');
 const selectedStatus = ref('pending');
+const selectedApplicationFilter = ref('all');
+const selectedApplicationSort = ref('priority');
 const providerNotes = ref({});
 const hiddenProviderIds = ref([]);
 const stats = ref({
@@ -38,14 +40,65 @@ const statusFilters = computed(() => [
     { value: 'rejected', label: 'Rejected', count: stats.value.rejected_providers },
     { value: 'all', label: 'All providers', count: stats.value.providers },
 ]);
+const applicationFilters = computed(() => [
+    { value: 'all', label: 'All', count: applications.value.length },
+    {
+        value: 'pending_documents',
+        label: 'Document queue',
+        count: applications.value.filter((application) => applicationDocumentIssueCount(application) > 0).length,
+    },
+    {
+        value: 'high_dss',
+        label: 'High DSS',
+        count: applications.value.filter((application) => Number(application.dss_score ?? 0) >= 80).length,
+    },
+    {
+        value: 'needs_review',
+        label: 'Needs review',
+        count: applications.value.filter((application) => application.dss_recommendation === 'needs_review' || ['submitted', 'under_review'].includes(application.status ?? 'submitted')).length,
+    },
+]);
+const prioritizedApplications = computed(() => {
+    const filteredApplications = applications.value.filter((application) => {
+        if (selectedApplicationFilter.value === 'pending_documents') {
+            return applicationDocumentIssueCount(application) > 0;
+        }
+
+        if (selectedApplicationFilter.value === 'high_dss') {
+            return Number(application.dss_score ?? 0) >= 80;
+        }
+
+        if (selectedApplicationFilter.value === 'needs_review') {
+            return application.dss_recommendation === 'needs_review' || ['submitted', 'under_review'].includes(application.status ?? 'submitted');
+        }
+
+        return true;
+    });
+
+    return [...filteredApplications].sort((first, second) => {
+        if (selectedApplicationSort.value === 'dss') {
+            return Number(second.dss_score ?? 0) - Number(first.dss_score ?? 0);
+        }
+
+        if (selectedApplicationSort.value === 'documents') {
+            return applicationDocumentIssueCount(second) - applicationDocumentIssueCount(first);
+        }
+
+        return applicationReviewScore(second) - applicationReviewScore(first) || Number(second.dss_score ?? 0) - Number(first.dss_score ?? 0);
+    });
+});
 
 function statusClass(status) {
-    if (status === 'approved') {
+    if (['approved', 'awarded', 'disbursed', 'renewed'].includes(status)) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (status === 'rejected') {
+    if (['rejected', 'not_awarded'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
+    }
+
+    if (['under_review', 'shortlisted', 'interview'].includes(status)) {
+        return 'bg-sky-100 text-sky-800';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -67,6 +120,105 @@ function documentStatusClass(status) {
     return 'bg-sky-100 text-sky-800';
 }
 
+function applicationDocumentIssueCount(application) {
+    if (application.documents?.length) {
+        return application.documents.filter((document) => ['pending', 'needs_replacement', 'rejected'].includes(document.status ?? 'pending')).length;
+    }
+
+    return Number(application.documents_pending ?? 0);
+}
+
+function applicationReviewScore(application) {
+    const status = application.status ?? 'submitted';
+    const issues = applicationDocumentIssueCount(application);
+    let score = 0;
+
+    if (['submitted', 'under_review'].includes(status)) {
+        score += status === 'submitted' ? 22 : 16;
+    }
+
+    if (issues > 0) {
+        score += Math.min(35, issues * 12);
+    }
+
+    if (Number(application.dss_score ?? 0) >= 80) {
+        score += 12;
+    }
+
+    if (Number(application.eligibility_score ?? 0) >= 80) {
+        score += 8;
+    }
+
+    if (application.dss_recommendation === 'needs_review') {
+        score += 20;
+    }
+
+    if (application.dss_recommendation === 'not_recommended') {
+        score += 10;
+    }
+
+    if (['approved', 'awarded', 'not_awarded', 'disbursed', 'renewed', 'rejected'].includes(status)) {
+        score -= 20;
+    }
+
+    return Math.max(0, score);
+}
+
+function applicationPriorityLabel(application) {
+    const score = applicationReviewScore(application);
+
+    if (score >= 55) {
+        return 'High priority';
+    }
+
+    if (score >= 30) {
+        return 'Needs review';
+    }
+
+    return 'Routine';
+}
+
+function applicationPriorityClass(application) {
+    const score = applicationReviewScore(application);
+
+    if (score >= 55) {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (score >= 30) {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-slate-200 text-slate-700';
+}
+
+function applicationReviewReasons(application) {
+    const reasons = [];
+    const issues = applicationDocumentIssueCount(application);
+
+    if (['submitted', 'under_review'].includes(application.status ?? 'submitted')) {
+        reasons.push('Open review');
+    }
+
+    if (issues > 0) {
+        reasons.push(`${issues} document ${issues === 1 ? 'issue' : 'issues'}`);
+    }
+
+    if (Number(application.dss_score ?? 0) >= 80) {
+        reasons.push('High DSS candidate');
+    }
+
+    if (application.dss_recommendation === 'needs_review') {
+        reasons.push('DSS needs manual check');
+    }
+
+    if (reasons.length === 0) {
+        reasons.push('No urgent admin flags');
+    }
+
+    return reasons.slice(0, 3);
+}
+
 function statusLabel(status) {
     return String(status ?? 'pending')
         .replace(/_/g, ' ')
@@ -79,6 +231,12 @@ function formatFileSize(size) {
     }
 
     return `${Math.max(1, Math.round(Number(size) / 1024))} KB`;
+}
+
+function documentTypeLabel(type) {
+    return String(type ?? 'Document')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function providerActionOptions(provider) {
@@ -277,6 +435,42 @@ onMounted(loadReviewData);
                                 </div>
 
                                 <div class="mt-3 rounded-md border border-slate-200 bg-white p-2.5">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                                            Verification proof
+                                        </p>
+                                        <span class="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
+                                            {{ provider.verification_documents?.length || 0 }} file{{ provider.verification_documents?.length === 1 ? '' : 's' }}
+                                        </span>
+                                    </div>
+                                    <div v-if="provider.verification_documents?.length" class="mt-2 grid gap-2">
+                                        <div
+                                            v-for="document in provider.verification_documents"
+                                            :key="document.id"
+                                            class="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 sm:flex-row sm:items-center sm:justify-between"
+                                        >
+                                            <div class="min-w-0">
+                                                <p class="truncate text-xs font-bold text-slate-950">
+                                                    {{ documentTypeLabel(document.document_type) }}
+                                                </p>
+                                                <p class="mt-0.5 truncate text-[11px] text-slate-500">
+                                                    {{ document.original_name }} - {{ formatFileSize(document.size) }}
+                                                </p>
+                                            </div>
+                                            <a
+                                                :href="document.download_url"
+                                                class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-100"
+                                            >
+                                                Download
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <p v-else class="mt-2 text-xs text-slate-500">
+                                        No proof documents uploaded yet.
+                                    </p>
+                                </div>
+
+                                <div class="mt-3 rounded-md border border-slate-200 bg-white p-2.5">
                                     <label class="block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
                                         Admin note
                                     </label>
@@ -321,13 +515,77 @@ onMounted(loadReviewData);
                             Recent submitted applications
                         </h3>
 
+                        <div v-if="applications.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                <div class="flex flex-wrap gap-2">
+                                    <button
+                                        v-for="filter in applicationFilters"
+                                        :key="filter.value"
+                                        type="button"
+                                        :class="[
+                                            'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
+                                            selectedApplicationFilter === filter.value
+                                                ? 'border-slate-900 bg-slate-900 text-white'
+                                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                                        ]"
+                                        @click="selectedApplicationFilter = filter.value"
+                                    >
+                                        {{ filter.label }} ({{ filter.count }})
+                                    </button>
+                                </div>
+
+                                <div class="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        :class="[
+                                            'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
+                                            selectedApplicationSort === 'priority'
+                                                ? 'border-sky-900 bg-sky-900 text-white'
+                                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                                        ]"
+                                        @click="selectedApplicationSort = 'priority'"
+                                    >
+                                        Priority
+                                    </button>
+                                    <button
+                                        type="button"
+                                        :class="[
+                                            'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
+                                            selectedApplicationSort === 'dss'
+                                                ? 'border-sky-900 bg-sky-900 text-white'
+                                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                                        ]"
+                                        @click="selectedApplicationSort = 'dss'"
+                                    >
+                                        DSS
+                                    </button>
+                                    <button
+                                        type="button"
+                                        :class="[
+                                            'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
+                                            selectedApplicationSort === 'documents'
+                                                ? 'border-sky-900 bg-sky-900 text-white'
+                                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                                        ]"
+                                        @click="selectedApplicationSort = 'documents'"
+                                    >
+                                        Documents
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div v-if="applications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
                             No applications yet.
                         </div>
 
+                        <div v-else-if="prioritizedApplications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+                            No applications match this review filter.
+                        </div>
+
                         <div v-else class="mt-4 grid gap-2 md:grid-cols-2">
                             <div
-                                v-for="application in applications"
+                                v-for="application in prioritizedApplications"
                                 :key="application.id"
                                 class="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm"
                             >
@@ -348,14 +606,31 @@ onMounted(loadReviewData);
                                         <p v-if="application.decision_reason" class="mt-1 truncate text-xs text-slate-500">
                                             Reason: {{ statusLabel(application.decision_reason) }}
                                         </p>
+                                        <p v-if="application.awarded_amount || application.outcome_at" class="mt-1 truncate text-xs font-semibold text-emerald-700">
+                                            Outcome: {{ application.awarded_amount || 'Amount not listed' }} <span v-if="application.outcome_at">on {{ application.outcome_at }}</span>
+                                        </p>
                                         <p class="mt-2 inline-flex w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-indigo-700 ring-1 ring-indigo-100">
                                             DSS: {{ application.dss_score ?? 0 }}% - {{ statusLabel(application.dss_recommendation || 'needs_review') }}
                                         </p>
                                     </div>
                                 </div>
-                                <span :class="['h-fit w-fit rounded-md px-2.5 py-1 text-[11px] font-bold uppercase', statusClass(application.status)]">
-                                    {{ statusLabel(application.status) }}
-                                </span>
+                                <div class="flex flex-wrap gap-2">
+                                    <span :class="['h-fit w-fit rounded-md px-2.5 py-1 text-[11px] font-bold uppercase', applicationPriorityClass(application)]">
+                                        {{ applicationPriorityLabel(application) }}
+                                    </span>
+                                    <span :class="['h-fit w-fit rounded-md px-2.5 py-1 text-[11px] font-bold uppercase', statusClass(application.status)]">
+                                        {{ statusLabel(application.status) }}
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <span
+                                        v-for="reason in applicationReviewReasons(application)"
+                                        :key="reason"
+                                        class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200"
+                                    >
+                                        {{ reason }}
+                                    </span>
+                                </div>
                                 <p class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
                                     {{ application.eligibility_score ?? 0 }}% match
                                 </p>

@@ -100,12 +100,21 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
 
         $scholarships = $this->publishedScholarships()->limit(8)->get();
+        $applications = ScholarshipApplication::query()
+            ->with(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
+            ->where('applicant_id', $request->user()->id)
+            ->latest('submitted_at')
+            ->limit(5)
+            ->get();
+        $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
+        $this->syncApplicantReminders($request->user());
 
         return response()->json([
             'user' => $this->userPayload($request),
             'profile_readiness' => $request->user()->applicantProfileReadiness(),
             'stats' => $this->statsPayload($request),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))->values(),
+            'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
             'notifications' => $this->notificationsPayload($request),
             'next_steps' => [
                 'Review available scholarship programs.',
@@ -125,6 +134,7 @@ class ApplicantDashboardController extends Controller
             ->where('applicant_id', $request->user()->id)
             ->latest('submitted_at')
             ->get();
+        $this->syncApplicantReminders($request->user());
 
         return response()->json([
             'user' => $this->userPayload($request),
@@ -150,6 +160,7 @@ class ApplicantDashboardController extends Controller
             ->where('user_id', $request->user()->id)
             ->latest('uploaded_at')
             ->get();
+        $this->syncApplicantReminders($request->user());
 
         return response()->json([
             'user' => $this->userPayload($request),
@@ -252,13 +263,22 @@ class ApplicantDashboardController extends Controller
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'education_level' => ['nullable', 'string', 'max:100'],
             'school' => ['nullable', 'string', 'max:255'],
+            'school_type' => ['nullable', 'string', 'max:100'],
+            'learner_reference_number' => ['nullable', 'string', 'max:50', 'regex:/^[A-Za-z0-9_.-]*$/'],
             'course_or_strand' => ['nullable', 'string', 'max:255'],
             'year_level' => ['nullable', 'string', 'max:100'],
             'enrollment_status' => ['nullable', 'string', 'max:100'],
             'gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'grading_scale' => ['nullable', Rule::in(['percentage', 'grade_point'])],
             'income_bracket' => ['nullable', 'string', 'max:100'],
+            'household_size' => ['nullable', 'integer', 'min:1', 'max:30'],
+            'preferred_categories' => ['nullable', 'string', 'max:1000'],
+            'preferred_locations' => ['nullable', 'string', 'max:1000'],
+            'willing_to_relocate' => ['nullable', Rule::in(['yes', 'no', 'depends'])],
+            'support_needs' => ['nullable', 'string', 'max:1500'],
+            'scholarship_goal' => ['nullable', 'string', 'max:1500'],
             'address' => ['nullable', 'string', 'max:500'],
             'barangay' => ['nullable', 'string', 'max:255'],
             'city' => ['nullable', 'string', 'max:255'],
@@ -374,6 +394,13 @@ class ApplicantDashboardController extends Controller
             'title' => 'New scholarship application',
             'message' => "{$request->user()->name} submitted an application for {$scholarship->title}.",
             'action_url' => '/provider/applications',
+        ]);
+        PortalNotification::create([
+            'user_id' => $request->user()->id,
+            'type' => 'application_submitted',
+            'title' => 'Application submitted',
+            'message' => "Your application for {$scholarship->title} was submitted successfully.",
+            'action_url' => '/dashboard/applications',
         ]);
 
         $freshApplication = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
@@ -585,7 +612,9 @@ class ApplicantDashboardController extends Controller
             'category' => $scholarship->category,
             'description' => $scholarship->description,
             'eligibility' => $scholarship->eligibility,
+            'eligible_education_levels' => $scholarship->eligible_education_levels,
             'eligible_courses' => $scholarship->eligible_courses,
+            'eligible_school_types' => $scholarship->eligible_school_types,
             'eligible_year_levels' => $scholarship->eligible_year_levels,
             'eligible_locations' => $scholarship->eligible_locations,
             'income_requirement' => $scholarship->income_requirement,
@@ -600,6 +629,11 @@ class ApplicantDashboardController extends Controller
             'requirements' => $scholarship->requirements,
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
+            'slots_available' => $scholarship->slots_available,
+            'application_mode' => $scholarship->application_mode,
+            'renewal_policy' => $scholarship->renewal_policy,
+            'contact_email' => $scholarship->contact_email,
+            'contact_number' => $scholarship->contact_number,
             'deadline' => $scholarship->deadline?->format('M d, Y'),
             'bookmarks_count' => $scholarship->bookmarks_count ?? $scholarship->bookmarks()->count(),
             'is_saved' => $saved,
@@ -693,6 +727,9 @@ class ApplicantDashboardController extends Controller
             'notes' => $application->notes,
             'review_notes' => $application->review_notes,
             'decision_reason' => $application->decision_reason,
+            'awarded_amount' => $application->awarded_amount,
+            'outcome_notes' => $application->outcome_notes,
+            'outcome_at' => $application->outcome_at?->format('M d, Y'),
             'dss_score' => $dss['score'],
             'dss_recommendation' => $dss['recommendation'],
             'dss_breakdown' => $dss,
@@ -964,14 +1001,14 @@ class ApplicantDashboardController extends Controller
             $minimumGwa = (float) $scholarship->minimum_gwa;
 
             if ($studentGwa === null) {
-                $addCriterion('gwa', 'GWA / average', 'missing', null, (string) $scholarship->minimum_gwa, 'Add your GWA in your profile to improve matching.');
+                $addCriterion('gwa', 'GWA / general average', 'missing', null, (string) $scholarship->minimum_gwa, 'Add your GWA or general average in your profile to improve matching.');
             } else {
                 $usesGradePointScale = $profile?->grading_scale === 'grade_point'
                     || ($profile?->grading_scale !== 'percentage' && $studentGwa <= 5 && $minimumGwa <= 5);
                 $isPassing = $usesGradePointScale ? $studentGwa <= $minimumGwa : $studentGwa >= $minimumGwa;
                 $addCriterion(
                     'gwa',
-                    'GWA / average',
+                    'GWA / general average',
                     $isPassing ? 'pass' : 'fail',
                     (string) $profile->gwa,
                     (string) $scholarship->minimum_gwa,
@@ -979,7 +1016,23 @@ class ApplicantDashboardController extends Controller
                 );
             }
         } else {
-            $addCriterion('gwa', 'GWA / average', 'info', $profile?->gwa, null, 'No minimum GWA listed.', false);
+            $addCriterion('gwa', 'GWA / general average', 'info', $profile?->gwa, null, 'No minimum GWA or general average listed.', false);
+        }
+
+        $educationLevelOptions = $this->splitOptions($scholarship->eligible_education_levels);
+        if ($educationLevelOptions !== []) {
+            $studentEducationLevel = $profile?->education_level;
+            $matchesEducationLevel = filled($studentEducationLevel) && $this->matchesAnyOption($studentEducationLevel, $educationLevelOptions);
+            $addCriterion(
+                'education_level',
+                'Education level',
+                filled($studentEducationLevel) ? ($matchesEducationLevel ? 'pass' : 'fail') : 'missing',
+                $studentEducationLevel,
+                implode(', ', $educationLevelOptions),
+                $matchesEducationLevel ? 'Your education level matches this program.' : 'Confirm if your education level is eligible.',
+            );
+        } else {
+            $addCriterion('education_level', 'Education level', 'info', $profile?->education_level, null, 'No education level restriction listed.', false);
         }
 
         $courseOptions = $this->splitOptions($scholarship->eligible_courses);
@@ -988,14 +1041,30 @@ class ApplicantDashboardController extends Controller
             $matchesCourse = filled($studentCourse) && $this->matchesAnyOption($studentCourse, $courseOptions);
             $addCriterion(
                 'course',
-                'Course / strand',
+                'Track / strand / course',
                 filled($studentCourse) ? ($matchesCourse ? 'pass' : 'fail') : 'missing',
                 $studentCourse,
                 implode(', ', $courseOptions),
-                $matchesCourse ? 'Your course or strand matches the listed target.' : 'Check if your course or strand is accepted by the provider.',
+                $matchesCourse ? 'Your track, strand, or course matches the listed target.' : 'Check if your grade-level track, strand, or course is accepted by the provider.',
             );
         } else {
-            $addCriterion('course', 'Course / strand', 'info', $profile?->course_or_strand, null, 'No course restriction listed.', false);
+            $addCriterion('course', 'Track / strand / course', 'info', $profile?->course_or_strand, null, 'No track, strand, or course restriction listed.', false);
+        }
+
+        $schoolTypeOptions = $this->splitOptions($scholarship->eligible_school_types);
+        if ($schoolTypeOptions !== []) {
+            $studentSchoolType = $profile?->school_type;
+            $matchesSchoolType = filled($studentSchoolType) && $this->matchesAnyOption($studentSchoolType, $schoolTypeOptions);
+            $addCriterion(
+                'school_type',
+                'School type',
+                filled($studentSchoolType) ? ($matchesSchoolType ? 'pass' : 'fail') : 'missing',
+                $studentSchoolType,
+                implode(', ', $schoolTypeOptions),
+                $matchesSchoolType ? 'Your school type matches this program.' : 'Confirm if your school type is eligible.',
+            );
+        } else {
+            $addCriterion('school_type', 'School type', 'info', $profile?->school_type, null, 'No school type restriction listed.', false);
         }
 
         $yearOptions = $this->splitOptions($scholarship->eligible_year_levels);
@@ -1004,14 +1073,14 @@ class ApplicantDashboardController extends Controller
             $matchesYear = filled($studentYear) && $this->matchesAnyOption($studentYear, $yearOptions);
             $addCriterion(
                 'year_level',
-                'Year level',
+                'Grade / year level',
                 filled($studentYear) ? ($matchesYear ? 'pass' : 'fail') : 'missing',
                 $studentYear,
                 implode(', ', $yearOptions),
-                $matchesYear ? 'Your year level matches this program.' : 'Confirm if your year level is eligible.',
+                $matchesYear ? 'Your grade or year level matches this program.' : 'Confirm if your grade or year level is eligible.',
             );
         } else {
-            $addCriterion('year_level', 'Year level', 'info', $profile?->year_level, null, 'No year level restriction listed.', false);
+            $addCriterion('year_level', 'Grade / year level', 'info', $profile?->year_level, null, 'No grade or year level restriction listed.', false);
         }
 
         $locationOptions = $this->splitOptions($scholarship->eligible_locations);
@@ -1113,10 +1182,70 @@ class ApplicantDashboardController extends Controller
                 'title' => $notification->title,
                 'message' => $notification->message,
                 'action_url' => $notification->action_url,
+                'is_read' => $notification->read_at !== null,
                 'read_at' => $notification->read_at?->format('M d, Y h:i A'),
                 'created_at' => $notification->created_at?->format('M d, Y h:i A'),
             ])
             ->values()
             ->all();
+    }
+
+    private function syncApplicantReminders(User $user): void
+    {
+        $profileReadiness = $user->applicantProfileReadiness();
+
+        if (! $profileReadiness['complete']) {
+            PortalNotification::updateOrCreate([
+                'user_id' => $user->id,
+                'type' => 'profile_reminder',
+                'title' => 'Complete your student profile',
+            ], [
+                'message' => "Your profile is {$profileReadiness['percent']}% complete. Complete it before submitting applications.",
+                'action_url' => '/dashboard/profile',
+            ]);
+        }
+
+        $applications = ScholarshipApplication::query()
+            ->with(['documents', 'scholarship'])
+            ->where('applicant_id', $user->id)
+            ->whereIn('status', ['submitted', 'under_review', 'qualified', 'shortlisted', 'interview'])
+            ->get();
+
+        foreach ($applications as $application) {
+            $documentReadiness = $this->documentReadiness($application);
+
+            if (($documentReadiness['uploaded_percent'] ?? 100) >= 100) {
+                continue;
+            }
+
+            $missing = collect($documentReadiness['missing'] ?? [])->take(3)->implode(', ');
+
+            PortalNotification::updateOrCreate([
+                'user_id' => $user->id,
+                'type' => 'document_reminder',
+                'title' => "Documents needed for {$application->scholarship?->title}",
+            ], [
+                'message' => $missing
+                    ? "Upload or replace these requirements: {$missing}."
+                    : 'Upload the remaining requirements for this application.',
+                'action_url' => '/dashboard/applications',
+            ]);
+        }
+
+        Scholarship::query()
+            ->where('status', 'published')
+            ->whereDate('deadline', '>=', now()->toDateString())
+            ->whereDate('deadline', '<=', now()->addDays(7)->toDateString())
+            ->whereHas('bookmarks', fn ($query) => $query->where('user_id', $user->id))
+            ->whereDoesntHave('applications', fn ($query) => $query->where('applicant_id', $user->id))
+            ->get()
+            ->each(fn (Scholarship $scholarship) => PortalNotification::updateOrCreate([
+                'user_id' => $user->id,
+                'type' => 'deadline_reminder',
+                'title' => "Deadline approaching: {$scholarship->title}",
+            ], [
+                'message' => "This saved scholarship is due on {$scholarship->deadline?->format('M d, Y')}.",
+                'action_url' => "/dashboard/scholarships/{$scholarship->id}",
+            ]));
     }
 }

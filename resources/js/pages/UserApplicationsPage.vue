@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 
@@ -36,13 +36,32 @@ const steps = [
     { label: 'Documents', detail: 'Confirm checklist' },
     { label: 'Submit', detail: 'Final review' },
 ];
+const applicationModeOptions = [
+    { value: 'online', label: 'Online submission' },
+    { value: 'onsite', label: 'On-site submission' },
+    { value: 'hybrid', label: 'Online and on-site' },
+    { value: 'provider_review', label: 'Provider review only' },
+];
 const dssFormula = [
-    { label: 'Eligibility match', weight: '35%', detail: 'Fit against GWA, course, year level, location, and income rules.' },
+    { label: 'Eligibility match', weight: '35%', detail: 'Fit against average, track, grade/year level, location, and income rules.' },
     { label: 'Documents', weight: '25%', detail: 'Prepared, uploaded, and accepted requirements.' },
     { label: 'Academic merit', weight: '20%', detail: 'Student GWA or average compared with the program minimum.' },
     { label: 'Financial need', weight: '15%', detail: 'Income bracket priority for assistance-focused grants.' },
     { label: 'Review status', weight: '5%', detail: 'Provider review progress and decision signal.' },
 ];
+const statusDescriptions = {
+    submitted: 'Your application was received and is waiting for provider review.',
+    under_review: 'The provider is checking your details and uploaded documents.',
+    qualified: 'Your application passed initial requirements and remains in review.',
+    shortlisted: 'You are in a smaller candidate pool for closer evaluation.',
+    interview: 'The provider may contact you for interview or follow-up requirements.',
+    approved: 'Your application was approved by the provider.',
+    awarded: 'The provider recorded an award outcome for your application.',
+    disbursed: 'Award release or disbursement has been recorded.',
+    renewed: 'This scholarship support was renewed.',
+    rejected: 'The application was closed and not approved.',
+    not_awarded: 'The application completed review but was not awarded.',
+};
 
 const selectedScholarship = computed(() => scholarships.value.find((scholarship) => scholarship.id === Number(selectedScholarshipId.value)));
 const selectedRequirements = computed(() => documentRequirements(selectedScholarship.value?.requirements));
@@ -51,6 +70,57 @@ const selectedAlreadyApplied = computed(() => selectedScholarship.value && appli
 const allDocumentsChecked = computed(() => selectedRequirements.value.every((requirement) => documentChecklist.value.includes(requirement)));
 const checkedDocumentCount = computed(() => selectedRequirements.value.filter((requirement) => documentChecklist.value.includes(requirement)).length);
 const canApply = computed(() => profileReadiness.value.complete);
+const selectedPreparedDocuments = computed(() => selectedScholarship.value?.prepared_documents?.matched ?? []);
+const selectedMissingPreparedDocuments = computed(() => selectedScholarship.value?.prepared_documents?.missing ?? selectedRequirements.value);
+const selectedDocumentReadiness = computed(() => selectedScholarship.value?.prepared_documents?.percent ?? (selectedRequirements.value.length === 0 ? 100 : 0));
+const selectedApplicationMode = computed(() => applicationModeLabel(selectedScholarship.value?.application_mode));
+const selectedSlotsLabel = computed(() => selectedScholarship.value?.slots_available ?? 'Not listed');
+const readyApplicationCount = computed(() => applications.value.filter((application) => Number(application.document_readiness?.accepted_percent ?? application.document_readiness?.uploaded_percent ?? 0) >= 100).length);
+const activeApplicationCount = computed(() => applications.value.filter((application) => ['submitted', 'under_review', 'qualified'].includes(application.status ?? 'submitted')).length);
+const applicationQueue = computed(() => [...applications.value].sort((first, second) => {
+    const statusRank = {
+        interview: 7,
+        shortlisted: 6,
+        under_review: 5,
+        qualified: 4,
+        submitted: 3,
+        approved: 2,
+        awarded: 1,
+        disbursed: 1,
+        renewed: 1,
+        rejected: 0,
+        not_awarded: 0,
+    };
+
+    return (statusRank[second.status ?? 'submitted'] ?? 0) - (statusRank[first.status ?? 'submitted'] ?? 0);
+}));
+const wizardReadinessItems = computed(() => [
+    {
+        label: 'Profile ready',
+        complete: canApply.value,
+        detail: canApply.value ? 'Student profile is complete.' : `${profileReadiness.value.percent}% profile readiness.`,
+    },
+    {
+        label: 'Program selected',
+        complete: Boolean(selectedScholarship.value),
+        detail: selectedScholarship.value ? selectedScholarship.value.title : 'Choose from Scholarships first.',
+    },
+    {
+        label: 'Documents prepared',
+        complete: selectedRequirements.value.length === 0 || selectedMissingPreparedDocuments.value.length === 0,
+        detail: selectedRequirements.value.length === 0
+            ? 'No document requirements listed.'
+            : `${selectedPreparedDocuments.value.length} of ${selectedRequirements.value.length} already uploaded in Documents.`,
+    },
+    {
+        label: 'Checklist confirmed',
+        complete: selectedRequirements.value.length === 0 || allDocumentsChecked.value,
+        detail: selectedRequirements.value.length === 0
+            ? 'No checklist needed.'
+            : `${checkedDocumentCount.value} of ${selectedRequirements.value.length} confirmed.`,
+    },
+]);
+const wizardReadinessPercent = computed(() => Math.round((wizardReadinessItems.value.filter((item) => item.complete).length / wizardReadinessItems.value.length) * 100));
 const canGoNext = computed(() => {
     if (!canApply.value || !selectedScholarship.value || selectedAlreadyApplied.value) {
         return false;
@@ -114,19 +184,23 @@ function statusLabel(status) {
 }
 
 function statusClass(status) {
-    if (status === 'approved') {
+    if (['approved', 'awarded', 'disbursed', 'renewed'].includes(status)) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (status === 'rejected') {
+    if (['rejected', 'not_awarded'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (status === 'under_review') {
+    if (['under_review', 'shortlisted', 'interview'].includes(status)) {
         return 'bg-sky-100 text-sky-800';
     }
 
     return 'bg-amber-100 text-amber-800';
+}
+
+function statusDescription(status) {
+    return statusDescriptions[status ?? 'submitted'] ?? 'The provider will update this status as review progresses.';
 }
 
 function matchClass(score) {
@@ -199,6 +273,10 @@ function labelFromKey(value) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function applicationModeLabel(value) {
+    return applicationModeOptions.find((option) => option.value === value)?.label ?? labelFromKey(value || 'not_listed');
+}
+
 function documentRequirements(requirements) {
     if (!requirements) {
         return [];
@@ -261,6 +339,10 @@ function resetWizard() {
     if (window.location.search) {
         window.history.replaceState({}, '', window.location.pathname);
     }
+}
+
+function applyPreparedDocuments() {
+    documentChecklist.value = [...new Set([...documentChecklist.value, ...selectedPreparedDocuments.value])];
 }
 
 function selectAllDocuments() {
@@ -404,6 +486,15 @@ async function logout() {
 }
 
 onMounted(loadApplications);
+
+watch(selectedScholarship, (scholarship) => {
+    if (!scholarship) {
+        documentChecklist.value = [];
+        return;
+    }
+
+    documentChecklist.value = [...(scholarship.prepared_documents?.matched ?? [])];
+});
 </script>
 
 <template>
@@ -428,13 +519,13 @@ onMounted(loadApplications);
 
                         <div class="rounded-lg border border-white/10 bg-white/10 p-4">
                             <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
-                                Current step
+                                Application readiness
                             </p>
                             <p class="mt-1 font-display text-3xl font-bold">
-                                {{ currentStep + 1 }} / {{ steps.length }}
+                                {{ wizardReadinessPercent }}%
                             </p>
                             <p class="mt-1 text-sm text-slate-300">
-                                {{ steps[currentStep]?.detail }}
+                                Step {{ currentStep + 1 }} of {{ steps.length }}: {{ steps[currentStep]?.detail }}
                             </p>
                         </div>
                     </div>
@@ -476,43 +567,46 @@ onMounted(loadApplications);
                         </div>
                     </div>
 
-                    <div class="grid gap-3 md:grid-cols-3">
-                        <article class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                            <div class="flex items-center gap-3">
-                                <span class="flex h-10 w-10 items-center justify-center rounded-md bg-slate-950 font-display text-xl font-bold text-white">
-                                    {{ stats.applications }}
-                                </span>
-                                <div>
-                                    <p class="text-sm font-bold text-slate-950">Submitted</p>
-                                    <p class="text-xs text-slate-500">Application records</p>
+                    <section class="student-card p-4">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <p class="student-kicker">
+                                    Application Readiness
+                                </p>
+                                <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                    {{ selectedScholarship ? selectedScholarship.title : 'Choose a scholarship to start' }}
+                                </h3>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">
+                                    {{ activeApplicationCount }} active application{{ activeApplicationCount === 1 ? '' : 's' }}, {{ readyApplicationCount }} with uploaded document requirements complete.
+                                </p>
+                            </div>
+                            <div class="w-full lg:max-w-xs">
+                                <div class="flex items-center justify-between text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                    <span>Ready to submit</span>
+                                    <span>{{ wizardReadinessPercent }}%</span>
+                                </div>
+                                <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                                    <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${wizardReadinessPercent}%` }"></div>
                                 </div>
                             </div>
-                        </article>
+                        </div>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                            <div class="flex items-center gap-3">
-                                <span class="flex h-10 w-10 items-center justify-center rounded-md bg-sky-100 font-display text-xl font-bold text-sky-800">
-                                    {{ stats.available_scholarships }}
-                                </span>
-                                <div>
-                                    <p class="text-sm font-bold text-slate-950">Available</p>
-                                    <p class="text-xs text-slate-500">Programs to choose</p>
+                        <div class="mt-4 grid gap-2 md:grid-cols-4">
+                            <div
+                                v-for="item in wizardReadinessItems"
+                                :key="item.label"
+                                class="rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm"
+                            >
+                                <div class="flex items-start gap-2">
+                                    <span :class="['mt-1 h-2.5 w-2.5 shrink-0 rounded-full', item.complete ? 'bg-emerald-500' : 'bg-amber-400']"></span>
+                                    <div>
+                                        <p class="font-bold text-slate-950">{{ item.label }}</p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ item.detail }}</p>
+                                    </div>
                                 </div>
                             </div>
-                        </article>
-
-                        <article class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                            <div class="flex items-center gap-3">
-                                <span class="flex h-10 w-10 items-center justify-center rounded-md bg-amber-100 font-display text-xl font-bold text-amber-800">
-                                    {{ profileReadiness.percent }}%
-                                </span>
-                                <div>
-                                    <p class="text-sm font-bold text-slate-950">Profile ready</p>
-                                    <p class="text-xs text-slate-500">Needed before applying</p>
-                                </div>
-                            </div>
-                        </article>
-                    </div>
+                        </div>
+                    </section>
 
                     <details class="rounded-lg border border-indigo-100 bg-indigo-50/80 p-5 shadow-sm">
                         <summary class="cursor-pointer list-none">
@@ -634,7 +728,7 @@ onMounted(loadApplications);
                                         <p class="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
                                             {{ selectedScholarship.description }}
                                         </p>
-                                        <div class="mt-4 grid gap-2 text-sm sm:grid-cols-4">
+                                        <div class="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
                                             <div class="rounded-md bg-[#f6faf8] p-3">
                                                 <p class="font-semibold text-slate-500">Award</p>
                                                 <p class="mt-1 font-bold text-slate-950">{{ formatAmount(selectedScholarship.award_amount) }}</p>
@@ -646,6 +740,10 @@ onMounted(loadApplications);
                                             <div class="rounded-md bg-[#f6faf8] p-3">
                                                 <p class="font-semibold text-slate-500">Documents</p>
                                                 <p class="mt-1 font-bold text-slate-950">{{ selectedRequirements.length }}</p>
+                                            </div>
+                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                                <p class="font-semibold text-slate-500">Mode</p>
+                                                <p class="mt-1 font-bold text-slate-950">{{ selectedApplicationMode }}</p>
                                             </div>
                                             <div class="rounded-md bg-[#f6faf8] p-3">
                                                 <p class="font-semibold text-slate-500">Match</p>
@@ -720,6 +818,30 @@ onMounted(loadApplications);
                                                 {{ selectedScholarship.eligibility_match?.score ?? 0 }}% - {{ selectedScholarship.eligibility_match?.label || 'Needs review' }}
                                             </p>
                                         </div>
+                                        <div class="rounded-md bg-white p-3">
+                                            <p class="font-semibold text-slate-500">
+                                                Application mode
+                                            </p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ selectedApplicationMode }}
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md bg-white p-3">
+                                            <p class="font-semibold text-slate-500">
+                                                Slots
+                                            </p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ selectedSlotsLabel }}
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md bg-white p-3">
+                                            <p class="font-semibold text-slate-500">
+                                                Documents ready
+                                            </p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ selectedDocumentReadiness }}%
+                                            </p>
+                                        </div>
                                     </div>
 
                                     <div class="mt-4 rounded-md bg-white p-3 text-sm">
@@ -787,7 +909,7 @@ onMounted(loadApplications);
                                                 Academic details
                                             </p>
                                             <p class="mt-1 font-bold text-slate-950">
-                                                {{ user?.course_or_strand || 'Course not set' }} - {{ user?.year_level || 'Year not set' }}
+                                                {{ user?.course_or_strand || 'Track not set' }} - {{ user?.year_level || 'Grade/year not set' }}
                                             </p>
                                         </div>
                                     </div>
@@ -814,6 +936,58 @@ onMounted(loadApplications);
                                         <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                                             Prepared
                                         </p>
+                                    </div>
+                                </div>
+
+                                <div v-if="selectedRequirements.length" class="mt-5 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+                                    <div class="rounded-lg border border-sky-100 bg-sky-50 p-4">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">
+                                                    Document Library Match
+                                                </p>
+                                                <p class="mt-1 text-sm font-bold text-slate-950">
+                                                    {{ selectedPreparedDocuments.length }} of {{ selectedRequirements.length }} already uploaded
+                                                </p>
+                                            </div>
+                                            <span class="font-display text-2xl font-bold text-sky-800">
+                                                {{ selectedDocumentReadiness }}%
+                                            </span>
+                                        </div>
+                                        <div class="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                                            <div class="h-full rounded-full bg-sky-700 transition-all" :style="{ width: `${selectedDocumentReadiness}%` }"></div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="mt-3 rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50"
+                                            @click="applyPreparedDocuments"
+                                        >
+                                            Confirm uploaded documents
+                                        </button>
+                                    </div>
+
+                                    <div class="rounded-lg border border-slate-200 bg-[#f6faf8] p-4">
+                                        <p class="text-sm font-bold text-slate-950">
+                                            Missing from Documents
+                                        </p>
+                                        <div v-if="selectedMissingPreparedDocuments.length" class="mt-3 flex flex-wrap gap-2">
+                                            <span
+                                                v-for="requirement in selectedMissingPreparedDocuments"
+                                                :key="requirement"
+                                                class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-amber-700 ring-1 ring-amber-100"
+                                            >
+                                                {{ requirement }}
+                                            </span>
+                                        </div>
+                                        <p v-else class="mt-2 text-sm text-slate-600">
+                                            All listed requirements already have a matching prepared document.
+                                        </p>
+                                        <a
+                                            href="/dashboard/documents"
+                                            class="mt-3 inline-flex rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                        >
+                                            Upload missing documents
+                                        </a>
                                     </div>
                                 </div>
 
@@ -866,7 +1040,7 @@ onMounted(loadApplications);
                                                     {{ requirement }}
                                                 </span>
                                                 <span :class="['mt-1 inline-flex rounded-md px-2 py-0.5 text-xs font-bold', documentChecklist.includes(requirement) ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-500']">
-                                                    {{ documentChecklist.includes(requirement) ? 'Prepared' : 'Needed' }}
+                                                    {{ selectedPreparedDocuments.includes(requirement) ? 'Uploaded in Documents' : documentChecklist.includes(requirement) ? 'Confirmed manually' : 'Needed' }}
                                                 </span>
                                             </span>
                                         </label>
@@ -923,10 +1097,26 @@ onMounted(loadApplications);
                                         </div>
                                         <div class="rounded-md bg-white p-3">
                                             <p class="font-semibold text-slate-500">
+                                                Uploaded from Documents
+                                            </p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ selectedPreparedDocuments.length }} of {{ selectedRequirements.length }}
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md bg-white p-3">
+                                            <p class="font-semibold text-slate-500">
                                                 Match score
                                             </p>
                                             <p class="mt-1 font-bold text-slate-950">
                                                 {{ selectedScholarship.eligibility_match?.score ?? 0 }}%
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md bg-white p-3">
+                                            <p class="font-semibold text-slate-500">
+                                                Application mode
+                                            </p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ selectedApplicationMode }}
                                             </p>
                                         </div>
                                     </div>
@@ -936,6 +1126,9 @@ onMounted(loadApplications);
                                     <p class="student-kicker">
                                         Notes
                                     </p>
+                                    <div class="mt-3 rounded-md border border-sky-100 bg-sky-50 p-3 text-sm leading-6 text-sky-900">
+                                        Prepared documents that match this checklist will be attached automatically after submission. You can still upload or replace files from the application record below.
+                                    </div>
                                     <p class="mt-3 rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm leading-6 text-slate-600">
                                         {{ notes || 'No note added.' }}
                                     </p>
@@ -1004,7 +1197,7 @@ onMounted(loadApplications);
 
                         <div v-else class="grid gap-4 p-5">
                             <article
-                                v-for="application in applications"
+                                v-for="application in applicationQueue"
                                 :key="application.id"
                                 class="rounded-lg border border-slate-200 border-l-4 border-l-slate-900 bg-white p-4 shadow-sm"
                             >
@@ -1031,6 +1224,9 @@ onMounted(loadApplications);
                                         {{ statusLabel(application.status) }}
                                     </span>
                                 </div>
+                                <p class="mt-3 rounded-md border border-slate-200 bg-[#f6faf8] px-3 py-2 text-xs leading-5 text-slate-600">
+                                    {{ statusDescription(application.status) }}
+                                </p>
 
                                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                                     <div class="rounded-md border border-indigo-100 bg-indigo-50 p-3">
@@ -1048,6 +1244,26 @@ onMounted(loadApplications);
                                         <p class="mt-2 text-xs leading-5 text-indigo-900">
                                             {{ application.dss_breakdown?.summary || 'This score helps reviewers prioritize applications.' }}
                                         </p>
+                                        <details v-if="application.dss_breakdown?.criteria?.length" class="mt-3 rounded-md border border-indigo-100 bg-white/70 p-2">
+                                            <summary class="cursor-pointer text-xs font-bold uppercase tracking-[0.12em] text-indigo-800">
+                                                Why this score?
+                                            </summary>
+                                            <div class="mt-2 grid gap-2">
+                                                <div
+                                                    v-for="criterion in application.dss_breakdown.criteria"
+                                                    :key="criterion.key"
+                                                    class="rounded-md bg-white p-2 text-xs"
+                                                >
+                                                    <div class="flex items-center justify-between gap-2">
+                                                        <span class="font-bold text-slate-900">{{ criterion.label }}</span>
+                                                        <span class="font-bold text-indigo-700">{{ criterion.score }}% x {{ criterion.weight }}%</span>
+                                                    </div>
+                                                    <p class="mt-1 leading-5 text-slate-500">
+                                                        {{ criterion.note }}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </details>
                                     </div>
                                     <div class="rounded-md bg-white p-3">
                                         <p class="font-semibold text-slate-500">
@@ -1069,6 +1285,29 @@ onMounted(loadApplications);
                                 <p class="mt-2 text-xs leading-5 text-slate-500">
                                     DSS is a guide for prioritizing review. Final scholarship decisions are still made by the provider.
                                 </p>
+
+                                <div
+                                    v-if="application.awarded_amount || application.outcome_notes || application.outcome_at || ['awarded', 'not_awarded', 'disbursed', 'renewed'].includes(application.status)"
+                                    class="mt-4 rounded-md border border-emerald-100 bg-emerald-50 p-3 text-sm"
+                                >
+                                    <p class="font-semibold text-emerald-800">
+                                        Outcome details
+                                    </p>
+                                    <div class="mt-2 grid gap-2 sm:grid-cols-3">
+                                        <p class="rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                                            Amount: {{ application.awarded_amount || 'Not listed' }}
+                                        </p>
+                                        <p class="rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                                            Date: {{ application.outcome_at || 'Not listed' }}
+                                        </p>
+                                        <p class="rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                                            Status: {{ statusLabel(application.status) }}
+                                        </p>
+                                    </div>
+                                    <p v-if="application.outcome_notes" class="mt-2 rounded-md bg-white p-3 text-sm leading-6 text-slate-700">
+                                        {{ application.outcome_notes }}
+                                    </p>
+                                </div>
 
                                 <div class="mt-4 rounded-md bg-white p-3 text-sm">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

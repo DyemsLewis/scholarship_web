@@ -80,6 +80,11 @@ class User extends Authenticatable
         return $this->hasMany(StudentDocument::class);
     }
 
+    public function providerVerificationDocuments(): HasMany
+    {
+        return $this->hasMany(ProviderVerificationDocument::class, 'provider_id');
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
@@ -178,13 +183,22 @@ class User extends Authenticatable
             'verification_status' => $this->providerProfile?->verification_status,
             'verification_notes' => $this->providerProfile?->verification_notes,
             'can_post_scholarships' => $this->isProvider() && $this->providerProfile?->isVerified(),
+            'education_level' => $this->studentProfile?->education_level,
             'school' => $this->studentProfile?->school,
+            'school_type' => $this->studentProfile?->school_type,
+            'learner_reference_number' => $this->studentProfile?->learner_reference_number,
             'course_or_strand' => $this->studentProfile?->course_or_strand,
             'year_level' => $this->studentProfile?->year_level,
             'enrollment_status' => $this->studentProfile?->enrollment_status,
             'gwa' => $this->studentProfile?->gwa,
             'grading_scale' => $this->studentProfile?->grading_scale,
             'income_bracket' => $this->studentProfile?->income_bracket,
+            'household_size' => $this->studentProfile?->household_size,
+            'preferred_categories' => $this->studentProfile?->preferred_categories,
+            'preferred_locations' => $this->studentProfile?->preferred_locations,
+            'willing_to_relocate' => $this->studentProfile?->willing_to_relocate,
+            'support_needs' => $this->studentProfile?->support_needs,
+            'scholarship_goal' => $this->studentProfile?->scholarship_goal,
             'address' => $this->studentProfile?->address,
             'barangay' => $this->studentProfile?->barangay,
             'city' => $this->studentProfile?->city,
@@ -208,11 +222,12 @@ class User extends Authenticatable
             'middle_initial' => 'Middle initial',
             'contact_number' => 'Contact number',
             'birthdate' => 'Birthdate',
-            'school' => 'School',
-            'course_or_strand' => 'Course / strand',
-            'year_level' => 'Year level',
+            'education_level' => 'Education level',
+            'school' => 'School / learning institution',
+            'course_or_strand' => 'Track / strand / course',
+            'year_level' => 'Grade / year level',
             'enrollment_status' => 'Enrollment status',
-            'gwa' => 'GWA / average',
+            'gwa' => 'GWA / general average',
             'grading_scale' => 'Grading scale',
             'income_bracket' => 'Household income bracket',
             'address' => 'Address',

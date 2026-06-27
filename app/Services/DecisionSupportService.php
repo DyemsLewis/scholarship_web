@@ -181,21 +181,32 @@ class DecisionSupportService
         }
 
         return match ($application->status) {
+            'disbursed', 'renewed', 'awarded' => 100,
             'approved' => 100,
+            'interview' => 95,
+            'shortlisted' => 92,
             'qualified' => 90,
             'under_review' => 75,
-            'rejected' => 10,
+            'rejected', 'not_awarded' => 10,
             default => 60,
         };
     }
 
     private function recommendation(int $score, string $status): array
     {
-        if ($status === 'rejected') {
+        if (in_array($status, ['rejected', 'not_awarded'], true)) {
             return [
                 'value' => 'not_recommended',
                 'label' => 'Not recommended',
-                'summary' => 'The application has been rejected, so it is not recommended unless reopened.',
+                'summary' => 'The application has been closed without an award, so it is not recommended unless reopened.',
+            ];
+        }
+
+        if (in_array($status, ['awarded', 'disbursed', 'renewed'], true)) {
+            return [
+                'value' => 'highly_recommended',
+                'label' => 'Award outcome recorded',
+                'summary' => 'The provider has recorded a successful scholarship outcome for this application.',
             ];
         }
 

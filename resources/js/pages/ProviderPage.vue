@@ -12,6 +12,7 @@ const stats = ref({
     drafts: 0,
 });
 const scholarships = ref([]);
+const notifications = ref([]);
 
 const publishedCount = computed(() => scholarships.value.filter((scholarship) => scholarship.status === 'published').length);
 const focusItems = computed(() => [
@@ -35,6 +36,72 @@ const focusItems = computed(() => [
     },
 ]);
 const recentPrograms = computed(() => scholarships.value.slice(0, 3));
+const programHealthSignals = computed(() => {
+    const draftPrograms = scholarships.value.filter((scholarship) => scholarship.status === 'draft');
+    const missingDocuments = scholarships.value.filter((scholarship) => !hasText(scholarship.requirements));
+    const missingLocations = scholarships.value.filter((scholarship) => !hasText(scholarship.location_address) || !hasText(scholarship.latitude) || !hasText(scholarship.longitude));
+    const expiredPublished = scholarships.value.filter((scholarship) => scholarship.status === 'published' && deadlineDays(scholarship.deadline) !== null && deadlineDays(scholarship.deadline) < 0);
+
+    return [
+        {
+            label: 'Draft completion',
+            tone: draftPrograms.length ? 'warn' : 'good',
+            detail: draftPrograms.length ? `${draftPrograms.length} draft program${draftPrograms.length === 1 ? '' : 's'} may need publishing decisions.` : 'No draft programs waiting.',
+            href: '/provider/programs',
+            action: 'Open programs',
+        },
+        {
+            label: 'Document quality',
+            tone: missingDocuments.length ? 'warn' : 'good',
+            detail: missingDocuments.length ? `${missingDocuments.length} program${missingDocuments.length === 1 ? '' : 's'} have no document requirements.` : 'Program document requirements are defined.',
+            href: '/provider/programs',
+            action: 'Review requirements',
+        },
+        {
+            label: 'Location coverage',
+            tone: missingLocations.length ? 'info' : 'good',
+            detail: missingLocations.length ? `${missingLocations.length} program${missingLocations.length === 1 ? '' : 's'} need address or map pins for distance matching.` : 'Program map data looks usable.',
+            href: '/provider/programs',
+            action: 'Check maps',
+        },
+        {
+            label: 'Deadline risk',
+            tone: expiredPublished.length ? 'warn' : 'good',
+            detail: expiredPublished.length ? `${expiredPublished.length} published program${expiredPublished.length === 1 ? '' : 's'} have passed deadlines.` : 'No expired published deadlines detected.',
+            href: '/provider/programs',
+            action: 'Update deadlines',
+        },
+    ];
+});
+
+function hasText(value) {
+    return value !== null && value !== undefined && String(value).trim() !== '';
+}
+
+function deadlineDays(value) {
+    const parsed = Date.parse(value ?? '');
+
+    if (Number.isNaN(parsed)) {
+        return null;
+    }
+
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+
+    return Math.ceil((parsed - startOfToday) / 86400000);
+}
+
+function signalClass(tone) {
+    if (tone === 'good') {
+        return 'border-emerald-100 bg-emerald-50 text-emerald-800';
+    }
+
+    if (tone === 'warn') {
+        return 'border-amber-100 bg-amber-50 text-amber-900';
+    }
+
+    return 'border-sky-100 bg-sky-50 text-sky-800';
+}
 
 function verificationLabel(status) {
     return String(status ?? 'pending')
@@ -76,6 +143,7 @@ async function loadProviderData() {
         user.value = response.data.user;
         stats.value = response.data.stats;
         scholarships.value = response.data.scholarships;
+        notifications.value = response.data.notifications ?? [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider dashboard.';
     } finally {
@@ -152,6 +220,88 @@ onMounted(loadProviderData);
                                 </p>
                                 <p class="mt-4 text-sm font-bold text-slate-700">
                                     {{ item.action }}
+                                </p>
+                            </a>
+                        </div>
+                    </section>
+
+                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                    Notifications
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    Recent provider updates
+                                </h3>
+                            </div>
+                            <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+                                {{ notifications.filter((item) => !item.is_read).length }} unread
+                            </span>
+                        </div>
+
+                        <div v-if="notifications.length === 0" class="mt-5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                            No provider notifications yet.
+                        </div>
+
+                        <div v-else class="mt-5 grid gap-3 md:grid-cols-2">
+                            <a
+                                v-for="notification in notifications"
+                                :key="notification.id"
+                                :href="notification.action_url || '/provider/applications'"
+                                class="rounded-md border border-slate-200 bg-slate-50 p-4 transition hover:bg-white"
+                            >
+                                <div class="flex items-start justify-between gap-3">
+                                    <p class="font-bold text-slate-950">
+                                        {{ notification.title }}
+                                    </p>
+                                    <span
+                                        v-if="!notification.is_read"
+                                        class="rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-800"
+                                    >
+                                        New
+                                    </span>
+                                </div>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">
+                                    {{ notification.message }}
+                                </p>
+                                <p class="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                    {{ notification.created_at }}
+                                </p>
+                            </a>
+                        </div>
+                    </section>
+
+                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                    Program Health Signals
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    Data quality checks for scholarship listings
+                                </h3>
+                            </div>
+                            <p class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+                                Drafts, documents, locations, deadlines
+                            </p>
+                        </div>
+
+                        <div class="mt-5 grid gap-3 lg:grid-cols-4">
+                            <a
+                                v-for="signal in programHealthSignals"
+                                :key="signal.label"
+                                :href="signal.href"
+                                :class="['rounded-lg border p-4 transition hover:bg-white', signalClass(signal.tone)]"
+                            >
+                                <p class="text-sm font-bold">
+                                    {{ signal.label }}
+                                </p>
+                                <p class="mt-2 min-h-12 text-sm leading-6 opacity-85">
+                                    {{ signal.detail }}
+                                </p>
+                                <p class="mt-4 text-sm font-bold">
+                                    {{ signal.action }}
                                 </p>
                             </a>
                         </div>

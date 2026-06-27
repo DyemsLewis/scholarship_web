@@ -54,6 +54,7 @@ Route::patch('/admin/profile', [AdminController::class, 'updateProfile'])->middl
 Route::get('/admin/analytics', [AdminController::class, 'analytics'])->middleware('auth')->name('admin.analytics');
 Route::get('/admin/reviews/data', [AdminController::class, 'reviewsData'])->middleware('auth')->name('admin.reviews.data');
 Route::patch('/admin/providers/{provider}/verification', [AdminController::class, 'updateProviderVerification'])->middleware('auth')->name('admin.providers.verification');
+Route::get('/admin/provider-verification-documents/{document}/download', [AdminController::class, 'downloadProviderVerificationDocument'])->middleware('auth')->name('admin.provider-verification-documents.download');
 Route::get('/admin/export/users', [AdminController::class, 'exportUsers'])->middleware('auth')->name('admin.export.users');
 Route::get('/admin/export/applications', [AdminController::class, 'exportApplications'])->middleware('auth')->name('admin.export.applications');
 Route::get('/admin/log-entries', [AdminController::class, 'logEntries'])->middleware('auth')->name('admin.log-entries');
@@ -67,6 +68,9 @@ Route::redirect('/provider/insights', '/provider/review');
 Route::get('/provider/review', [ProviderController::class, 'insights'])->middleware('auth')->name('provider.review');
 Route::get('/provider/profile/data', [ProviderController::class, 'profileData'])->middleware('auth')->name('provider.profile.data');
 Route::patch('/provider/profile', [ProviderController::class, 'updateProfile'])->middleware('auth')->name('provider.profile.update');
+Route::post('/provider/verification-documents', [ProviderController::class, 'uploadVerificationDocument'])->middleware('auth')->name('provider.verification-documents.store');
+Route::get('/provider/verification-documents/{document}/download', [ProviderController::class, 'downloadVerificationDocument'])->middleware('auth')->name('provider.verification-documents.download');
+Route::delete('/provider/verification-documents/{document}', [ProviderController::class, 'deleteVerificationDocument'])->middleware('auth')->name('provider.verification-documents.destroy');
 Route::get('/provider/insights/data', [ProviderController::class, 'insightsData'])->middleware('auth')->name('provider.insights.data');
 Route::get('/provider/applications/data', [ProviderController::class, 'applicationsData'])->middleware('auth')->name('provider.applications.data');
 Route::patch('/provider/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->middleware('auth')->name('provider.applications.status');

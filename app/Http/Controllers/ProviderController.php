@@ -6,12 +6,15 @@ use App\Models\ActivityLog;
 use App\Models\ApplicationDocument;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
+use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\User;
 use App\Services\DecisionSupportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -104,6 +107,13 @@ class ProviderController extends Controller
                 'drafts' => $scholarships->where('status', 'draft')->count(),
             ],
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
+            'verification_documents' => $request->user()
+                ->providerVerificationDocuments()
+                ->latest()
+                ->get()
+                ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))
+                ->values(),
+            'notifications' => $this->notificationsPayload($request),
         ]);
     }
 
@@ -164,6 +174,97 @@ class ProviderController extends Controller
             'message' => 'Provider profile updated successfully.',
             'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ]);
+    }
+
+    public function uploadVerificationDocument(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $validated = $request->validate([
+            'document_type' => ['required', Rule::in([
+                'organization_registration',
+                'authorization_letter',
+                'valid_id',
+                'school_or_office_proof',
+                'other',
+            ])],
+            'document_file' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
+        ]);
+
+        $file = $validated['document_file'];
+        $path = $file->store("provider-verification/{$request->user()->id}", 'local');
+
+        $document = ProviderVerificationDocument::create([
+            'provider_id' => $request->user()->id,
+            'uploaded_by' => $request->user()->id,
+            'document_type' => $validated['document_type'],
+            'original_name' => $file->getClientOriginalName(),
+            'path' => $path,
+            'mime_type' => $file->getMimeType(),
+            'size' => $file->getSize() ?: 0,
+            'status' => 'submitted',
+            'uploaded_at' => now(),
+        ]);
+
+        User::query()
+            ->where('role', 'admin')
+            ->get()
+            ->each(fn (User $admin) => PortalNotification::create([
+                'user_id' => $admin->id,
+                'type' => 'provider_verification_document',
+                'title' => 'Provider document uploaded',
+                'message' => "{$request->user()->provider_name} uploaded a verification document.",
+                'action_url' => '/admin/reviews',
+            ]));
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_verification_document_uploaded',
+            "{$request->user()->name} uploaded a provider verification document.",
+            $request,
+            ['document_id' => $document->id, 'document_type' => $document->document_type],
+        );
+
+        return response()->json([
+            'message' => 'Verification document uploaded.',
+            'document' => $this->verificationDocumentPayload($document),
+            'verification_documents' => $request->user()
+                ->providerVerificationDocuments()
+                ->latest()
+                ->get()
+                ->map(fn (ProviderVerificationDocument $item) => $this->verificationDocumentPayload($item))
+                ->values(),
+        ], 201);
+    }
+
+    public function deleteVerificationDocument(Request $request, ProviderVerificationDocument $document): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($document->provider_id === $request->user()->id, 403);
+
+        if (Storage::disk('local')->exists($document->path)) {
+            Storage::disk('local')->delete($document->path);
+        }
+
+        $document->delete();
+
+        return response()->json([
+            'message' => 'Verification document removed.',
+            'verification_documents' => $request->user()
+                ->providerVerificationDocuments()
+                ->latest()
+                ->get()
+                ->map(fn (ProviderVerificationDocument $item) => $this->verificationDocumentPayload($item))
+                ->values(),
+        ]);
+    }
+
+    public function downloadVerificationDocument(Request $request, ProviderVerificationDocument $document)
+    {
+        abort_unless($request->user()?->isProvider() && $document->provider_id === $request->user()->id, 403);
+        abort_unless(Storage::disk('local')->exists($document->path), 404);
+
+        return Storage::disk('local')->download($document->path, $document->original_name);
     }
 
     public function insightsData(Request $request): JsonResponse
@@ -365,18 +466,38 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
         abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
 
+        $outcomeStatuses = ['awarded', 'not_awarded', 'disbursed', 'renewed'];
         $validated = $request->validate([
-            'status' => ['required', Rule::in(['submitted', 'under_review', 'qualified', 'approved', 'rejected'])],
+            'status' => ['required', Rule::in([
+                'submitted',
+                'under_review',
+                'qualified',
+                'shortlisted',
+                'interview',
+                'approved',
+                'awarded',
+                'not_awarded',
+                'disbursed',
+                'renewed',
+                'rejected',
+            ])],
             'decision_reason' => ['nullable', 'string', 'max:255'],
             'review_notes' => ['nullable', 'string', 'max:1500'],
+            'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
+            'outcome_notes' => ['nullable', 'string', 'max:2000'],
+            'outcome_at' => ['nullable', 'date'],
         ]);
 
         $previousStatus = $application->status;
+        $isOutcomeStatus = in_array($validated['status'], $outcomeStatuses, true);
 
         $application->update([
             'status' => $validated['status'],
             'decision_reason' => $validated['decision_reason'] ?? $application->decision_reason,
             'review_notes' => $validated['review_notes'] ?? $application->review_notes,
+            'awarded_amount' => array_key_exists('awarded_amount', $validated) ? $validated['awarded_amount'] : $application->awarded_amount,
+            'outcome_notes' => $validated['outcome_notes'] ?? $application->outcome_notes,
+            'outcome_at' => $validated['outcome_at'] ?? ($isOutcomeStatus ? ($application->outcome_at ?? now()) : $application->outcome_at),
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
         ]);
@@ -406,8 +527,8 @@ class ProviderController extends Controller
 
         PortalNotification::create([
             'user_id' => $application->applicant_id,
-            'type' => 'application_status',
-            'title' => 'Application status updated',
+            'type' => $isOutcomeStatus ? 'application_outcome' : 'application_status',
+            'title' => $isOutcomeStatus ? 'Application outcome recorded' : 'Application status updated',
             'message' => "Your application for {$application->scholarship?->title} is now {$this->statusLabel($validated['status'])}.",
             'action_url' => '/dashboard/applications',
         ]);
@@ -478,7 +599,7 @@ class ProviderController extends Controller
 
         return response()->streamDownload(function () use ($provider) {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Review Notes']);
+            fputcsv($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Outcome Date', 'Outcome Notes', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Review Notes']);
 
             ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship'])
@@ -500,6 +621,9 @@ class ProviderController extends Controller
                             $application->dss_recommendation,
                             $application->eligibility_score,
                             $application->decision_reason,
+                            $application->awarded_amount,
+                            $application->outcome_at?->format('Y-m-d'),
+                            $application->outcome_notes,
                             $readiness['percent'],
                             $application->submitted_at?->format('Y-m-d H:i:s'),
                             implode('; ', $application->document_checklist ?? []),
@@ -607,7 +731,9 @@ class ProviderController extends Controller
             'category' => ['nullable', 'string', 'max:100'],
             'description' => ['required', 'string', 'max:5000'],
             'eligibility' => ['nullable', 'string', 'max:5000'],
+            'eligible_education_levels' => ['nullable', 'string', 'max:2000'],
             'eligible_courses' => ['nullable', 'string', 'max:3000'],
+            'eligible_school_types' => ['nullable', 'string', 'max:2000'],
             'eligible_year_levels' => ['nullable', 'string', 'max:2000'],
             'eligible_locations' => ['nullable', 'string', 'max:3000'],
             'income_requirement' => ['nullable', 'string', 'max:100'],
@@ -618,6 +744,11 @@ class ProviderController extends Controller
             'requirements' => ['nullable', 'string', 'max:5000'],
             'award_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'minimum_gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'slots_available' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'application_mode' => ['nullable', Rule::in(['online', 'onsite', 'hybrid', 'provider_review'])],
+            'renewal_policy' => ['nullable', 'string', 'max:2000'],
+            'contact_email' => ['nullable', 'email', 'max:255'],
+            'contact_number' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{7,30}$/'],
             'deadline' => ['nullable', 'date'],
             'status' => ['required', Rule::in(['draft', 'published', 'closed'])],
             'image_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
@@ -670,6 +801,9 @@ class ProviderController extends Controller
             'notes' => $application->notes,
             'review_notes' => $application->review_notes,
             'decision_reason' => $application->decision_reason,
+            'awarded_amount' => $application->awarded_amount,
+            'outcome_notes' => $application->outcome_notes,
+            'outcome_at' => $application->outcome_at?->format('Y-m-d'),
             'reviewed_at' => $application->reviewed_at?->format('M d, Y h:i A'),
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
@@ -678,11 +812,20 @@ class ProviderController extends Controller
                 'email' => $application->applicant?->email,
                 'username' => $application->applicant?->username,
                 'contact_number' => $application->applicant?->contact_number,
+                'education_level' => $application->applicant?->studentProfile?->education_level,
                 'school' => $application->applicant?->studentProfile?->school,
+                'school_type' => $application->applicant?->studentProfile?->school_type,
+                'learner_reference_number' => $application->applicant?->studentProfile?->learner_reference_number,
                 'course_or_strand' => $application->applicant?->studentProfile?->course_or_strand,
                 'year_level' => $application->applicant?->studentProfile?->year_level,
                 'gwa' => $application->applicant?->studentProfile?->gwa,
                 'income_bracket' => $application->applicant?->studentProfile?->income_bracket,
+                'household_size' => $application->applicant?->studentProfile?->household_size,
+                'preferred_categories' => $application->applicant?->studentProfile?->preferred_categories,
+                'preferred_locations' => $application->applicant?->studentProfile?->preferred_locations,
+                'willing_to_relocate' => $application->applicant?->studentProfile?->willing_to_relocate,
+                'support_needs' => $application->applicant?->studentProfile?->support_needs,
+                'scholarship_goal' => $application->applicant?->studentProfile?->scholarship_goal,
                 'location' => collect([
                     $application->applicant?->studentProfile?->barangay,
                     $application->applicant?->studentProfile?->city,
@@ -757,7 +900,9 @@ class ProviderController extends Controller
             'category' => $scholarship->category,
             'description' => $scholarship->description,
             'eligibility' => $scholarship->eligibility,
+            'eligible_education_levels' => $scholarship->eligible_education_levels,
             'eligible_courses' => $scholarship->eligible_courses,
+            'eligible_school_types' => $scholarship->eligible_school_types,
             'eligible_year_levels' => $scholarship->eligible_year_levels,
             'eligible_locations' => $scholarship->eligible_locations,
             'income_requirement' => $scholarship->income_requirement,
@@ -770,6 +915,11 @@ class ProviderController extends Controller
             'requirements' => $scholarship->requirements,
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
+            'slots_available' => $scholarship->slots_available,
+            'application_mode' => $scholarship->application_mode,
+            'renewal_policy' => $scholarship->renewal_policy,
+            'contact_email' => $scholarship->contact_email,
+            'contact_number' => $scholarship->contact_number,
             'deadline' => $scholarship->deadline?->format('Y-m-d'),
             'status' => $scholarship->status,
             'bookmarks_count' => $scholarship->bookmarks_count ?? $scholarship->bookmarks()->count(),
@@ -833,6 +983,40 @@ class ProviderController extends Controller
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'download_url' => route('documents.download', $document),
         ];
+    }
+
+    private function verificationDocumentPayload(ProviderVerificationDocument $document): array
+    {
+        return [
+            'id' => $document->id,
+            'document_type' => $document->document_type,
+            'original_name' => $document->original_name,
+            'size' => $document->size,
+            'status' => $document->status,
+            'review_notes' => $document->review_notes,
+            'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'download_url' => route('provider.verification-documents.download', $document),
+        ];
+    }
+
+    private function notificationsPayload(Request $request): array
+    {
+        return PortalNotification::query()
+            ->where('user_id', $request->user()->id)
+            ->latest()
+            ->limit(5)
+            ->get()
+            ->map(fn (PortalNotification $notification) => [
+                'id' => $notification->id,
+                'type' => $notification->type,
+                'title' => $notification->title,
+                'message' => $notification->message,
+                'action_url' => $notification->action_url,
+                'is_read' => $notification->read_at !== null,
+                'created_at' => $notification->created_at?->format('M d, Y h:i A'),
+            ])
+            ->values()
+            ->all();
     }
 
     private function timelinePayload(ScholarshipApplication $application): array
