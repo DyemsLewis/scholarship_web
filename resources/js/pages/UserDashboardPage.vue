@@ -23,7 +23,6 @@ const applications = ref([]);
 const nextSteps = ref([]);
 const notifications = ref([]);
 
-const profileCompletion = computed(() => profileReadiness.value.percent ?? 0);
 const topMatches = computed(() => [...scholarships.value]
     .sort((first, second) => Number(second.eligibility_match?.score ?? 0) - Number(first.eligibility_match?.score ?? 0))
     .slice(0, 3));
@@ -87,14 +86,26 @@ const analystSignals = computed(() => [
 
 function signalClass(tone) {
     if (tone === 'good') {
-        return 'border-emerald-100 bg-emerald-50 text-emerald-800';
+        return 'border-slate-200 bg-white text-slate-800';
     }
 
     if (tone === 'warn') {
-        return 'border-amber-100 bg-amber-50 text-amber-900';
+        return 'border-slate-300 bg-white text-slate-900';
     }
 
-    return 'border-sky-100 bg-sky-50 text-sky-800';
+    return 'border-slate-200 bg-white text-slate-800';
+}
+
+function signalAccentClass(tone) {
+    if (tone === 'good') {
+        return 'bg-slate-900 text-white';
+    }
+
+    if (tone === 'warn') {
+        return 'bg-slate-700 text-white';
+    }
+
+    return 'bg-slate-100 text-slate-700';
 }
 
 function deadlineDays(value) {
@@ -146,7 +157,7 @@ onMounted(loadDashboard);
         <section class="student-page">
             <div class="student-container">
                 <header class="student-hero">
-                    <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <div class="max-w-2xl">
                             <p class="student-kicker">
                                 Dashboard
@@ -154,28 +165,9 @@ onMounted(loadDashboard);
                             <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
                                 Welcome back, {{ user?.first_name || 'Scholar' }}
                             </h2>
-                        </div>
-
-                        <div class="student-soft-card w-full p-4 lg:max-w-sm">
-                            <div class="flex items-center justify-between gap-4">
-                                <div>
-                                    <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                                        Profile readiness
-                                    </p>
-                                    <p class="mt-1 text-sm text-slate-500">
-                                        {{ profileReadiness.completed }}/{{ profileReadiness.total }} details complete
-                                    </p>
-                                </div>
-                                <p class="font-display text-3xl font-bold text-slate-950">
-                                    {{ profileCompletion }}%
-                                </p>
-                            </div>
-                            <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-                                <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${profileCompletion}%` }"></div>
-                            </div>
-                            <a href="/dashboard/profile" class="mt-3 inline-flex text-sm font-semibold text-slate-900 hover:text-sky-700">
-                                Update profile
-                            </a>
+                            <p class="mt-3 text-sm leading-6 text-slate-600">
+                                Review your profile, saved programs, and next scholarship steps in one place.
+                            </p>
                         </div>
                     </div>
                 </header>
@@ -189,7 +181,7 @@ onMounted(loadDashboard);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <section class="student-card p-5">
+                    <section class="student-card p-4">
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                                 <p class="student-kicker">
@@ -201,25 +193,25 @@ onMounted(loadDashboard);
                             </div>
                         </div>
 
-                        <div class="mt-5 grid gap-3 lg:grid-cols-4">
+                        <div class="mt-4 grid gap-2 lg:grid-cols-4">
                             <a
                                 v-for="signal in analystSignals"
                                 :key="signal.label"
                                 :href="signal.href"
-                                :class="['rounded-lg border p-4 transition hover:bg-white', signalClass(signal.tone)]"
+                                :class="['rounded-lg border p-3 transition hover:border-slate-400 hover:shadow-sm', signalClass(signal.tone)]"
                             >
-                                <div class="flex items-center gap-2">
-                                    <span class="flex h-8 w-8 items-center justify-center rounded-md bg-white/70 shadow-sm">
-                                        <i :class="[signal.icon, 'text-sm']"></i>
-                                    </span>
+                                <div class="flex items-center justify-between gap-3">
                                     <p class="text-sm font-bold">
                                         {{ signal.label }}
                                     </p>
+                                    <span :class="['flex h-7 w-7 items-center justify-center rounded-md', signalAccentClass(signal.tone)]">
+                                        <i :class="[signal.icon, 'text-xs']"></i>
+                                    </span>
                                 </div>
-                                <p class="mt-2 text-sm leading-5 opacity-85">
+                                <p class="mt-2 text-xs leading-5 text-slate-600">
                                     {{ signal.detail }}
                                 </p>
-                                <p class="mt-4 text-sm font-bold">
+                                <p class="mt-3 text-xs font-bold text-slate-900">
                                     {{ signal.action }}
                                 </p>
                             </a>
@@ -258,7 +250,7 @@ onMounted(loadDashboard);
                                                 {{ scholarship.provider?.name || 'Scholarship Provider' }}
                                             </p>
                                         </div>
-                                        <span class="w-fit rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
+                                        <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                             {{ scholarship.eligibility_match?.score ?? 0 }}% match
                                         </span>
                                     </div>
@@ -282,34 +274,34 @@ onMounted(loadDashboard);
                             </h3>
 
                             <div class="mt-5 grid gap-3">
-                                <div v-if="urgentScholarships.length" class="rounded-md border border-amber-100 bg-amber-50 p-3">
-                                    <p class="text-sm font-bold text-amber-900">
+                                <div v-if="urgentScholarships.length" class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
+                                    <p class="text-sm font-bold text-slate-950">
                                         Upcoming deadlines
                                     </p>
                                     <p
                                         v-for="scholarship in urgentScholarships"
                                         :key="scholarship.id"
-                                        class="mt-2 text-sm text-amber-900"
+                                        class="mt-2 text-sm text-slate-600"
                                     >
                                         {{ scholarship.title }}: {{ scholarship.days_left }} day{{ scholarship.days_left === 1 ? '' : 's' }} left
                                     </p>
                                 </div>
 
-                                <div v-if="documentGaps.length" class="rounded-md border border-sky-100 bg-sky-50 p-3">
-                                    <p class="text-sm font-bold text-sky-900">
+                                <div v-if="documentGaps.length" class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
+                                    <p class="text-sm font-bold text-slate-950">
                                         Document gaps
                                     </p>
                                     <p
                                         v-for="scholarship in documentGaps"
                                         :key="scholarship.id"
-                                        class="mt-2 text-sm text-sky-900"
+                                        class="mt-2 text-sm text-slate-600"
                                     >
                                         {{ scholarship.title }}: {{ scholarship.prepared_documents.uploaded }} of {{ scholarship.prepared_documents.required }} ready
                                     </p>
                                 </div>
 
-                                <div v-if="applicationWatchlist.length" class="rounded-md border border-slate-200 bg-slate-50 p-3">
-                                    <p class="text-sm font-bold text-slate-900">
+                                <div v-if="applicationWatchlist.length" class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
+                                    <p class="text-sm font-bold text-slate-950">
                                         Application follow-up
                                     </p>
                                     <p

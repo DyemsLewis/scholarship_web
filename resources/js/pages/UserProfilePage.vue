@@ -67,11 +67,20 @@ const gradingScaleOptions = [
     { value: 'percentage', label: 'General average / percentage' },
     { value: 'grade_point', label: 'GWA grade point' },
 ];
+const genderOptions = [
+    { value: 'female', label: 'Female' },
+    { value: 'male', label: 'Male' },
+    { value: 'non_binary', label: 'Non-binary' },
+    { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+];
+const suffixOptions = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
 
 const fieldLabels = {
     first_name: 'First name',
     last_name: 'Last name',
     middle_initial: 'Middle initial',
+    suffix: 'Suffix',
+    gender: 'Gender',
     contact_number: 'Contact number',
     account_managed_by: 'Account managed by',
     birthdate: 'Birthdate',
@@ -111,8 +120,8 @@ const profileSections = [
         icon: 'fa-solid fa-address-card',
         impact: 'Basic applicant information.',
         required: true,
-        fields: ['first_name', 'middle_initial', 'last_name', 'birthdate', 'contact_number', 'account_managed_by'],
-        requiredFields: ['first_name', 'middle_initial', 'last_name', 'birthdate', 'contact_number', 'account_managed_by'],
+        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'gender', 'birthdate', 'contact_number', 'account_managed_by'],
+        requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number'],
     },
     {
         id: 'academic',
@@ -122,7 +131,7 @@ const profileSections = [
         impact: 'Used for matching and eligibility.',
         required: true,
         fields: ['education_level', 'school', 'school_type', 'learner_reference_number', 'course_or_strand', 'year_level', 'enrollment_status', 'grading_scale', 'gwa'],
-        requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'enrollment_status', 'grading_scale', 'gwa'],
+        requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'grading_scale', 'gwa'],
     },
     {
         id: 'location',
@@ -132,7 +141,7 @@ const profileSections = [
         impact: 'Used for distance and need-based matching.',
         required: true,
         fields: ['income_bracket', 'household_size', 'address', 'barangay', 'city', 'province', 'region'],
-        requiredFields: ['income_bracket', 'address', 'barangay', 'city', 'province', 'region'],
+        requiredFields: ['income_bracket', 'city', 'province', 'region'],
     },
     {
         id: 'guardian',
@@ -142,16 +151,7 @@ const profileSections = [
         impact: 'Parent or guardian contact.',
         required: true,
         fields: ['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
-        requiredFields: ['guardian_name', 'guardian_relationship', 'guardian_contact'],
-    },
-    {
-        id: 'preferences',
-        label: 'Finder preferences',
-        detail: 'Optional',
-        icon: 'fa-solid fa-sliders',
-        impact: 'Optional details for better suggestions.',
-        required: false,
-        fields: ['preferred_categories', 'preferred_locations', 'willing_to_relocate', 'support_needs', 'scholarship_goal'],
+        requiredFields: ['guardian_name', 'guardian_contact'],
     },
     {
         id: 'review',
@@ -171,6 +171,13 @@ const requiresProgramPath = computed(() => courseRequiredLevels.includes(form.va
 const requiresGrades = computed(() => gradesRequiredLevels.includes(form.value.education_level));
 const needsGuardianContext = computed(() => guardianRequiredLevels.includes(form.value.education_level)
     || ['parent_guardian', 'relative', 'school_representative', 'other'].includes(form.value.account_managed_by));
+const hasGuardianDetails = computed(() => [
+    form.value.guardian_name,
+    form.value.guardian_relationship,
+    form.value.guardian_contact,
+    form.value.guardian_email,
+].some(hasValue) || form.value.guardian_is_account_owner);
+const visibleProfileSections = computed(() => profileSections.filter((section) => section.id !== 'guardian' || needsGuardianContext.value || hasGuardianDetails.value));
 const requiredProfileFields = computed(() => profileSections.flatMap((section) => sectionRequiredFields(section)));
 const boosterFields = computed(() => profileSections.flatMap((section) => sectionAllFields(section).filter((field) => !sectionRequiredFields(section).includes(field))));
 const requiredFieldData = computed(() => requiredProfileFields.value.map((key) => ({
@@ -184,9 +191,7 @@ const boosterFieldData = computed(() => boosterFields.value.map((key) => ({
     value: form.value[key],
 })));
 const completedRequiredFields = computed(() => requiredFieldData.value.filter((field) => hasValue(field.value)).length);
-const completedBoosterFields = computed(() => boosterFieldData.value.filter((field) => hasValue(field.value)).length);
 const profileCompletion = computed(() => requiredFieldData.value.length === 0 ? 100 : Math.round((completedRequiredFields.value / requiredFieldData.value.length) * 100));
-const boosterCompletion = computed(() => boosterFieldData.value.length === 0 ? 100 : Math.round((completedBoosterFields.value / boosterFieldData.value.length) * 100));
 const missingProfileFields = computed(() => requiredFieldData.value.filter((field) => !hasValue(field.value)));
 const profileComplete = computed(() => missingProfileFields.value.length === 0);
 const profileQuality = computed(() => {
@@ -221,7 +226,7 @@ const activeSectionIndex = computed(() => profileSections.findIndex((section) =>
 const recommendedSection = computed(() => {
     const section = profileSections.find((item) => item.required && sectionProgress(item).complete === false);
 
-    return section?.id ?? 'preferences';
+    return section?.id ?? 'review';
 });
 const profileMapAddress = computed(() => {
     const parts = [
@@ -240,6 +245,8 @@ function emptyForm() {
         first_name: '',
         last_name: '',
         middle_initial: '',
+        suffix: '',
+        gender: '',
         contact_number: '',
         account_managed_by: '',
         education_level: '',
@@ -349,6 +356,46 @@ function sectionMissingFields(section) {
         .map((field) => fieldLabel(field));
 }
 
+function sectionStatusLabel(section) {
+    if (!section.fields.length) {
+        return profileComplete.value ? 'Ready' : 'Review';
+    }
+
+    const progress = sectionProgress(section);
+
+    if (!section.required) {
+        return progress.completed > 0 ? 'Added' : 'Optional';
+    }
+
+    if (progress.complete) {
+        return 'Complete';
+    }
+
+    return progress.completed > 0 ? 'In progress' : 'Needs details';
+}
+
+function sectionStatusClass(section) {
+    if (!section.fields.length) {
+        return profileComplete.value
+            ? 'bg-emerald-100 text-emerald-800'
+            : 'bg-slate-100 text-slate-600';
+    }
+
+    const progress = sectionProgress(section);
+
+    if (!section.required) {
+        return progress.completed > 0
+            ? 'bg-sky-100 text-sky-800'
+            : 'bg-slate-100 text-slate-600';
+    }
+
+    if (progress.complete) {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
 function openSection(sectionId) {
     activeSection.value = sectionId;
     errorMessage.value = '';
@@ -372,6 +419,10 @@ function goToNextSection() {
 
 function gradingScaleLabel(value) {
     return gradingScaleOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function genderLabel(value) {
+    return genderOptions.find((option) => option.value === value)?.label ?? value;
 }
 
 function educationLevelLabel(value) {
@@ -524,7 +575,8 @@ const reviewGroups = computed(() => [
     {
         title: 'Learner',
         items: [
-            ['Name', [form.value.first_name, form.value.middle_initial ? `${form.value.middle_initial}.` : '', form.value.last_name].filter(Boolean).join(' ')],
+            ['Name', [form.value.first_name, form.value.middle_initial ? `${form.value.middle_initial}.` : '', form.value.last_name, form.value.suffix].filter(Boolean).join(' ')],
+            ['Gender', genderLabel(form.value.gender)],
             ['Birthdate', form.value.birthdate],
             ['Contact', form.value.contact_number],
             ['Account managed by', accountManagerLabel(form.value.account_managed_by)],
@@ -555,15 +607,6 @@ const reviewGroups = computed(() => [
             ['Relationship', relationshipLabel(form.value.guardian_relationship)],
             ['Contact', form.value.guardian_contact],
             ['Email', form.value.guardian_email],
-        ],
-    },
-    {
-        title: 'Preferences',
-        items: [
-            ['Scholarship types', listFromText(form.value.preferred_categories).join(', ')],
-            ['Support needs', listFromText(form.value.support_needs).join(', ')],
-            ['Preferred locations', form.value.preferred_locations],
-            ['Relocation', relocationOptions.find((option) => option.value === form.value.willing_to_relocate)?.label],
         ],
     },
 ]);
@@ -621,6 +664,10 @@ function fieldDisplayValue(field) {
         return gradingScaleLabel(field.value);
     }
 
+    if (field.key === 'gender') {
+        return genderLabel(field.value);
+    }
+
     if (field.key === 'willing_to_relocate') {
         return relocationOptions.find((option) => option.value === field.value)?.label ?? field.value;
     }
@@ -665,6 +712,8 @@ function fillForm(payload) {
         first_name: payload?.first_name ?? '',
         last_name: payload?.last_name ?? '',
         middle_initial: payload?.middle_initial ?? '',
+        suffix: payload?.suffix ?? '',
+        gender: payload?.gender ?? '',
         contact_number: payload?.contact_number ?? '',
         account_managed_by: payload?.account_managed_by ?? '',
         education_level: payload?.education_level ?? '',
@@ -823,7 +872,7 @@ onMounted(loadProfile);
         <section class="student-page">
             <div class="student-container">
                 <header class="student-hero">
-                    <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <div class="max-w-2xl">
                             <p class="student-kicker">
                                 Student Profile
@@ -831,28 +880,9 @@ onMounted(loadProfile);
                             <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
                                 Build a learner profile that fits your level
                             </h2>
-                        </div>
-
-                        <div class="student-soft-card w-full p-4 lg:max-w-sm">
-                            <div class="flex items-center justify-between gap-4">
-                                <div>
-                                    <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                                        Application readiness
-                                    </p>
-                                    <p class="mt-1 text-sm font-bold text-slate-950">
-                                        {{ profileQuality.label }}
-                                    </p>
-                                    <p class="mt-0.5 text-xs text-slate-500">
-                                        {{ completedRequiredFields }}/{{ requiredFieldData.length }} required details
-                                    </p>
-                                </div>
-                                <p class="font-display text-3xl font-bold text-slate-950">
-                                    {{ profileCompletion }}%
-                                </p>
-                            </div>
-                            <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-                                <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${profileCompletion}%` }"></div>
-                            </div>
+                            <p class="mt-3 text-sm leading-6 text-slate-600">
+                                Keep learner, school, guardian, and scholarship matching details organized by page.
+                            </p>
                         </div>
                     </div>
                 </header>
@@ -861,57 +891,82 @@ onMounted(loadProfile);
                     Loading profile...
                 </div>
 
-                <div v-else class="mt-6 grid gap-5 xl:grid-cols-[17rem_minmax(0,1fr)] xl:items-start">
-                    <aside class="student-card h-fit p-4 xl:sticky xl:top-5">
-                        <p class="student-kicker">
-                            Profile Pages
-                        </p>
-                        <div class="mt-4 grid gap-2">
+                <div v-else class="mt-6 space-y-5">
+                    <section class="student-card p-4">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <p class="student-kicker">
+                                    Profile Pages
+                                </p>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <p class="text-sm font-bold text-slate-950">
+                                        {{ profileQuality.label }}
+                                    </p>
+                                    <span class="rounded-md bg-[#f6faf8] px-2 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                                        {{ completedRequiredFields }}/{{ requiredFieldData.length }} done
+                                    </span>
+                                    <span v-if="missingProfileFields.length" class="text-xs font-semibold text-slate-500">
+                                        Next: {{ missingProfileFields.slice(0, 3).map((field) => field.label).join(', ') }}
+                                    </span>
+                                    <span v-else class="text-xs font-semibold text-emerald-700">
+                                        Ready to submit applications.
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                    :disabled="isSaving"
+                                    @click="saveProfile(false)"
+                                >
+                                    {{ isSaving ? 'Saving...' : 'Save profile' }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    :disabled="isSaving || missingProfileFields.length > 0"
+                                    @click="saveProfile(true)"
+                                >
+                                    Complete profile
+                                </button>
+                            </div>
+                        </div>
+
+                        <nav class="mt-4 flex w-full flex-nowrap gap-2 overflow-x-auto pb-1">
                             <button
-                                v-for="section in profileSections"
+                                v-for="section in visibleProfileSections"
                                 :key="section.id"
                                 type="button"
                                 :class="[
-                                    'rounded-lg border p-3 text-left transition hover:border-slate-400 hover:bg-white',
+                                    'min-w-[10rem] flex-1 rounded-lg border px-3 py-2.5 text-left transition hover:border-slate-400 hover:bg-white',
                                     activeSection === section.id ? 'border-slate-900 bg-white shadow-sm' : 'border-slate-200 bg-[#f6faf8]',
                                 ]"
                                 @click="openSection(section.id)"
                             >
-                                <span class="flex items-center justify-between gap-2">
-                                    <span class="flex items-center gap-2 font-bold text-slate-950">
-                                        <i :class="[section.icon, 'w-4 text-center text-xs text-sky-700']"></i>
-                                        {{ section.label }}
+                                <span class="flex items-center justify-between gap-3">
+                                    <span class="flex min-w-0 items-center gap-2 font-bold text-slate-950">
+                                        <i :class="[section.icon, 'w-4 shrink-0 text-center text-xs text-sky-700']"></i>
+                                        <span class="truncate">{{ section.label }}</span>
                                     </span>
                                     <span
                                         v-if="section.fields.length"
                                         :class="[
-                                            'rounded-md px-2 py-0.5 text-xs font-bold',
-                                            sectionProgress(section).complete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
+                                            'shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold',
+                                            sectionStatusClass(section),
                                         ]"
                                     >
-                                        {{ sectionProgress(section).completed }}/{{ sectionProgress(section).total }}
+                                        {{ sectionStatusLabel(section) }}
                                     </span>
-                                    <span v-else class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+                                    <span v-else class="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
                                         Check
                                     </span>
                                 </span>
-                                <span class="mt-1 block text-xs leading-5 text-slate-500">
-                                    {{ section.detail }}
-                                </span>
                             </button>
-                        </div>
+                        </nav>
+                    </section>
 
-                        <button
-                            type="button"
-                            class="mt-4 w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                            :disabled="isSaving"
-                            @click="saveProfile(false)"
-                        >
-                            {{ isSaving ? 'Saving...' : 'Save profile' }}
-                        </button>
-                    </aside>
-
-                    <section class="space-y-5 xl:col-start-2 xl:row-start-1">
+                    <section class="space-y-5">
                         <div v-if="statusMessage || errorMessage" class="student-card p-4">
                             <p v-if="statusMessage" class="text-sm font-semibold text-emerald-700">
                                 {{ statusMessage }}
@@ -921,57 +976,18 @@ onMounted(loadProfile);
                             </p>
                         </div>
 
-                        <div class="student-card p-5">
-                            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                                <div class="flex gap-4">
-                                    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-slate-900 text-white shadow-sm">
-                                        <i :class="[activeProfileSection.icon, 'text-lg']"></i>
-                                    </div>
-                                    <div>
-                                    <p class="student-kicker">
-                                        Page {{ activeSectionIndex + 1 }} of {{ profileSections.length }}
-                                    </p>
-                                    <h3 class="mt-2 text-2xl font-bold text-slate-950">
-                                        {{ activeProfileSection.label }}
-                                    </h3>
-                                    <p class="mt-1 text-sm leading-5 text-slate-600">
-                                        {{ activeProfileSection.impact }}
-                                    </p>
-                                    </div>
-                                </div>
-                                <div class="flex flex-wrap gap-2">
-                                    <button
-                                        type="button"
-                                        class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                        :disabled="activeSectionIndex === 0"
-                                        @click="goToPreviousSection"
-                                    >
-                                        Previous page
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                        :disabled="activeSectionIndex === profileSections.length - 1"
-                                        @click="goToNextSection"
-                                    >
-                                        Next page
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
                         <section v-if="activeSection === 'personal'" id="profile-personal" class="student-card p-6">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
                                     <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Personal details</h3>
                                 </div>
-                                <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
-                                    {{ sectionProgress(profileSections[0]).percent }}% ready
+                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSections[0])]">
+                                    {{ sectionStatusLabel(profileSections[0]) }}
                                 </span>
                             </div>
 
-                            <div class="mt-5 grid gap-4 md:grid-cols-[1fr_5rem_1fr] md:items-end">
+                            <div class="mt-5 grid gap-4 md:grid-cols-[1fr_5rem_1fr_7rem] md:items-end">
                                 <div>
                                     <label :class="labelClass" for="profile-first-name">First name</label>
                                     <input id="profile-first-name" v-model="form.first_name" :class="inputClass">
@@ -990,9 +1006,38 @@ onMounted(loadProfile);
                                     <label :class="labelClass" for="profile-last-name">Last name</label>
                                     <input id="profile-last-name" v-model="form.last_name" :class="inputClass">
                                 </div>
+                                <div>
+                                    <label :class="labelClass" for="profile-suffix">Suffix <span class="font-normal text-sky-600">(optional)</span></label>
+                                    <select id="profile-suffix" v-model="form.suffix" :class="inputClass">
+                                        <option value="">None</option>
+                                        <option v-if="form.suffix && !suffixOptions.includes(form.suffix)" :value="form.suffix">
+                                            {{ form.suffix }}
+                                        </option>
+                                        <option
+                                            v-for="option in suffixOptions"
+                                            :key="option"
+                                            :value="option"
+                                        >
+                                            {{ option }}
+                                        </option>
+                                    </select>
+                                </div>
                             </div>
 
-                            <div class="mt-4 grid gap-4 md:grid-cols-2">
+                            <div class="mt-4 grid gap-4 md:grid-cols-3">
+                                <div>
+                                    <label :class="labelClass" for="profile-gender">Gender <span class="font-normal text-sky-600">(optional)</span></label>
+                                    <select id="profile-gender" v-model="form.gender" :class="inputClass">
+                                        <option value="">Select gender</option>
+                                        <option
+                                            v-for="option in genderOptions"
+                                            :key="option.value"
+                                            :value="option.value"
+                                        >
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
+                                </div>
                                 <div>
                                     <label :class="labelClass" for="profile-birthdate">Birthdate</label>
                                     <input id="profile-birthdate" v-model="form.birthdate" type="date" :class="inputClass">
@@ -1013,7 +1058,7 @@ onMounted(loadProfile);
                                     </p>
                                 </div>
                                 <div>
-                                    <label :class="labelClass" for="profile-account-manager">Who manages this account?</label>
+                                    <label :class="labelClass" for="profile-account-manager">Who manages this account? <span class="font-normal text-sky-600">(optional)</span></label>
                                     <select id="profile-account-manager" v-model="form.account_managed_by" :class="inputClass">
                                         <option value="">Select account manager</option>
                                         <option
@@ -1034,8 +1079,8 @@ onMounted(loadProfile);
                                     <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Learning background</h3>
                                 </div>
-                                <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
-                                    {{ sectionProgress(profileSections[1]).percent }}% ready
+                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSections[1])]">
+                                    {{ sectionStatusLabel(profileSections[1]) }}
                                 </span>
                             </div>
 
@@ -1053,7 +1098,7 @@ onMounted(loadProfile);
                                 </p>
                             </div>
 
-                            <div class="mt-4 grid gap-4 md:grid-cols-3">
+                            <div class="mt-4 grid gap-4 md:grid-cols-2">
                                 <div>
                                     <label :class="labelClass" for="profile-education-level">Education level</label>
                                     <select id="profile-education-level" v-model="form.education_level" :class="inputClass">
@@ -1064,19 +1109,6 @@ onMounted(loadProfile);
                                             :value="option.value"
                                         >
                                             {{ option.label }}
-                                        </option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-enrollment">Enrollment status</label>
-                                    <select id="profile-enrollment" v-model="form.enrollment_status" :class="inputClass">
-                                        <option value="">Select status</option>
-                                        <option
-                                            v-for="option in enrollmentOptions"
-                                            :key="option"
-                                            :value="option"
-                                        >
-                                            {{ option }}
                                         </option>
                                     </select>
                                 </div>
@@ -1173,29 +1205,50 @@ onMounted(loadProfile);
                                 </div>
                             </div>
 
-                            <div class="mt-4 grid gap-4 md:grid-cols-3">
-                                <div v-if="isFieldRelevant('gwa')">
+                            <div v-if="isFieldRelevant('gwa')" class="mt-4 grid gap-4 md:grid-cols-3">
+                                <div>
                                     <label :class="labelClass" for="profile-gwa">{{ gwaLabel }}</label>
                                     <input id="profile-gwa" v-model="form.gwa" type="number" min="0" max="100" step="0.01" placeholder="92.50 or 1.75" :class="inputClass">
                                 </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-school-type">Institution type <span class="font-normal text-sky-600">(booster)</span></label>
-                                    <select id="profile-school-type" v-model="form.school_type" :class="inputClass">
-                                        <option value="">Select institution type</option>
-                                        <option
-                                            v-for="option in schoolTypeOptions"
-                                            :key="option.value"
-                                            :value="option.value"
-                                        >
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-lrn">{{ learnerIdLabel }} <span class="font-normal text-sky-600">(optional)</span></label>
-                                    <input id="profile-lrn" v-model="form.learner_reference_number" :placeholder="learnerIdPlaceholder" :class="inputClass">
-                                </div>
                             </div>
+
+                            <details class="mt-5 rounded-lg border border-slate-200 bg-[#f6faf8] p-4">
+                                <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
+                                    Optional school details
+                                </summary>
+                                <div class="mt-4 grid gap-4 md:grid-cols-3">
+                                    <div>
+                                        <label :class="labelClass" for="profile-enrollment">Enrollment status</label>
+                                        <select id="profile-enrollment" v-model="form.enrollment_status" :class="inputClass">
+                                            <option value="">Select status</option>
+                                            <option
+                                                v-for="option in enrollmentOptions"
+                                                :key="option"
+                                                :value="option"
+                                            >
+                                                {{ option }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-school-type">Institution type</label>
+                                        <select id="profile-school-type" v-model="form.school_type" :class="inputClass">
+                                            <option value="">Select institution type</option>
+                                            <option
+                                                v-for="option in schoolTypeOptions"
+                                                :key="option.value"
+                                                :value="option.value"
+                                            >
+                                                {{ option.label }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-lrn">{{ learnerIdLabel }}</label>
+                                        <input id="profile-lrn" v-model="form.learner_reference_number" :placeholder="learnerIdPlaceholder" :class="inputClass">
+                                    </div>
+                                </div>
+                            </details>
                         </section>
 
                         <section v-if="activeSection === 'location'" id="profile-location" class="student-card p-6">
@@ -1204,12 +1257,12 @@ onMounted(loadProfile);
                                     <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Location and financial need</h3>
                                 </div>
-                                <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
-                                    {{ sectionProgress(profileSections[2]).percent }}% ready
+                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSections[2])]">
+                                    {{ sectionStatusLabel(profileSections[2]) }}
                                 </span>
                             </div>
 
-                            <div class="mt-5 grid gap-4 md:grid-cols-2">
+                            <div class="mt-5 grid gap-4 md:grid-cols-4">
                                 <div>
                                     <label :class="labelClass" for="profile-income">Household income bracket</label>
                                     <select id="profile-income" v-model="form.income_bracket" :class="inputClass">
@@ -1222,29 +1275,6 @@ onMounted(loadProfile);
                                             {{ option }}
                                         </option>
                                     </select>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-household-size">Household size <span class="font-normal text-sky-600">(booster)</span></label>
-                                    <input
-                                        id="profile-household-size"
-                                        v-model="form.household_size"
-                                        type="number"
-                                        min="1"
-                                        max="30"
-                                        placeholder="Number of people in household"
-                                        :class="inputClass"
-                                    >
-                                </div>
-                            </div>
-
-                            <div class="mt-4 grid gap-4 md:grid-cols-4">
-                                <div class="md:col-span-4">
-                                    <label :class="labelClass" for="profile-address">Address</label>
-                                    <input id="profile-address" v-model="form.address" placeholder="Home address" :class="inputClass" @input="clearProfileMapPoint">
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-barangay">Barangay</label>
-                                    <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass" @input="clearProfileMapPoint">
                                 </div>
                                 <div>
                                     <label :class="labelClass" for="profile-city">City / municipality</label>
@@ -1293,8 +1323,35 @@ onMounted(loadProfile);
                                 </div>
                             </div>
 
-                            <div class="student-soft-card mt-5 p-4">
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <details class="mt-5 rounded-lg border border-slate-200 bg-[#f6faf8] p-4">
+                                <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
+                                    Optional address details
+                                </summary>
+
+                                <div class="mt-4 grid gap-4 md:grid-cols-3">
+                                    <div>
+                                        <label :class="labelClass" for="profile-household-size">Household size</label>
+                                        <input
+                                            id="profile-household-size"
+                                            v-model="form.household_size"
+                                            type="number"
+                                            min="1"
+                                            max="30"
+                                            placeholder="Number of people in household"
+                                            :class="inputClass"
+                                        >
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label :class="labelClass" for="profile-address">Street / home address</label>
+                                        <input id="profile-address" v-model="form.address" placeholder="Home address" :class="inputClass" @input="clearProfileMapPoint">
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-barangay">Barangay</label>
+                                        <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass" @input="clearProfileMapPoint">
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
                                             Address map preview
@@ -1326,7 +1383,7 @@ onMounted(loadProfile);
                                 <p v-if="locationMessage" class="mt-3 text-xs font-semibold text-slate-700">
                                     {{ locationMessage }}
                                 </p>
-                            </div>
+                            </details>
                         </section>
 
                         <section v-if="activeSection === 'guardian'" id="profile-guardian" class="student-card p-6">
@@ -1335,8 +1392,8 @@ onMounted(loadProfile);
                                     <p class="student-kicker">{{ needsGuardianContext ? 'Required' : 'Optional' }}</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Guardian information</h3>
                                 </div>
-                                <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
-                                    {{ sectionProgress(profileSections[3]).percent }}% ready
+                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSections[3])]">
+                                    {{ sectionStatusLabel(profileSections[3]) }}
                                 </span>
                             </div>
 
@@ -1355,136 +1412,47 @@ onMounted(loadProfile);
                                     <input id="profile-guardian" v-model="form.guardian_name" placeholder="Parent or guardian" :class="inputClass">
                                 </div>
                                 <div>
-                                    <label :class="labelClass" for="profile-guardian-relationship">Relationship to learner</label>
-                                    <select id="profile-guardian-relationship" v-model="form.guardian_relationship" :class="inputClass">
-                                        <option value="">Select relationship</option>
-                                        <option
-                                            v-for="option in guardianRelationshipOptions"
-                                            :key="option"
-                                            :value="option"
-                                        >
-                                            {{ option }}
-                                        </option>
-                                    </select>
-                                </div>
-                                <div>
                                     <label :class="labelClass" for="profile-guardian-contact">Guardian contact</label>
                                     <input id="profile-guardian-contact" :value="form.guardian_contact" placeholder="Guardian contact number" :class="inputClass" @input="handlePhoneInput('guardian_contact', $event)">
                                 </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-guardian-email">Guardian email <span class="font-normal text-sky-600">(optional)</span></label>
-                                    <input id="profile-guardian-email" v-model="form.guardian_email" type="email" placeholder="guardian@example.com" :class="inputClass">
-                                </div>
                             </div>
 
-                            <label class="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-[#f6faf8] p-4 text-sm text-slate-600">
-                                <input
-                                    v-model="form.guardian_is_account_owner"
-                                    type="checkbox"
-                                    class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                                >
-                                <span>
-                                    <span class="block font-bold text-slate-950">Guardian manages this account</span>
-                                    <span class="mt-1 block text-xs leading-5">Use this when a parent or guardian signs in and manages applications for the learner.</span>
-                                </span>
-                            </label>
-                        </section>
+                            <details class="mt-5 rounded-lg border border-slate-200 bg-[#f6faf8] p-4">
+                                <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
+                                    Optional guardian details
+                                </summary>
+                                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label :class="labelClass" for="profile-guardian-relationship">Relationship to learner</label>
+                                        <select id="profile-guardian-relationship" v-model="form.guardian_relationship" :class="inputClass">
+                                            <option value="">Select relationship</option>
+                                            <option
+                                                v-for="option in guardianRelationshipOptions"
+                                                :key="option"
+                                                :value="option"
+                                            >
+                                                {{ option }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-guardian-email">Guardian email</label>
+                                        <input id="profile-guardian-email" v-model="form.guardian_email" type="email" placeholder="guardian@example.com" :class="inputClass">
+                                    </div>
+                                </div>
 
-                        <section v-if="activeSection === 'preferences'" id="profile-preferences" class="student-card p-6">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <div>
-                                    <p class="student-kicker">Optional</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Finder preferences</h3>
-                                </div>
-                                <span class="rounded-md bg-sky-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-sky-700">
-                                    {{ boosterCompletion }}% boosted
-                                </span>
-                            </div>
-
-                            <div class="mt-5 grid gap-4 md:grid-cols-2">
-                                <div>
-                                    <label :class="labelClass" for="profile-relocate">Willing to relocate</label>
-                                    <select id="profile-relocate" v-model="form.willing_to_relocate" :class="inputClass">
-                                        <option value="">Select preference</option>
-                                        <option
-                                            v-for="option in relocationOptions"
-                                            :key="option.value"
-                                            :value="option.value"
-                                        >
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <p :class="labelClass">Preferred locations</p>
-                                    <div class="flex flex-wrap gap-2">
-                                        <button
-                                            v-for="option in preferredLocationOptions"
-                                            :key="option"
-                                            type="button"
-                                            :class="[
-                                                'rounded-md border px-3 py-2 text-xs font-bold transition',
-                                                isOptionSelected('preferred_locations', option) ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-slate-500',
-                                            ]"
-                                            @click="toggleListOption('preferred_locations', option)"
-                                        >
-                                            {{ option }}
-                                        </button>
-                                    </div>
-                                    <textarea
-                                        id="profile-preferred-locations"
-                                        v-model="form.preferred_locations"
-                                        rows="2"
-                                        placeholder="Add custom location if needed"
-                                        class="mt-2"
-                                        :class="inputClass"
-                                    ></textarea>
-                                </div>
-                                <div class="md:col-span-2">
-                                    <p :class="labelClass">Preferred scholarship types</p>
-                                    <div class="flex flex-wrap gap-2">
-                                        <button
-                                            v-for="option in categoryOptions"
-                                            :key="option"
-                                            type="button"
-                                            :class="[
-                                                'rounded-md border px-3 py-2 text-xs font-bold transition',
-                                                isOptionSelected('preferred_categories', option) ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-slate-500',
-                                            ]"
-                                            @click="toggleListOption('preferred_categories', option)"
-                                        >
-                                            {{ option }}
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="md:col-span-2">
-                                    <p :class="labelClass">Support needs</p>
-                                    <div class="flex flex-wrap gap-2">
-                                        <button
-                                            v-for="option in supportNeedOptions"
-                                            :key="option"
-                                            type="button"
-                                            :class="[
-                                                'rounded-md border px-3 py-2 text-xs font-bold transition',
-                                                isOptionSelected('support_needs', option) ? 'border-sky-700 bg-sky-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-slate-500',
-                                            ]"
-                                            @click="toggleListOption('support_needs', option)"
-                                        >
-                                            {{ option }}
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="md:col-span-2">
-                                    <label :class="labelClass" for="profile-goal">Scholarship goal</label>
-                                    <textarea
-                                        id="profile-goal"
-                                        v-model="form.scholarship_goal"
-                                        rows="3"
-                                        placeholder="Short goal or reason for applying"
-                                        :class="inputClass"
-                                    ></textarea>
-                                </div>
-                            </div>
+                                <label class="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                                    <input
+                                        v-model="form.guardian_is_account_owner"
+                                        type="checkbox"
+                                        class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                    >
+                                    <span>
+                                        <span class="block font-bold text-slate-950">Guardian manages this account</span>
+                                        <span class="mt-1 block text-xs leading-5">Use this when a parent or guardian signs in and manages applications for the learner.</span>
+                                    </span>
+                                </label>
+                            </details>
                         </section>
 
                         <section v-if="activeSection === 'review'" id="profile-review" class="student-card p-6">
@@ -1550,132 +1518,6 @@ onMounted(loadProfile);
                         </section>
                     </section>
 
-                    <aside class="space-y-5 xl:col-start-2">
-                        <section class="student-card p-5">
-                            <p class="student-kicker">
-                                Readiness
-                            </p>
-                            <div class="mt-3 flex items-end justify-between gap-4">
-                                <div>
-                                    <h3 class="text-lg font-bold text-slate-950">
-                                        {{ profileQuality.label }}
-                                    </h3>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">
-                                        {{ profileQuality.detail }}
-                                    </p>
-                                </div>
-                                <p class="font-display text-3xl font-bold text-slate-950">
-                                    {{ profileCompletion }}%
-                                </p>
-                            </div>
-                            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
-                                <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${profileCompletion}%` }"></div>
-                            </div>
-
-                            <div v-if="missingProfileFields.length" class="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-3">
-                                <p class="text-sm font-bold text-amber-900">
-                                    Missing required details
-                                </p>
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <button
-                                        v-for="field in missingProfileFields.slice(0, 8)"
-                                        :key="field.key"
-                                        type="button"
-                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-100"
-                                        @click="openSection(profileSections.find((section) => sectionAllFields(section).includes(field.key))?.id || 'personal')"
-                                    >
-                                        {{ field.label }}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div v-else class="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
-                                Required details are complete. You can submit applications.
-                            </div>
-
-                            <div class="mt-4 grid gap-2">
-                                <button
-                                    type="button"
-                                    :disabled="isSaving"
-                                    class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                    @click="saveProfile(false)"
-                                >
-                                    {{ isSaving ? 'Saving...' : 'Save changes' }}
-                                </button>
-                                <button
-                                    type="button"
-                                    :disabled="isSaving || missingProfileFields.length > 0"
-                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                                    @click="saveProfile(true)"
-                                >
-                                    Complete profile
-                                </button>
-                            </div>
-                        </section>
-
-                        <section class="student-card p-5">
-                            <p class="student-kicker">
-                                Sections
-                            </p>
-                            <div class="mt-4 grid gap-3">
-                                <div
-                                    v-for="section in profileSections"
-                                    :key="section.id"
-                                    class="rounded-lg border border-slate-200 bg-[#f6faf8] p-3"
-                                >
-                                    <div class="flex items-center justify-between gap-3">
-                                        <p class="font-bold text-slate-950">
-                                            {{ section.label }}
-                                        </p>
-                                        <p v-if="section.fields.length" class="text-xs font-bold text-slate-500">
-                                            {{ sectionProgress(section).completed }}/{{ sectionProgress(section).total }}
-                                        </p>
-                                        <p v-else class="text-xs font-bold text-slate-500">
-                                            Check
-                                        </p>
-                                    </div>
-                                    <div v-if="section.fields.length" class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
-                                        <div
-                                            class="h-full rounded-full transition-all"
-                                            :class="section.required ? 'bg-slate-900' : 'bg-sky-600'"
-                                            :style="{ width: `${sectionProgress(section).percent}%` }"
-                                        ></div>
-                                    </div>
-                                    <p v-if="section.fields.length && sectionMissingFields(section).length" class="mt-2 text-xs leading-5 text-slate-500">
-                                        Missing: {{ sectionMissingFields(section).slice(0, 3).join(', ') }}
-                                    </p>
-                                    <p v-else-if="section.fields.length" class="mt-2 text-xs font-semibold text-emerald-700">
-                                        {{ section.required ? 'Ready' : 'Added' }}
-                                    </p>
-                                    <p v-else class="mt-2 text-xs font-semibold text-slate-500">
-                                        Confirm before completing
-                                    </p>
-                                </div>
-                            </div>
-                        </section>
-
-                        <details class="student-card p-5">
-                            <summary class="cursor-pointer list-none">
-                                <p class="student-kicker">Checklist</p>
-                                <h3 class="mt-2 text-lg font-bold text-slate-950">Required fields</h3>
-                            </summary>
-
-                            <div class="mt-4 grid gap-2">
-                                <div
-                                    v-for="field in requiredFieldData"
-                                    :key="field.key"
-                                    class="flex items-center justify-between gap-3 rounded-md bg-[#f6faf8] px-3 py-2.5 text-sm ring-1 ring-slate-200/70"
-                                >
-                                    <span class="font-semibold text-slate-500">
-                                        {{ field.label }}
-                                    </span>
-                                    <span :class="hasValue(field.value) ? 'font-bold text-slate-950' : 'font-semibold text-rose-600'">
-                                        {{ hasValue(field.value) ? fieldDisplayValue(field) : 'Missing' }}
-                                    </span>
-                                </div>
-                            </div>
-                        </details>
-                    </aside>
                 </div>
 
                 <ApplicantFooter />

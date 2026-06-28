@@ -296,6 +296,9 @@ onMounted(loadDocuments);
                             <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
                                 Prepare documents before applying
                             </h2>
+                            <p class="mt-3 text-sm leading-6 text-slate-600">
+                                Upload common requirements once so they are ready when a scholarship needs them.
+                            </p>
                         </div>
 
                         <a

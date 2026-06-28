@@ -1025,10 +1025,9 @@ class _ProfileSummary extends StatelessWidget {
       'first_name',
       'last_name',
       'contact_number',
+      'birthdate',
       'education_level',
       'school',
-      'school_type',
-      'course_or_strand',
       'year_level',
       'gwa',
       'grading_scale',
@@ -1228,6 +1227,11 @@ class _ProfileCard extends StatelessWidget {
     final details = [
       _Detail('Name', stringValue(user['name'])),
       _Detail('Email', stringValue(user['email'])),
+      _Detail(
+        'Suffix',
+        stringValue(user['suffix'], fallback: 'Not provided'),
+      ),
+      _Detail('Gender', profileLabelFromKey(user['gender'])),
       _Detail(
         'Contact',
         stringValue(user['contact_number'], fallback: 'Not provided'),
@@ -3180,8 +3184,13 @@ class _ProfileEditorState extends State<_ProfileEditor> {
 
   static const fields = [
     _ProfileField('first_name', 'First name', required: true),
-    _ProfileField('middle_initial', 'M.I.', required: true, maxLength: 1),
+    _ProfileField('middle_initial', 'M.I.', maxLength: 1),
     _ProfileField('last_name', 'Last name', required: true),
+    _ProfileField('suffix', 'Suffix', maxLength: 20),
+    _ProfileField(
+      'gender',
+      'Gender (female / male / non_binary / prefer_not_to_say)',
+    ),
     _ProfileField(
       'contact_number',
       'Contact number',
@@ -3274,6 +3283,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       payload['willing_to_relocate'] = normalizeRelocationChoice(
         payload['willing_to_relocate'],
       );
+      payload['gender'] = normalizeGenderChoice(payload['gender']);
 
       await widget.apiClient.updateProfile(payload);
 
@@ -3341,6 +3351,14 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                         if (stringValue(value).isNotEmpty &&
                             normalized.isEmpty) {
                           return 'Use yes, no, or depends';
+                        }
+                      }
+
+                      if (field.key == 'gender') {
+                        final normalized = normalizeGenderChoice(value);
+                        if (stringValue(value).isNotEmpty &&
+                            normalized.isEmpty) {
+                          return 'Use female, male, non_binary, or prefer_not_to_say';
                         }
                       }
 
@@ -4110,6 +4128,27 @@ String normalizeRelocationChoice(Object? value) {
 
   if (choice == 'yes' || choice == 'no' || choice == 'depends') {
     return choice;
+  }
+
+  return '';
+}
+
+String normalizeGenderChoice(Object? value) {
+  final choice = stringValue(value)
+      .toLowerCase()
+      .trim()
+      .replaceAll(RegExp(r'[\s-]+'), '_');
+
+  if (choice.isEmpty) {
+    return '';
+  }
+
+  if (choice == 'female' || choice == 'male' || choice == 'non_binary') {
+    return choice;
+  }
+
+  if (choice == 'prefer_not_to_say' || choice == 'rather_not_say') {
+    return 'prefer_not_to_say';
   }
 
   return '';

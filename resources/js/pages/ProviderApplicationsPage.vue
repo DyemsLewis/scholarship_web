@@ -85,7 +85,7 @@ const decisionReasonOptions = [
     { value: '', label: 'No reason selected' },
     { value: 'complete_requirements', label: 'Complete requirements' },
     { value: 'missing_documents', label: 'Missing documents' },
-    { value: 'gwa_not_met', label: 'GWA not met' },
+    { value: 'academic_requirement_not_met', label: 'Academic requirement not met' },
     { value: 'outside_eligibility', label: 'Outside eligibility' },
     { value: 'for_interview', label: 'For interview' },
     { value: 'approved_for_award', label: 'Approved for award' },
@@ -133,6 +133,16 @@ function matchClass(score) {
     }
 
     return 'bg-rose-100 text-rose-800';
+}
+
+function applicantAcademicLabel(applicant) {
+    if (!applicant?.gwa) {
+        return 'No academic value';
+    }
+
+    return applicant.grading_scale === 'grade_point'
+        ? `${applicant.gwa} GWA/GPA`
+        : `${applicant.gwa}%`;
 }
 
 function recommendationClass(recommendation) {
@@ -402,14 +412,8 @@ onMounted(loadProviderData);
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 Applicant activity queue
                             </h2>
-                        </div>
-
-                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                Provider
-                            </p>
-                            <p class="mt-1 text-sm font-bold text-slate-950">
-                                {{ user?.provider_name || user?.name || 'Provider' }}
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                                Review submitted applications, document status, and DSS guidance for your programs.
                             </p>
                         </div>
                     </div>
@@ -600,10 +604,10 @@ onMounted(loadProviderData);
                                     </div>
                                     <div class="rounded-md bg-white p-3">
                                         <p class="font-semibold text-slate-500">
-                                            GWA / income
+                                            Academic / income
                                         </p>
                                         <p class="mt-1 font-bold text-slate-950">
-                                            {{ application.applicant?.gwa || 'No GWA' }} - {{ application.applicant?.income_bracket || 'No income data' }}
+                                            {{ applicantAcademicLabel(application.applicant) }} - {{ application.applicant?.income_bracket || 'No income data' }}
                                         </p>
                                         <p v-if="application.applicant?.household_size" class="mt-1 text-xs text-slate-500">
                                             Household size: {{ application.applicant.household_size }}

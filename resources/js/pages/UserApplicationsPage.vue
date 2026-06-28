@@ -132,6 +132,28 @@ function canOpenWizardStep(index) {
     return false;
 }
 
+function inferGradeScale(value) {
+    if (value === null || value === undefined || value === '') {
+        return '';
+    }
+
+    return Number(value) <= 5 ? 'grade_point' : 'percentage';
+}
+
+function academicRequirementLabel(scholarship) {
+    if (scholarship?.minimum_grade_label) {
+        return scholarship.minimum_grade_label;
+    }
+
+    if (!scholarship?.minimum_gwa) {
+        return 'Not listed yet';
+    }
+
+    return inferGradeScale(scholarship.minimum_gwa) === 'grade_point'
+        ? `Maximum GWA/GPA ${scholarship.minimum_gwa}`
+        : `Minimum average ${scholarship.minimum_gwa}%`;
+}
+
 function goToWizardStep(index) {
     if (canOpenWizardStep(index)) {
         currentStep.value = index;
@@ -478,28 +500,17 @@ watch(selectedScholarship, (scholarship) => {
 
         <section class="student-page">
             <div class="student-container">
-                <header class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-white shadow-[0_24px_70px_rgba(15,23,42,0.22)]">
-                    <div class="grid gap-4 p-4 lg:grid-cols-[1fr_16rem] lg:items-end">
-                        <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-200">
-                                Application Desk
-                            </p>
-                            <h2 class="mt-2 font-display text-2xl font-bold">
-                                Start an application
-                            </h2>
-                        </div>
-
-                        <div class="rounded-lg border border-white/10 bg-white/10 p-3">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
-                                Application readiness
-                            </p>
-                            <p class="mt-1 font-display text-2xl font-bold">
-                                {{ wizardReadinessPercent }}%
-                            </p>
-                            <p class="mt-1 text-sm text-slate-300">
-                                Step {{ currentStep + 1 }} of {{ steps.length }}: {{ steps[currentStep]?.detail }}
-                            </p>
-                        </div>
+                <header class="student-hero">
+                    <div class="max-w-2xl">
+                        <p class="student-kicker">
+                            Application Desk
+                        </p>
+                        <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
+                            Start an application
+                        </h2>
+                        <p class="mt-3 text-sm leading-6 text-slate-600">
+                            Choose a scholarship, confirm your documents, and submit through a guided application flow.
+                        </p>
                     </div>
                 </header>
 
@@ -732,10 +743,10 @@ watch(selectedScholarship, (scholarship) => {
                                         </div>
                                         <div class="rounded-md bg-white p-3">
                                             <p class="font-semibold text-slate-500">
-                                                Minimum GWA / avg
+                                                Academic requirement
                                             </p>
                                             <p class="mt-1 font-bold text-slate-950">
-                                                {{ selectedScholarship.minimum_gwa || 'Not listed yet' }}
+                                                {{ academicRequirementLabel(selectedScholarship) }}
                                             </p>
                                         </div>
                                         <div class="rounded-md bg-white p-3">

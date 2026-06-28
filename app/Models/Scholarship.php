@@ -28,6 +28,7 @@ class Scholarship extends Model
         'requirements',
         'award_amount',
         'minimum_gwa',
+        'minimum_grade_scale',
         'slots_available',
         'application_mode',
         'renewal_policy',

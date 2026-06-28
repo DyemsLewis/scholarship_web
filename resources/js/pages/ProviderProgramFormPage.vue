@@ -22,9 +22,15 @@ const providerAddressLookupTrigger = ref(0);
 const activeFormSection = ref('basics');
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
-const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
+const inputClass = 'w-full min-w-0 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
+const sectionCardClass = 'rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5';
+const fieldCardClass = 'min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm';
+const fieldStackClass = `${fieldCardClass} flex flex-col`;
+const basicFieldStackClass = `${fieldStackClass} min-h-32`;
+const wideFieldStackClass = `${fieldStackClass} xl:col-span-2`;
+const formGridClass = 'grid items-stretch gap-4 md:grid-cols-2';
 const formSections = [
-    { id: 'basics', label: 'Basics', help: 'Name, logo, amount, and status.' },
+    { id: 'basics', label: 'Basics', help: 'Name, logo, amount, and review action.' },
     { id: 'workflow', label: 'Apply', help: 'How applicants submit and contact you.' },
     { id: 'target', label: 'Target', help: 'Who can match with this program.' },
     { id: 'location', label: 'Location', help: 'Address and map pin.' },
@@ -37,6 +43,43 @@ const applicationModeOptions = [
     { value: 'onsite', label: 'On-site submission' },
     { value: 'hybrid', label: 'Online and on-site' },
     { value: 'provider_review', label: 'Provider review only' },
+];
+const gradeScaleOptions = [
+    {
+        value: '',
+        label: 'No academic minimum',
+        inputLabel: 'Academic requirement',
+        placeholder: '',
+        help: 'Use this when grades are not part of the eligibility rules.',
+    },
+    {
+        value: 'percentage',
+        label: 'General average / percentage',
+        inputLabel: 'Minimum average',
+        placeholder: 'Example: 85',
+        help: 'Higher values meet the requirement, such as 85 or above.',
+    },
+    {
+        value: 'grade_point',
+        label: 'GWA / GPA grade point',
+        inputLabel: 'Maximum GWA / GPA',
+        placeholder: 'Example: 2.00',
+        help: 'Lower values meet the requirement, such as 2.00 or better.',
+    },
+    {
+        value: 'pass_fail',
+        label: 'Pass/fail or competency based',
+        inputLabel: 'Document-based review',
+        placeholder: '',
+        help: 'Use this for competency, pass/fail, or certification-based programs.',
+    },
+    {
+        value: 'other',
+        label: 'Other grading scale / manual review',
+        inputLabel: 'Manual academic review',
+        placeholder: '',
+        help: 'Use eligibility details to explain the scale reviewers should check.',
+    },
 ];
 const educationLevelOptions = [
     { value: 'preschool', label: 'Preschool / Kindergarten' },
@@ -354,6 +397,27 @@ const scholarshipFormMapAddress = computed(() => {
 
     return parts.length ? [...parts, 'Philippines'].join(', ') : '';
 });
+const selectedGradeScaleOption = computed(() => gradeScaleOptions.find((option) => option.value === scholarshipForm.value.minimumGradeScale) ?? gradeScaleOptions[0]);
+const academicRequirementNeedsValue = computed(() => ['percentage', 'grade_point'].includes(scholarshipForm.value.minimumGradeScale));
+const academicRequirementSummary = computed(() => {
+    if (scholarshipForm.value.minimumGradeScale === 'pass_fail') {
+        return 'Pass/fail or competency';
+    }
+
+    if (scholarshipForm.value.minimumGradeScale === 'other') {
+        return 'Manual academic review';
+    }
+
+    if (!academicRequirementNeedsValue.value || !hasText(scholarshipForm.value.minimumGwa)) {
+        return 'No academic minimum';
+    }
+
+    return scholarshipForm.value.minimumGradeScale === 'grade_point'
+        ? `Max GWA/GPA ${scholarshipForm.value.minimumGwa}`
+        : `Min average ${scholarshipForm.value.minimumGwa}%`;
+});
+const academicRequirementInputMax = computed(() => scholarshipForm.value.minimumGradeScale === 'grade_point' ? 5 : 100);
+const academicRequirementInputStep = computed(() => scholarshipForm.value.minimumGradeScale === 'grade_point' ? '0.01' : '0.01');
 const programReadinessItems = computed(() => [
     {
         label: 'Basic program details',
@@ -374,6 +438,8 @@ const programReadinessItems = computed(() => [
                 || hasText(scholarshipForm.value.eligibleYearLevels)
                 || hasText(scholarshipForm.value.eligibleLocations)
                 || scholarshipForm.value.incomeRequirement !== 'Any'
+                || scholarshipForm.value.minimumGradeScale === 'pass_fail'
+                || scholarshipForm.value.minimumGradeScale === 'other'
                 || hasText(scholarshipForm.value.minimumGwa)
             ),
         help: 'Eligibility text plus at least one finder rule or clear open-to-all intent.',
@@ -401,8 +467,6 @@ const programReadinessItems = computed(() => [
         help: 'How students apply and who they can contact for questions.',
     },
 ]);
-const completedProgramReadinessItems = computed(() => programReadinessItems.value.filter((item) => item.complete).length);
-const programReadiness = computed(() => Math.round((completedProgramReadinessItems.value / programReadinessItems.value.length) * 100));
 const missingProgramReadinessItems = computed(() => programReadinessItems.value.filter((item) => !item.complete));
 const activeFormSectionIndex = computed(() => formSections.findIndex((section) => section.id === activeFormSection.value));
 const activeFormSectionMeta = computed(() => formSections[activeFormSectionIndex.value] ?? formSections[0]);
@@ -432,7 +496,7 @@ const formSectionProgress = computed(() => {
     return Object.fromEntries(formSections.map((section) => [section.id, Boolean(sectionChecks[section.id])]));
 });
 const publishWarnings = computed(() => {
-    if (scholarshipForm.value.status !== 'published') {
+    if (!['pending_review', 'rejected'].includes(scholarshipForm.value.status)) {
         return [];
     }
 
@@ -441,7 +505,7 @@ const publishWarnings = computed(() => {
 const finderRuleSummary = computed(() => [
     scholarshipForm.value.eligibleEducationLevels.length ? `${scholarshipForm.value.eligibleEducationLevels.length} education level${scholarshipForm.value.eligibleEducationLevels.length === 1 ? '' : 's'}` : 'All education levels',
     scholarshipForm.value.eligibleSchoolTypes.length ? `${scholarshipForm.value.eligibleSchoolTypes.length} school type${scholarshipForm.value.eligibleSchoolTypes.length === 1 ? '' : 's'}` : 'All school types',
-    hasText(scholarshipForm.value.minimumGwa) ? `Min avg ${scholarshipForm.value.minimumGwa}` : 'No minimum average',
+    academicRequirementSummary.value,
     scholarshipForm.value.incomeRequirement && scholarshipForm.value.incomeRequirement !== 'Any' ? scholarshipForm.value.incomeRequirement : 'Any income',
 ]);
 const activeTargetKey = computed(() => inferTargetFormKey(scholarshipForm.value.eligibleEducationLevels));
@@ -492,6 +556,48 @@ const workflowSummary = computed(() => [
     hasText(scholarshipForm.value.slotsAvailable) ? `${scholarshipForm.value.slotsAvailable} available slot${Number(scholarshipForm.value.slotsAvailable) === 1 ? '' : 's'}` : 'Slots not listed',
     hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber) ? 'Contact available' : 'No contact channel',
 ]);
+const statusOptions = computed(() => {
+    const options = [
+        { value: 'draft', label: 'Save as draft', help: 'Only provider can see it.' },
+        { value: 'pending_review', label: 'Submit for admin review', help: 'Admin must approve before students see it.' },
+    ];
+
+    if (scholarshipForm.value.status === 'rejected') {
+        options.push({ value: 'rejected', label: 'Rejected by admin', help: 'Edit and resubmit when ready.' });
+    }
+
+    if (scholarshipForm.value.status === 'published') {
+        options.push({ value: 'published', label: 'Published', help: 'Currently visible to students.' });
+        options.push({ value: 'closed', label: 'Closed', help: 'Stop accepting new student applications.' });
+    }
+
+    if (scholarshipForm.value.status === 'closed') {
+        options.push({ value: 'closed', label: 'Closed', help: 'Stop accepting new student applications.' });
+    }
+
+    return options;
+});
+const submitButtonLabel = computed(() => {
+    if (isSaving.value) {
+        return 'Saving...';
+    }
+
+    if (scholarshipForm.value.status === 'draft') {
+        return 'Save draft';
+    }
+
+    if (scholarshipForm.value.status === 'closed') {
+        return 'Close program';
+    }
+
+    if (scholarshipForm.value.status === 'published') {
+        return 'Save changes';
+    }
+
+    return scholarshipForm.value.status === 'rejected'
+        ? 'Resubmit for review'
+        : 'Submit for review';
+});
 
 function openFormSection(sectionId) {
     activeFormSection.value = sectionId;
@@ -585,6 +691,7 @@ function emptyScholarshipForm() {
         requirements: [],
         awardAmount: '',
         minimumGwa: '',
+        minimumGradeScale: '',
         slotsAvailable: '',
         applicationMode: '',
         renewalPolicy: '',
@@ -632,15 +739,6 @@ function selectAllOptions(field, options) {
     scholarshipForm.value[field] = options.map((option) => option.value);
 }
 
-function applyBroadEligibility() {
-    scholarshipForm.value.eligibleEducationLevels = [...allEducationLevelValues];
-    scholarshipForm.value.eligibleSchoolTypes = [];
-    scholarshipForm.value.eligibleCourses = 'Any';
-    scholarshipForm.value.eligibleYearLevels = 'Any grade or year level';
-    scholarshipForm.value.eligibleLocations = 'Nationwide';
-    scholarshipForm.value.incomeRequirement = 'Any';
-}
-
 function applyActiveTargetDefaults() {
     const targetForm = activeTargetForm.value;
 
@@ -683,36 +781,6 @@ function applyTargetApplicantPreset(preset) {
     }
 }
 
-function applyCommonProgramDetails() {
-    if (!scholarshipForm.value.eligibility) {
-        scholarshipForm.value.eligibility = 'Open to currently enrolled learners who meet the academic, location, and document requirements listed by the provider.';
-    }
-
-    if (!scholarshipForm.value.description) {
-        scholarshipForm.value.description = 'A scholarship assistance program for eligible Filipino students. Review the requirements, prepare documents, and submit your application before the deadline.';
-    }
-
-    if (!selectedRequirementCount.value) {
-        selectCommonRequirements();
-    }
-
-    if (!scholarshipForm.value.applicationMode) {
-        scholarshipForm.value.applicationMode = 'online';
-    }
-
-    if (!scholarshipForm.value.renewalPolicy) {
-        scholarshipForm.value.renewalPolicy = 'Renewal depends on continued eligibility, submitted requirements, and available funding.';
-    }
-
-    if (!scholarshipForm.value.contactEmail && user.value?.email) {
-        scholarshipForm.value.contactEmail = user.value.email;
-    }
-
-    if (!scholarshipForm.value.contactNumber && user.value?.contact_number) {
-        scholarshipForm.value.contactNumber = user.value.contact_number;
-    }
-}
-
 function fillScholarshipForm(scholarship) {
     scholarshipForm.value = {
         title: scholarship.title ?? '',
@@ -732,6 +800,7 @@ function fillScholarshipForm(scholarship) {
         requirements: parseRequirements(scholarship.requirements),
         awardAmount: scholarship.award_amount ?? '',
         minimumGwa: scholarship.minimum_gwa ?? '',
+        minimumGradeScale: scholarship.minimum_grade_scale ?? inferGradeScale(scholarship.minimum_gwa),
         slotsAvailable: scholarship.slots_available ?? '',
         applicationMode: scholarship.application_mode ?? '',
         renewalPolicy: scholarship.renewal_policy ?? '',
@@ -761,6 +830,30 @@ function selectCommonRequirements() {
 
 function clearRequirements() {
     scholarshipForm.value.requirements = [];
+}
+
+function inferGradeScale(value) {
+    if (!hasText(value)) {
+        return '';
+    }
+
+    return Number(value) <= 5 ? 'grade_point' : 'percentage';
+}
+
+function handleGradeScaleChange() {
+    if (!academicRequirementNeedsValue.value) {
+        scholarshipForm.value.minimumGwa = '';
+        return;
+    }
+
+    const value = Number(scholarshipForm.value.minimumGwa);
+
+    if (
+        (scholarshipForm.value.minimumGradeScale === 'percentage' && value > 0 && value <= 5)
+        || (scholarshipForm.value.minimumGradeScale === 'grade_point' && value > 5)
+    ) {
+        scholarshipForm.value.minimumGwa = '';
+    }
 }
 
 function clearScholarshipMapPoint() {
@@ -891,7 +984,8 @@ async function saveScholarship() {
         longitude: scholarshipForm.value.longitude || '',
         requirements: scholarshipForm.value.requirements.join('\n'),
         award_amount: scholarshipForm.value.awardAmount || '',
-        minimum_gwa: scholarshipForm.value.minimumGwa || '',
+        minimum_gwa: academicRequirementNeedsValue.value ? scholarshipForm.value.minimumGwa || '' : '',
+        minimum_grade_scale: scholarshipForm.value.minimumGradeScale || '',
         slots_available: scholarshipForm.value.slotsAvailable || '',
         application_mode: scholarshipForm.value.applicationMode || '',
         renewal_policy: scholarshipForm.value.renewalPolicy || '',
@@ -946,7 +1040,7 @@ onMounted(loadFormData);
         <ProviderSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-5xl">
+            <div class="mx-auto max-w-6xl">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -956,6 +1050,9 @@ onMounted(loadFormData);
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 {{ isEditMode ? 'Edit scholarship program' : 'Create scholarship program' }}
                             </h2>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                                Add the program details students need for matching, review, and application guidance.
+                            </p>
                         </div>
 
                         <a
@@ -990,11 +1087,11 @@ onMounted(loadFormData);
 
                     <form
                         ref="scholarshipFormElement"
-                        class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+                        class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
                         novalidate
                         @submit.prevent="saveScholarship"
                     >
-                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
                                     {{ isEditMode ? 'Edit Scholarship' : 'Create Scholarship' }}
@@ -1006,39 +1103,26 @@ onMounted(loadFormData);
                                     {{ activeFormSectionMeta.help }}
                                 </p>
                             </div>
-
-                            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 lg:min-w-44">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                    Readiness
-                                </p>
-                                <p class="mt-1 font-display text-2xl font-bold text-slate-950">
-                                    {{ programReadiness }}%
-                                </p>
-                            </div>
                         </div>
 
-                        <div class="mt-5 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
-                            <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                <div class="flex items-center justify-between gap-4">
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                                            Sections
-                                        </p>
-                                        <p class="mt-1 text-sm text-slate-500">
-                                            {{ completedProgramReadinessItems }}/{{ programReadinessItems.length }} sections ready
-                                        </p>
-                                    </div>
+                        <div class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <div class="grid gap-3">
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                                        Sections
+                                    </p>
+                                    <p class="mt-1 text-sm text-slate-500">
+                                        Move through each page to complete the scholarship setup.
+                                    </p>
                                 </div>
-                                <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-                                    <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${programReadiness}%` }"></div>
-                                </div>
-                                <div class="mt-4 grid gap-2">
+
+                                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                                     <button
                                         v-for="section in formSections"
                                         :key="section.id"
                                         type="button"
                                         :class="[
-                                            'flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition',
+                                            'flex min-h-11 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition',
                                             activeFormSection === section.id
                                                 ? 'border-slate-900 bg-white text-slate-950 shadow-sm'
                                                 : 'border-slate-200 bg-white/70 text-slate-600 hover:bg-white',
@@ -1050,50 +1134,6 @@ onMounted(loadFormData);
                                     </button>
                                 </div>
                             </div>
-
-                            <div class="rounded-lg border border-emerald-100 bg-emerald-50/70 p-4">
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                        <p class="text-sm font-bold text-slate-950">
-                                            Quick setup
-                                        </p>
-                                    </div>
-                                    <div class="flex shrink-0 flex-wrap gap-2">
-                                        <button
-                                            type="button"
-                                            class="rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50"
-                                            @click="applyCommonProgramDetails"
-                                        >
-                                            Add common details
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50"
-                                            @click="applyBroadEligibility"
-                                        >
-                                            Broad eligibility
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <span
-                                        v-for="summary in finderRuleSummary"
-                                        :key="summary"
-                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-emerald-100"
-                                    >
-                                        {{ summary }}
-                                    </span>
-                                </div>
-                                <div class="mt-2 flex flex-wrap gap-2">
-                                    <span
-                                        v-for="summary in workflowSummary"
-                                        :key="`workflow-${summary}`"
-                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-emerald-100"
-                                    >
-                                        {{ summary }}
-                                    </span>
-                                </div>
-                            </div>
                         </div>
 
                         <div
@@ -1101,15 +1141,15 @@ onMounted(loadFormData);
                             class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
                         >
                             <p class="font-bold">
-                                Review before publishing
+                                Review before submitting
                             </p>
                             <p class="mt-1 leading-6">
-                                This program can still be saved, but these sections are incomplete: {{ publishWarnings.join(', ') }}.
+                                This program can still be saved as draft, but these sections should be completed before admin review: {{ publishWarnings.join(', ') }}.
                             </p>
                         </div>
 
-                        <div v-show="activeFormSection === 'basics'" class="mt-5 grid gap-4">
-                            <div>
+                        <div v-show="activeFormSection === 'basics'" :class="['mt-5 grid gap-4', sectionCardClass]">
+                            <div :class="fieldStackClass">
                                 <label :class="labelClass" for="scholarship-title">
                                     Scholarship title
                                 </label>
@@ -1122,7 +1162,7 @@ onMounted(loadFormData);
                                 >
                             </div>
 
-                            <div class="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[5rem_1fr] lg:items-center">
+                            <div :class="[fieldCardClass, 'grid gap-4 sm:grid-cols-[5rem_1fr] sm:items-center']">
                                 <img
                                     :src="scholarshipImagePreview"
                                     alt="Scholarship program preview"
@@ -1146,8 +1186,8 @@ onMounted(loadFormData);
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-                                <div>
+                            <div :class="formGridClass">
+                                <div :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-category">
                                         Category
                                     </label>
@@ -1165,7 +1205,7 @@ onMounted(loadFormData);
                                     </select>
                                 </div>
 
-                                <div>
+                                <div :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-amount">
                                         Award amount
                                     </label>
@@ -1180,18 +1220,41 @@ onMounted(loadFormData);
                                     >
                                 </div>
 
-                                <div>
+                                <div :class="basicFieldStackClass">
+                                    <label :class="labelClass" for="scholarship-grade-scale">
+                                        Academic basis
+                                    </label>
+                                    <select
+                                        id="scholarship-grade-scale"
+                                        v-model="scholarshipForm.minimumGradeScale"
+                                        :class="inputClass"
+                                        @change="handleGradeScaleChange"
+                                    >
+                                        <option
+                                            v-for="option in gradeScaleOptions"
+                                            :key="option.value || 'none'"
+                                            :value="option.value"
+                                        >
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        {{ selectedGradeScaleOption.help }}
+                                    </p>
+                                </div>
+
+                                <div v-if="academicRequirementNeedsValue" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-minimum-gwa">
-                                        {{ activeTargetForm.averageLabel }}
+                                        {{ selectedGradeScaleOption.inputLabel }}
                                     </label>
                                     <input
                                         id="scholarship-minimum-gwa"
                                         v-model="scholarshipForm.minimumGwa"
                                         type="number"
                                         min="0"
-                                        max="100"
-                                        step="0.01"
-                                        :placeholder="activeTargetForm.averagePlaceholder"
+                                        :max="academicRequirementInputMax"
+                                        :step="academicRequirementInputStep"
+                                        :placeholder="selectedGradeScaleOption.placeholder"
                                         :class="inputClass"
                                     >
                                     <p class="mt-2 text-xs leading-5 text-slate-500">
@@ -1199,7 +1262,19 @@ onMounted(loadFormData);
                                     </p>
                                 </div>
 
-                                <div>
+                                <div v-else :class="basicFieldStackClass">
+                                    <p class="text-sm font-semibold text-slate-500">
+                                        Academic cutoff
+                                    </p>
+                                    <p class="mt-2 text-sm font-bold text-slate-950">
+                                        {{ academicRequirementSummary }}
+                                    </p>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        Add extra details in the eligibility section if reviewers need context.
+                                    </p>
+                                </div>
+
+                                <div :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-slots">
                                         Available slots
                                     </label>
@@ -1214,7 +1289,7 @@ onMounted(loadFormData);
                                     >
                                 </div>
 
-                                <div>
+                                <div :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-mode">
                                         Application mode
                                     </label>
@@ -1232,7 +1307,7 @@ onMounted(loadFormData);
                                     </select>
                                 </div>
 
-                                <div>
+                                <div :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-deadline">
                                         Deadline
                                     </label>
@@ -1244,25 +1319,27 @@ onMounted(loadFormData);
                                     >
                                 </div>
 
-                                <div>
+                                <div :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-status">
-                                        Status
+                                        Review action
                                     </label>
                                     <select id="scholarship-status" v-model="scholarshipForm.status" required :class="inputClass">
-                                        <option value="draft">
-                                            Draft
-                                        </option>
-                                        <option value="published">
-                                            Published
-                                        </option>
-                                        <option value="closed">
-                                            Closed
+                                        <option
+                                            v-for="option in statusOptions"
+                                            :key="option.value"
+                                            :value="option.value"
+                                            :disabled="option.value === 'rejected'"
+                                        >
+                                            {{ option.label }}
                                         </option>
                                     </select>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        {{ statusOptions.find((option) => option.value === scholarshipForm.status)?.help || 'Admin must approve before students can see the program.' }}
+                                    </p>
                                 </div>
                             </div>
 
-                            <div>
+                            <div :class="fieldStackClass">
                                 <label :class="labelClass" for="scholarship-description">
                                     Description
                                 </label>
@@ -1276,8 +1353,8 @@ onMounted(loadFormData);
                             </div>
                         </div>
 
-                        <div v-show="activeFormSection === 'target'" class="mt-5">
-                            <div>
+                        <div v-show="activeFormSection === 'target'" :class="['mt-5', sectionCardClass]">
+                            <div :class="fieldStackClass">
                                 <label :class="labelClass" for="scholarship-eligibility">
                                     Eligibility
                                 </label>
@@ -1291,7 +1368,7 @@ onMounted(loadFormData);
                             </div>
                         </div>
 
-                            <fieldset v-show="activeFormSection === 'workflow'" class="mt-5 rounded-lg border border-amber-100 bg-amber-50/60 p-4">
+                            <fieldset v-show="activeFormSection === 'workflow'" :class="['mt-5', sectionCardClass]">
                                 <legend class="text-sm font-semibold text-slate-700">
                                     Application workflow
                                 </legend>
@@ -1303,77 +1380,14 @@ onMounted(loadFormData);
                                     <span
                                         v-for="summary in workflowSummary"
                                         :key="`workflow-detail-${summary}`"
-                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-100"
+                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
                                     >
                                         {{ summary }}
                                     </span>
                                 </div>
 
-                                <div class="mt-5 rounded-lg border border-emerald-100 bg-white p-4">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">
-                                                Target applicant presets
-                                            </p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">
-                                                Pick the closest target group first. The form will fill matching rules and recommended documents, then you can edit anything below.
-                                            </p>
-                                        </div>
-                                        <span class="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 ring-1 ring-emerald-100">
-                                            Optional helper
-                                        </span>
-                                    </div>
-
-                                    <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                                        <button
-                                            v-for="preset in targetApplicantPresets"
-                                            :key="preset.key"
-                                            type="button"
-                                            :class="[
-                                                'group rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-white hover:shadow-sm',
-                                                activeTargetKey === preset.key
-                                                    ? 'border-emerald-500 bg-white shadow-sm ring-2 ring-emerald-100'
-                                                    : 'border-slate-200 bg-slate-50',
-                                            ]"
-                                            @click="applyTargetApplicantPreset(preset)"
-                                        >
-                                            <span class="flex items-center gap-3">
-                                                <span class="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-100 text-emerald-800 transition group-hover:bg-emerald-700 group-hover:text-white">
-                                                    <i :class="[preset.icon, 'text-sm']"></i>
-                                                </span>
-                                                <span class="font-bold text-slate-950">
-                                                    {{ preset.label }}
-                                                </span>
-                                            </span>
-                                            <span class="mt-2 block text-xs leading-5 text-slate-500">
-                                                {{ preset.description }}
-                                            </span>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="mt-4 rounded-lg border border-slate-200 bg-white p-4">
-                                    <p class="text-sm font-bold text-slate-950">
-                                        Current target applicant summary
-                                    </p>
-                                    <div class="mt-3 grid gap-3 md:grid-cols-2">
-                                        <div
-                                            v-for="item in targetApplicantSummary"
-                                            :key="item.label"
-                                            class="rounded-md bg-[#f6faf8] p-3 text-sm ring-1 ring-slate-200/80"
-                                        >
-                                            <p class="font-semibold text-slate-500">
-                                                {{ item.label }}
-                                            </p>
-                                            <p class="mt-1 line-clamp-2 font-bold text-slate-900">
-                                                {{ item.value }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="mt-4 grid gap-4 lg:grid-cols-2">
-                                    <div>
+                                <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
+                                    <div :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-contact-email">
                                             Contact email
                                         </label>
@@ -1386,7 +1400,7 @@ onMounted(loadFormData);
                                         >
                                     </div>
 
-                                    <div>
+                                    <div :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-contact-number">
                                             Contact number
                                         </label>
@@ -1399,7 +1413,7 @@ onMounted(loadFormData);
                                         >
                                     </div>
 
-                                    <div class="lg:col-span-2">
+                                    <div :class="[fieldStackClass, 'lg:col-span-2']">
                                         <label :class="labelClass" for="scholarship-renewal">
                                             Renewal or continuation policy
                                         </label>
@@ -1414,7 +1428,7 @@ onMounted(loadFormData);
                                 </div>
                             </fieldset>
 
-                            <fieldset v-show="activeFormSection === 'target'" class="mt-5 rounded-lg border border-emerald-100 bg-emerald-50/60 p-4">
+                            <fieldset v-show="activeFormSection === 'target'" :class="['mt-4', sectionCardClass]">
                                 <legend class="text-sm font-semibold text-slate-700">
                                     Matching criteria
                                 </legend>
@@ -1426,16 +1440,79 @@ onMounted(loadFormData);
                                     <span
                                         v-for="summary in finderRuleSummary"
                                         :key="`matching-${summary}`"
-                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 ring-1 ring-emerald-100"
+                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
                                     >
                                         {{ summary }}
                                     </span>
                                 </div>
 
-                                <div class="mt-4 rounded-lg border border-emerald-200 bg-white p-4">
+                                <div :class="['mt-4', fieldCardClass]">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">
+                                                Target applicant presets
+                                            </p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">
+                                                Pick the closest target group first. The form will fill matching rules and recommended documents, then you can edit anything below.
+                                            </p>
+                                        </div>
+                                        <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                                            Optional helper
+                                        </span>
+                                    </div>
+
+                                    <div class="mt-4 grid items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                        <button
+                                            v-for="preset in targetApplicantPresets"
+                                            :key="preset.key"
+                                            type="button"
+                                            :class="[
+                                                'group flex h-full flex-col rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-sm',
+                                                activeTargetKey === preset.key
+                                                    ? 'border-slate-900 bg-white shadow-sm ring-2 ring-slate-200'
+                                                    : 'border-slate-200 bg-slate-50',
+                                            ]"
+                                            @click="applyTargetApplicantPreset(preset)"
+                                        >
+                                            <span class="flex items-center gap-3">
+                                                <span class="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
+                                                    <i :class="[preset.icon, 'text-sm']"></i>
+                                                </span>
+                                                <span class="font-bold text-slate-950">
+                                                    {{ preset.label }}
+                                                </span>
+                                            </span>
+                                            <span class="mt-2 block text-xs leading-5 text-slate-500">
+                                                {{ preset.description }}
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div :class="['mt-4', fieldCardClass]">
+                                    <p class="text-sm font-bold text-slate-950">
+                                        Current target applicant summary
+                                    </p>
+                                    <div class="mt-3 grid items-stretch gap-3 md:grid-cols-2">
+                                        <div
+                                            v-for="item in targetApplicantSummary"
+                                            :key="item.label"
+                                            class="flex min-h-full flex-col rounded-md bg-slate-50 p-3 text-sm ring-1 ring-slate-200/80"
+                                        >
+                                            <p class="font-semibold text-slate-500">
+                                                {{ item.label }}
+                                            </p>
+                                            <p class="mt-1 line-clamp-2 font-bold text-slate-900">
+                                                {{ item.value }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div :class="['mt-4', fieldCardClass]">
                                     <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                         <div class="flex gap-3">
-                                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-800">
+                                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
                                                 <i :class="[activeTargetForm.icon, 'text-sm']"></i>
                                             </span>
                                             <div>
@@ -1450,7 +1527,7 @@ onMounted(loadFormData);
 
                                         <button
                                             type="button"
-                                            class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100"
+                                            class="rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-white"
                                             @click="applyActiveTargetDefaults"
                                         >
                                             Use target defaults
@@ -1461,15 +1538,15 @@ onMounted(loadFormData);
                                         <div
                                             v-for="note in activeTargetForm.notes"
                                             :key="note"
-                                            class="rounded-md bg-[#f6faf8] px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200/80"
+                                            class="rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200/80"
                                         >
                                             {{ note }}
                                         </div>
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid gap-4 lg:grid-cols-2">
-                                    <div class="rounded-md border border-emerald-100 bg-white p-3 lg:col-span-2">
+                                <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
+                                    <div :class="[fieldStackClass, 'lg:col-span-2']">
                                         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                             <label class="text-sm font-semibold text-slate-700">
                                                 Eligible education levels
@@ -1491,7 +1568,7 @@ onMounted(loadFormData);
                                                 :class="[
                                                     'rounded-md border px-3 py-2 text-xs font-bold transition',
                                                     scholarshipForm.eligibleEducationLevels.includes(option.value)
-                                                        ? 'border-emerald-700 bg-emerald-700 text-white'
+                                                        ? 'border-slate-900 bg-slate-900 text-white'
                                                         : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-white',
                                                 ]"
                                                 @click="toggleSelection('eligibleEducationLevels', option.value)"
@@ -1501,7 +1578,7 @@ onMounted(loadFormData);
                                         </div>
                                     </div>
 
-                                    <div v-if="activeTargetForm.showProgramPath">
+                                    <div v-if="activeTargetForm.showProgramPath" :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-courses">
                                             {{ activeTargetForm.programPathLabel }}
                                         </label>
@@ -1517,7 +1594,7 @@ onMounted(loadFormData);
                                         </p>
                                     </div>
 
-                                    <div v-else class="rounded-md border border-slate-200 bg-white p-3">
+                                    <div v-else :class="fieldStackClass">
                                         <p class="text-sm font-semibold text-slate-700">
                                             {{ activeTargetForm.programPathLabel }}
                                         </p>
@@ -1533,7 +1610,7 @@ onMounted(loadFormData);
                                         </button>
                                     </div>
 
-                                    <div class="rounded-md border border-emerald-100 bg-white p-3">
+                                    <div :class="fieldStackClass">
                                         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                             <label class="text-sm font-semibold text-slate-700">
                                                 Eligible school types
@@ -1555,7 +1632,7 @@ onMounted(loadFormData);
                                                 :class="[
                                                     'rounded-md border px-3 py-2 text-xs font-bold transition',
                                                     scholarshipForm.eligibleSchoolTypes.includes(option.value)
-                                                        ? 'border-emerald-700 bg-emerald-700 text-white'
+                                                        ? 'border-slate-900 bg-slate-900 text-white'
                                                         : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-white',
                                                 ]"
                                                 @click="toggleSelection('eligibleSchoolTypes', option.value)"
@@ -1583,7 +1660,7 @@ onMounted(loadFormData);
                                         </div>
                                     </div>
 
-                                    <div>
+                                    <div :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-years">
                                             {{ activeTargetForm.levelLabel }}
                                         </label>
@@ -1599,7 +1676,7 @@ onMounted(loadFormData);
                                         </p>
                                     </div>
 
-                                    <div>
+                                    <div :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-locations">
                                             Eligible locations
                                         </label>
@@ -1612,7 +1689,7 @@ onMounted(loadFormData);
                                         ></textarea>
                                     </div>
 
-                                    <div>
+                                    <div :class="wideFieldStackClass">
                                         <label :class="labelClass" for="scholarship-income">
                                             Income requirement
                                         </label>
@@ -1629,12 +1706,12 @@ onMounted(loadFormData);
                                 </div>
                             </fieldset>
 
-                            <fieldset v-show="activeFormSection === 'location'" class="mt-5 rounded-lg border border-sky-100 bg-sky-50/60 p-4">
+                            <fieldset v-show="activeFormSection === 'location'" :class="['mt-5', sectionCardClass]">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
-                                        <legend class="text-sm font-semibold text-slate-700">
+                                        <p class="text-sm font-semibold text-slate-700">
                                             Map location
-                                        </legend>
+                                        </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
                                             Add the office, campus, or service address. Search an address or click the map to set a pin and fill the address.
                                         </p>
@@ -1649,8 +1726,8 @@ onMounted(loadFormData);
                                     </button>
                                 </div>
 
-                                <div class="mt-4 grid gap-4 lg:grid-cols-2">
-                                    <div>
+                                <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
+                                    <div :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-location-name">
                                             Location name
                                         </label>
@@ -1664,7 +1741,7 @@ onMounted(loadFormData);
                                         >
                                     </div>
 
-                                    <div>
+                                    <div :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-location-address">
                                             Full address
                                         </label>
@@ -1698,12 +1775,12 @@ onMounted(loadFormData);
                                 </p>
                             </fieldset>
 
-                            <fieldset v-show="activeFormSection === 'documents'" class="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+                            <fieldset v-show="activeFormSection === 'documents'" :class="['mt-5', sectionCardClass]">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
-                                        <legend class="text-sm font-semibold text-slate-700">
+                                        <p class="text-sm font-semibold text-slate-700">
                                             Document requirements
-                                        </legend>
+                                        </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
                                             Choose the documents applicants must prepare for this scholarship.
                                         </p>
@@ -1712,14 +1789,14 @@ onMounted(loadFormData);
                                     <div class="flex shrink-0 flex-wrap gap-2">
                                         <button
                                             type="button"
-                                            class="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-slate-400 hover:bg-slate-100"
                                             @click="selectCommonRequirements"
                                         >
                                             Select common
                                         </button>
                                         <button
                                             type="button"
-                                            class="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
                                             @click="clearRequirements"
                                         >
                                             Clear
@@ -1727,14 +1804,14 @@ onMounted(loadFormData);
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                <div class="mt-4 grid items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-3">
                                     <label
                                         v-for="requirement in documentRequirementOptions"
                                         :key="requirement"
                                         :class="[
-                                            'group flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition',
+                                            'group flex min-h-full cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition',
                                             isRequirementSelected(requirement)
-                                                ? 'border-sky-300 bg-sky-50 text-slate-950 shadow-sm'
+                                                ? 'border-slate-900 bg-white text-slate-950 shadow-sm ring-2 ring-slate-200'
                                                 : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white',
                                         ]"
                                     >
@@ -1748,8 +1825,8 @@ onMounted(loadFormData);
                                             :class="[
                                                 'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] font-bold transition',
                                                 isRequirementSelected(requirement)
-                                                    ? 'border-sky-600 bg-sky-600 text-white'
-                                                    : 'border-slate-300 bg-white text-transparent group-hover:border-sky-300',
+                                                    ? 'border-slate-900 bg-slate-900 text-white'
+                                                    : 'border-slate-300 bg-white text-transparent group-hover:border-slate-400',
                                             ]"
                                         >
                                             OK
@@ -1760,7 +1837,7 @@ onMounted(loadFormData);
                                     </label>
                                 </div>
 
-                                <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                <div :class="['mt-4', fieldCardClass]">
                                     <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                                         {{ selectedRequirementCount }} selected
                                     </p>
@@ -1768,7 +1845,7 @@ onMounted(loadFormData);
                                         <span
                                             v-for="requirement in scholarshipForm.requirements"
                                             :key="requirement"
-                                            class="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800"
+                                            class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700"
                                         >
                                             {{ requirement }}
                                         </span>
@@ -1779,7 +1856,7 @@ onMounted(loadFormData);
                                 </div>
                             </fieldset>
 
-                        <div class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 lg:flex-row lg:items-center lg:justify-between">
                             <div class="min-h-5">
                                 <p v-if="formMessage" class="text-sm font-semibold text-emerald-700">
                                     {{ formMessage }}
@@ -1789,7 +1866,7 @@ onMounted(loadFormData);
                                 </p>
                             </div>
 
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <div class="grid gap-2 sm:grid-cols-2 lg:flex lg:items-center">
                                 <button
                                     type="button"
                                     :disabled="activeFormSectionIndex === 0"
@@ -1819,7 +1896,7 @@ onMounted(loadFormData);
                                     :disabled="isSaving || !canPostScholarships"
                                     class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80"
                                 >
-                                    {{ isSaving ? 'Saving...' : isEditMode ? 'Update scholarship' : 'Create scholarship' }}
+                                    {{ submitButtonLabel }}
                                 </button>
                             </div>
                         </div>

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ApplicationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Support\AcademicRequirement;
 
 class DecisionSupportService
 {
@@ -29,7 +30,7 @@ class DecisionSupportService
         $criteria = [
             $this->criterion('eligibility', 'Eligibility match', $eligibilityScore, 'How well the applicant matches structured scholarship criteria.'),
             $this->criterion('documents', 'Document readiness', $documentScore, 'Prepared, uploaded, and accepted requirements.'),
-            $this->criterion('academic', 'Academic merit', $academicScore, 'GWA or average compared with the minimum requirement.'),
+            $this->criterion('academic', 'Academic merit', $academicScore, 'Academic record compared with the scholarship grading requirement.'),
             $this->criterion('financial_need', 'Financial need', $financialNeedScore, 'Income bracket priority for assistance-focused scholarships.'),
             $this->criterion('review_status', 'Review progress', $reviewStatusScore, 'Current application status and reviewer signal.'),
         ];
@@ -273,28 +274,16 @@ class DecisionSupportService
             );
         };
 
-        if (filled($scholarship->minimum_gwa)) {
-            $studentGwa = $profile->gwa === null ? null : (float) $profile->gwa;
-            $minimumGwa = (float) $scholarship->minimum_gwa;
-
-            if ($studentGwa === null) {
-                $addCriterion('gwa', 'GWA / general average', 'missing', null, (string) $scholarship->minimum_gwa, 'Applicant has not added a GWA or general average yet.');
-            } else {
-                $usesGradePointScale = $profile->grading_scale === 'grade_point'
-                    || ($profile->grading_scale !== 'percentage' && $studentGwa <= 5 && $minimumGwa <= 5);
-                $isPassing = $usesGradePointScale ? $studentGwa <= $minimumGwa : $studentGwa >= $minimumGwa;
-                $addCriterion(
-                    'gwa',
-                    'GWA / general average',
-                    $isPassing ? 'pass' : 'fail',
-                    (string) $profile->gwa,
-                    (string) $scholarship->minimum_gwa,
-                    $isPassing ? 'Academic average meets the listed requirement.' : 'Academic average may need provider review.',
-                );
-            }
-        } else {
-            $addCriterion('gwa', 'GWA / general average', 'info', $profile->gwa === null ? null : (string) $profile->gwa, null, 'No minimum GWA or general average listed.', false);
-        }
+        $academicMatch = AcademicRequirement::match($profile->gwa, $profile->grading_scale, $scholarship->minimum_gwa, $scholarship->minimum_grade_scale);
+        $addCriterion(
+            'academic',
+            $academicMatch['label'],
+            $academicMatch['status'],
+            $academicMatch['student_value'],
+            $academicMatch['requirement'],
+            $academicMatch['note'],
+            $academicMatch['counts'],
+        );
 
         $addOptionCriterion('education_level', 'Education level', $profile->education_level, $scholarship->eligible_education_levels, 'This scholarship is open to all education levels.');
         $addOptionCriterion('course', 'Track / strand / course', $profile->course_or_strand, $scholarship->eligible_courses, 'This scholarship accepts any track, strand, or course.');
@@ -379,13 +368,18 @@ class DecisionSupportService
 
         $studentGwa = (float) $gwa;
         $requiredGwa = (float) $minimumGwa;
-        $gradingScale = $application->applicant?->studentProfile?->grading_scale;
+        $studentScale = AcademicRequirement::normalizeScale($application->applicant?->studentProfile?->grading_scale, $gwa);
+        $requiredScale = AcademicRequirement::normalizeScale($application->scholarship?->minimum_grade_scale, $minimumGwa);
 
         if ($studentGwa <= 0 || $requiredGwa <= 0) {
             return 60;
         }
 
-        if ($gradingScale === 'grade_point' || ($gradingScale !== 'percentage' && $studentGwa <= 5 && $requiredGwa <= 5)) {
+        if ($studentScale !== null && $requiredScale !== null && $studentScale !== $requiredScale) {
+            return 60;
+        }
+
+        if ($requiredScale === AcademicRequirement::SCALE_GRADE_POINT) {
             return $this->clamp((int) round(($requiredGwa / $studentGwa) * 100));
         }
 

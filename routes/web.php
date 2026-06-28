@@ -54,6 +54,7 @@ Route::patch('/admin/profile', [AdminController::class, 'updateProfile'])->middl
 Route::get('/admin/analytics', [AdminController::class, 'analytics'])->middleware('auth')->name('admin.analytics');
 Route::get('/admin/reviews/data', [AdminController::class, 'reviewsData'])->middleware('auth')->name('admin.reviews.data');
 Route::patch('/admin/providers/{provider}/verification', [AdminController::class, 'updateProviderVerification'])->middleware('auth')->name('admin.providers.verification');
+Route::patch('/admin/scholarships/{scholarship}/review', [AdminController::class, 'updateScholarshipReview'])->middleware('auth')->name('admin.scholarships.review');
 Route::get('/admin/provider-verification-documents/{document}/download', [AdminController::class, 'downloadProviderVerificationDocument'])->middleware('auth')->name('admin.provider-verification-documents.download');
 Route::get('/admin/export/users', [AdminController::class, 'exportUsers'])->middleware('auth')->name('admin.export.users');
 Route::get('/admin/export/applications', [AdminController::class, 'exportApplications'])->middleware('auth')->name('admin.export.applications');

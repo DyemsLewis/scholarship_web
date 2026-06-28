@@ -47,6 +47,14 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
+    if (status === 'pending_review') {
+        return 'bg-sky-100 text-sky-800';
+    }
+
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
     if (status === 'closed') {
         return 'bg-slate-200 text-slate-700';
     }
@@ -89,6 +97,28 @@ function formatAmount(amount) {
     }).format(Number(amount));
 }
 
+function inferGradeScale(value) {
+    if (value === null || value === undefined || value === '') {
+        return '';
+    }
+
+    return Number(value) <= 5 ? 'grade_point' : 'percentage';
+}
+
+function academicRequirementLabel(scholarship) {
+    if (scholarship?.minimum_grade_label) {
+        return scholarship.minimum_grade_label;
+    }
+
+    if (!scholarship?.minimum_gwa) {
+        return 'No academic minimum';
+    }
+
+    return inferGradeScale(scholarship.minimum_gwa) === 'grade_point'
+        ? `Max GWA/GPA ${scholarship.minimum_gwa}`
+        : `Min average ${scholarship.minimum_gwa}%`;
+}
+
 async function loadProviderData() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -128,6 +158,9 @@ onMounted(loadProviderData);
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 Program directory
                             </h2>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                                Manage scholarship listings, draft updates, and programs awaiting admin review.
+                            </p>
                         </div>
 
                         <div class="flex flex-col gap-2 sm:flex-row">
@@ -248,7 +281,7 @@ onMounted(loadProviderData);
 
                                 <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-600">
                                     <span class="rounded-md bg-white px-2.5 py-1">
-                                        GWA {{ scholarship.minimum_gwa || 'Any' }}
+                                        {{ academicRequirementLabel(scholarship) }}
                                     </span>
                                     <span class="rounded-md bg-white px-2.5 py-1">
                                         {{ scholarship.bookmarks_count || 0 }} saved

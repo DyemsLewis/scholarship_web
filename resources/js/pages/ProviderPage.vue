@@ -174,6 +174,9 @@ onMounted(loadProviderData);
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 Quick overview
                             </h2>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                                See the provider tasks that need attention before students apply.
+                            </p>
                         </div>
 
                         <a

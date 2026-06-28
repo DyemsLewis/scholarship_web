@@ -194,6 +194,9 @@ onMounted(loadInsights);
                     <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                         Program and applicant review
                     </h2>
+                    <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                        Review program activity, application movement, and document patterns without opening every record.
+                    </p>
                 </header>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">

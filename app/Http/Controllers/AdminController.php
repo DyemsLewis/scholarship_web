@@ -11,6 +11,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
 use App\Models\User;
 use App\Services\DecisionSupportService;
+use App\Support\AcademicRequirement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -395,6 +396,13 @@ class AdminController extends Controller
             ->latest('submitted_at')
             ->limit(8)
             ->get();
+        $scholarships = Scholarship::query()
+            ->with('provider.providerProfile')
+            ->withCount('bookmarks')
+            ->whereIn('status', ['pending_review', 'rejected', 'published'])
+            ->latest('updated_at')
+            ->limit(12)
+            ->get();
         $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
 
         return response()->json([
@@ -407,6 +415,9 @@ class AdminController extends Controller
                 'average_match_score' => round((float) $applications->avg('eligibility_score'), 1),
                 'average_dss_score' => round((float) $applications->avg('dss_score'), 1),
                 'pending_documents' => $applications->flatMap(fn (ScholarshipApplication $application) => $application->documents)->where('status', 'pending')->count(),
+                'pending_programs' => $scholarships->where('status', 'pending_review')->count(),
+                'published_programs' => $scholarships->where('status', 'published')->count(),
+                'rejected_programs' => $scholarships->where('status', 'rejected')->count(),
             ],
             'providers' => $providers->map(fn (User $user) => [
                 ...$user->publicPayload(),
@@ -443,6 +454,48 @@ class AdminController extends Controller
                 'review_notes' => $application->review_notes,
                 'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             ])->values(),
+            'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipReviewPayload($scholarship))->values(),
+        ]);
+    }
+
+    public function updateScholarshipReview(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(['pending_review', 'published', 'rejected'])],
+            'review_notes' => ['nullable', 'string', 'max:1500'],
+        ]);
+
+        $previousStatus = $scholarship->status;
+        $scholarship->update([
+            'status' => $validated['status'],
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'scholarship_review_updated',
+            "{$request->user()->name} marked scholarship {$scholarship->title} as {$validated['status']}.",
+            $request,
+            [
+                'scholarship_id' => $scholarship->id,
+                'from_status' => $previousStatus,
+                'to_status' => $validated['status'],
+                'review_notes' => $validated['review_notes'] ?? null,
+            ],
+        );
+
+        PortalNotification::create([
+            'user_id' => $scholarship->provider_id,
+            'type' => 'scholarship_review',
+            'title' => 'Scholarship review updated',
+            'message' => "Your scholarship {$scholarship->title} is now {$this->labelFromKey($validated['status'])}.",
+            'action_url' => '/provider/programs',
+        ]);
+
+        return response()->json([
+            'message' => 'Scholarship review updated.',
+            'scholarship' => $this->scholarshipReviewPayload($scholarship->fresh('provider.providerProfile')),
         ]);
     }
 
@@ -766,6 +819,31 @@ class AdminController extends Controller
         return collect($metadata)
             ->map(fn ($value, string $key) => "{$key}: {$value}")
             ->implode(' | ');
+    }
+
+    private function scholarshipReviewPayload(Scholarship $scholarship): array
+    {
+        return [
+            'id' => $scholarship->id,
+            'title' => $scholarship->title,
+            'category' => $scholarship->category,
+            'description' => $scholarship->description,
+            'eligibility' => $scholarship->eligibility,
+            'provider' => $scholarship->provider?->name,
+            'provider_email' => $scholarship->provider?->email,
+            'status' => $scholarship->status,
+            'image_url' => $this->scholarshipImageUrl($scholarship),
+            'award_amount' => $scholarship->award_amount,
+            'minimum_gwa' => $scholarship->minimum_gwa,
+            'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
+            'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
+            'deadline' => $scholarship->deadline?->format('M d, Y'),
+            'requirements' => $scholarship->requirements,
+            'eligible_education_levels' => $scholarship->eligible_education_levels,
+            'eligible_locations' => $scholarship->eligible_locations,
+            'bookmarks_count' => $scholarship->bookmarks_count ?? 0,
+            'updated_at' => $scholarship->updated_at?->format('M d, Y h:i A'),
+        ];
     }
 
     private function scholarshipImageUrl(Scholarship $scholarship): string

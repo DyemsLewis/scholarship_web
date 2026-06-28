@@ -11,6 +11,8 @@ class StudentProfile extends Model
         'user_id',
         'first_name',
         'last_name',
+        'suffix',
+        'gender',
         'middle_initial',
         'contact_number',
         'account_managed_by',

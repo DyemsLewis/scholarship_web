@@ -128,6 +128,16 @@ class User extends Authenticatable
         return $this->profileRecord()?->middle_initial;
     }
 
+    public function getSuffixAttribute(): ?string
+    {
+        return $this->studentProfile?->suffix;
+    }
+
+    public function getGenderAttribute(): ?string
+    {
+        return $this->studentProfile?->gender;
+    }
+
     public function getContactNumberAttribute(): ?string
     {
         return $this->profileRecord()?->contact_number;
@@ -171,6 +181,8 @@ class User extends Authenticatable
             'first_name' => $this->first_name,
             'last_name' => $this->last_name,
             'middle_initial' => $this->middle_initial,
+            'suffix' => $this->suffix,
+            'gender' => $this->gender,
             'email' => $this->email,
             'username' => $this->username,
             'contact_number' => $this->contact_number,
@@ -231,9 +243,7 @@ class User extends Authenticatable
         $fields = [
             'first_name' => 'First name',
             'last_name' => 'Last name',
-            'middle_initial' => 'Middle initial',
             'contact_number' => 'Contact number',
-            'account_managed_by' => 'Account managed by',
             'birthdate' => 'Birthdate',
         ];
 
@@ -248,7 +258,6 @@ class User extends Authenticatable
 
         $fields += [
             'year_level' => 'Grade / year level',
-            'enrollment_status' => 'Enrollment status',
         ];
 
         if ($requiresGrades) {
@@ -260,8 +269,6 @@ class User extends Authenticatable
 
         $fields += [
             'income_bracket' => 'Household income bracket',
-            'address' => 'Address',
-            'barangay' => 'Barangay',
             'city' => 'City / municipality',
             'province' => 'Province',
             'region' => 'Region',
@@ -270,7 +277,6 @@ class User extends Authenticatable
         if ($requiresGuardian) {
             $fields += [
                 'guardian_name' => 'Guardian name',
-                'guardian_relationship' => 'Relationship to learner',
                 'guardian_contact' => 'Guardian contact',
             ];
         }
@@ -324,6 +330,7 @@ class User extends Authenticatable
             $this->first_name,
             $this->middle_initial ? "{$this->middle_initial}." : null,
             $this->last_name,
+            $this->suffix,
         ])->filter()->values();
 
         return $parts->isEmpty() ? null : $parts->implode(' ');

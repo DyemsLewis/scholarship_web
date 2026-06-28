@@ -14,6 +14,7 @@ use App\Models\ScholarshipBookmark;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Services\DecisionSupportService;
+use App\Support\AcademicRequirement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -28,7 +29,7 @@ class MobileAuthController extends Controller
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', 'unique:users,username'],
             'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
@@ -157,6 +158,8 @@ class MobileAuthController extends Controller
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'suffix' => ['nullable', 'string', 'max:20'],
+            'gender' => ['nullable', Rule::in(['female', 'male', 'non_binary', 'prefer_not_to_say'])],
             'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
             'education_level' => ['nullable', 'string', 'max:100'],
             'school' => ['nullable', 'string', 'max:255'],
@@ -190,7 +193,7 @@ class MobileAuthController extends Controller
             'user_id' => $user->id,
         ], [
             ...$validated,
-            'middle_initial' => strtoupper($validated['middle_initial']),
+            'middle_initial' => filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null,
         ]);
 
         ScholarshipApplication::query()
@@ -631,6 +634,8 @@ class MobileAuthController extends Controller
             'requirements' => $scholarship->requirements,
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
+            'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
+            'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
             'renewal_policy' => $scholarship->renewal_policy,
@@ -648,11 +653,11 @@ class MobileAuthController extends Controller
             'eligibility_guide' => [
                 'requires_gwa' => filled($scholarship->minimum_gwa),
                 'minimum_gwa' => $scholarship->minimum_gwa,
+                'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
+                'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
                 'required_documents' => count($this->documentRequirements($scholarship)),
                 'prepared_documents' => $preparedDocuments['uploaded'],
-                'note' => filled($scholarship->minimum_gwa)
-                    ? "Check that your GWA or average meets {$scholarship->minimum_gwa} before applying."
-                    : 'No minimum GWA or average is listed for this scholarship.',
+                'note' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             ],
             'provider' => [
                 'name' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
@@ -828,19 +833,16 @@ class MobileAuthController extends Controller
             }
         };
 
-        if (filled($scholarship->minimum_gwa)) {
-            $studentGwa = $profile?->gwa === null ? null : (float) $profile->gwa;
-            $minimumGwa = (float) $scholarship->minimum_gwa;
-
-            if ($studentGwa === null) {
-                $addCriterion('gwa', 'GWA / general average', 'missing', null, (string) $scholarship->minimum_gwa, 'Add your GWA or general average in your profile.');
-            } else {
-                $usesGradePointScale = $profile?->grading_scale === 'grade_point'
-                    || ($profile?->grading_scale !== 'percentage' && $studentGwa <= 5 && $minimumGwa <= 5);
-                $isPassing = $usesGradePointScale ? $studentGwa <= $minimumGwa : $studentGwa >= $minimumGwa;
-                $addCriterion('gwa', 'GWA / general average', $isPassing ? 'pass' : 'fail', (string) $profile->gwa, (string) $scholarship->minimum_gwa, $isPassing ? 'Your average meets this requirement.' : 'Your average may need review.');
-            }
-        }
+        $academicMatch = AcademicRequirement::match($profile?->gwa, $profile?->grading_scale, $scholarship->minimum_gwa, $scholarship->minimum_grade_scale);
+        $addCriterion(
+            'academic',
+            $academicMatch['label'],
+            $academicMatch['status'],
+            $academicMatch['student_value'],
+            $academicMatch['requirement'],
+            $academicMatch['note'],
+            $academicMatch['counts'],
+        );
 
         $this->addOptionCriterion($addCriterion, 'education_level', 'Education level', $profile?->education_level, $scholarship->eligible_education_levels);
         $this->addOptionCriterion($addCriterion, 'course', 'Track / strand / course', $profile?->course_or_strand, $scholarship->eligible_courses);

@@ -11,6 +11,7 @@ use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Services\DecisionSupportService;
+use App\Support\AcademicRequirement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -672,12 +673,18 @@ class ProviderController extends Controller
         $imagePath = $this->storeScholarshipImage($request);
 
         unset($validated['image_file']);
+        $validated = $this->normalizeScholarshipAcademicRequirement($validated);
+        $validated['status'] = $validated['status'] === 'draft' ? 'draft' : 'pending_review';
 
         $scholarship = Scholarship::create([
             ...$validated,
             'image_path' => $imagePath,
             'provider_id' => $request->user()->id,
         ]);
+
+        if ($scholarship->status === 'pending_review') {
+            $this->notifyAdminsScholarshipSubmitted($request, $scholarship);
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -688,7 +695,9 @@ class ProviderController extends Controller
         );
 
         return response()->json([
-            'message' => 'Scholarship created successfully.',
+            'message' => $scholarship->status === 'pending_review'
+                ? 'Scholarship submitted for admin review.'
+                : 'Scholarship draft saved.',
             'scholarship' => $this->scholarshipPayload($scholarship),
         ], 201);
     }
@@ -703,12 +712,18 @@ class ProviderController extends Controller
         $imagePath = $this->storeScholarshipImage($request, $scholarship);
 
         unset($validated['image_file']);
+        $validated = $this->normalizeScholarshipAcademicRequirement($validated);
 
         if ($imagePath) {
             $validated['image_path'] = $imagePath;
         }
 
+        $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status']);
         $scholarship->update($validated);
+
+        if ($scholarship->status === 'pending_review') {
+            $this->notifyAdminsScholarshipSubmitted($request, $scholarship);
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -719,7 +734,12 @@ class ProviderController extends Controller
         );
 
         return response()->json([
-            'message' => 'Scholarship updated successfully.',
+            'message' => match ($scholarship->status) {
+                'pending_review' => 'Scholarship submitted for admin review.',
+                'closed' => 'Scholarship closed.',
+                'published' => 'Published scholarship updated.',
+                default => 'Scholarship draft saved.',
+            },
             'scholarship' => $this->scholarshipPayload($scholarship->fresh()),
         ]);
     }
@@ -744,15 +764,64 @@ class ProviderController extends Controller
             'requirements' => ['nullable', 'string', 'max:5000'],
             'award_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'minimum_gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'minimum_grade_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
             'slots_available' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'application_mode' => ['nullable', Rule::in(['online', 'onsite', 'hybrid', 'provider_review'])],
             'renewal_policy' => ['nullable', 'string', 'max:2000'],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'contact_number' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{7,30}$/'],
             'deadline' => ['nullable', 'date'],
-            'status' => ['required', Rule::in(['draft', 'published', 'closed'])],
+            'status' => ['required', Rule::in(['draft', 'pending_review', 'published', 'closed', 'rejected'])],
             'image_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
         ]);
+    }
+
+    private function normalizeScholarshipAcademicRequirement(array $validated): array
+    {
+        $scale = $validated['minimum_grade_scale'] ?? null;
+
+        if ($scale === '') {
+            $scale = null;
+        }
+
+        if (! AcademicRequirement::requiresNumeric($scale)) {
+            $validated['minimum_gwa'] = null;
+        }
+
+        if (blank($validated['minimum_gwa'] ?? null) && in_array($scale, ['percentage', 'grade_point'], true)) {
+            $scale = null;
+        }
+
+        $validated['minimum_grade_scale'] = $scale;
+
+        return $validated;
+    }
+
+    private function providerScholarshipStatus(Scholarship $scholarship, string $requestedStatus): string
+    {
+        if ($requestedStatus === 'published' && $scholarship->status === 'published') {
+            return 'published';
+        }
+
+        if ($requestedStatus === 'closed' && in_array($scholarship->status, ['published', 'closed'], true)) {
+            return 'closed';
+        }
+
+        return $requestedStatus === 'draft' ? 'draft' : 'pending_review';
+    }
+
+    private function notifyAdminsScholarshipSubmitted(Request $request, Scholarship $scholarship): void
+    {
+        User::query()
+            ->where('role', 'admin')
+            ->get()
+            ->each(fn (User $admin) => PortalNotification::create([
+                'user_id' => $admin->id,
+                'type' => 'scholarship_review',
+                'title' => 'Scholarship ready for review',
+                'message' => "{$request->user()->name} submitted {$scholarship->title} for admin review.",
+                'action_url' => '/admin/reviews',
+            ]));
     }
 
     private function storeScholarshipImage(Request $request, ?Scholarship $scholarship = null): ?string
@@ -822,6 +891,7 @@ class ProviderController extends Controller
                 'course_or_strand' => $application->applicant?->studentProfile?->course_or_strand,
                 'year_level' => $application->applicant?->studentProfile?->year_level,
                 'gwa' => $application->applicant?->studentProfile?->gwa,
+                'grading_scale' => $application->applicant?->studentProfile?->grading_scale,
                 'income_bracket' => $application->applicant?->studentProfile?->income_bracket,
                 'household_size' => $application->applicant?->studentProfile?->household_size,
                 'preferred_categories' => $application->applicant?->studentProfile?->preferred_categories,
@@ -918,6 +988,8 @@ class ProviderController extends Controller
             'requirements' => $scholarship->requirements,
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
+            'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
+            'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
             'renewal_policy' => $scholarship->renewal_policy,
