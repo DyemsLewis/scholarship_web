@@ -960,6 +960,9 @@ class MobileAuthController extends Controller
             'nationwide',
             'no income requirement',
         ], true)
+            || str_starts_with($normalized, 'any ')
+            || str_starts_with($normalized, 'all ')
+            || str_contains($normalized, 'n/a')
             || str_contains($normalized, 'open to all')
             || str_contains($normalized, 'no restriction')
             || str_contains($normalized, 'no preference')

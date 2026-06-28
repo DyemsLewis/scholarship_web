@@ -7,13 +7,17 @@ const props = defineProps({
         default: 'light',
         validator: (value) => ['light', 'transparent'].includes(value),
     },
+    showIcons: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const currentPath = window.location.pathname;
 const links = [
-    { href: '/', label: 'Home' },
-    { href: '/login', label: 'Login' },
-    { href: '/register', label: 'Register' },
+    { href: '/', label: 'Home', icon: 'fa-solid fa-house' },
+    { href: '/login', label: 'Login', icon: 'fa-solid fa-right-to-bracket' },
+    { href: '/register', label: 'Register', icon: 'fa-solid fa-user-plus' },
 ];
 
 const isTransparent = computed(() => props.variant === 'transparent');
@@ -31,8 +35,23 @@ function isActive(href) {
         ]"
     >
         <nav class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-            <a href="/" class="font-display text-xl font-bold tracking-normal">
-                Scholarship Portal
+            <a
+                href="/"
+                :class="[
+                    'font-display text-xl font-bold tracking-normal',
+                    showIcons ? 'flex items-center gap-2' : '',
+                ]"
+            >
+                <span
+                    v-if="showIcons"
+                    :class="[
+                        'flex h-9 w-9 items-center justify-center rounded-md',
+                        isTransparent ? 'bg-amber-300 text-slate-950' : 'bg-slate-900 text-white',
+                    ]"
+                >
+                    <i class="fa-solid fa-award text-sm"></i>
+                </span>
+                <span>Scholarship Portal</span>
             </a>
 
             <div class="hidden items-center gap-1 sm:flex">
@@ -47,7 +66,13 @@ function isActive(href) {
                             : isActive(link.href) ? 'bg-slate-100 text-slate-950' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
                     ]"
                 >
-                    {{ link.label }}
+                    <span v-if="showIcons" class="inline-flex items-center gap-2">
+                        <i :class="[link.icon, 'text-xs']"></i>
+                        {{ link.label }}
+                    </span>
+                    <span v-else>
+                        {{ link.label }}
+                    </span>
                 </a>
             </div>
 
@@ -59,6 +84,7 @@ function isActive(href) {
                         isTransparent ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-100'
                     ]"
                 >
+                    <i v-if="showIcons" class="fa-solid fa-right-to-bracket mr-2"></i>
                     Login
                 </a>
                 <a
@@ -68,6 +94,7 @@ function isActive(href) {
                         isTransparent ? 'bg-amber-300 text-slate-950 hover:bg-amber-200' : 'bg-slate-900 text-white hover:bg-slate-800'
                     ]"
                 >
+                    <i v-if="showIcons" class="fa-solid fa-user-plus mr-2"></i>
                     Register
                 </a>
             </div>

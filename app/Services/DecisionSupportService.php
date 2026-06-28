@@ -69,6 +69,119 @@ class DecisionSupportService
         return $score;
     }
 
+    public function explainApplication(ScholarshipApplication $application, ?array $score = null): array
+    {
+        $application->loadMissing(['applicant.studentProfile', 'documents', 'scholarship']);
+
+        $score ??= $this->scoreApplication($application);
+        $eligibility = $application->eligibility_breakdown ?? $this->currentEligibilitySnapshot($application) ?? [];
+        $eligibilityCriteria = collect($eligibility['criteria'] ?? []);
+        $requirements = $this->documentRequirements($application->scholarship);
+        $uploadedDocuments = $application->documents->pluck('document_name')->all();
+        $acceptedDocuments = $application->documents
+            ->filter(fn (ApplicationDocument $document) => $document->status === 'accepted')
+            ->pluck('document_name')
+            ->all();
+        $missingUploads = collect($requirements)
+            ->reject(fn (string $requirement) => $this->containsRequirement($uploadedDocuments, $requirement))
+            ->values();
+        $missingAccepted = collect($requirements)
+            ->reject(fn (string $requirement) => $this->containsRequirement($acceptedDocuments, $requirement))
+            ->values();
+
+        $strengths = collect($score['criteria'] ?? [])
+            ->filter(fn (array $criterion) => (int) ($criterion['score'] ?? 0) >= 80)
+            ->map(fn (array $criterion) => "{$criterion['label']} is strong.");
+
+        $strengths = $strengths->merge(
+            $eligibilityCriteria
+                ->where('status', 'pass')
+                ->pluck('note')
+        );
+
+        if ($requirements !== [] && $missingUploads->isEmpty()) {
+            $strengths->push('All required documents have been uploaded.');
+        }
+
+        $needsAttention = collect($score['criteria'] ?? [])
+            ->filter(fn (array $criterion) => (int) ($criterion['score'] ?? 0) < 60)
+            ->map(fn (array $criterion) => "{$criterion['label']} needs attention.");
+
+        $needsAttention = $needsAttention->merge(
+            $eligibilityCriteria
+                ->filter(fn (array $criterion) => in_array($criterion['status'] ?? '', ['fail', 'missing'], true))
+                ->pluck('note')
+        );
+
+        if ($missingUploads->isNotEmpty()) {
+            $needsAttention->push('Missing uploads: '.$missingUploads->take(3)->implode(', ').($missingUploads->count() > 3 ? ', and more' : '').'.');
+        } elseif ($missingAccepted->isNotEmpty()) {
+            $needsAttention->push('Some uploaded documents still need provider acceptance.');
+        }
+
+        return [
+            'headline' => $this->explanationHeadline($score['recommendation'] ?? 'needs_review', $application->status),
+            'summary' => $score['summary'] ?? 'DSS reviewed the current application data.',
+            'strengths' => $strengths
+                ->filter()
+                ->unique()
+                ->take(4)
+                ->values()
+                ->all(),
+            'needs_attention' => $needsAttention
+                ->filter()
+                ->unique()
+                ->take(4)
+                ->values()
+                ->all(),
+            'next_action' => $this->recommendedNextAction($application, $score, $missingUploads->all(), $missingAccepted->all()),
+        ];
+    }
+
+    public function statusProgress(ScholarshipApplication $application): array
+    {
+        $status = $application->status ?: 'submitted';
+        $flow = [
+            ['key' => 'submitted', 'label' => 'Submitted'],
+            ['key' => 'under_review', 'label' => 'Under review'],
+            ['key' => 'qualified', 'label' => 'Qualified'],
+            ['key' => 'approved', 'label' => 'Approved'],
+            ['key' => 'awarded', 'label' => 'Awarded'],
+        ];
+        $stageIndex = match ($status) {
+            'under_review' => 1,
+            'qualified', 'shortlisted', 'interview' => 2,
+            'approved' => 3,
+            'awarded', 'disbursed', 'renewed', 'not_awarded' => 4,
+            'rejected' => 1,
+            default => 0,
+        };
+        $isClosedWithoutAward = in_array($status, ['rejected', 'not_awarded'], true);
+        $steps = collect($flow)
+            ->map(function (array $step, int $index) use ($stageIndex, $isClosedWithoutAward): array {
+                return [
+                    ...$step,
+                    'state' => match (true) {
+                        $isClosedWithoutAward && $index > $stageIndex => 'skipped',
+                        $index < $stageIndex => 'complete',
+                        $index === $stageIndex => 'current',
+                        default => 'upcoming',
+                    },
+                ];
+            })
+            ->values()
+            ->all();
+
+        return [
+            'current' => $status,
+            'label' => $this->statusLabel($status),
+            'percent' => (int) round(($stageIndex / (count($flow) - 1)) * 100),
+            'tone' => $this->statusTone($status),
+            'next_action' => $this->statusNextAction($status),
+            'steps' => $steps,
+        ];
+    }
+
     private function criterion(string $key, string $label, int $score, string $note): array
     {
         $weight = self::WEIGHTS[$key];
@@ -377,6 +490,100 @@ class DecisionSupportService
         ];
     }
 
+    private function explanationHeadline(string $recommendation, string $status): string
+    {
+        if (in_array($status, ['awarded', 'disbursed', 'renewed'], true)) {
+            return 'Award outcome is already recorded.';
+        }
+
+        if (in_array($status, ['rejected', 'not_awarded'], true)) {
+            return 'Application is closed; review notes explain the final decision.';
+        }
+
+        return match ($recommendation) {
+            'highly_recommended' => 'Strong candidate based on current data.',
+            'recommended' => 'Good candidate with a few items to confirm.',
+            'needs_review' => 'Needs manual review before a decision.',
+            'low_priority' => 'Lower priority until missing or weak items improve.',
+            'not_recommended' => 'Not recommended based on current review data.',
+            default => 'DSS reviewed the current application data.',
+        };
+    }
+
+    private function recommendedNextAction(ScholarshipApplication $application, array $score, array $missingUploads, array $missingAccepted): string
+    {
+        if (in_array($application->status, ['awarded', 'disbursed', 'renewed'], true)) {
+            return 'Keep outcome details updated for renewal or reporting.';
+        }
+
+        if (in_array($application->status, ['rejected', 'not_awarded'], true)) {
+            return 'No action is required unless the provider reopens the application.';
+        }
+
+        if ($missingUploads !== []) {
+            return 'Applicant should upload missing requirements before final review.';
+        }
+
+        if ($missingAccepted !== []) {
+            return 'Provider should review and accept or return the uploaded documents.';
+        }
+
+        if (($score['recommendation'] ?? '') === 'needs_review') {
+            return 'Provider should review the flagged criteria and add a decision note.';
+        }
+
+        if ((int) ($score['score'] ?? 0) >= 80) {
+            return 'Provider can prioritize this application for qualification or approval review.';
+        }
+
+        return 'Continue reviewing eligibility, documents, and provider notes.';
+    }
+
+    private function statusTone(string $status): string
+    {
+        return match ($status) {
+            'approved', 'awarded', 'disbursed', 'renewed' => 'success',
+            'rejected', 'not_awarded' => 'danger',
+            'under_review', 'qualified', 'shortlisted', 'interview' => 'info',
+            default => 'warning',
+        };
+    }
+
+    private function statusNextAction(string $status): string
+    {
+        return match ($status) {
+            'submitted' => 'Waiting for the provider to start review.',
+            'under_review' => 'Provider is checking eligibility, documents, and notes.',
+            'qualified' => 'Application is qualified; wait for shortlist or approval.',
+            'shortlisted' => 'Applicant may be contacted for the next screening step.',
+            'interview' => 'Applicant should complete the interview or follow-up requirement.',
+            'approved' => 'Waiting for award or release details.',
+            'awarded' => 'Award is recorded; wait for release or renewal updates.',
+            'disbursed' => 'Scholarship support has been released.',
+            'renewed' => 'Scholarship renewal has been recorded.',
+            'rejected', 'not_awarded' => 'Application is closed; check review notes for context.',
+            default => 'Continue monitoring this application.',
+        };
+    }
+
+    private function statusLabel(string $status): string
+    {
+        return str($status)->replace('_', ' ')->title()->toString();
+    }
+
+    private function containsRequirement(array $documents, string $requirement): bool
+    {
+        $normalizedRequirement = str($requirement)->lower()->squish()->toString();
+
+        return collect($documents)->contains(function (string $document) use ($normalizedRequirement) {
+            $normalizedDocument = str($document)->lower()->squish()->toString();
+
+            return $normalizedDocument === $normalizedRequirement
+                || str_contains($normalizedDocument, $normalizedRequirement)
+                || str_contains($normalizedRequirement, $normalizedDocument);
+        });
+    }
+
     private function documentRequirements(?Scholarship $scholarship): array
     {
         if (! $scholarship?->requirements) {
@@ -467,6 +674,9 @@ class DecisionSupportService
             'nationwide',
             'no income requirement',
         ], true)
+            || str_starts_with($normalized, 'any ')
+            || str_starts_with($normalized, 'all ')
+            || str_contains($normalized, 'n/a')
             || str_contains($normalized, 'open to all')
             || str_contains($normalized, 'no restriction')
             || str_contains($normalized, 'no preference')

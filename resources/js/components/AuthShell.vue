@@ -68,6 +68,7 @@ defineProps({
                     <div class="relative flex h-full flex-col justify-between gap-8">
                         <div>
                             <div class="inline-flex items-center gap-2 rounded-md border border-amber-200/25 bg-amber-300/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-amber-100">
+                                <i class="fa-solid fa-award"></i>
                                 {{ panelBadge }}
                             </div>
 
@@ -91,7 +92,9 @@ defineProps({
                                         :key="highlight"
                                         class="flex items-start gap-3"
                                     >
-                                        <span class="mt-1.5 h-2 w-2 rounded-full bg-amber-300"></span>
+                                        <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-300 text-[0.65rem] text-slate-950">
+                                            <i class="fa-solid fa-check"></i>
+                                        </span>
                                         <p class="text-sm leading-6 text-slate-200">
                                             {{ highlight }}
                                         </p>
@@ -113,6 +116,7 @@ defineProps({
                         <div class="flex items-start justify-between gap-4">
                             <div>
                                 <p class="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">
+                                    <i class="fa-solid fa-circle-nodes mr-2"></i>
                                     {{ eyebrow }}
                                 </p>
                                 <h1 class="mt-3 font-display text-3xl leading-tight text-slate-950 sm:text-[2.1rem]">
@@ -127,6 +131,7 @@ defineProps({
                                 :href="switchHref"
                                 class="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
                             >
+                                <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i>
                                 {{ switchLabel }}
                             </a>
                         </div>

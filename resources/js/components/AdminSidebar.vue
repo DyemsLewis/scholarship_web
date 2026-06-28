@@ -9,11 +9,11 @@ const props = defineProps({
 const emit = defineEmits(['logout']);
 
 const navLinks = [
-    { key: 'dashboard', href: '/admin', label: 'Dashboard' },
-    { key: 'users', href: '/admin/manage-users', label: 'Manage Users' },
-    { key: 'reviews', href: '/admin/reviews', label: 'Reviews' },
-    { key: 'logs', href: '/admin/logs', label: 'Logs' },
-    { key: 'profile', href: '/admin/profile', label: 'Profile' },
+    { key: 'dashboard', href: '/admin', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
+    { key: 'users', href: '/admin/manage-users', label: 'Manage Users', icon: 'fa-solid fa-users-gear' },
+    { key: 'reviews', href: '/admin/reviews', label: 'Reviews', icon: 'fa-solid fa-clipboard-check' },
+    { key: 'logs', href: '/admin/logs', label: 'Logs', icon: 'fa-solid fa-clock-rotate-left' },
+    { key: 'profile', href: '/admin/profile', label: 'Profile', icon: 'fa-solid fa-id-badge' },
 ];
 
 function navLinkClass(link) {
@@ -35,7 +35,7 @@ function navLinkClass(link) {
         <div class="relative flex min-h-72 flex-col px-5 py-6 lg:h-full">
             <div class="flex items-center gap-3">
                 <div class="flex h-10 w-10 items-center justify-center rounded-md bg-amber-300 text-sm font-black text-slate-950">
-                    AD
+                    <i class="fa-solid fa-shield-halved"></i>
                 </div>
                 <div>
                     <p class="font-display text-xl font-bold text-white">
@@ -58,7 +58,8 @@ function navLinkClass(link) {
                         v-if="active === link.key"
                         class="absolute inset-y-2 left-0 w-1 rounded-r-full bg-amber-500"
                     ></span>
-                    <span class="pl-2">
+                    <span class="flex items-center gap-2 pl-2">
+                        <i :class="[link.icon, 'w-4 text-center text-xs']"></i>
                         {{ link.label }}
                     </span>
                 </a>
@@ -70,6 +71,7 @@ function navLinkClass(link) {
                     class="w-full rounded-md border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300 transition hover:border-amber-300/40 hover:bg-white/5 hover:text-white"
                     @click="emit('logout')"
                 >
+                    <i class="fa-solid fa-right-from-bracket mr-2"></i>
                     Logout
                 </button>
             </div>

@@ -77,6 +77,7 @@ class DatabaseSeeder extends Seeder
             'last_name' => 'Student',
             'middle_initial' => 'S',
             'contact_number' => '09170000002',
+            'account_managed_by' => 'learner',
             'education_level' => 'senior_high_school',
             'school' => 'Demo National High School',
             'school_type' => 'public',
@@ -102,7 +103,10 @@ class DatabaseSeeder extends Seeder
             'longitude' => 121.0437000,
             'birthdate' => '2004-06-01',
             'guardian_name' => 'Demo Guardian',
+            'guardian_relationship' => 'Parent / guardian',
             'guardian_contact' => '09170000003',
+            'guardian_email' => 'guardian@scholarship.test',
+            'guardian_is_account_owner' => false,
         ]);
 
         Scholarship::query()

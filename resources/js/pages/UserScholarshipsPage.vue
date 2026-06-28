@@ -169,10 +169,18 @@ function splitOptions(value) {
         .filter(Boolean);
 }
 
-function criteriaLabel(value, fallback = 'Open to all') {
-    const items = splitOptions(value).map(labelFromKey);
+function targetApplicantLabel(scholarship) {
+    const levels = splitOptions(scholarship.eligible_education_levels);
 
-    return items.length ? items.join(', ') : fallback;
+    if (levels.length === 0 || levels.length >= 7) {
+        return 'All learners';
+    }
+
+    if (levels.includes('preschool') && levels.includes('elementary') && levels.length === 2) {
+        return 'Preschool / Elementary';
+    }
+
+    return levels.slice(0, 2).map(labelFromKey).join(', ') + (levels.length > 2 ? ` +${levels.length - 2}` : '');
 }
 
 function documentRequirements(requirements) {
@@ -327,9 +335,6 @@ onMounted(loadScholarships);
                             <h2 class="font-display text-2xl font-bold text-slate-950 sm:text-3xl">
                                 Find a program that fits
                             </h2>
-                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                Search first, then open details only when a scholarship looks relevant.
-                            </p>
                         </div>
                         <p class="student-chip">
                             {{ filteredScholarships.length }} of {{ scholarships.length }} shown
@@ -349,14 +354,11 @@ onMounted(loadScholarships);
                     <aside class="student-card h-fit overflow-hidden xl:sticky xl:top-6">
                         <div class="bg-slate-950 p-5 text-white">
                             <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
-                                Finder Controls
+                                Filters
                             </p>
                             <h3 class="mt-2 font-display text-xl font-bold">
                                 Narrow the list
                             </h3>
-                            <p class="mt-2 text-sm leading-6 text-slate-300">
-                                Use simple filters first. Open a full program only when it looks worth reviewing.
-                            </p>
                         </div>
 
                         <div class="grid gap-3 p-4">
@@ -436,33 +438,19 @@ onMounted(loadScholarships);
                             {{ statusMessage }}
                         </div>
 
-                        <div class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
-                            <div class="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+                        <div class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-white shadow-[0_18px_42px_rgba(15,23,42,0.14)]">
+                            <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
-                                        Program Catalog
+                                        Programs
                                     </p>
-                                    <h3 class="mt-2 font-display text-2xl font-bold">
+                                    <h3 class="mt-1 font-display text-xl font-bold">
                                         {{ filteredScholarships.length }} programs matched
                                     </h3>
-                                    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                                        Sorted by eligibility match first, then upcoming deadlines.
-                                    </p>
                                 </div>
-                                <div class="grid grid-cols-2 gap-2 text-center sm:grid-cols-3">
-                                    <div class="rounded-md bg-white/10 px-3 py-2">
-                                        <p class="text-xl font-bold">{{ scholarships.length }}</p>
-                                        <p class="text-xs text-slate-300">Total</p>
-                                    </div>
-                                    <div class="rounded-md bg-white/10 px-3 py-2">
-                                        <p class="text-xl font-bold">{{ activeFilterCount }}</p>
-                                        <p class="text-xs text-slate-300">Filters</p>
-                                    </div>
-                                    <div class="rounded-md bg-white/10 px-3 py-2">
-                                        <p class="text-xl font-bold">{{ scholarships.filter((item) => item.is_saved).length }}</p>
-                                        <p class="text-xs text-slate-300">Saved</p>
-                                    </div>
-                                </div>
+                                <p class="rounded-md bg-white/10 px-3 py-2 text-xs font-bold text-slate-200">
+                                    {{ activeFilterCount }} filter{{ activeFilterCount === 1 ? '' : 's' }} active
+                                </p>
                             </div>
                         </div>
 
@@ -503,6 +491,10 @@ onMounted(loadScholarships);
                                                 <p class="mt-1 truncate text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                                                     {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
                                                 </p>
+                                                <p class="mt-2 inline-flex items-center rounded-md bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-800 ring-1 ring-sky-100">
+                                                    <i class="fa-solid fa-users mr-1.5"></i>
+                                                    {{ targetApplicantLabel(scholarship) }}
+                                                </p>
                                             </div>
                                         </div>
 
@@ -519,34 +511,22 @@ onMounted(loadScholarships);
                                         </div>
                                     </div>
 
-                                    <p class="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
+                                    <p class="mt-3 line-clamp-1 text-sm leading-6 text-slate-600">
                                         {{ scholarship.description }}
                                     </p>
 
-                                    <div class="mt-3 grid gap-2 text-xs font-bold text-slate-600 md:grid-cols-2">
-                                        <p class="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200/80">
-                                            Education: {{ criteriaLabel(scholarship.eligible_education_levels) }}
-                                        </p>
-                                        <p class="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200/80">
-                                            School type: {{ criteriaLabel(scholarship.eligible_school_types) }}
-                                        </p>
-                                    </div>
-
-                                    <div class="mt-4 grid gap-3 text-sm md:grid-cols-3">
-                                        <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70">
+                                    <div class="mt-4 grid gap-2 text-sm md:grid-cols-3">
+                                        <div class="rounded-md bg-[#f6faf8] px-3 py-2 ring-1 ring-slate-200/70">
                                             <p class="font-semibold text-slate-500">Award</p>
                                             <p class="mt-1 font-bold text-slate-950">{{ formatAmount(scholarship.award_amount) }}</p>
                                         </div>
-                                        <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70">
-                                            <p class="font-semibold text-slate-500">GWA / avg</p>
+                                        <div class="rounded-md bg-[#f6faf8] px-3 py-2 ring-1 ring-slate-200/70">
+                                            <p class="font-semibold text-slate-500">Min avg</p>
                                             <p class="mt-1 font-bold text-slate-950">{{ scholarship.minimum_gwa || 'Not listed yet' }}</p>
                                         </div>
-                                        <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70">
-                                            <p class="font-semibold text-slate-500">Requirements</p>
+                                        <div class="rounded-md bg-[#f6faf8] px-3 py-2 ring-1 ring-slate-200/70">
+                                            <p class="font-semibold text-slate-500">Docs</p>
                                             <p class="mt-1 font-bold text-slate-950">{{ requirementsLabel(scholarship.requirements) }}</p>
-                                            <p v-if="scholarship.prepared_documents?.required" class="mt-1 text-xs font-semibold text-sky-700">
-                                                {{ scholarship.prepared_documents.uploaded }} ready in Documents
-                                            </p>
                                         </div>
                                     </div>
 

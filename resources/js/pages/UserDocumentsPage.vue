@@ -296,9 +296,6 @@ onMounted(loadDocuments);
                             <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
                                 Prepare documents before applying
                             </h2>
-                            <p class="mt-2 text-sm leading-6 text-slate-600">
-                                Upload common requirements once. Scholarship matching will use this library, and matching files are copied into your application when you apply.
-                            </p>
                         </div>
 
                         <a
@@ -325,14 +322,11 @@ onMounted(loadDocuments);
                     <section class="student-card overflow-hidden">
                         <div class="border-b border-slate-200 bg-[#f6faf8] p-5">
                             <p class="student-kicker">
-                                Document Library
+                                Library
                             </p>
                             <h3 class="mt-2 text-xl font-bold text-slate-950">
                                 Upload reusable requirements
                             </h3>
-                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                Use exact document names from scholarship requirements when possible, so the matching system can recognize them.
-                            </p>
                         </div>
 
                         <div class="grid gap-5 p-5 lg:grid-cols-[0.9fr_1.1fr]">
@@ -410,7 +404,7 @@ onMounted(loadDocuments);
                                     </div>
                                 </div>
                                 <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-                                    No prepared documents yet. Add files here before applying so scholarships can show better document readiness.
+                                    No prepared documents yet.
                                 </div>
                             </div>
                         </div>
@@ -500,13 +494,10 @@ onMounted(loadDocuments);
 
                                 <section>
                                     <p class="student-kicker">
-                                        Application Copy
+                                        Add File
                                     </p>
                                     <div class="mt-3 rounded-md border border-slate-200 bg-white p-4">
-                                        <p class="text-sm leading-6 text-slate-600">
-                                            Prepared files are copied automatically when you apply. You can still upload or replace an application-specific file here.
-                                        </p>
-                                        <div class="mt-4 grid gap-3">
+                                        <div class="grid gap-3">
                                             <label>
                                                 <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Document type</span>
                                                 <select
@@ -559,9 +550,6 @@ onMounted(loadDocuments);
                                     <div>
                                         <p class="student-kicker">
                                             Submitted Files
-                                        </p>
-                                        <p class="mt-1 text-sm text-slate-500">
-                                            These are the copies providers can review for this application.
                                         </p>
                                     </div>
                                     <span class="w-fit rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">

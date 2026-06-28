@@ -26,6 +26,20 @@ import UserProfilePage from './pages/UserProfilePage.vue';
 import UserScholarshipDetailPage from './pages/UserScholarshipDetailPage.vue';
 import UserScholarshipsPage from './pages/UserScholarshipsPage.vue';
 
+function loadIconCdn() {
+    if (document.querySelector('link[data-icon-cdn="fontawesome"]')) {
+        return;
+    }
+
+    const iconStylesheet = document.createElement('link');
+    iconStylesheet.rel = 'stylesheet';
+    iconStylesheet.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css';
+    iconStylesheet.crossOrigin = 'anonymous';
+    iconStylesheet.referrerPolicy = 'no-referrer';
+    iconStylesheet.dataset.iconCdn = 'fontawesome';
+    document.head.appendChild(iconStylesheet);
+}
+
 const appElement = document.getElementById('app');
 const pages = {
     accountSetup: AccountSetupPage,
@@ -56,6 +70,8 @@ const pages = {
 };
 
 if (appElement) {
+    loadIconCdn();
+
     const page = appElement.dataset.page ?? 'landing';
     const component = pages[page] ?? LandingPage;
 

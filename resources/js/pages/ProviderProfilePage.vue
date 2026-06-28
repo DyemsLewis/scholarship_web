@@ -206,16 +206,13 @@ onMounted(loadProviderProfile);
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-5xl">
-                <header class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <header class="provider-hero">
                     <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
                         Provider Profile
                     </p>
                     <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                         Edit organization details
                     </h2>
-                    <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                        Keep your provider profile accurate for scholarship listings and admin verification.
-                    </p>
                 </header>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">

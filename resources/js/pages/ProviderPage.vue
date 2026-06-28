@@ -18,19 +18,19 @@ const publishedCount = computed(() => scholarships.value.filter((scholarship) =>
 const focusItems = computed(() => [
     {
         label: 'Draft programs',
-        detail: stats.value.drafts > 0 ? 'Finish drafts before publishing.' : 'No drafts waiting.',
+        detail: stats.value.drafts > 0 ? `${stats.value.drafts} draft${stats.value.drafts === 1 ? '' : 's'} waiting.` : 'No drafts waiting.',
         href: '/provider/programs',
         action: stats.value.drafts > 0 ? 'Open programs' : 'Create program',
     },
     {
         label: 'Applications to review',
-        detail: stats.value.applications > 0 ? 'Check applicant submissions.' : 'No submissions yet.',
+        detail: stats.value.applications > 0 ? `${stats.value.applications} submission${stats.value.applications === 1 ? '' : 's'}.` : 'No submissions yet.',
         href: '/provider/applications',
         action: 'Review queue',
     },
     {
         label: 'Published programs',
-        detail: publishedCount.value > 0 ? 'Visible to student applicants.' : 'Publish a program to appear in search.',
+        detail: publishedCount.value > 0 ? `${publishedCount.value} live.` : 'None live yet.',
         href: '/provider/programs',
         action: 'Manage programs',
     },
@@ -46,28 +46,28 @@ const programHealthSignals = computed(() => {
         {
             label: 'Draft completion',
             tone: draftPrograms.length ? 'warn' : 'good',
-            detail: draftPrograms.length ? `${draftPrograms.length} draft program${draftPrograms.length === 1 ? '' : 's'} may need publishing decisions.` : 'No draft programs waiting.',
+            detail: draftPrograms.length ? `${draftPrograms.length} draft${draftPrograms.length === 1 ? '' : 's'} waiting.` : 'Clear.',
             href: '/provider/programs',
             action: 'Open programs',
         },
         {
             label: 'Document quality',
             tone: missingDocuments.length ? 'warn' : 'good',
-            detail: missingDocuments.length ? `${missingDocuments.length} program${missingDocuments.length === 1 ? '' : 's'} have no document requirements.` : 'Program document requirements are defined.',
+            detail: missingDocuments.length ? `${missingDocuments.length} missing docs.` : 'Clear.',
             href: '/provider/programs',
             action: 'Review requirements',
         },
         {
             label: 'Location coverage',
             tone: missingLocations.length ? 'info' : 'good',
-            detail: missingLocations.length ? `${missingLocations.length} program${missingLocations.length === 1 ? '' : 's'} need address or map pins for distance matching.` : 'Program map data looks usable.',
+            detail: missingLocations.length ? `${missingLocations.length} need map pins.` : 'Clear.',
             href: '/provider/programs',
             action: 'Check maps',
         },
         {
             label: 'Deadline risk',
             tone: expiredPublished.length ? 'warn' : 'good',
-            detail: expiredPublished.length ? `${expiredPublished.length} published program${expiredPublished.length === 1 ? '' : 's'} have passed deadlines.` : 'No expired published deadlines detected.',
+            detail: expiredPublished.length ? `${expiredPublished.length} expired.` : 'Clear.',
             href: '/provider/programs',
             action: 'Update deadlines',
         },
@@ -165,7 +165,7 @@ onMounted(loadProviderData);
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-6xl">
-                <header class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
@@ -174,9 +174,6 @@ onMounted(loadProviderData);
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 Quick overview
                             </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                A lighter dashboard for provider actions, review tasks, and recent scholarship records.
-                            </p>
                         </div>
 
                         <a
@@ -202,7 +199,7 @@ onMounted(loadProviderData);
                             Focus Today
                         </p>
                         <h3 class="mt-2 text-xl font-bold text-slate-950">
-                            Provider tasks that may need attention
+                            Needs attention
                         </h3>
 
                         <div class="mt-5 grid gap-3 lg:grid-cols-3">
@@ -279,12 +276,9 @@ onMounted(loadProviderData);
                                     Program Health Signals
                                 </p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Data quality checks for scholarship listings
+                                    Program checks
                                 </h3>
                             </div>
-                            <p class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                                Drafts, documents, locations, deadlines
-                            </p>
                         </div>
 
                         <div class="mt-5 grid gap-3 lg:grid-cols-4">
@@ -297,7 +291,7 @@ onMounted(loadProviderData);
                                 <p class="text-sm font-bold">
                                     {{ signal.label }}
                                 </p>
-                                <p class="mt-2 min-h-12 text-sm leading-6 opacity-85">
+                                <p class="mt-2 text-sm leading-5 opacity-85">
                                     {{ signal.detail }}
                                 </p>
                                 <p class="mt-4 text-sm font-bold">
@@ -320,8 +314,8 @@ onMounted(loadProviderData);
                                     {{ verificationLabel(user?.verification_status) }}
                                 </span>
                             </div>
-                            <p class="mt-4 text-sm leading-6 text-slate-600">
-                                {{ user?.can_post_scholarships ? 'This provider can publish and manage scholarship programs.' : 'Admin approval is needed before this provider can publish scholarships.' }}
+                            <p class="mt-4 text-sm leading-5 text-slate-600">
+                                {{ user?.can_post_scholarships ? 'Can publish programs.' : 'Needs admin approval before publishing.' }}
                             </p>
                         </article>
 

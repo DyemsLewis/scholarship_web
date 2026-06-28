@@ -6,11 +6,11 @@ const currentPath = window.location.pathname.replace(/\/$/, '') || '/dashboard';
 const isMenuOpen = ref(false);
 
 const navLinks = [
-    { href: '/dashboard', label: 'Dashboard', detail: 'Applicant overview' },
-    { href: '/dashboard/scholarships', label: 'Scholarships', detail: 'Available programs' },
-    { href: '/dashboard/applications', label: 'Applications', detail: 'Submission status' },
-    { href: '/dashboard/documents', label: 'Documents', detail: 'Uploaded files' },
-    { href: '/dashboard/profile', label: 'Profile', detail: 'Applicant record' },
+    { href: '/dashboard', label: 'Dashboard', icon: 'fa-solid fa-chart-line' },
+    { href: '/dashboard/scholarships', label: 'Scholarships', icon: 'fa-solid fa-graduation-cap' },
+    { href: '/dashboard/applications', label: 'Applications', icon: 'fa-solid fa-file-signature' },
+    { href: '/dashboard/documents', label: 'Documents', icon: 'fa-solid fa-folder-open' },
+    { href: '/dashboard/profile', label: 'Profile', icon: 'fa-solid fa-user-graduate' },
 ];
 
 function isActive(href) {
@@ -36,14 +36,11 @@ function logout() {
         <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
             <a href="/dashboard" class="group flex items-center gap-3">
                 <span class="flex h-9 w-9 items-center justify-center rounded-md bg-amber-300 font-display text-sm font-bold text-slate-950">
-                    S
+                    <i class="fa-solid fa-award"></i>
                 </span>
                 <span>
                     <span class="block font-display text-lg font-bold leading-tight text-white">
                         Scholarship Portal
-                    </span>
-                    <span class="block text-xs font-semibold text-slate-300">
-                        Student workspace
                     </span>
                 </span>
             </a>
@@ -60,7 +57,10 @@ function logout() {
                             : 'text-slate-200 hover:bg-white/10 hover:text-white',
                     ]"
                 >
-                    {{ link.label }}
+                    <span class="inline-flex items-center gap-2">
+                        <i :class="[link.icon, 'text-xs']"></i>
+                        {{ link.label }}
+                    </span>
                 </a>
             </nav>
 
@@ -81,9 +81,10 @@ function logout() {
                 type="button"
                 class="rounded-md border border-white/20 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white hover:text-slate-950 md:hidden"
                 @click="isMenuOpen = true"
-            >
-                Menu
-            </button>
+                >
+                    <i class="fa-solid fa-bars mr-2"></i>
+                    Menu
+                </button>
         </div>
     </header>
 
@@ -103,20 +104,18 @@ function logout() {
                         class="rounded-md border border-white/20 px-3 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white hover:text-slate-950"
                         @click="closeMenu"
                     >
+                        <i class="fa-solid fa-xmark mr-2"></i>
                         Close
                     </button>
                 </div>
 
                 <div>
                     <p class="inline-flex rounded-md bg-amber-300/15 px-3 py-1.5 text-xs font-semibold text-amber-100 ring-1 ring-amber-200/20">
-                        Applicant Access
+                        Applicant
                     </p>
                     <h1 class="mt-4 font-display text-2xl leading-tight font-bold text-white">
                         Student Workspace
                     </h1>
-                    <p class="mt-2 text-sm leading-6 text-slate-300">
-                        Manage scholarships, applications, and profile details.
-                    </p>
                 </div>
 
                 <nav class="grid gap-2">
@@ -132,11 +131,9 @@ function logout() {
                         ]"
                         @click="closeMenu"
                     >
-                        <span class="block text-sm font-bold">
+                        <span class="flex items-center gap-2 text-sm font-bold">
+                            <i :class="[link.icon, 'w-4 text-center']"></i>
                             {{ link.label }}
-                        </span>
-                        <span :class="['mt-1 block text-xs', isActive(link.href) ? 'text-slate-600' : 'text-slate-400']">
-                            {{ link.detail }}
                         </span>
                     </a>
                 </nav>
@@ -145,14 +142,12 @@ function logout() {
                     <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
                         Applicant Account
                     </p>
-                    <p class="mt-2 text-sm leading-6 text-slate-300">
-                        Signed in to the applicant scholarship workspace.
-                    </p>
                     <button
                         type="button"
                         class="mt-4 w-full rounded-md border border-white/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white hover:text-slate-950"
                         @click="logout"
                     >
+                        <i class="fa-solid fa-right-from-bracket mr-2"></i>
                         Logout
                     </button>
                 </div>

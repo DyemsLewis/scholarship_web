@@ -785,7 +785,8 @@ class ProviderController extends Controller
     private function applicationPayload(ScholarshipApplication $application): array
     {
         $readiness = $this->documentReadiness($application);
-        $dss = app(DecisionSupportService::class)->scoreApplication($application);
+        $decisionSupport = app(DecisionSupportService::class);
+        $dss = $decisionSupport->scoreApplication($application);
 
         return [
             'id' => $application->id,
@@ -798,6 +799,8 @@ class ProviderController extends Controller
             'dss_score' => $dss['score'],
             'dss_recommendation' => $dss['recommendation'],
             'dss_breakdown' => $dss,
+            'dss_explanation' => $decisionSupport->explainApplication($application, $dss),
+            'status_progress' => $decisionSupport->statusProgress($application),
             'notes' => $application->notes,
             'review_notes' => $application->review_notes,
             'decision_reason' => $application->decision_reason,

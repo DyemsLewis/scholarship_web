@@ -13,6 +13,7 @@ class StudentProfile extends Model
         'last_name',
         'middle_initial',
         'contact_number',
+        'account_managed_by',
         'education_level',
         'school',
         'school_type',
@@ -38,7 +39,10 @@ class StudentProfile extends Model
         'longitude',
         'birthdate',
         'guardian_name',
+        'guardian_relationship',
         'guardian_contact',
+        'guardian_email',
+        'guardian_is_account_owner',
     ];
 
     protected function casts(): array
@@ -49,6 +53,7 @@ class StudentProfile extends Model
             'household_size' => 'integer',
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
+            'guardian_is_account_owner' => 'boolean',
         ];
     }
 

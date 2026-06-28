@@ -19,9 +19,17 @@ const imageFile = ref(null);
 const imagePreviewUrl = ref('');
 const providerLocationMessage = ref('');
 const providerAddressLookupTrigger = ref(0);
+const activeFormSection = ref('basics');
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
+const formSections = [
+    { id: 'basics', label: 'Basics', help: 'Name, logo, amount, and status.' },
+    { id: 'workflow', label: 'Apply', help: 'How applicants submit and contact you.' },
+    { id: 'target', label: 'Target', help: 'Who can match with this program.' },
+    { id: 'location', label: 'Location', help: 'Address and map pin.' },
+    { id: 'documents', label: 'Docs', help: 'Required files.' },
+];
 const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
 const incomeOptions = ['Any', 'Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
 const applicationModeOptions = [
@@ -39,6 +47,7 @@ const educationLevelOptions = [
     { value: 'tvet', label: 'TVET / Vocational' },
     { value: 'als', label: 'ALS / Alternative Learning' },
 ];
+const allEducationLevelValues = educationLevelOptions.map((option) => option.value);
 const schoolTypeOptions = [
     { value: 'daycare_learning_center', label: 'Daycare / learning center' },
     { value: 'public', label: 'Public school' },
@@ -62,6 +71,277 @@ const documentRequirementOptions = [
     'Proof of income',
     'Recommendation letter',
 ];
+const targetApplicantPresets = [
+    {
+        key: 'all',
+        label: 'All learners',
+        icon: 'fa-solid fa-people-group',
+        description: 'Use this when the program is open to any Filipino learner regardless of level.',
+        educationLevels: allEducationLevelValues,
+        schoolTypes: [],
+        courses: 'Any',
+        years: 'Any grade or year level',
+        locations: 'Nationwide',
+        eligibility: 'Open to Filipino learners who meet the document, academic, location, and income requirements listed by the provider.',
+        requirements: ['Completed application form', 'Certificate of enrollment', 'Latest report card or grades', 'School ID'],
+    },
+    {
+        key: 'early_basic',
+        label: 'Preschool / Elementary',
+        icon: 'fa-solid fa-child-reaching',
+        description: 'Best for younger learners where a parent or guardian may manage the account.',
+        educationLevels: ['preschool', 'elementary'],
+        schoolTypes: ['daycare_learning_center', 'public', 'private'],
+        courses: 'N/A',
+        years: 'Nursery\nKinder 1\nKinder 2\nGrade 1\nGrade 2\nGrade 3\nGrade 4\nGrade 5\nGrade 6',
+        locations: 'Nationwide',
+        eligibility: 'Open to preschool or elementary learners. A parent or guardian may manage the applicant profile and provide contact information.',
+        requirements: ['Completed application form', 'Certificate of enrollment', 'Latest report card or grades', 'Birth certificate', 'Parent or guardian valid ID', 'Proof of income'],
+    },
+    {
+        key: 'junior_high',
+        label: 'Junior High School',
+        icon: 'fa-solid fa-school',
+        description: 'For Grade 7 to Grade 10 learners, including general or special curriculum programs.',
+        educationLevels: ['junior_high_school'],
+        schoolTypes: ['public', 'private'],
+        courses: 'Any',
+        years: 'Grade 7\nGrade 8\nGrade 9\nGrade 10',
+        locations: 'Nationwide',
+        eligibility: 'Open to Junior High School learners who meet the provider requirements and maintain the required general average.',
+        requirements: ['Completed application form', 'Certificate of enrollment', 'Latest report card or grades', 'School ID', 'Proof of income'],
+    },
+    {
+        key: 'senior_high',
+        label: 'Senior High School',
+        icon: 'fa-solid fa-book-open-reader',
+        description: 'For Grade 11 to Grade 12 applicants where track or strand matters.',
+        educationLevels: ['senior_high_school'],
+        schoolTypes: ['public', 'private'],
+        courses: 'STEM\nABM\nHUMSS\nGAS\nTVL',
+        years: 'Grade 11\nGrade 12',
+        locations: 'Nationwide',
+        eligibility: 'Open to Senior High School learners in eligible tracks or strands who meet the academic and document requirements.',
+        requirements: ['Completed application form', 'Certificate of enrollment', 'Latest report card or grades', 'School ID', 'Proof of income'],
+    },
+    {
+        key: 'college',
+        label: 'College / University',
+        icon: 'fa-solid fa-user-graduate',
+        description: 'For degree program applicants where course and year level are key matching fields.',
+        educationLevels: ['college'],
+        schoolTypes: ['state_university', 'local_college', 'private'],
+        courses: 'Any course',
+        years: '1st year\n2nd year\n3rd year\n4th year\n5th year\nGraduating',
+        locations: 'Nationwide',
+        eligibility: 'Open to college or university students enrolled in eligible degree programs and year levels.',
+        requirements: ['Completed application form', 'Certificate of enrollment', 'Transcript of records', 'School ID', 'Proof of income'],
+    },
+    {
+        key: 'tvet',
+        label: 'TVET / Vocational',
+        icon: 'fa-solid fa-screwdriver-wrench',
+        description: 'For skills training, qualification, and certification-focused scholarship programs.',
+        educationLevels: ['tvet'],
+        schoolTypes: ['tvet_center'],
+        courses: 'Cookery NC II\nICT\nAutomotive\nElectrical installation\nCaregiving',
+        years: 'NC I\nNC II\nNC III\nNC IV\nFirst term\nSecond term',
+        locations: 'Nationwide',
+        eligibility: 'Open to TVET or vocational learners enrolled in eligible training programs or qualifications.',
+        requirements: ['Completed application form', 'Certificate of enrollment', 'School ID', 'Proof of income', 'Good moral certificate'],
+    },
+    {
+        key: 'als',
+        label: 'ALS learners',
+        icon: 'fa-solid fa-person-chalkboard',
+        description: 'For Alternative Learning System learners and non-traditional pathways.',
+        educationLevels: ['als'],
+        schoolTypes: ['als_center', 'public'],
+        courses: 'Any',
+        years: 'Basic literacy\nElementary level\nJunior high school level',
+        locations: 'Nationwide',
+        eligibility: 'Open to ALS learners who can provide enrollment or learning center verification and meet listed requirements.',
+        requirements: ['Completed application form', 'Certificate of enrollment', 'Latest report card or grades', 'Birth certificate', 'Proof of income'],
+    },
+];
+const targetFormProfiles = {
+    all: {
+        key: 'all',
+        title: 'All learners form',
+        shortLabel: 'all learners',
+        icon: 'fa-solid fa-people-group',
+        guidance: 'Use broad rules and only add restrictions that truly matter for matching.',
+        showProgramPath: true,
+        programPathLabel: 'Eligible tracks, strands, courses, or programs',
+        programPathPlaceholder: 'Leave blank or use Any when all paths are accepted',
+        programPathHelp: 'For open programs, keeping this blank or set to Any prevents false mismatches.',
+        programPathTemplate: 'Any',
+        levelLabel: 'Eligible grade, year, or training levels',
+        levelPlaceholder: 'Example: Any grade or year level',
+        levelTemplate: 'Any grade or year level',
+        averageLabel: 'Minimum GWA / general average',
+        averagePlaceholder: 'Example: 85',
+        averageHelp: 'Use the same scale students will enter in their profile.',
+        schoolTypeValues: null,
+        notes: ['Best for wide public calls', 'Keep restrictions minimal', 'Good for discovery and matching'],
+        emptyPathSummary: 'Any track, strand, course, or program',
+        emptyLevelSummary: 'Any grade, year, or training level',
+    },
+    early_basic: {
+        key: 'early_basic',
+        title: 'Preschool / Elementary form',
+        shortLabel: 'preschool or elementary learners',
+        icon: 'fa-solid fa-child-reaching',
+        guidance: 'Focus on grade level, guardian documents, location, and school type. Course or strand is not needed here.',
+        showProgramPath: false,
+        programPathLabel: 'Course or strand',
+        programPathPlaceholder: '',
+        programPathHelp: 'Hidden for younger learners because they do not have a college course or SHS strand.',
+        programPathTemplate: 'N/A',
+        levelLabel: 'Eligible grade levels',
+        levelPlaceholder: 'Example: Kinder 2, Grade 1, Grade 2',
+        levelTemplate: 'Nursery\nKinder 1\nKinder 2\nGrade 1\nGrade 2\nGrade 3\nGrade 4\nGrade 5\nGrade 6',
+        averageLabel: 'Minimum general average',
+        averagePlaceholder: 'Example: 85',
+        averageHelp: 'Use report-card average if the scholarship requires grades.',
+        schoolTypeValues: ['daycare_learning_center', 'public', 'private'],
+        notes: ['No college course field', 'Guardian documents are common', 'Grade level matters most'],
+        emptyPathSummary: 'No course or strand required',
+        emptyLevelSummary: 'Any preschool or elementary level',
+    },
+    junior_high: {
+        key: 'junior_high',
+        title: 'Junior High School form',
+        shortLabel: 'junior high school learners',
+        icon: 'fa-solid fa-school',
+        guidance: 'Use grade level first. Add curriculum or special program only when the scholarship is limited to one.',
+        showProgramPath: true,
+        programPathLabel: 'Curriculum or special program',
+        programPathPlaceholder: 'Optional: STE, SPA, sports program, general curriculum',
+        programPathHelp: 'Use Any when the program accepts all Junior High School curricula.',
+        programPathTemplate: 'Any',
+        levelLabel: 'Eligible grade levels',
+        levelPlaceholder: 'Example: Grade 7, Grade 8, Grade 9, Grade 10',
+        levelTemplate: 'Grade 7\nGrade 8\nGrade 9\nGrade 10',
+        averageLabel: 'Minimum general average',
+        averagePlaceholder: 'Example: 85',
+        averageHelp: 'Use the learner report-card average.',
+        schoolTypeValues: ['public', 'private'],
+        notes: ['Grade 7-10 focused', 'Curriculum is optional', 'Good for report-card based matching'],
+        emptyPathSummary: 'Any Junior High School curriculum',
+        emptyLevelSummary: 'Any Junior High School grade level',
+    },
+    senior_high: {
+        key: 'senior_high',
+        title: 'Senior High School form',
+        shortLabel: 'senior high school learners',
+        icon: 'fa-solid fa-book-open-reader',
+        guidance: 'Track and strand are useful here because many SHS scholarships target STEM, ABM, HUMSS, GAS, or TVL.',
+        showProgramPath: true,
+        programPathLabel: 'Eligible tracks or strands',
+        programPathPlaceholder: 'Example: STEM, ABM, HUMSS, GAS, TVL',
+        programPathHelp: 'List one track or strand per line when the program is specific.',
+        programPathTemplate: 'STEM\nABM\nHUMSS\nGAS\nTVL',
+        levelLabel: 'Eligible SHS grade levels',
+        levelPlaceholder: 'Example: Grade 11, Grade 12',
+        levelTemplate: 'Grade 11\nGrade 12',
+        averageLabel: 'Minimum general average',
+        averagePlaceholder: 'Example: 85',
+        averageHelp: 'Use the senior high report-card average.',
+        schoolTypeValues: ['public', 'private'],
+        notes: ['Track or strand can matter', 'Grade 11-12 focused', 'Useful for STEM/TVL targeting'],
+        emptyPathSummary: 'Any SHS track or strand',
+        emptyLevelSummary: 'Any Senior High School level',
+    },
+    college: {
+        key: 'college',
+        title: 'College / University form',
+        shortLabel: 'college or university students',
+        icon: 'fa-solid fa-user-graduate',
+        guidance: 'Course and year level are important matching fields for college scholarships.',
+        showProgramPath: true,
+        programPathLabel: 'Eligible courses or degree programs',
+        programPathPlaceholder: 'Example: BSIT, BSED, Engineering, Accountancy',
+        programPathHelp: 'Use Any course when the scholarship is not course-specific.',
+        programPathTemplate: 'Any course',
+        levelLabel: 'Eligible college year levels',
+        levelPlaceholder: 'Example: 1st year, 2nd year, Graduating',
+        levelTemplate: '1st year\n2nd year\n3rd year\n4th year\n5th year\nGraduating',
+        averageLabel: 'Minimum GWA / general average',
+        averagePlaceholder: 'Example: 85 or 2.00',
+        averageHelp: 'If using grade-point GWA, explain the scale in eligibility details.',
+        schoolTypeValues: ['state_university', 'local_college', 'private'],
+        notes: ['Course matching is useful', 'Year level matters', 'Transcript is usually required'],
+        emptyPathSummary: 'Any college course',
+        emptyLevelSummary: 'Any college year level',
+    },
+    tvet: {
+        key: 'tvet',
+        title: 'TVET / Vocational form',
+        shortLabel: 'TVET or vocational learners',
+        icon: 'fa-solid fa-screwdriver-wrench',
+        guidance: 'Target the training qualification, certification level, or term instead of college course/year wording.',
+        showProgramPath: true,
+        programPathLabel: 'Eligible qualifications or training programs',
+        programPathPlaceholder: 'Example: Cookery NC II, ICT, Automotive, Caregiving',
+        programPathHelp: 'List qualification names or training programs accepted by the provider.',
+        programPathTemplate: 'Cookery NC II\nICT\nAutomotive\nElectrical installation\nCaregiving',
+        levelLabel: 'Eligible certification or training level',
+        levelPlaceholder: 'Example: NC I, NC II, First term',
+        levelTemplate: 'NC I\nNC II\nNC III\nNC IV\nFirst term\nSecond term',
+        averageLabel: 'Minimum average or competency rating',
+        averagePlaceholder: 'Optional',
+        averageHelp: 'Leave blank if the scholarship is based on enrollment or certification readiness instead.',
+        schoolTypeValues: ['tvet_center'],
+        notes: ['Qualification matters', 'Uses training-level wording', 'Good for skills-based programs'],
+        emptyPathSummary: 'Any TVET qualification',
+        emptyLevelSummary: 'Any training level',
+    },
+    als: {
+        key: 'als',
+        title: 'ALS learner form',
+        shortLabel: 'ALS learners',
+        icon: 'fa-solid fa-person-chalkboard',
+        guidance: 'Focus on ALS level, learning center verification, location, and support needs.',
+        showProgramPath: false,
+        programPathLabel: 'Course or strand',
+        programPathPlaceholder: '',
+        programPathHelp: 'Hidden for ALS because matching should use ALS level instead of college course wording.',
+        programPathTemplate: 'N/A',
+        levelLabel: 'Eligible ALS levels',
+        levelPlaceholder: 'Example: Basic literacy, Elementary level, Junior high school level',
+        levelTemplate: 'Basic literacy\nElementary level\nJunior high school level',
+        averageLabel: 'Minimum assessment score or average',
+        averagePlaceholder: 'Optional',
+        averageHelp: 'Leave blank when assessment score is not required.',
+        schoolTypeValues: ['als_center', 'public'],
+        notes: ['No course field needed', 'Learning center proof matters', 'Works for non-traditional pathways'],
+        emptyPathSummary: 'No course or strand required',
+        emptyLevelSummary: 'Any ALS level',
+    },
+    mixed: {
+        key: 'mixed',
+        title: 'Mixed target form',
+        shortLabel: 'selected learner groups',
+        icon: 'fa-solid fa-layer-group',
+        guidance: 'You selected multiple learner groups. Keep labels broad and only restrict fields that apply to every selected group.',
+        showProgramPath: true,
+        programPathLabel: 'Eligible path, strand, course, or program',
+        programPathPlaceholder: 'Example: Any, STEM, BSIT, Cookery NC II',
+        programPathHelp: 'Use Any when the selected groups do not share one common path field.',
+        programPathTemplate: 'Any',
+        levelLabel: 'Eligible grade, year, or training levels',
+        levelPlaceholder: 'Example: Grade 12, 1st year, NC II',
+        levelTemplate: '',
+        averageLabel: 'Minimum GWA / general average',
+        averagePlaceholder: 'Example: 85',
+        averageHelp: 'Use eligibility notes when different groups use different grade scales.',
+        schoolTypeValues: null,
+        notes: ['Mixed target', 'Use broad wording', 'Avoid over-restricting matches'],
+        emptyPathSummary: 'Any applicable path',
+        emptyLevelSummary: 'Any applicable level',
+    },
+};
 
 const selectedRequirementCount = computed(() => scholarshipForm.value.requirements.length);
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
@@ -124,6 +404,33 @@ const programReadinessItems = computed(() => [
 const completedProgramReadinessItems = computed(() => programReadinessItems.value.filter((item) => item.complete).length);
 const programReadiness = computed(() => Math.round((completedProgramReadinessItems.value / programReadinessItems.value.length) * 100));
 const missingProgramReadinessItems = computed(() => programReadinessItems.value.filter((item) => !item.complete));
+const activeFormSectionIndex = computed(() => formSections.findIndex((section) => section.id === activeFormSection.value));
+const activeFormSectionMeta = computed(() => formSections[activeFormSectionIndex.value] ?? formSections[0]);
+const formSectionProgress = computed(() => {
+    const sectionChecks = {
+        basics: hasText(scholarshipForm.value.title)
+            && hasText(scholarshipForm.value.description)
+            && hasText(scholarshipForm.value.awardAmount)
+            && hasText(scholarshipForm.value.deadline),
+        workflow: hasText(scholarshipForm.value.applicationMode)
+            && (hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber)),
+        target: hasText(scholarshipForm.value.eligibility)
+            && (
+                scholarshipForm.value.eligibleEducationLevels.length > 0
+                || hasText(scholarshipForm.value.eligibleCourses)
+                || scholarshipForm.value.eligibleSchoolTypes.length > 0
+                || hasText(scholarshipForm.value.eligibleYearLevels)
+                || hasText(scholarshipForm.value.eligibleLocations)
+            ),
+        location: hasText(scholarshipForm.value.locationName)
+            && hasText(scholarshipForm.value.locationAddress)
+            && hasText(scholarshipForm.value.latitude)
+            && hasText(scholarshipForm.value.longitude),
+        documents: selectedRequirementCount.value > 0,
+    };
+
+    return Object.fromEntries(formSections.map((section) => [section.id, Boolean(sectionChecks[section.id])]));
+});
 const publishWarnings = computed(() => {
     if (scholarshipForm.value.status !== 'published') {
         return [];
@@ -137,6 +444,47 @@ const finderRuleSummary = computed(() => [
     hasText(scholarshipForm.value.minimumGwa) ? `Min avg ${scholarshipForm.value.minimumGwa}` : 'No minimum average',
     scholarshipForm.value.incomeRequirement && scholarshipForm.value.incomeRequirement !== 'Any' ? scholarshipForm.value.incomeRequirement : 'Any income',
 ]);
+const activeTargetKey = computed(() => inferTargetFormKey(scholarshipForm.value.eligibleEducationLevels));
+const activeTargetForm = computed(() => targetFormProfiles[activeTargetKey.value] ?? targetFormProfiles.mixed);
+const targetSchoolTypeOptions = computed(() => {
+    const values = activeTargetForm.value.schoolTypeValues;
+
+    if (!Array.isArray(values)) {
+        return schoolTypeOptions;
+    }
+
+    return schoolTypeOptions.filter((option) => values.includes(option.value));
+});
+const hiddenSelectedSchoolTypeLabels = computed(() => {
+    const visibleValues = new Set(targetSchoolTypeOptions.value.map((option) => option.value));
+    const hiddenValues = scholarshipForm.value.eligibleSchoolTypes.filter((value) => !visibleValues.has(value));
+
+    return optionLabels(hiddenValues, schoolTypeOptions);
+});
+const targetApplicantSummary = computed(() => {
+    const educationLabels = optionLabels(scholarshipForm.value.eligibleEducationLevels, educationLevelOptions);
+    const schoolTypeLabels = optionLabels(scholarshipForm.value.eligibleSchoolTypes, schoolTypeOptions);
+    const targetForm = activeTargetForm.value;
+
+    return [
+        {
+            label: 'Learner levels',
+            value: educationLabels.length ? educationLabels.join(', ') : 'Open to all education levels',
+        },
+        {
+            label: 'School types',
+            value: schoolTypeLabels.length ? schoolTypeLabels.join(', ') : 'Open to all institution types',
+        },
+        {
+            label: targetForm.showProgramPath ? 'Program path' : 'Course / strand',
+            value: hasText(scholarshipForm.value.eligibleCourses) ? scholarshipForm.value.eligibleCourses.replace(/\n/g, ', ') : targetForm.emptyPathSummary,
+        },
+        {
+            label: targetForm.levelLabel,
+            value: hasText(scholarshipForm.value.eligibleYearLevels) ? scholarshipForm.value.eligibleYearLevels.replace(/\n/g, ', ') : targetForm.emptyLevelSummary,
+        },
+    ];
+});
 const workflowSummary = computed(() => [
     scholarshipForm.value.applicationMode
         ? applicationModeOptions.find((option) => option.value === scholarshipForm.value.applicationMode)?.label ?? scholarshipForm.value.applicationMode
@@ -145,8 +493,77 @@ const workflowSummary = computed(() => [
     hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber) ? 'Contact available' : 'No contact channel',
 ]);
 
+function openFormSection(sectionId) {
+    activeFormSection.value = sectionId;
+}
+
+function goToPreviousFormSection() {
+    const previous = formSections[activeFormSectionIndex.value - 1];
+
+    if (previous) {
+        openFormSection(previous.id);
+    }
+}
+
+function goToNextFormSection() {
+    const next = formSections[activeFormSectionIndex.value + 1];
+
+    if (next) {
+        openFormSection(next.id);
+    }
+}
+
 function hasText(value) {
     return value !== null && value !== undefined && String(value).trim() !== '';
+}
+
+function optionLabels(values, options) {
+    return values
+        .map((value) => options.find((option) => option.value === value)?.label ?? value)
+        .filter(Boolean);
+}
+
+function hasSameMembers(values, expectedValues) {
+    return values.length === expectedValues.length
+        && expectedValues.every((value) => values.includes(value));
+}
+
+function onlyContains(values, allowedValues) {
+    return values.length > 0 && values.every((value) => allowedValues.includes(value));
+}
+
+function inferTargetFormKey(educationLevels) {
+    const selectedLevels = [...new Set(educationLevels.filter(Boolean))];
+
+    if (selectedLevels.length === 0 || hasSameMembers(selectedLevels, allEducationLevelValues)) {
+        return 'all';
+    }
+
+    if (onlyContains(selectedLevels, ['preschool', 'elementary'])) {
+        return 'early_basic';
+    }
+
+    if (hasSameMembers(selectedLevels, ['junior_high_school'])) {
+        return 'junior_high';
+    }
+
+    if (hasSameMembers(selectedLevels, ['senior_high_school'])) {
+        return 'senior_high';
+    }
+
+    if (hasSameMembers(selectedLevels, ['college'])) {
+        return 'college';
+    }
+
+    if (hasSameMembers(selectedLevels, ['tvet'])) {
+        return 'tvet';
+    }
+
+    if (hasSameMembers(selectedLevels, ['als'])) {
+        return 'als';
+    }
+
+    return 'mixed';
 }
 
 function emptyScholarshipForm() {
@@ -216,12 +633,54 @@ function selectAllOptions(field, options) {
 }
 
 function applyBroadEligibility() {
-    scholarshipForm.value.eligibleEducationLevels = educationLevelOptions.map((option) => option.value);
-    scholarshipForm.value.eligibleSchoolTypes = schoolTypeOptions.map((option) => option.value);
-    scholarshipForm.value.eligibleCourses = 'Any track, strand, or course';
+    scholarshipForm.value.eligibleEducationLevels = [...allEducationLevelValues];
+    scholarshipForm.value.eligibleSchoolTypes = [];
+    scholarshipForm.value.eligibleCourses = 'Any';
     scholarshipForm.value.eligibleYearLevels = 'Any grade or year level';
-    scholarshipForm.value.eligibleLocations = 'Philippines';
+    scholarshipForm.value.eligibleLocations = 'Nationwide';
     scholarshipForm.value.incomeRequirement = 'Any';
+}
+
+function applyActiveTargetDefaults() {
+    const targetForm = activeTargetForm.value;
+
+    if (targetForm.programPathTemplate !== undefined) {
+        scholarshipForm.value.eligibleCourses = targetForm.programPathTemplate;
+    }
+
+    if (targetForm.levelTemplate) {
+        scholarshipForm.value.eligibleYearLevels = targetForm.levelTemplate;
+    }
+
+    if (Array.isArray(targetForm.schoolTypeValues)) {
+        scholarshipForm.value.eligibleSchoolTypes = [...targetForm.schoolTypeValues];
+    }
+}
+
+function clearHiddenSchoolTypes() {
+    const visibleValues = new Set(targetSchoolTypeOptions.value.map((option) => option.value));
+
+    scholarshipForm.value.eligibleSchoolTypes = scholarshipForm.value.eligibleSchoolTypes
+        .filter((value) => visibleValues.has(value));
+}
+
+function applyTargetApplicantPreset(preset) {
+    scholarshipForm.value.eligibleEducationLevels = [...preset.educationLevels];
+    scholarshipForm.value.eligibleSchoolTypes = [...preset.schoolTypes];
+    scholarshipForm.value.eligibleCourses = preset.courses;
+    scholarshipForm.value.eligibleYearLevels = preset.years;
+    scholarshipForm.value.eligibleLocations = preset.locations;
+    scholarshipForm.value.eligibility = preset.eligibility;
+    scholarshipForm.value.requirements = preset.requirements
+        .filter((requirement) => documentRequirementOptions.includes(requirement));
+
+    if (!scholarshipForm.value.description) {
+        scholarshipForm.value.description = `A scholarship assistance program for ${preset.label.toLowerCase()}. Review the target applicant rules, prepare documents, and submit before the deadline.`;
+    }
+
+    if (!scholarshipForm.value.applicationMode) {
+        scholarshipForm.value.applicationMode = 'online';
+    }
 }
 
 function applyCommonProgramDetails() {
@@ -406,7 +865,9 @@ async function saveScholarship() {
     formMessage.value = '';
     formError.value = '';
 
-    if (!scholarshipFormElement.value?.reportValidity()) {
+    if (!hasText(scholarshipForm.value.title) || !hasText(scholarshipForm.value.description)) {
+        activeFormSection.value = 'basics';
+        formError.value = 'Add a scholarship title and description before saving.';
         return;
     }
 
@@ -486,7 +947,7 @@ onMounted(loadFormData);
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-5xl">
-                <header class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
@@ -495,9 +956,6 @@ onMounted(loadFormData);
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 {{ isEditMode ? 'Edit scholarship program' : 'Create scholarship program' }}
                             </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Use this focused page for program details, matching rules, document requirements, and map location.
-                            </p>
                         </div>
 
                         <a
@@ -533,48 +991,63 @@ onMounted(loadFormData);
                     <form
                         ref="scholarshipFormElement"
                         class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+                        novalidate
                         @submit.prevent="saveScholarship"
                     >
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                            {{ isEditMode ? 'Edit Scholarship' : 'Create Scholarship' }}
-                        </p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                            {{ isEditMode ? 'Update scholarship program' : 'Add scholarship program' }}
-                        </h3>
-                        <p class="mt-3 text-sm leading-6 text-slate-600">
-                            Save as draft while preparing details, publish when ready, or close when applications should stop.
-                        </p>
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                    {{ isEditMode ? 'Edit Scholarship' : 'Create Scholarship' }}
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    {{ activeFormSectionMeta.label }}
+                                </h3>
+                                <p class="mt-1 text-sm text-slate-500">
+                                    {{ activeFormSectionMeta.help }}
+                                </p>
+                            </div>
+
+                            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 lg:min-w-44">
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                    Readiness
+                                </p>
+                                <p class="mt-1 font-display text-2xl font-bold text-slate-950">
+                                    {{ programReadiness }}%
+                                </p>
+                            </div>
+                        </div>
 
                         <div class="mt-5 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
                             <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
                                 <div class="flex items-center justify-between gap-4">
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                                            Program readiness
+                                            Sections
                                         </p>
                                         <p class="mt-1 text-sm text-slate-500">
                                             {{ completedProgramReadinessItems }}/{{ programReadinessItems.length }} sections ready
                                         </p>
                                     </div>
-                                    <p class="font-display text-3xl font-bold text-slate-950">
-                                        {{ programReadiness }}%
-                                    </p>
                                 </div>
                                 <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
                                     <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${programReadiness}%` }"></div>
                                 </div>
                                 <div class="mt-4 grid gap-2">
-                                    <div
-                                        v-for="item in programReadinessItems"
-                                        :key="item.label"
-                                        class="flex items-start gap-2 rounded-md bg-white px-3 py-2 text-xs ring-1 ring-slate-200"
+                                    <button
+                                        v-for="section in formSections"
+                                        :key="section.id"
+                                        type="button"
+                                        :class="[
+                                            'flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition',
+                                            activeFormSection === section.id
+                                                ? 'border-slate-900 bg-white text-slate-950 shadow-sm'
+                                                : 'border-slate-200 bg-white/70 text-slate-600 hover:bg-white',
+                                        ]"
+                                        @click="openFormSection(section.id)"
                                     >
-                                        <span :class="['mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full', item.complete ? 'bg-emerald-500' : 'bg-amber-400']"></span>
-                                        <span>
-                                            <span class="block font-bold text-slate-800">{{ item.label }}</span>
-                                            <span class="block leading-5 text-slate-500">{{ item.help }}</span>
-                                        </span>
-                                    </div>
+                                        <span class="font-bold">{{ section.label }}</span>
+                                        <span :class="['h-2.5 w-2.5 rounded-full', formSectionProgress[section.id] ? 'bg-emerald-500' : 'bg-amber-400']"></span>
+                                    </button>
                                 </div>
                             </div>
 
@@ -583,9 +1056,6 @@ onMounted(loadFormData);
                                     <div>
                                         <p class="text-sm font-bold text-slate-950">
                                             Quick setup
-                                        </p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Use these helpers when creating a general scholarship, then adjust any field as needed.
                                         </p>
                                     </div>
                                     <div class="flex shrink-0 flex-wrap gap-2">
@@ -638,7 +1108,7 @@ onMounted(loadFormData);
                             </p>
                         </div>
 
-                        <div class="mt-5 grid gap-4">
+                        <div v-show="activeFormSection === 'basics'" class="mt-5 grid gap-4">
                             <div>
                                 <label :class="labelClass" for="scholarship-title">
                                     Scholarship title
@@ -647,7 +1117,6 @@ onMounted(loadFormData);
                                     id="scholarship-title"
                                     v-model="scholarshipForm.title"
                                     type="text"
-                                    required
                                     placeholder="Scholarship title"
                                     :class="inputClass"
                                 >
@@ -713,7 +1182,7 @@ onMounted(loadFormData);
 
                                 <div>
                                     <label :class="labelClass" for="scholarship-minimum-gwa">
-                                        Minimum GWA / general average
+                                        {{ activeTargetForm.averageLabel }}
                                     </label>
                                     <input
                                         id="scholarship-minimum-gwa"
@@ -722,9 +1191,12 @@ onMounted(loadFormData);
                                         min="0"
                                         max="100"
                                         step="0.01"
-                                        placeholder="85 or 2.00"
+                                        :placeholder="activeTargetForm.averagePlaceholder"
                                         :class="inputClass"
                                     >
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        {{ activeTargetForm.averageHelp }}
+                                    </p>
                                 </div>
 
                                 <div>
@@ -797,13 +1269,14 @@ onMounted(loadFormData);
                                 <textarea
                                     id="scholarship-description"
                                     v-model="scholarshipForm.description"
-                                    required
                                     rows="4"
                                     placeholder="Describe the scholarship program"
                                     :class="inputClass"
                                 ></textarea>
                             </div>
+                        </div>
 
+                        <div v-show="activeFormSection === 'target'" class="mt-5">
                             <div>
                                 <label :class="labelClass" for="scholarship-eligibility">
                                     Eligibility
@@ -816,8 +1289,9 @@ onMounted(loadFormData);
                                     :class="inputClass"
                                 ></textarea>
                             </div>
+                        </div>
 
-                            <fieldset class="rounded-lg border border-amber-100 bg-amber-50/60 p-4">
+                            <fieldset v-show="activeFormSection === 'workflow'" class="mt-5 rounded-lg border border-amber-100 bg-amber-50/60 p-4">
                                 <legend class="text-sm font-semibold text-slate-700">
                                     Application workflow
                                 </legend>
@@ -833,6 +1307,69 @@ onMounted(loadFormData);
                                     >
                                         {{ summary }}
                                     </span>
+                                </div>
+
+                                <div class="mt-5 rounded-lg border border-emerald-100 bg-white p-4">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">
+                                                Target applicant presets
+                                            </p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">
+                                                Pick the closest target group first. The form will fill matching rules and recommended documents, then you can edit anything below.
+                                            </p>
+                                        </div>
+                                        <span class="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 ring-1 ring-emerald-100">
+                                            Optional helper
+                                        </span>
+                                    </div>
+
+                                    <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                        <button
+                                            v-for="preset in targetApplicantPresets"
+                                            :key="preset.key"
+                                            type="button"
+                                            :class="[
+                                                'group rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-white hover:shadow-sm',
+                                                activeTargetKey === preset.key
+                                                    ? 'border-emerald-500 bg-white shadow-sm ring-2 ring-emerald-100'
+                                                    : 'border-slate-200 bg-slate-50',
+                                            ]"
+                                            @click="applyTargetApplicantPreset(preset)"
+                                        >
+                                            <span class="flex items-center gap-3">
+                                                <span class="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-100 text-emerald-800 transition group-hover:bg-emerald-700 group-hover:text-white">
+                                                    <i :class="[preset.icon, 'text-sm']"></i>
+                                                </span>
+                                                <span class="font-bold text-slate-950">
+                                                    {{ preset.label }}
+                                                </span>
+                                            </span>
+                                            <span class="mt-2 block text-xs leading-5 text-slate-500">
+                                                {{ preset.description }}
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                                    <p class="text-sm font-bold text-slate-950">
+                                        Current target applicant summary
+                                    </p>
+                                    <div class="mt-3 grid gap-3 md:grid-cols-2">
+                                        <div
+                                            v-for="item in targetApplicantSummary"
+                                            :key="item.label"
+                                            class="rounded-md bg-[#f6faf8] p-3 text-sm ring-1 ring-slate-200/80"
+                                        >
+                                            <p class="font-semibold text-slate-500">
+                                                {{ item.label }}
+                                            </p>
+                                            <p class="mt-1 line-clamp-2 font-bold text-slate-900">
+                                                {{ item.value }}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="mt-4 grid gap-4 lg:grid-cols-2">
@@ -877,7 +1414,7 @@ onMounted(loadFormData);
                                 </div>
                             </fieldset>
 
-                            <fieldset class="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4">
+                            <fieldset v-show="activeFormSection === 'target'" class="mt-5 rounded-lg border border-emerald-100 bg-emerald-50/60 p-4">
                                 <legend class="text-sm font-semibold text-slate-700">
                                     Matching criteria
                                 </legend>
@@ -893,6 +1430,42 @@ onMounted(loadFormData);
                                     >
                                         {{ summary }}
                                     </span>
+                                </div>
+
+                                <div class="mt-4 rounded-lg border border-emerald-200 bg-white p-4">
+                                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                        <div class="flex gap-3">
+                                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-800">
+                                                <i :class="[activeTargetForm.icon, 'text-sm']"></i>
+                                            </span>
+                                            <div>
+                                                <p class="text-sm font-bold text-slate-950">
+                                                    {{ activeTargetForm.title }}
+                                                </p>
+                                                <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                                                    {{ activeTargetForm.guidance }}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100"
+                                            @click="applyActiveTargetDefaults"
+                                        >
+                                            Use target defaults
+                                        </button>
+                                    </div>
+
+                                    <div class="mt-3 grid gap-2 sm:grid-cols-3">
+                                        <div
+                                            v-for="note in activeTargetForm.notes"
+                                            :key="note"
+                                            class="rounded-md bg-[#f6faf8] px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200/80"
+                                        >
+                                            {{ note }}
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="mt-4 grid gap-4 lg:grid-cols-2">
@@ -928,17 +1501,36 @@ onMounted(loadFormData);
                                         </div>
                                     </div>
 
-                                    <div>
+                                    <div v-if="activeTargetForm.showProgramPath">
                                         <label :class="labelClass" for="scholarship-courses">
-                                            Eligible tracks, strands, or courses
+                                            {{ activeTargetForm.programPathLabel }}
                                         </label>
                                         <textarea
                                             id="scholarship-courses"
                                             v-model="scholarshipForm.eligibleCourses"
                                             rows="3"
-                                            placeholder="Example: General, STEM, TVL, BSIT"
+                                            :placeholder="activeTargetForm.programPathPlaceholder"
                                             :class="inputClass"
                                         ></textarea>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">
+                                            {{ activeTargetForm.programPathHelp }}
+                                        </p>
+                                    </div>
+
+                                    <div v-else class="rounded-md border border-slate-200 bg-white p-3">
+                                        <p class="text-sm font-semibold text-slate-700">
+                                            {{ activeTargetForm.programPathLabel }}
+                                        </p>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">
+                                            {{ activeTargetForm.programPathHelp }}
+                                        </p>
+                                        <button
+                                            type="button"
+                                            class="mt-3 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-white"
+                                            @click="scholarshipForm.eligibleCourses = activeTargetForm.programPathTemplate"
+                                        >
+                                            Mark as not applicable
+                                        </button>
                                     </div>
 
                                     <div class="rounded-md border border-emerald-100 bg-white p-3">
@@ -947,7 +1539,7 @@ onMounted(loadFormData);
                                                 Eligible school types
                                             </label>
                                             <div class="flex gap-2">
-                                                <button type="button" class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100" @click="selectAllOptions('eligibleSchoolTypes', schoolTypeOptions)">
+                                                <button type="button" class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100" @click="selectAllOptions('eligibleSchoolTypes', targetSchoolTypeOptions)">
                                                     Select all
                                                 </button>
                                                 <button type="button" class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100" @click="scholarshipForm.eligibleSchoolTypes = []">
@@ -957,7 +1549,7 @@ onMounted(loadFormData);
                                         </div>
                                         <div class="mt-3 flex flex-wrap gap-2">
                                             <button
-                                                v-for="option in schoolTypeOptions"
+                                                v-for="option in targetSchoolTypeOptions"
                                                 :key="option.value"
                                                 type="button"
                                                 :class="[
@@ -971,19 +1563,40 @@ onMounted(loadFormData);
                                                 {{ option.label }}
                                             </button>
                                         </div>
+                                        <div
+                                            v-if="hiddenSelectedSchoolTypeLabels.length"
+                                            class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
+                                        >
+                                            <p class="font-bold">
+                                                Hidden selections from another target form
+                                            </p>
+                                            <p class="mt-1">
+                                                {{ hiddenSelectedSchoolTypeLabels.join(', ') }}
+                                            </p>
+                                            <button
+                                                type="button"
+                                                class="mt-2 font-bold text-amber-950 underline"
+                                                @click="clearHiddenSchoolTypes"
+                                            >
+                                                Remove hidden school types
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div>
                                         <label :class="labelClass" for="scholarship-years">
-                                            Eligible grade / year levels
+                                            {{ activeTargetForm.levelLabel }}
                                         </label>
                                         <textarea
                                             id="scholarship-years"
                                             v-model="scholarshipForm.eligibleYearLevels"
                                             rows="3"
-                                            placeholder="Example: Grade 7, Grade 12, 1st year"
+                                            :placeholder="activeTargetForm.levelPlaceholder"
                                             :class="inputClass"
                                         ></textarea>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">
+                                            Use one accepted level per line for cleaner matching.
+                                        </p>
                                     </div>
 
                                     <div>
@@ -1016,7 +1629,7 @@ onMounted(loadFormData);
                                 </div>
                             </fieldset>
 
-                            <fieldset class="rounded-lg border border-sky-100 bg-sky-50/60 p-4">
+                            <fieldset v-show="activeFormSection === 'location'" class="mt-5 rounded-lg border border-sky-100 bg-sky-50/60 p-4">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <legend class="text-sm font-semibold text-slate-700">
@@ -1085,7 +1698,7 @@ onMounted(loadFormData);
                                 </p>
                             </fieldset>
 
-                            <fieldset class="rounded-lg border border-slate-200 bg-white p-4">
+                            <fieldset v-show="activeFormSection === 'documents'" class="mt-5 rounded-lg border border-slate-200 bg-white p-4">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <legend class="text-sm font-semibold text-slate-700">
@@ -1165,7 +1778,6 @@ onMounted(loadFormData);
                                     </p>
                                 </div>
                             </fieldset>
-                        </div>
 
                         <div class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
                             <div class="min-h-5">
@@ -1177,7 +1789,23 @@ onMounted(loadFormData);
                                 </p>
                             </div>
 
-                            <div class="flex flex-col gap-2 sm:flex-row">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                <button
+                                    type="button"
+                                    :disabled="activeFormSectionIndex === 0"
+                                    class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    @click="goToPreviousFormSection"
+                                >
+                                    Previous
+                                </button>
+                                <button
+                                    type="button"
+                                    :disabled="activeFormSectionIndex === formSections.length - 1"
+                                    class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    @click="goToNextFormSection"
+                                >
+                                    Next
+                                </button>
                                 <button
                                     v-if="!isEditMode"
                                     type="button"

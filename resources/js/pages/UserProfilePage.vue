@@ -21,6 +21,23 @@ const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px
 const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
 const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
 const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
+const supportNeedOptions = ['Tuition', 'Books and supplies', 'Transportation', 'Uniform', 'Internet / device', 'Boarding / housing', 'Exam or certification fees'];
+const accountManagerOptions = [
+    { value: 'learner', label: 'Learner / student' },
+    { value: 'parent_guardian', label: 'Parent or guardian' },
+    { value: 'relative', label: 'Relative' },
+    { value: 'school_representative', label: 'School representative' },
+    { value: 'other', label: 'Other trusted person' },
+];
+const guardianRelationshipOptions = ['Parent / guardian', 'Mother', 'Father', 'Grandparent', 'Sibling', 'Relative', 'Teacher / adviser', 'Other'];
+const regionOptions = ['NCR', 'CAR', 'Region I', 'Region II', 'Region III', 'Region IV-A', 'MIMAROPA', 'Region V', 'Region VI', 'Region VII', 'Region VIII', 'Region IX', 'Region X', 'Region XI', 'Region XII', 'Region XIII', 'BARMM'];
+const provinceOptions = ['Metro Manila', 'Abra', 'Agusan del Norte', 'Agusan del Sur', 'Aklan', 'Albay', 'Antique', 'Apayao', 'Aurora', 'Bataan', 'Batangas', 'Benguet', 'Bohol', 'Bukidnon', 'Bulacan', 'Cagayan', 'Camarines Norte', 'Camarines Sur', 'Capiz', 'Cavite', 'Cebu', 'Davao del Norte', 'Davao del Sur', 'Davao Oriental', 'Iloilo', 'Isabela', 'Laguna', 'La Union', 'Leyte', 'Misamis Oriental', 'Negros Occidental', 'Negros Oriental', 'Nueva Ecija', 'Nueva Vizcaya', 'Pampanga', 'Pangasinan', 'Quezon', 'Rizal', 'South Cotabato', 'Tarlac', 'Zambales'];
+const preferredLocationOptions = ['Anywhere in the Philippines', 'Near my home address', 'NCR', 'Region III', 'Region IV-A', 'Cebu', 'Davao', 'Online-friendly'];
+const juniorHighPathOptions = ['General curriculum', 'STE', 'SPA', 'Sports program', 'Special science class', 'Other'];
+const seniorHighPathOptions = ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL', 'Arts and Design', 'Sports Track', 'Other'];
+const collegePathOptions = ['Any course', 'BS Information Technology', 'BS Education', 'BS Nursing', 'BS Accountancy', 'BS Business Administration', 'Engineering', 'Criminology', 'Agriculture', 'Other'];
+const tvetPathOptions = ['Cookery NC II', 'ICT / Computer Systems Servicing', 'Automotive Servicing', 'Electrical Installation and Maintenance', 'Caregiving', 'Shielded Metal Arc Welding', 'Other'];
+const alsPathOptions = ['Basic Literacy', 'A&E Elementary', 'A&E Junior High School', 'Other'];
 const relocationOptions = [
     { value: 'yes', label: 'Yes, if needed' },
     { value: 'no', label: 'No, local only' },
@@ -56,6 +73,7 @@ const fieldLabels = {
     last_name: 'Last name',
     middle_initial: 'Middle initial',
     contact_number: 'Contact number',
+    account_managed_by: 'Account managed by',
     birthdate: 'Birthdate',
     education_level: 'Education level',
     school: 'School / learning institution',
@@ -79,24 +97,29 @@ const fieldLabels = {
     province: 'Province',
     region: 'Region',
     guardian_name: 'Guardian name',
+    guardian_relationship: 'Relationship to learner',
     guardian_contact: 'Guardian contact',
+    guardian_email: 'Guardian email',
+    guardian_is_account_owner: 'Guardian manages this account',
 };
 
 const profileSections = [
     {
         id: 'personal',
         label: 'Personal',
-        detail: 'Identity and contact',
-        impact: 'Used to identify your application record and contact you about updates.',
+        detail: 'Identity',
+        icon: 'fa-solid fa-address-card',
+        impact: 'Basic applicant information.',
         required: true,
-        fields: ['first_name', 'middle_initial', 'last_name', 'birthdate', 'contact_number'],
-        requiredFields: ['first_name', 'middle_initial', 'last_name', 'birthdate', 'contact_number'],
+        fields: ['first_name', 'middle_initial', 'last_name', 'birthdate', 'contact_number', 'account_managed_by'],
+        requiredFields: ['first_name', 'middle_initial', 'last_name', 'birthdate', 'contact_number', 'account_managed_by'],
     },
     {
         id: 'academic',
         label: 'Learning',
-        detail: 'Education level and school record',
-        impact: 'Affects eligibility matching, GWA checks, and DSS scoring.',
+        detail: 'School record',
+        icon: 'fa-solid fa-book-open-reader',
+        impact: 'Used for matching and eligibility.',
         required: true,
         fields: ['education_level', 'school', 'school_type', 'learner_reference_number', 'course_or_strand', 'year_level', 'enrollment_status', 'grading_scale', 'gwa'],
         requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'enrollment_status', 'grading_scale', 'gwa'],
@@ -104,8 +127,9 @@ const profileSections = [
     {
         id: 'location',
         label: 'Location and need',
-        detail: 'Income, address, and distance matching',
-        impact: 'Used for location restrictions, distance visualization, and financial-need scoring.',
+        detail: 'Address and need',
+        icon: 'fa-solid fa-location-dot',
+        impact: 'Used for distance and need-based matching.',
         required: true,
         fields: ['income_bracket', 'household_size', 'address', 'barangay', 'city', 'province', 'region'],
         requiredFields: ['income_bracket', 'address', 'barangay', 'city', 'province', 'region'],
@@ -113,24 +137,40 @@ const profileSections = [
     {
         id: 'guardian',
         label: 'Guardian',
-        detail: 'Parent or guardian contact',
-        impact: 'Useful for programs that need guardian confirmation or follow-up.',
+        detail: 'Contact person',
+        icon: 'fa-solid fa-user-shield',
+        impact: 'Parent or guardian contact.',
         required: true,
-        fields: ['guardian_name', 'guardian_contact'],
-        requiredFields: ['guardian_name', 'guardian_contact'],
+        fields: ['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
+        requiredFields: ['guardian_name', 'guardian_relationship', 'guardian_contact'],
     },
     {
         id: 'preferences',
         label: 'Finder preferences',
-        detail: 'Optional matching boosters',
-        impact: 'Helps the finder and providers understand what kind of support fits you best.',
+        detail: 'Optional',
+        icon: 'fa-solid fa-sliders',
+        impact: 'Optional details for better suggestions.',
         required: false,
         fields: ['preferred_categories', 'preferred_locations', 'willing_to_relocate', 'support_needs', 'scholarship_goal'],
+    },
+    {
+        id: 'review',
+        label: 'Review',
+        detail: 'Final check',
+        icon: 'fa-solid fa-clipboard-check',
+        impact: 'Confirm the profile before applying.',
+        required: false,
+        fields: [],
     },
 ];
 
 const courseRequiredLevels = ['senior_high_school', 'college', 'tvet'];
+const gradesRequiredLevels = ['elementary', 'junior_high_school', 'senior_high_school', 'college', 'tvet', 'als', 'other'];
+const guardianRequiredLevels = ['preschool', 'elementary', 'junior_high_school', 'senior_high_school'];
 const requiresProgramPath = computed(() => courseRequiredLevels.includes(form.value.education_level));
+const requiresGrades = computed(() => gradesRequiredLevels.includes(form.value.education_level));
+const needsGuardianContext = computed(() => guardianRequiredLevels.includes(form.value.education_level)
+    || ['parent_guardian', 'relative', 'school_representative', 'other'].includes(form.value.account_managed_by));
 const requiredProfileFields = computed(() => profileSections.flatMap((section) => sectionRequiredFields(section)));
 const boosterFields = computed(() => profileSections.flatMap((section) => sectionAllFields(section).filter((field) => !sectionRequiredFields(section).includes(field))));
 const requiredFieldData = computed(() => requiredProfileFields.value.map((key) => ({
@@ -149,6 +189,33 @@ const profileCompletion = computed(() => requiredFieldData.value.length === 0 ? 
 const boosterCompletion = computed(() => boosterFieldData.value.length === 0 ? 100 : Math.round((completedBoosterFields.value / boosterFieldData.value.length) * 100));
 const missingProfileFields = computed(() => requiredFieldData.value.filter((field) => !hasValue(field.value)));
 const profileComplete = computed(() => missingProfileFields.value.length === 0);
+const profileQuality = computed(() => {
+    if (profileComplete.value) {
+        return {
+            label: 'Application-ready',
+            detail: 'Required details are complete.',
+        };
+    }
+
+    if (profileCompletion.value >= 70) {
+        return {
+            label: 'Ready to match',
+            detail: 'Add the remaining details before applying.',
+        };
+    }
+
+    if (profileCompletion.value >= 40) {
+        return {
+            label: 'Basic profile',
+            detail: 'Enough to explore scholarships.',
+        };
+    }
+
+    return {
+        label: 'Starting profile',
+        detail: 'Add learner details to improve matching.',
+    };
+});
 const activeProfileSection = computed(() => profileSections.find((section) => section.id === activeSection.value) ?? profileSections[0]);
 const activeSectionIndex = computed(() => profileSections.findIndex((section) => section.id === activeProfileSection.value.id));
 const recommendedSection = computed(() => {
@@ -174,6 +241,7 @@ function emptyForm() {
         last_name: '',
         middle_initial: '',
         contact_number: '',
+        account_managed_by: '',
         education_level: '',
         school: '',
         school_type: '',
@@ -199,7 +267,10 @@ function emptyForm() {
         longitude: '',
         birthdate: '',
         guardian_name: '',
+        guardian_relationship: '',
         guardian_contact: '',
+        guardian_email: '',
+        guardian_is_account_owner: false,
     };
 }
 
@@ -220,12 +291,41 @@ function sectionRequiredFields(section) {
 }
 
 function isFieldRelevant(field) {
-    return field !== 'course_or_strand' || requiresProgramPath.value || hasValue(form.value.course_or_strand);
+    if (field === 'course_or_strand') {
+        return requiresProgramPath.value || hasValue(form.value.course_or_strand);
+    }
+
+    if (['gwa', 'grading_scale'].includes(field)) {
+        return requiresGrades.value || hasValue(form.value[field]);
+    }
+
+    if (['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'].includes(field)) {
+        return needsGuardianContext.value
+            || hasValue(form.value.guardian_name)
+            || hasValue(form.value.guardian_relationship)
+            || hasValue(form.value.guardian_contact)
+            || hasValue(form.value.guardian_email)
+            || form.value.guardian_is_account_owner;
+    }
+
+    return true;
 }
 
 function isFieldRequired(field) {
     if (field === 'course_or_strand') {
         return requiresProgramPath.value;
+    }
+
+    if (['gwa', 'grading_scale'].includes(field)) {
+        return requiresGrades.value;
+    }
+
+    if (['guardian_name', 'guardian_relationship', 'guardian_contact'].includes(field)) {
+        return needsGuardianContext.value;
+    }
+
+    if (['guardian_email', 'guardian_is_account_owner'].includes(field)) {
+        return false;
     }
 
     return true;
@@ -282,6 +382,14 @@ function schoolTypeLabel(value) {
     return schoolTypeOptions.find((option) => option.value === value)?.label ?? value;
 }
 
+function accountManagerLabel(value) {
+    return accountManagerOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function relationshipLabel(value) {
+    return guardianRelationshipOptions.find((option) => option === value) ?? value;
+}
+
 const learnerPathCopy = computed(() => {
     switch (form.value.education_level) {
         case 'preschool':
@@ -294,7 +402,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'Latest progress rating / average',
                 idLabel: 'Learner ID',
                 idPlaceholder: 'School learner ID if available',
-                summary: 'Use grade or level details that match the learner record from the school or center.',
+                summary: 'Use the learner record from the school or center.',
             };
         case 'elementary':
             return {
@@ -306,7 +414,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'General average',
                 idLabel: 'Learner Reference Number',
                 idPlaceholder: 'LRN if available',
-                summary: 'Elementary matching usually relies on grade level, school, location, average, and household need.',
+                summary: 'Grade level, school, location, and need matter most.',
             };
         case 'junior_high_school':
             return {
@@ -318,7 +426,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'General average',
                 idLabel: 'Learner Reference Number',
                 idPlaceholder: 'LRN if available',
-                summary: 'JHS matching should emphasize grade level, curriculum if any, average, location, and support needs.',
+                summary: 'Grade level, average, location, and support needs matter most.',
             };
         case 'senior_high_school':
             return {
@@ -330,7 +438,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'General average',
                 idLabel: 'Learner Reference Number',
                 idPlaceholder: 'LRN if available',
-                summary: 'SHS matching uses track/strand, grade level, average, location, and financial need.',
+                summary: 'Track, grade level, average, location, and need matter most.',
             };
         case 'college':
             return {
@@ -342,7 +450,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'GWA / general average',
                 idLabel: 'Student number',
                 idPlaceholder: 'College student number',
-                summary: 'College matching uses degree program, year level, GWA, school type, location, and need.',
+                summary: 'Course, year level, GWA, school type, location, and need matter most.',
             };
         case 'tvet':
             return {
@@ -354,7 +462,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'Latest average / assessment rating',
                 idLabel: 'Trainee number',
                 idPlaceholder: 'TESDA or center trainee ID',
-                summary: 'TVET matching uses qualification, center, training level, location, and support needs.',
+                summary: 'Qualification, center, level, location, and support needs matter most.',
             };
         case 'als':
             return {
@@ -366,7 +474,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'Latest assessment rating / average',
                 idLabel: 'Learner ID',
                 idPlaceholder: 'ALS learner ID if available',
-                summary: 'ALS matching should describe the current level, learning center, location, and support needs.',
+                summary: 'Current level, learning center, location, and support needs matter most.',
             };
         default:
             return {
@@ -378,7 +486,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'GWA / general average',
                 idLabel: 'Learner / student ID',
                 idPlaceholder: 'LRN, student number, or trainee ID',
-                summary: 'Choose the learner level first so the profile can show the right fields and matching guidance.',
+                summary: 'Choose a learner level first.',
             };
     }
 });
@@ -392,6 +500,73 @@ const gwaLabel = computed(() => learnerPathCopy.value.gwaLabel);
 const learnerIdLabel = computed(() => learnerPathCopy.value.idLabel);
 const learnerIdPlaceholder = computed(() => learnerPathCopy.value.idPlaceholder);
 const academicSummary = computed(() => learnerPathCopy.value.summary);
+const coursePathOptions = computed(() => {
+    switch (form.value.education_level) {
+        case 'junior_high_school':
+            return juniorHighPathOptions;
+        case 'senior_high_school':
+            return seniorHighPathOptions;
+        case 'college':
+            return collegePathOptions;
+        case 'tvet':
+            return tvetPathOptions;
+        case 'als':
+            return alsPathOptions;
+        default:
+            return [];
+    }
+});
+const guardianRequirementLabel = computed(() => needsGuardianContext.value ? 'Required for this profile' : 'Optional contact');
+const guardianRequirementText = computed(() => needsGuardianContext.value
+    ? 'Younger learners or parent-managed accounts need a guardian contact for scholarship follow-ups.'
+    : 'Add a trusted contact if someone else helps with applications.');
+const reviewGroups = computed(() => [
+    {
+        title: 'Learner',
+        items: [
+            ['Name', [form.value.first_name, form.value.middle_initial ? `${form.value.middle_initial}.` : '', form.value.last_name].filter(Boolean).join(' ')],
+            ['Birthdate', form.value.birthdate],
+            ['Contact', form.value.contact_number],
+            ['Account managed by', accountManagerLabel(form.value.account_managed_by)],
+        ],
+    },
+    {
+        title: 'Learning',
+        items: [
+            ['Level', educationLevelLabel(form.value.education_level)],
+            ['School', form.value.school],
+            [yearLabel.value, form.value.year_level],
+            ...(isFieldRelevant('course_or_strand') ? [[courseLabel.value, form.value.course_or_strand]] : []),
+            ...(isFieldRelevant('gwa') ? [[gwaLabel.value, form.value.gwa], ['Grading scale', gradingScaleLabel(form.value.grading_scale)]] : []),
+        ],
+    },
+    {
+        title: 'Location and Need',
+        items: [
+            ['Income bracket', form.value.income_bracket],
+            ['Household size', form.value.household_size],
+            ['Address', [form.value.address, form.value.barangay, form.value.city, form.value.province, form.value.region].filter(Boolean).join(', ')],
+        ],
+    },
+    {
+        title: 'Guardian',
+        items: [
+            ['Name', form.value.guardian_name],
+            ['Relationship', relationshipLabel(form.value.guardian_relationship)],
+            ['Contact', form.value.guardian_contact],
+            ['Email', form.value.guardian_email],
+        ],
+    },
+    {
+        title: 'Preferences',
+        items: [
+            ['Scholarship types', listFromText(form.value.preferred_categories).join(', ')],
+            ['Support needs', listFromText(form.value.support_needs).join(', ')],
+            ['Preferred locations', form.value.preferred_locations],
+            ['Relocation', relocationOptions.find((option) => option.value === form.value.willing_to_relocate)?.label],
+        ],
+    },
+]);
 const yearLevelOptions = computed(() => {
     switch (form.value.education_level) {
         case 'preschool':
@@ -450,7 +625,39 @@ function fieldDisplayValue(field) {
         return relocationOptions.find((option) => option.value === field.value)?.label ?? field.value;
     }
 
+    if (field.key === 'account_managed_by') {
+        return accountManagerLabel(field.value);
+    }
+
+    if (field.key === 'guardian_relationship') {
+        return relationshipLabel(field.value);
+    }
+
+    if (field.key === 'guardian_is_account_owner') {
+        return field.value ? 'Yes' : 'No';
+    }
+
     return field.value;
+}
+
+function listFromText(value) {
+    return String(value ?? '')
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+function isOptionSelected(key, option) {
+    return listFromText(form.value[key]).includes(option);
+}
+
+function toggleListOption(key, option) {
+    const selected = listFromText(form.value[key]);
+    const next = selected.includes(option)
+        ? selected.filter((item) => item !== option)
+        : [...selected, option];
+
+    form.value[key] = next.join('\n');
 }
 
 function fillForm(payload) {
@@ -459,6 +666,7 @@ function fillForm(payload) {
         last_name: payload?.last_name ?? '',
         middle_initial: payload?.middle_initial ?? '',
         contact_number: payload?.contact_number ?? '',
+        account_managed_by: payload?.account_managed_by ?? '',
         education_level: payload?.education_level ?? '',
         school: payload?.school ?? '',
         school_type: payload?.school_type ?? '',
@@ -484,7 +692,10 @@ function fillForm(payload) {
         longitude: payload?.longitude ?? '',
         birthdate: payload?.birthdate ?? '',
         guardian_name: payload?.guardian_name ?? '',
+        guardian_relationship: payload?.guardian_relationship ?? '',
         guardian_contact: payload?.guardian_contact ?? '',
+        guardian_email: payload?.guardian_email ?? '',
+        guardian_is_account_owner: Boolean(payload?.guardian_is_account_owner),
     };
 }
 
@@ -620,9 +831,6 @@ onMounted(loadProfile);
                             <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
                                 Build a learner profile that fits your level
                             </h2>
-                            <p class="mt-2 text-sm leading-6 text-slate-600">
-                                Works for preschool, elementary, high school, college, TVET, ALS, and other learner paths. Save anytime and add optional finder details when you are ready.
-                            </p>
                         </div>
 
                         <div class="student-soft-card w-full p-4 lg:max-w-sm">
@@ -631,11 +839,11 @@ onMounted(loadProfile);
                                     <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                                         Application readiness
                                     </p>
-                                    <p class="mt-1 text-sm text-slate-500">
-                                        {{ completedRequiredFields }}/{{ requiredFieldData.length }} required details
+                                    <p class="mt-1 text-sm font-bold text-slate-950">
+                                        {{ profileQuality.label }}
                                     </p>
-                                    <p class="mt-1 text-xs font-semibold text-sky-700">
-                                        {{ completedBoosterFields }}/{{ boosterFieldData.length }} finder boosters added
+                                    <p class="mt-0.5 text-xs text-slate-500">
+                                        {{ completedRequiredFields }}/{{ requiredFieldData.length }} required details
                                     </p>
                                 </div>
                                 <p class="font-display text-3xl font-bold text-slate-950">
@@ -653,7 +861,7 @@ onMounted(loadProfile);
                     Loading profile...
                 </div>
 
-                <div v-else class="mt-6 grid gap-5 xl:grid-cols-[17rem_minmax(0,1fr)]">
+                <div v-else class="mt-6 grid gap-5 xl:grid-cols-[17rem_minmax(0,1fr)] xl:items-start">
                     <aside class="student-card h-fit p-4 xl:sticky xl:top-5">
                         <p class="student-kicker">
                             Profile Pages
@@ -670,14 +878,21 @@ onMounted(loadProfile);
                                 @click="openSection(section.id)"
                             >
                                 <span class="flex items-center justify-between gap-2">
-                                    <span class="font-bold text-slate-950">{{ section.label }}</span>
+                                    <span class="flex items-center gap-2 font-bold text-slate-950">
+                                        <i :class="[section.icon, 'w-4 text-center text-xs text-sky-700']"></i>
+                                        {{ section.label }}
+                                    </span>
                                     <span
+                                        v-if="section.fields.length"
                                         :class="[
                                             'rounded-md px-2 py-0.5 text-xs font-bold',
                                             sectionProgress(section).complete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
                                         ]"
                                     >
                                         {{ sectionProgress(section).completed }}/{{ sectionProgress(section).total }}
+                                    </span>
+                                    <span v-else class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+                                        Check
                                     </span>
                                 </span>
                                 <span class="mt-1 block text-xs leading-5 text-slate-500">
@@ -696,7 +911,7 @@ onMounted(loadProfile);
                         </button>
                     </aside>
 
-                    <section class="space-y-5">
+                    <section class="space-y-5 xl:col-start-2 xl:row-start-1">
                         <div v-if="statusMessage || errorMessage" class="student-card p-4">
                             <p v-if="statusMessage" class="text-sm font-semibold text-emerald-700">
                                 {{ statusMessage }}
@@ -708,16 +923,21 @@ onMounted(loadProfile);
 
                         <div class="student-card p-5">
                             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                                <div>
+                                <div class="flex gap-4">
+                                    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-slate-900 text-white shadow-sm">
+                                        <i :class="[activeProfileSection.icon, 'text-lg']"></i>
+                                    </div>
+                                    <div>
                                     <p class="student-kicker">
                                         Page {{ activeSectionIndex + 1 }} of {{ profileSections.length }}
                                     </p>
                                     <h3 class="mt-2 text-2xl font-bold text-slate-950">
                                         {{ activeProfileSection.label }}
                                     </h3>
-                                    <p class="mt-2 text-sm leading-6 text-slate-600">
+                                    <p class="mt-1 text-sm leading-5 text-slate-600">
                                         {{ activeProfileSection.impact }}
                                     </p>
+                                    </div>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
                                     <button
@@ -743,11 +963,8 @@ onMounted(loadProfile);
                         <section v-if="activeSection === 'personal'" id="profile-personal" class="student-card p-6">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <p class="student-kicker">Required Section</p>
+                                    <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Personal details</h3>
-                                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                                        Basic identity and contact information used in scholarship records.
-                                    </p>
                                 </div>
                                 <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
                                     {{ sectionProgress(profileSections[0]).percent }}% ready
@@ -785,16 +1002,37 @@ onMounted(loadProfile);
                                     <input id="profile-contact" :value="form.contact_number" :class="inputClass" @input="handlePhoneInput('contact_number', $event)">
                                 </div>
                             </div>
+
+                            <div class="student-soft-card mt-4 grid gap-4 p-4 md:grid-cols-[1fr_1.2fr] md:items-center">
+                                <div>
+                                    <p class="text-sm font-bold text-slate-950">
+                                        Account context
+                                    </p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">
+                                        Helps the portal handle child or guardian-managed profiles correctly.
+                                    </p>
+                                </div>
+                                <div>
+                                    <label :class="labelClass" for="profile-account-manager">Who manages this account?</label>
+                                    <select id="profile-account-manager" v-model="form.account_managed_by" :class="inputClass">
+                                        <option value="">Select account manager</option>
+                                        <option
+                                            v-for="option in accountManagerOptions"
+                                            :key="option.value"
+                                            :value="option.value"
+                                        >
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
                         </section>
 
                         <section v-if="activeSection === 'academic'" id="profile-academic" class="student-card p-6">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <p class="student-kicker">Required Section</p>
+                                    <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Learning background</h3>
-                                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                                        Select the learner level first so the labels and required fields fit the student record.
-                                    </p>
                                 </div>
                                 <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
                                     {{ sectionProgress(profileSections[1]).percent }}% ready
@@ -810,7 +1048,7 @@ onMounted(loadProfile);
                                         {{ form.education_level ? educationLevelLabel(form.education_level) : 'Choose education level' }}
                                     </p>
                                 </div>
-                                <p class="text-sm leading-6 text-slate-600">
+                                <p class="text-sm leading-5 text-slate-600">
                                     {{ academicSummary }}
                                 </p>
                             </div>
@@ -849,30 +1087,78 @@ onMounted(loadProfile);
                             </div>
 
                             <div class="mt-4 grid gap-4 md:grid-cols-3">
-                                <div>
+                                <div v-if="isFieldRelevant('course_or_strand')">
                                     <label :class="labelClass" for="profile-course">
                                         {{ courseLabel }}
                                         <span class="font-normal text-sky-600">
                                             {{ requiresProgramPath ? '(required)' : '(optional)' }}
                                         </span>
                                     </label>
-                                    <input id="profile-course" v-model="form.course_or_strand" :placeholder="coursePlaceholder" :class="inputClass">
+                                    <select
+                                        v-if="coursePathOptions.length"
+                                        id="profile-course"
+                                        v-model="form.course_or_strand"
+                                        :class="inputClass"
+                                    >
+                                        <option value="">Select {{ courseLabel.toLowerCase() }}</option>
+                                        <option v-if="form.course_or_strand && !coursePathOptions.includes(form.course_or_strand)" :value="form.course_or_strand">
+                                            {{ form.course_or_strand }}
+                                        </option>
+                                        <option
+                                            v-for="option in coursePathOptions"
+                                            :key="option"
+                                            :value="option"
+                                        >
+                                            {{ option }}
+                                        </option>
+                                    </select>
+                                    <input
+                                        v-else
+                                        id="profile-course"
+                                        v-model="form.course_or_strand"
+                                        :placeholder="coursePlaceholder"
+                                        :class="inputClass"
+                                    >
+                                    <input
+                                        v-if="coursePathOptions.length && (form.course_or_strand === 'Other' || (hasValue(form.course_or_strand) && !coursePathOptions.includes(form.course_or_strand)))"
+                                        v-model="form.course_or_strand"
+                                        class="mt-2"
+                                        :placeholder="`Type exact ${courseLabel.toLowerCase()}`"
+                                        :class="inputClass"
+                                    >
                                     <p class="mt-1 text-xs leading-5 text-slate-500">
                                         {{ courseHelpText }}
                                     </p>
                                 </div>
                                 <div>
                                     <label :class="labelClass" for="profile-year">{{ yearLabel }}</label>
-                                    <input id="profile-year" v-model="form.year_level" list="profile-year-options" :placeholder="yearPlaceholder" :class="inputClass">
-                                    <datalist id="profile-year-options">
+                                    <select
+                                        v-if="yearLevelOptions.length"
+                                        id="profile-year"
+                                        v-model="form.year_level"
+                                        :class="inputClass"
+                                    >
+                                        <option value="">Select {{ yearLabel.toLowerCase() }}</option>
+                                        <option v-if="form.year_level && !yearLevelOptions.includes(form.year_level)" :value="form.year_level">
+                                            {{ form.year_level }}
+                                        </option>
                                         <option
                                             v-for="option in yearLevelOptions"
                                             :key="option"
                                             :value="option"
-                                        />
-                                    </datalist>
+                                        >
+                                            {{ option }}
+                                        </option>
+                                    </select>
+                                    <input
+                                        v-else
+                                        id="profile-year"
+                                        v-model="form.year_level"
+                                        :placeholder="yearPlaceholder"
+                                        :class="inputClass"
+                                    >
                                 </div>
-                                <div>
+                                <div v-if="isFieldRelevant('grading_scale')">
                                     <label :class="labelClass" for="profile-grading-scale">Grading scale</label>
                                     <select id="profile-grading-scale" v-model="form.grading_scale" :class="inputClass">
                                         <option value="">Select grading scale</option>
@@ -888,7 +1174,7 @@ onMounted(loadProfile);
                             </div>
 
                             <div class="mt-4 grid gap-4 md:grid-cols-3">
-                                <div>
+                                <div v-if="isFieldRelevant('gwa')">
                                     <label :class="labelClass" for="profile-gwa">{{ gwaLabel }}</label>
                                     <input id="profile-gwa" v-model="form.gwa" type="number" min="0" max="100" step="0.01" placeholder="92.50 or 1.75" :class="inputClass">
                                 </div>
@@ -915,11 +1201,8 @@ onMounted(loadProfile);
                         <section v-if="activeSection === 'location'" id="profile-location" class="student-card p-6">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <p class="student-kicker">Required Section</p>
+                                    <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Location and financial need</h3>
-                                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                                        Used for distance, regional eligibility, and financial assistance matching.
-                                    </p>
                                 </div>
                                 <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
                                     {{ sectionProgress(profileSections[2]).percent }}% ready
@@ -969,11 +1252,44 @@ onMounted(loadProfile);
                                 </div>
                                 <div>
                                     <label :class="labelClass" for="profile-province">Province</label>
-                                    <input id="profile-province" v-model="form.province" placeholder="Province" :class="inputClass" @input="clearProfileMapPoint">
+                                    <select id="profile-province" v-model="form.province" :class="inputClass" @change="clearProfileMapPoint">
+                                        <option value="">Select province</option>
+                                        <option v-if="form.province && form.province !== 'Other' && !provinceOptions.includes(form.province)" :value="form.province">
+                                            {{ form.province }}
+                                        </option>
+                                        <option
+                                            v-for="province in provinceOptions"
+                                            :key="province"
+                                            :value="province"
+                                        >
+                                            {{ province }}
+                                        </option>
+                                        <option value="Other">Other / not listed</option>
+                                    </select>
+                                    <input
+                                        v-if="form.province === 'Other' || (hasValue(form.province) && !provinceOptions.includes(form.province))"
+                                        v-model="form.province"
+                                        class="mt-2"
+                                        placeholder="Type province"
+                                        :class="inputClass"
+                                        @input="clearProfileMapPoint"
+                                    >
                                 </div>
                                 <div>
                                     <label :class="labelClass" for="profile-region">Region</label>
-                                    <input id="profile-region" v-model="form.region" placeholder="NCR / Region IV-A" :class="inputClass" @input="clearProfileMapPoint">
+                                    <select id="profile-region" v-model="form.region" :class="inputClass" @change="clearProfileMapPoint">
+                                        <option value="">Select region</option>
+                                        <option v-if="form.region && !regionOptions.includes(form.region)" :value="form.region">
+                                            {{ form.region }}
+                                        </option>
+                                        <option
+                                            v-for="region in regionOptions"
+                                            :key="region"
+                                            :value="region"
+                                        >
+                                            {{ region }}
+                                        </option>
+                                    </select>
                                 </div>
                             </div>
 
@@ -982,9 +1298,6 @@ onMounted(loadProfile);
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
                                             Address map preview
-                                        </p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Search the typed address or click the map to set a pin. This helps visualize distance from scholarships.
                                         </p>
                                     </div>
                                     <button
@@ -1019,15 +1332,21 @@ onMounted(loadProfile);
                         <section v-if="activeSection === 'guardian'" id="profile-guardian" class="student-card p-6">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <p class="student-kicker">Required Section</p>
+                                    <p class="student-kicker">{{ needsGuardianContext ? 'Required' : 'Optional' }}</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Guardian information</h3>
-                                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                                        Some scholarships may need guardian contact for verification or follow-up.
-                                    </p>
                                 </div>
                                 <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
                                     {{ sectionProgress(profileSections[3]).percent }}% ready
                                 </span>
+                            </div>
+
+                            <div class="student-soft-card mt-5 p-4">
+                                <p class="text-sm font-bold text-slate-950">
+                                    {{ guardianRequirementLabel }}
+                                </p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">
+                                    {{ guardianRequirementText }}
+                                </p>
                             </div>
 
                             <div class="mt-5 grid gap-4 md:grid-cols-2">
@@ -1036,20 +1355,46 @@ onMounted(loadProfile);
                                     <input id="profile-guardian" v-model="form.guardian_name" placeholder="Parent or guardian" :class="inputClass">
                                 </div>
                                 <div>
+                                    <label :class="labelClass" for="profile-guardian-relationship">Relationship to learner</label>
+                                    <select id="profile-guardian-relationship" v-model="form.guardian_relationship" :class="inputClass">
+                                        <option value="">Select relationship</option>
+                                        <option
+                                            v-for="option in guardianRelationshipOptions"
+                                            :key="option"
+                                            :value="option"
+                                        >
+                                            {{ option }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div>
                                     <label :class="labelClass" for="profile-guardian-contact">Guardian contact</label>
                                     <input id="profile-guardian-contact" :value="form.guardian_contact" placeholder="Guardian contact number" :class="inputClass" @input="handlePhoneInput('guardian_contact', $event)">
                                 </div>
+                                <div>
+                                    <label :class="labelClass" for="profile-guardian-email">Guardian email <span class="font-normal text-sky-600">(optional)</span></label>
+                                    <input id="profile-guardian-email" v-model="form.guardian_email" type="email" placeholder="guardian@example.com" :class="inputClass">
+                                </div>
                             </div>
+
+                            <label class="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-[#f6faf8] p-4 text-sm text-slate-600">
+                                <input
+                                    v-model="form.guardian_is_account_owner"
+                                    type="checkbox"
+                                    class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                >
+                                <span>
+                                    <span class="block font-bold text-slate-950">Guardian manages this account</span>
+                                    <span class="mt-1 block text-xs leading-5">Use this when a parent or guardian signs in and manages applications for the learner.</span>
+                                </span>
+                            </label>
                         </section>
 
                         <section v-if="activeSection === 'preferences'" id="profile-preferences" class="student-card p-6">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <p class="student-kicker">Optional Section</p>
+                                    <p class="student-kicker">Optional</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Finder preferences</h3>
-                                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                                        These do not block applications. They help the finder recommend programs that fit your goals and support needs.
-                                    </p>
                                 </div>
                                 <span class="rounded-md bg-sky-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-sky-700">
                                     {{ boosterCompletion }}% boosted
@@ -1071,34 +1416,63 @@ onMounted(loadProfile);
                                     </select>
                                 </div>
                                 <div>
-                                    <label :class="labelClass" for="profile-preferred-locations">Preferred locations</label>
+                                    <p :class="labelClass">Preferred locations</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button
+                                            v-for="option in preferredLocationOptions"
+                                            :key="option"
+                                            type="button"
+                                            :class="[
+                                                'rounded-md border px-3 py-2 text-xs font-bold transition',
+                                                isOptionSelected('preferred_locations', option) ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-slate-500',
+                                            ]"
+                                            @click="toggleListOption('preferred_locations', option)"
+                                        >
+                                            {{ option }}
+                                        </button>
+                                    </div>
                                     <textarea
                                         id="profile-preferred-locations"
                                         v-model="form.preferred_locations"
-                                        rows="3"
-                                        placeholder="Example: Manila, Quezon City, online-friendly"
+                                        rows="2"
+                                        placeholder="Add custom location if needed"
+                                        class="mt-2"
                                         :class="inputClass"
                                     ></textarea>
                                 </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-preferred-categories">Preferred scholarship types</label>
-                                    <textarea
-                                        id="profile-preferred-categories"
-                                        v-model="form.preferred_categories"
-                                        rows="3"
-                                        :placeholder="categoryOptions.join(', ')"
-                                        :class="inputClass"
-                                    ></textarea>
+                                <div class="md:col-span-2">
+                                    <p :class="labelClass">Preferred scholarship types</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button
+                                            v-for="option in categoryOptions"
+                                            :key="option"
+                                            type="button"
+                                            :class="[
+                                                'rounded-md border px-3 py-2 text-xs font-bold transition',
+                                                isOptionSelected('preferred_categories', option) ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-slate-500',
+                                            ]"
+                                            @click="toggleListOption('preferred_categories', option)"
+                                        >
+                                            {{ option }}
+                                        </button>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-support-needs">Support needs</label>
-                                    <textarea
-                                        id="profile-support-needs"
-                                        v-model="form.support_needs"
-                                        rows="3"
-                                        placeholder="Example: tuition, transportation, books, internet, uniform"
-                                        :class="inputClass"
-                                    ></textarea>
+                                <div class="md:col-span-2">
+                                    <p :class="labelClass">Support needs</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button
+                                            v-for="option in supportNeedOptions"
+                                            :key="option"
+                                            type="button"
+                                            :class="[
+                                                'rounded-md border px-3 py-2 text-xs font-bold transition',
+                                                isOptionSelected('support_needs', option) ? 'border-sky-700 bg-sky-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-slate-500',
+                                            ]"
+                                            @click="toggleListOption('support_needs', option)"
+                                        >
+                                            {{ option }}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="md:col-span-2">
                                     <label :class="labelClass" for="profile-goal">Scholarship goal</label>
@@ -1112,9 +1486,71 @@ onMounted(loadProfile);
                                 </div>
                             </div>
                         </section>
+
+                        <section v-if="activeSection === 'review'" id="profile-review" class="student-card p-6">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <p class="student-kicker">Final check</p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Review profile</h3>
+                                </div>
+                                <span
+                                    :class="[
+                                        'rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]',
+                                        profileComplete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
+                                    ]"
+                                >
+                                    {{ profileQuality.label }}
+                                </span>
+                            </div>
+
+                            <div class="mt-5 grid gap-4 md:grid-cols-2">
+                                <article
+                                    v-for="group in reviewGroups"
+                                    :key="group.title"
+                                    class="rounded-lg border border-slate-200 bg-[#f6faf8] p-4"
+                                >
+                                    <h4 class="font-bold text-slate-950">
+                                        {{ group.title }}
+                                    </h4>
+                                    <div class="mt-3 grid gap-2">
+                                        <div
+                                            v-for="item in group.items"
+                                            :key="`${group.title}-${item[0]}`"
+                                            class="flex items-start justify-between gap-3 text-sm"
+                                        >
+                                            <span class="text-slate-500">{{ item[0] }}</span>
+                                            <span class="max-w-[60%] text-right font-semibold text-slate-900">
+                                                {{ hasValue(item[1]) ? item[1] : 'Not set' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </article>
+                            </div>
+
+                            <div v-if="missingProfileFields.length" class="mt-5 rounded-lg border border-amber-100 bg-amber-50 p-4">
+                                <p class="text-sm font-bold text-amber-900">
+                                    Add these before applying
+                                </p>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                        v-for="field in missingProfileFields"
+                                        :key="field.key"
+                                        type="button"
+                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-100"
+                                        @click="openSection(profileSections.find((section) => sectionAllFields(section).includes(field.key))?.id || 'personal')"
+                                    >
+                                        {{ field.label }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div v-else class="mt-5 rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+                                Profile is application-ready. You can save it as complete.
+                            </div>
+                        </section>
                     </section>
 
-                    <aside class="space-y-5 xl:col-start-2 xl:grid xl:grid-cols-3 xl:gap-5 xl:space-y-0">
+                    <aside class="space-y-5 xl:col-start-2">
                         <section class="student-card p-5">
                             <p class="student-kicker">
                                 Readiness
@@ -1122,10 +1558,10 @@ onMounted(loadProfile);
                             <div class="mt-3 flex items-end justify-between gap-4">
                                 <div>
                                     <h3 class="text-lg font-bold text-slate-950">
-                                        {{ profileComplete ? 'Ready to apply' : 'Needs a few details' }}
+                                        {{ profileQuality.label }}
                                     </h3>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">
-                                        Required fields unlock application submission. Optional fields improve recommendations.
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">
+                                        {{ profileQuality.detail }}
                                     </p>
                                 </div>
                                 <p class="font-display text-3xl font-bold text-slate-950">
@@ -1179,7 +1615,7 @@ onMounted(loadProfile);
 
                         <section class="student-card p-5">
                             <p class="student-kicker">
-                                Section Health
+                                Sections
                             </p>
                             <div class="mt-4 grid gap-3">
                                 <div
@@ -1191,22 +1627,28 @@ onMounted(loadProfile);
                                         <p class="font-bold text-slate-950">
                                             {{ section.label }}
                                         </p>
-                                        <p class="text-xs font-bold text-slate-500">
+                                        <p v-if="section.fields.length" class="text-xs font-bold text-slate-500">
                                             {{ sectionProgress(section).completed }}/{{ sectionProgress(section).total }}
                                         </p>
+                                        <p v-else class="text-xs font-bold text-slate-500">
+                                            Check
+                                        </p>
                                     </div>
-                                    <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                    <div v-if="section.fields.length" class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
                                         <div
                                             class="h-full rounded-full transition-all"
                                             :class="section.required ? 'bg-slate-900' : 'bg-sky-600'"
                                             :style="{ width: `${sectionProgress(section).percent}%` }"
                                         ></div>
                                     </div>
-                                    <p v-if="sectionMissingFields(section).length" class="mt-2 text-xs leading-5 text-slate-500">
+                                    <p v-if="section.fields.length && sectionMissingFields(section).length" class="mt-2 text-xs leading-5 text-slate-500">
                                         Missing: {{ sectionMissingFields(section).slice(0, 3).join(', ') }}
                                     </p>
-                                    <p v-else class="mt-2 text-xs font-semibold text-emerald-700">
-                                        {{ section.required ? 'Ready' : 'Good optional context' }}
+                                    <p v-else-if="section.fields.length" class="mt-2 text-xs font-semibold text-emerald-700">
+                                        {{ section.required ? 'Ready' : 'Added' }}
+                                    </p>
+                                    <p v-else class="mt-2 text-xs font-semibold text-slate-500">
+                                        Confirm before completing
                                     </p>
                                 </div>
                             </div>
@@ -1215,7 +1657,7 @@ onMounted(loadProfile);
                         <details class="student-card p-5">
                             <summary class="cursor-pointer list-none">
                                 <p class="student-kicker">Checklist</p>
-                                <h3 class="mt-2 text-lg font-bold text-slate-950">Required application fields</h3>
+                                <h3 class="mt-2 text-lg font-bold text-slate-950">Required fields</h3>
                             </summary>
 
                             <div class="mt-4 grid gap-2">

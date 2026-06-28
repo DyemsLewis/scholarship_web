@@ -85,6 +85,23 @@ function criteriaLabel(value) {
     return items.length ? items.join(', ') : 'Any';
 }
 
+function targetApplicantLabel(scholarship) {
+    const levels = String(scholarship?.eligible_education_levels ?? '')
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+    if (levels.length === 0 || levels.length >= 7) {
+        return 'All learners';
+    }
+
+    if (levels.includes('preschool') && levels.includes('elementary') && levels.length === 2) {
+        return 'Preschool / Elementary';
+    }
+
+    return levels.slice(0, 2).map(labelFromKey).join(', ') + (levels.length > 2 ? ` +${levels.length - 2}` : '');
+}
+
 function documentRequirements(requirements) {
     if (!requirements) {
         return ['Not listed yet'];
@@ -210,6 +227,10 @@ onMounted(loadScholarship);
                                     <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
                                         {{ scholarship.eligibility_match?.score ?? 0 }}% match
                                     </span>
+                                    <span class="inline-flex items-center rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800">
+                                        <i class="fa-solid fa-users mr-1.5"></i>
+                                        {{ targetApplicantLabel(scholarship) }}
+                                    </span>
                                     <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                         {{ scholarship.deadline || 'No deadline' }}
                                     </span>
@@ -315,11 +336,8 @@ onMounted(loadScholarship);
                                 <p class="student-kicker">
                                     Eligibility Pre-check
                                 </p>
-                                <p class="mt-3 text-sm leading-6 text-slate-600">
-                                    {{ scholarship.eligibility_match?.summary || 'Review the listed requirements before applying.' }}
-                                </p>
 
-                                <details v-if="scholarship.eligibility_match?.criteria?.length" class="mt-4 rounded-md border border-slate-200 bg-[#f6faf8] p-3">
+                                <details v-if="scholarship.eligibility_match?.criteria?.length" class="mt-3 rounded-md border border-slate-200 bg-[#f6faf8] p-3">
                                     <summary class="cursor-pointer text-sm font-bold text-slate-700">
                                         View matching checklist
                                     </summary>
@@ -339,12 +357,13 @@ onMounted(loadScholarship);
                                             <p v-if="criterion.requirement" class="mt-1 text-xs leading-5">
                                                 Required: {{ criterion.requirement }}
                                             </p>
-                                            <p class="mt-1 text-xs leading-5 opacity-80">
-                                                {{ criterion.note }}
-                                            </p>
                                         </div>
                                     </div>
                                 </details>
+
+                                <p v-else class="mt-3 text-sm text-slate-500">
+                                    No pre-check details listed.
+                                </p>
                             </article>
 
                             <article class="student-card p-5">
@@ -497,9 +516,6 @@ onMounted(loadScholarship);
                 </div>
 
                 <div class="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p class="text-xs leading-5 text-slate-500">
-                        Map preview uses Leaflet CDN with OpenStreetMap address search.
-                    </p>
                     <a
                         v-if="scholarship.map_url"
                         :href="scholarship.map_url"

@@ -334,7 +334,7 @@ onMounted(loadReviewData);
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
-                <header class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <header class="admin-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
@@ -612,6 +612,9 @@ onMounted(loadReviewData);
                                         <p class="mt-2 inline-flex w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-indigo-700 ring-1 ring-indigo-100">
                                             DSS: {{ application.dss_score ?? 0 }}% - {{ statusLabel(application.dss_recommendation || 'needs_review') }}
                                         </p>
+                                        <p v-if="application.dss_explanation?.headline" class="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-600">
+                                            {{ application.dss_explanation.headline }}
+                                        </p>
                                     </div>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
@@ -620,6 +623,9 @@ onMounted(loadReviewData);
                                     </span>
                                     <span :class="['h-fit w-fit rounded-md px-2.5 py-1 text-[11px] font-bold uppercase', statusClass(application.status)]">
                                         {{ statusLabel(application.status) }}
+                                    </span>
+                                    <span v-if="application.status_progress" class="h-fit w-fit rounded-md bg-white px-2.5 py-1 text-[11px] font-bold uppercase text-slate-600 ring-1 ring-slate-200">
+                                        {{ application.status_progress.percent }}% stage
                                     </span>
                                 </div>
                                 <div class="flex flex-wrap gap-2">

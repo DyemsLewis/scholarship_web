@@ -44,38 +44,42 @@ const applicationWatchlist = computed(() => applications.value
     .slice(0, 3));
 const analystSignals = computed(() => [
     {
-        label: 'Profile data quality',
+        label: 'Profile',
+        icon: 'fa-solid fa-user-check',
         tone: profileReadiness.value.complete ? 'good' : 'warn',
         detail: profileReadiness.value.complete
-            ? 'Your profile has enough data for applications.'
-            : `${profileReadiness.value.missing?.length ?? 0} profile fields still affect application readiness.`,
+            ? 'Ready to apply.'
+            : `${profileReadiness.value.missing?.length ?? 0} missing detail${(profileReadiness.value.missing?.length ?? 0) === 1 ? '' : 's'}.`,
         href: '/dashboard/profile',
         action: profileReadiness.value.complete ? 'Review profile' : 'Complete profile',
     },
     {
-        label: 'Scholarship opportunity',
+        label: 'Matches',
+        icon: 'fa-solid fa-graduation-cap',
         tone: highMatchCount.value > 0 ? 'good' : 'info',
         detail: highMatchCount.value > 0
-            ? `${highMatchCount.value} visible program${highMatchCount.value === 1 ? '' : 's'} are strong matches.`
-            : 'No strong match yet. Improve profile details or broaden filters.',
+            ? `${highMatchCount.value} strong match${highMatchCount.value === 1 ? '' : 'es'}.`
+            : 'No strong match yet.',
         href: '/dashboard/scholarships',
         action: 'Browse matches',
     },
     {
-        label: 'Document readiness',
+        label: 'Documents',
+        icon: 'fa-solid fa-folder-open',
         tone: documentGaps.value.length === 0 ? 'good' : 'warn',
         detail: documentGaps.value.length === 0
-            ? 'Prepared documents cover the sampled scholarship requirements.'
-            : `${documentGaps.value.length} promising program${documentGaps.value.length === 1 ? '' : 's'} still need prepared documents.`,
+            ? 'No gaps found.'
+            : `${documentGaps.value.length} program${documentGaps.value.length === 1 ? '' : 's'} need files.`,
         href: '/dashboard/documents',
         action: 'Prepare documents',
     },
     {
-        label: 'Deadline watch',
+        label: 'Deadlines',
+        icon: 'fa-solid fa-calendar-days',
         tone: urgentScholarships.value.length === 0 ? 'good' : 'warn',
         detail: urgentScholarships.value.length === 0
-            ? 'No visible scholarship deadlines within 14 days.'
-            : `${urgentScholarships.value.length} deadline${urgentScholarships.value.length === 1 ? '' : 's'} need attention soon.`,
+            ? 'Nothing urgent.'
+            : `${urgentScholarships.value.length} coming soon.`,
         href: '/dashboard/scholarships',
         action: 'Check deadlines',
     },
@@ -150,9 +154,6 @@ onMounted(loadDashboard);
                             <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
                                 Welcome back, {{ user?.first_name || 'Scholar' }}
                             </h2>
-                            <p class="mt-2 text-sm leading-6 text-slate-600">
-                                Quick overview only. Use the tabs above when you need full scholarship, application, or profile details.
-                            </p>
                         </div>
 
                         <div class="student-soft-card w-full p-4 lg:max-w-sm">
@@ -192,15 +193,12 @@ onMounted(loadDashboard);
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                                 <p class="student-kicker">
-                                    Data Analyst Signals
+                                    To Do
                                 </p>
                                 <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                    What needs attention first
+                                    What needs attention
                                 </h3>
                             </div>
-                            <p class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                                Based on profile, matches, documents, and deadlines
-                            </p>
                         </div>
 
                         <div class="mt-5 grid gap-3 lg:grid-cols-4">
@@ -210,10 +208,15 @@ onMounted(loadDashboard);
                                 :href="signal.href"
                                 :class="['rounded-lg border p-4 transition hover:bg-white', signalClass(signal.tone)]"
                             >
-                                <p class="text-sm font-bold">
-                                    {{ signal.label }}
-                                </p>
-                                <p class="mt-2 min-h-12 text-sm leading-6 opacity-85">
+                                <div class="flex items-center gap-2">
+                                    <span class="flex h-8 w-8 items-center justify-center rounded-md bg-white/70 shadow-sm">
+                                        <i :class="[signal.icon, 'text-sm']"></i>
+                                    </span>
+                                    <p class="text-sm font-bold">
+                                        {{ signal.label }}
+                                    </p>
+                                </div>
+                                <p class="mt-2 text-sm leading-5 opacity-85">
                                     {{ signal.detail }}
                                 </p>
                                 <p class="mt-4 text-sm font-bold">

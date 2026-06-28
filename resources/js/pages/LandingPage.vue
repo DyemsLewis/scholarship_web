@@ -90,16 +90,19 @@ const scholarshipSteps = [
         title: 'Choose your role',
         text: 'Applicants and providers each have a dedicated registration path.',
         image: '/images/student-dashboard.jpg',
+        icon: 'fa-solid fa-user-check',
     },
     {
         title: 'Enter the right workspace',
         text: 'Applicants continue to scholarship access while providers use a provider dashboard.',
         image: '/images/scholarship-cards.jpg',
+        icon: 'fa-solid fa-door-open',
     },
     {
         title: 'Keep records organized',
         text: 'Admins can monitor account roles and review registered users from the admin panel.',
         image: '/images/application-documents.jpg',
+        icon: 'fa-solid fa-folder-tree',
     },
 ];
 
@@ -111,6 +114,7 @@ const audiences = [
         href: '/register',
         action: 'Register as applicant',
         image: '/images/student-dashboard.jpg',
+        icon: 'fa-solid fa-user-graduate',
     },
     {
         label: 'For providers',
@@ -119,6 +123,7 @@ const audiences = [
         href: '/provider/register',
         action: 'Register as provider',
         image: '/images/scholarship-cards.jpg',
+        icon: 'fa-solid fa-building-columns',
     },
 ];
 </script>
@@ -140,7 +145,7 @@ const audiences = [
                 <div class="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-slate-950/70 to-transparent"></div>
             </div>
 
-            <SiteNavbar variant="transparent" />
+            <SiteNavbar variant="transparent" show-icons />
 
             <div class="relative z-10 mx-auto flex w-full max-w-6xl flex-1 items-center px-4 pt-10 pb-24 sm:px-6 sm:pt-12 sm:pb-28 lg:px-8">
                 <div class="max-w-3xl">
@@ -165,12 +170,14 @@ const audiences = [
                             :href="currentSlide.primaryHref"
                             class="rounded-md bg-amber-300 px-5 py-3 text-center text-sm font-bold text-slate-950 transition hover:bg-amber-200"
                         >
+                            <i class="fa-solid fa-arrow-right mr-2"></i>
                             {{ currentSlide.primaryAction }}
                         </a>
                         <a
                             :href="currentSlide.secondaryHref"
                             class="rounded-md bg-white px-5 py-3 text-center text-sm font-bold text-slate-950 transition hover:bg-slate-100"
                         >
+                            <i class="fa-solid fa-circle-info mr-2"></i>
                             {{ currentSlide.secondaryAction }}
                         </a>
                     </div>
@@ -201,6 +208,7 @@ const audiences = [
                             class="rounded-md border border-white/30 bg-white/10 px-3 py-2 text-sm font-bold text-white transition hover:bg-white hover:text-slate-950"
                             @click="previousSlide"
                         >
+                            <i class="fa-solid fa-chevron-left mr-2"></i>
                             Prev
                         </button>
                         <button
@@ -210,6 +218,7 @@ const audiences = [
                             @click="nextSlide"
                         >
                             Next
+                            <i class="fa-solid fa-chevron-right ml-2"></i>
                         </button>
                     </div>
                 </div>
@@ -219,9 +228,9 @@ const audiences = [
         <section class="border-b border-slate-200 bg-white px-4 py-10 sm:px-6 lg:px-8">
             <div class="mx-auto grid max-w-6xl gap-6 sm:grid-cols-3">
                 <div>
-                    <p class="font-display text-3xl font-bold text-emerald-700">
-                        01
-                    </p>
+                    <span class="flex h-11 w-11 items-center justify-center rounded-md bg-emerald-100 text-emerald-700">
+                        <i class="fa-solid fa-id-card"></i>
+                    </span>
                     <h2 class="mt-2 text-lg font-bold text-slate-950">
                         Account profile
                     </h2>
@@ -231,9 +240,9 @@ const audiences = [
                 </div>
 
                 <div>
-                    <p class="font-display text-3xl font-bold text-amber-600">
-                        02
-                    </p>
+                    <span class="flex h-11 w-11 items-center justify-center rounded-md bg-amber-100 text-amber-700">
+                        <i class="fa-solid fa-graduation-cap"></i>
+                    </span>
                     <h2 class="mt-2 text-lg font-bold text-slate-950">
                         Scholarship access
                     </h2>
@@ -243,9 +252,9 @@ const audiences = [
                 </div>
 
                 <div>
-                    <p class="font-display text-3xl font-bold text-sky-700">
-                        03
-                    </p>
+                    <span class="flex h-11 w-11 items-center justify-center rounded-md bg-sky-100 text-sky-700">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </span>
                     <h2 class="mt-2 text-lg font-bold text-slate-950">
                         Admin oversight
                     </h2>
@@ -275,9 +284,14 @@ const audiences = [
                     >
                         <img :src="assetUrl(audience.image)" :alt="audience.title" class="h-52 w-full object-cover">
                         <div class="p-6">
-                            <p class="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
-                                {{ audience.label }}
-                            </p>
+                            <div class="flex items-center gap-3">
+                                <span class="flex h-10 w-10 items-center justify-center rounded-md bg-slate-900 text-white">
+                                    <i :class="[audience.icon, 'text-sm']"></i>
+                                </span>
+                                <p class="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
+                                    {{ audience.label }}
+                                </p>
+                            </div>
                             <h3 class="mt-3 text-xl font-bold text-slate-950">
                                 {{ audience.title }}
                             </h3>
@@ -315,9 +329,14 @@ const audiences = [
                     >
                         <img :src="assetUrl(step.image)" :alt="step.title" class="h-36 w-full object-cover">
                         <div class="p-5">
-                            <h3 class="text-lg font-bold text-slate-950">
-                                {{ step.title }}
-                            </h3>
+                            <div class="flex items-center gap-3">
+                                <span class="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
+                                    <i :class="[step.icon, 'text-sm']"></i>
+                                </span>
+                                <h3 class="text-lg font-bold text-slate-950">
+                                    {{ step.title }}
+                                </h3>
+                            </div>
                             <p class="mt-3 text-sm leading-6 text-slate-600">
                                 {{ step.text }}
                             </p>

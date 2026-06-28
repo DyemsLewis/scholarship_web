@@ -101,14 +101,6 @@ const documentStatusOptions = [
     { value: 'needs_replacement', label: 'Needs replacement' },
     { value: 'rejected', label: 'Rejected' },
 ];
-const dssFormula = [
-    { label: 'Eligibility match', weight: '35%', detail: 'Structured fit against program rules.' },
-    { label: 'Documents', weight: '25%', detail: 'Confirmed, uploaded, and accepted files.' },
-    { label: 'Academic merit', weight: '20%', detail: 'GWA or average against the minimum.' },
-    { label: 'Financial need', weight: '15%', detail: 'Income bracket support priority.' },
-    { label: 'Review status', weight: '5%', detail: 'Pipeline progress and decision reason.' },
-];
-
 function statusLabel(status) {
     return String(status ?? 'submitted')
         .replace(/_/g, ' ')
@@ -401,7 +393,7 @@ onMounted(loadProviderData);
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
-                <header class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <header class="provider-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
@@ -410,9 +402,6 @@ onMounted(loadProviderData);
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 Applicant activity queue
                             </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Review applications submitted through the applicant wizard.
-                            </p>
                         </div>
 
                         <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
@@ -439,38 +428,14 @@ onMounted(loadProviderData);
                         {{ statusMessage }}
                     </div>
 
-                    <section class="rounded-lg border border-indigo-100 bg-white p-6 shadow-sm">
-                        <div>
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
-                                    Decision Support Formula
-                                </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Queue ranking guide
-                                </h3>
-                                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Applications are sorted by DSS score to help reviewers prioritize complete and eligible records. Final decisions still require provider review.
-                                </p>
-                            </div>
-                        </div>
-                        <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                            <div
-                                v-for="item in dssFormula"
-                                :key="item.label"
-                                class="rounded-md border border-slate-200 bg-slate-50 p-3"
-                            >
-                                <p class="text-sm font-bold text-slate-950">
-                                    {{ item.label }}
-                                </p>
-                                <p class="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-indigo-700">
-                                    Weight {{ item.weight }}
-                                </p>
-                                <p class="mt-2 text-xs leading-5 text-slate-500">
-                                    {{ item.detail }}
-                                </p>
-                            </div>
-                        </div>
-                    </section>
+                    <details class="rounded-lg border border-indigo-100 bg-indigo-50/70 p-4 text-sm shadow-sm">
+                        <summary class="cursor-pointer font-bold text-slate-950">
+                            DSS queue guide
+                        </summary>
+                        <p class="mt-2 leading-5 text-slate-600">
+                            DSS helps rank applications, but the provider still makes the final decision.
+                        </p>
+                    </details>
 
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -480,9 +445,6 @@ onMounted(loadProviderData);
                             Submitted applications
                         </h3>
                         <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <p class="text-sm leading-6 text-slate-600">
-                                Move applications through the review pipeline and export records when needed.
-                            </p>
                             <a
                                 href="/provider/export/applications"
                                 class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
@@ -611,7 +573,10 @@ onMounted(loadProviderData);
                                             </span>
                                         </div>
                                         <p class="mt-2 text-xs leading-5 text-indigo-900">
-                                            {{ application.dss_breakdown?.summary || 'Decision support score based on applicant data.' }}
+                                            {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'Decision support score based on applicant data.' }}
+                                        </p>
+                                        <p class="mt-2 rounded-md bg-white/80 p-2 text-xs font-semibold leading-5 text-indigo-900">
+                                            {{ application.dss_explanation?.next_action || 'Review eligibility, documents, and notes before deciding.' }}
                                         </p>
                                     </div>
                                     <div class="rounded-md bg-white p-3">
@@ -672,6 +637,46 @@ onMounted(loadProviderData);
                                     </p>
                                 </div>
 
+                                <div
+                                    v-if="application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length"
+                                    class="mt-4 grid gap-3 text-sm md:grid-cols-2"
+                                >
+                                    <div class="rounded-md border border-emerald-100 bg-emerald-50 p-3">
+                                        <p class="font-semibold text-emerald-800">
+                                            DSS strengths
+                                        </p>
+                                        <div v-if="application.dss_explanation?.strengths?.length" class="mt-2 grid gap-2">
+                                            <p
+                                                v-for="item in application.dss_explanation.strengths.slice(0, 3)"
+                                                :key="item"
+                                                class="rounded-md bg-white px-3 py-2 text-xs leading-5 text-slate-600"
+                                            >
+                                                {{ item }}
+                                            </p>
+                                        </div>
+                                        <p v-else class="mt-2 text-xs text-emerald-800">
+                                            No strong signals yet.
+                                        </p>
+                                    </div>
+                                    <div class="rounded-md border border-amber-100 bg-amber-50 p-3">
+                                        <p class="font-semibold text-amber-800">
+                                            DSS review flags
+                                        </p>
+                                        <div v-if="application.dss_explanation?.needs_attention?.length" class="mt-2 grid gap-2">
+                                            <p
+                                                v-for="item in application.dss_explanation.needs_attention.slice(0, 3)"
+                                                :key="item"
+                                                class="rounded-md bg-white px-3 py-2 text-xs leading-5 text-slate-600"
+                                            >
+                                                {{ item }}
+                                            </p>
+                                        </div>
+                                        <p v-else class="mt-2 text-xs text-amber-800">
+                                            No major DSS flags.
+                                        </p>
+                                    </div>
+                                </div>
+
                                 <div v-if="application.dss_breakdown?.criteria?.length" class="mt-4 rounded-md bg-white p-3 text-sm">
                                     <p class="font-semibold text-slate-500">
                                         DSS weighted criteria
@@ -698,6 +703,40 @@ onMounted(loadProviderData);
                                             </p>
                                         </div>
                                     </div>
+                                </div>
+
+                                <div v-if="application.status_progress" class="mt-4 rounded-md bg-white p-3 text-sm">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p class="font-semibold text-slate-500">
+                                                Review stage
+                                            </p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ application.status_progress.label }}
+                                            </p>
+                                        </div>
+                                        <p class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+                                            {{ application.status_progress.percent }}%
+                                        </p>
+                                    </div>
+                                    <div class="mt-3 grid gap-2 sm:grid-cols-5">
+                                        <div
+                                            v-for="step in application.status_progress.steps"
+                                            :key="step.key"
+                                            :class="[
+                                                'rounded-md px-2.5 py-2 text-xs font-bold',
+                                                step.state === 'complete' ? 'bg-slate-900 text-white' : '',
+                                                step.state === 'current' ? 'bg-sky-100 text-sky-800 ring-1 ring-sky-200' : '',
+                                                step.state === 'upcoming' ? 'bg-slate-50 text-slate-500 ring-1 ring-slate-200' : '',
+                                                step.state === 'skipped' ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-100' : '',
+                                            ]"
+                                        >
+                                            {{ step.label }}
+                                        </div>
+                                    </div>
+                                    <p class="mt-3 text-xs font-semibold leading-5 text-slate-600">
+                                        {{ application.status_progress.next_action }}
+                                    </p>
                                 </div>
 
                                 <div class="mt-4 rounded-md bg-white p-3 text-sm">

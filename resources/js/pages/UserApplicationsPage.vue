@@ -42,27 +42,6 @@ const applicationModeOptions = [
     { value: 'hybrid', label: 'Online and on-site' },
     { value: 'provider_review', label: 'Provider review only' },
 ];
-const dssFormula = [
-    { label: 'Eligibility match', weight: '35%', detail: 'Fit against average, track, grade/year level, location, and income rules.' },
-    { label: 'Documents', weight: '25%', detail: 'Prepared, uploaded, and accepted requirements.' },
-    { label: 'Academic merit', weight: '20%', detail: 'Student GWA or average compared with the program minimum.' },
-    { label: 'Financial need', weight: '15%', detail: 'Income bracket priority for assistance-focused grants.' },
-    { label: 'Review status', weight: '5%', detail: 'Provider review progress and decision signal.' },
-];
-const statusDescriptions = {
-    submitted: 'Your application was received and is waiting for provider review.',
-    under_review: 'The provider is checking your details and uploaded documents.',
-    qualified: 'Your application passed initial requirements and remains in review.',
-    shortlisted: 'You are in a smaller candidate pool for closer evaluation.',
-    interview: 'The provider may contact you for interview or follow-up requirements.',
-    approved: 'Your application was approved by the provider.',
-    awarded: 'The provider recorded an award outcome for your application.',
-    disbursed: 'Award release or disbursement has been recorded.',
-    renewed: 'This scholarship support was renewed.',
-    rejected: 'The application was closed and not approved.',
-    not_awarded: 'The application completed review but was not awarded.',
-};
-
 const selectedScholarship = computed(() => scholarships.value.find((scholarship) => scholarship.id === Number(selectedScholarshipId.value)));
 const selectedRequirements = computed(() => documentRequirements(selectedScholarship.value?.requirements));
 const appliedScholarshipIds = computed(() => new Set(applications.value.map((application) => application.scholarship?.id).filter(Boolean)));
@@ -197,10 +176,6 @@ function statusClass(status) {
     }
 
     return 'bg-amber-100 text-amber-800';
-}
-
-function statusDescription(status) {
-    return statusDescriptions[status ?? 'submitted'] ?? 'The provider will update this status as review progresses.';
 }
 
 function matchClass(score) {
@@ -504,24 +479,21 @@ watch(selectedScholarship, (scholarship) => {
         <section class="student-page">
             <div class="student-container">
                 <header class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-white shadow-[0_24px_70px_rgba(15,23,42,0.22)]">
-                    <div class="grid gap-5 p-5 lg:grid-cols-[1fr_18rem] lg:items-end">
+                    <div class="grid gap-4 p-4 lg:grid-cols-[1fr_16rem] lg:items-end">
                         <div>
                             <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-200">
                                 Application Desk
                             </p>
-                            <h2 class="mt-2 font-display text-2xl font-bold sm:text-3xl">
-                                Build one clean submission
+                            <h2 class="mt-2 font-display text-2xl font-bold">
+                                Start an application
                             </h2>
-                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                                Pick a program, confirm the requirements, then submit a trackable application record.
-                            </p>
                         </div>
 
-                        <div class="rounded-lg border border-white/10 bg-white/10 p-4">
+                        <div class="rounded-lg border border-white/10 bg-white/10 p-3">
                             <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
                                 Application readiness
                             </p>
-                            <p class="mt-1 font-display text-3xl font-bold">
+                            <p class="mt-1 font-display text-2xl font-bold">
                                 {{ wizardReadinessPercent }}%
                             </p>
                             <p class="mt-1 text-sm text-slate-300">
@@ -553,7 +525,7 @@ watch(selectedScholarship, (scholarship) => {
                                 <h3 class="mt-2 text-lg font-bold text-slate-950">
                                     Complete your student profile before applying
                                 </h3>
-                                <p class="mt-2 text-sm leading-6 text-slate-700">
+                                <p class="mt-2 text-sm leading-5 text-slate-700">
                                     Your profile is {{ profileReadiness.percent }}% complete. Missing:
                                     {{ profileReadiness.missing.slice(0, 4).map((field) => field.label).join(', ') }}{{ profileReadiness.missing.length > 4 ? ', and more' : '' }}.
                                 </p>
@@ -576,9 +548,6 @@ watch(selectedScholarship, (scholarship) => {
                                 <h3 class="mt-1 text-lg font-bold text-slate-950">
                                     {{ selectedScholarship ? selectedScholarship.title : 'Choose a scholarship to start' }}
                                 </h3>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">
-                                    {{ activeApplicationCount }} active application{{ activeApplicationCount === 1 ? '' : 's' }}, {{ readyApplicationCount }} with uploaded document requirements complete.
-                                </p>
                             </div>
                             <div class="w-full lg:max-w-xs">
                                 <div class="flex items-center justify-between text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
@@ -601,49 +570,19 @@ watch(selectedScholarship, (scholarship) => {
                                     <span :class="['mt-1 h-2.5 w-2.5 shrink-0 rounded-full', item.complete ? 'bg-emerald-500' : 'bg-amber-400']"></span>
                                     <div>
                                         <p class="font-bold text-slate-950">{{ item.label }}</p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ item.detail }}</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </section>
 
-                    <details class="rounded-lg border border-indigo-100 bg-indigo-50/80 p-5 shadow-sm">
-                        <summary class="cursor-pointer list-none">
-                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                <div>
-                                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                                        Decision Support System
-                                    </p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                        How recommendation scores work
-                                    </h3>
-                                    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                        Optional context. DSS is guidance only and providers still make final decisions.
-                                    </p>
-                                </div>
-                                <span class="h-fit rounded-md bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
-                                    Show details
-                                </span>
-                            </div>
+                    <details class="rounded-lg border border-indigo-100 bg-indigo-50/80 p-4 text-sm shadow-sm">
+                        <summary class="cursor-pointer font-bold text-slate-950">
+                            How DSS scores work
                         </summary>
-                        <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                            <div
-                                v-for="item in dssFormula"
-                                :key="item.label"
-                                class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3"
-                            >
-                                <p class="font-display text-2xl font-bold text-indigo-700">
-                                    {{ item.weight }}
-                                </p>
-                                <p class="mt-1 text-sm font-bold text-slate-950">
-                                    {{ item.label }}
-                                </p>
-                                <p class="mt-2 text-xs leading-5 text-slate-500">
-                                    {{ item.detail }}
-                                </p>
-                            </div>
-                        </div>
+                        <p class="mt-2 leading-5 text-slate-600">
+                            DSS scores are a guide only. Providers still make the final decision.
+                        </p>
                     </details>
 
                     <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
@@ -655,9 +594,6 @@ watch(selectedScholarship, (scholarship) => {
                                 <h3 class="mt-2 font-display text-xl font-bold">
                                     Application flow
                                 </h3>
-                                <p class="mt-2 text-sm leading-6 text-slate-300">
-                                    Move through the checklist from top to bottom.
-                                </p>
 
                                 <div class="mt-4 grid gap-2">
                             <button
@@ -1186,9 +1122,6 @@ watch(selectedScholarship, (scholarship) => {
                             <h3 class="mt-2 text-xl font-bold text-slate-950">
                                 Review timeline
                             </h3>
-                            <p class="mt-2 text-sm leading-6 text-slate-600">
-                                Submitted records, document uploads, and provider review movement stay here.
-                            </p>
                         </div>
 
                         <div v-if="applications.length === 0" class="m-5 rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
@@ -1224,9 +1157,43 @@ watch(selectedScholarship, (scholarship) => {
                                         {{ statusLabel(application.status) }}
                                     </span>
                                 </div>
-                                <p class="mt-3 rounded-md border border-slate-200 bg-[#f6faf8] px-3 py-2 text-xs leading-5 text-slate-600">
-                                    {{ statusDescription(application.status) }}
-                                </p>
+
+                                <div v-if="application.status_progress" class="mt-4 rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p class="font-semibold text-slate-500">
+                                                Application stage
+                                            </p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ application.status_progress.label }}
+                                            </p>
+                                        </div>
+                                        <p class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                                            {{ application.status_progress.percent }}% through review
+                                        </p>
+                                    </div>
+                                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                                        <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${application.status_progress.percent}%` }"></div>
+                                    </div>
+                                    <div class="mt-3 grid gap-2 sm:grid-cols-5">
+                                        <div
+                                            v-for="step in application.status_progress.steps"
+                                            :key="step.key"
+                                            :class="[
+                                                'rounded-md px-2.5 py-2 text-xs font-bold',
+                                                step.state === 'complete' ? 'bg-slate-900 text-white' : '',
+                                                step.state === 'current' ? 'bg-sky-100 text-sky-800 ring-1 ring-sky-200' : '',
+                                                step.state === 'upcoming' ? 'bg-white text-slate-500 ring-1 ring-slate-200' : '',
+                                                step.state === 'skipped' ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-100' : '',
+                                            ]"
+                                        >
+                                            {{ step.label }}
+                                        </div>
+                                    </div>
+                                    <p class="mt-3 text-xs font-semibold leading-5 text-slate-600">
+                                        {{ application.status_progress.next_action }}
+                                    </p>
+                                </div>
 
                                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                                     <div class="rounded-md border border-indigo-100 bg-indigo-50 p-3">
@@ -1241,9 +1208,45 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
                                             </span>
                                         </div>
-                                        <p class="mt-2 text-xs leading-5 text-indigo-900">
-                                            {{ application.dss_breakdown?.summary || 'This score helps reviewers prioritize applications.' }}
+                                        <p class="mt-2 font-bold leading-5 text-indigo-950">
+                                            {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'DSS reviewed the current application data.' }}
                                         </p>
+                                        <p class="mt-1 text-xs leading-5 text-indigo-900">
+                                            {{ application.dss_explanation?.next_action || 'Wait for provider review and document feedback.' }}
+                                        </p>
+                                        <div
+                                            v-if="application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length"
+                                            class="mt-3 grid gap-2"
+                                        >
+                                            <div v-if="application.dss_explanation?.strengths?.length" class="rounded-md bg-white/80 p-2">
+                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">
+                                                    Strengths
+                                                </p>
+                                                <ul class="mt-1 space-y-1">
+                                                    <li
+                                                        v-for="item in application.dss_explanation.strengths.slice(0, 2)"
+                                                        :key="item"
+                                                        class="text-xs leading-5 text-slate-600"
+                                                    >
+                                                        {{ item }}
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                            <div v-if="application.dss_explanation?.needs_attention?.length" class="rounded-md bg-white/80 p-2">
+                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">
+                                                    Needs attention
+                                                </p>
+                                                <ul class="mt-1 space-y-1">
+                                                    <li
+                                                        v-for="item in application.dss_explanation.needs_attention.slice(0, 2)"
+                                                        :key="item"
+                                                        class="text-xs leading-5 text-slate-600"
+                                                    >
+                                                        {{ item }}
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
                                         <details v-if="application.dss_breakdown?.criteria?.length" class="mt-3 rounded-md border border-indigo-100 bg-white/70 p-2">
                                             <summary class="cursor-pointer text-xs font-bold uppercase tracking-[0.12em] text-indigo-800">
                                                 Why this score?
@@ -1282,9 +1285,6 @@ watch(selectedScholarship, (scholarship) => {
                                         </p>
                                     </div>
                                 </div>
-                                <p class="mt-2 text-xs leading-5 text-slate-500">
-                                    DSS is a guide for prioritizing review. Final scholarship decisions are still made by the provider.
-                                </p>
 
                                 <div
                                     v-if="application.awarded_amount || application.outcome_notes || application.outcome_at || ['awarded', 'not_awarded', 'disbursed', 'renewed'].includes(application.status)"

@@ -263,6 +263,7 @@ class ApplicantDashboardController extends Controller
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'account_managed_by' => ['nullable', Rule::in(['learner', 'parent_guardian', 'relative', 'school_representative', 'other'])],
             'education_level' => ['nullable', 'string', 'max:100'],
             'school' => ['nullable', 'string', 'max:255'],
             'school_type' => ['nullable', 'string', 'max:100'],
@@ -288,7 +289,10 @@ class ApplicantDashboardController extends Controller
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'birthdate' => ['nullable', 'date', 'before:today'],
             'guardian_name' => ['nullable', 'string', 'max:255'],
+            'guardian_relationship' => ['nullable', 'string', 'max:100'],
             'guardian_contact' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'guardian_email' => ['nullable', 'email', 'max:255'],
+            'guardian_is_account_owner' => ['nullable', 'boolean'],
         ]);
 
         $request->user()->studentProfile()->updateOrCreate([
@@ -296,6 +300,7 @@ class ApplicantDashboardController extends Controller
         ], [
             ...$validated,
             'middle_initial' => strtoupper($validated['middle_initial']),
+            'guardian_is_account_owner' => (bool) ($validated['guardian_is_account_owner'] ?? false),
         ]);
         $request->user()->unsetRelation('studentProfile');
 
@@ -714,7 +719,8 @@ class ApplicantDashboardController extends Controller
 
     private function applicationPayload(ScholarshipApplication $application): array
     {
-        $dss = app(DecisionSupportService::class)->scoreApplication($application);
+        $decisionSupport = app(DecisionSupportService::class);
+        $dss = $decisionSupport->scoreApplication($application);
 
         return [
             'id' => $application->id,
@@ -733,6 +739,8 @@ class ApplicantDashboardController extends Controller
             'dss_score' => $dss['score'],
             'dss_recommendation' => $dss['recommendation'],
             'dss_breakdown' => $dss,
+            'dss_explanation' => $decisionSupport->explainApplication($application, $dss),
+            'status_progress' => $decisionSupport->statusProgress($application),
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             'scholarship' => $application->scholarship
@@ -1236,6 +1244,9 @@ class ApplicantDashboardController extends Controller
             'nationwide',
             'no income requirement',
         ], true)
+            || str_starts_with($normalized, 'any ')
+            || str_starts_with($normalized, 'all ')
+            || str_contains($normalized, 'n/a')
             || str_contains($normalized, 'open to all')
             || str_contains($normalized, 'no restriction')
             || str_contains($normalized, 'no preference')

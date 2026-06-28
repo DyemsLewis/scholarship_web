@@ -174,6 +174,7 @@ class User extends Authenticatable
             'email' => $this->email,
             'username' => $this->username,
             'contact_number' => $this->contact_number,
+            'account_managed_by' => $this->studentProfile?->account_managed_by,
             'display_name' => $this->adminProfile?->display_name,
             'provider_name' => $this->provider_name,
             'provider_type' => $this->provider_type,
@@ -208,7 +209,10 @@ class User extends Authenticatable
             'longitude' => $this->studentProfile?->longitude,
             'birthdate' => $this->studentProfile?->birthdate?->format('Y-m-d'),
             'guardian_name' => $this->studentProfile?->guardian_name,
+            'guardian_relationship' => $this->studentProfile?->guardian_relationship,
             'guardian_contact' => $this->studentProfile?->guardian_contact,
+            'guardian_email' => $this->studentProfile?->guardian_email,
+            'guardian_is_account_owner' => (bool) $this->studentProfile?->guardian_is_account_owner,
             'role' => $this->role,
             'is_admin' => $this->is_admin,
         ];
@@ -216,34 +220,59 @@ class User extends Authenticatable
 
     public static function applicantProfileRequiredFields(?array $payload = null): array
     {
+        $payload ??= [];
+        $educationLevel = $payload['education_level'] ?? null;
+        $accountManagedBy = $payload['account_managed_by'] ?? null;
+        $requiresCoursePath = in_array($educationLevel, ['senior_high_school', 'college', 'tvet'], true);
+        $requiresGrades = ! in_array($educationLevel, ['preschool'], true);
+        $requiresGuardian = in_array($educationLevel, ['preschool', 'elementary', 'junior_high_school', 'senior_high_school'], true)
+            || in_array($accountManagedBy, ['parent_guardian', 'relative', 'school_representative', 'other'], true);
+
         $fields = [
             'first_name' => 'First name',
             'last_name' => 'Last name',
             'middle_initial' => 'Middle initial',
             'contact_number' => 'Contact number',
+            'account_managed_by' => 'Account managed by',
             'birthdate' => 'Birthdate',
+        ];
+
+        $fields += [
             'education_level' => 'Education level',
             'school' => 'School / learning institution',
+        ];
+
+        if ($requiresCoursePath) {
+            $fields['course_or_strand'] = 'Track / strand / course / program';
+        }
+
+        $fields += [
             'year_level' => 'Grade / year level',
             'enrollment_status' => 'Enrollment status',
-            'gwa' => 'GWA / general average',
-            'grading_scale' => 'Grading scale',
+        ];
+
+        if ($requiresGrades) {
+            $fields += [
+                'gwa' => 'GWA / general average',
+                'grading_scale' => 'Grading scale',
+            ];
+        }
+
+        $fields += [
             'income_bracket' => 'Household income bracket',
             'address' => 'Address',
             'barangay' => 'Barangay',
             'city' => 'City / municipality',
             'province' => 'Province',
             'region' => 'Region',
-            'guardian_name' => 'Guardian name',
-            'guardian_contact' => 'Guardian contact',
         ];
 
-        $educationLevel = $payload['education_level'] ?? null;
-
-        if (in_array($educationLevel, ['senior_high_school', 'college', 'tvet'], true)) {
-            $fields = array_slice($fields, 0, 7, true)
-                + ['course_or_strand' => 'Track / strand / course / program']
-                + array_slice($fields, 7, null, true);
+        if ($requiresGuardian) {
+            $fields += [
+                'guardian_name' => 'Guardian name',
+                'guardian_relationship' => 'Relationship to learner',
+                'guardian_contact' => 'Guardian contact',
+            ];
         }
 
         return $fields;

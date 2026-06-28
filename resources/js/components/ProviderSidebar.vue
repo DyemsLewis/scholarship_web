@@ -3,11 +3,11 @@ const emit = defineEmits(['logout']);
 const currentPath = window.location.pathname.replace(/\/$/, '') || '/provider';
 
 const navLinks = [
-    { href: '/provider', label: 'Dashboard' },
-    { href: '/provider/programs', label: 'Programs' },
-    { href: '/provider/applications', label: 'Applications' },
-    { href: '/provider/review', label: 'Review' },
-    { href: '/provider/profile', label: 'Profile' },
+    { href: '/provider', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
+    { href: '/provider/programs', label: 'Programs', icon: 'fa-solid fa-graduation-cap' },
+    { href: '/provider/applications', label: 'Applications', icon: 'fa-solid fa-file-circle-check' },
+    { href: '/provider/review', label: 'Review', icon: 'fa-solid fa-clipboard-list' },
+    { href: '/provider/profile', label: 'Profile', icon: 'fa-solid fa-building-user' },
 ];
 
 function isActive(href) {
@@ -26,7 +26,7 @@ function isActive(href) {
         <div class="relative flex min-h-72 flex-col px-5 py-6 lg:h-full">
             <div class="flex items-center gap-3">
                 <div class="flex h-10 w-10 items-center justify-center rounded-md bg-amber-300 text-sm font-black text-slate-950">
-                    SP
+                    <i class="fa-solid fa-building-columns"></i>
                 </div>
                 <div>
                     <p class="font-display text-xl font-bold text-white">
@@ -54,7 +54,8 @@ function isActive(href) {
                         v-if="isActive(link.href)"
                         class="absolute inset-y-2 left-0 w-1 rounded-r-full bg-amber-500"
                     ></span>
-                    <span class="pl-2">
+                    <span class="flex items-center gap-2 pl-2">
+                        <i :class="[link.icon, 'w-4 text-center text-xs']"></i>
                         {{ link.label }}
                     </span>
                 </a>
@@ -66,6 +67,7 @@ function isActive(href) {
                     class="w-full rounded-md border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300 transition hover:border-amber-300/40 hover:bg-white/5 hover:text-white"
                     @click="emit('logout')"
                 >
+                    <i class="fa-solid fa-right-from-bracket mr-2"></i>
                     Logout
                 </button>
             </div>

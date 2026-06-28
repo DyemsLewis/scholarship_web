@@ -60,18 +60,21 @@ function labelFromKey(value) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function criteriaLabel(value, fallback = 'Open to all') {
-    if (!value) {
-        return fallback;
-    }
-
-    const items = String(value)
+function targetApplicantLabel(scholarship) {
+    const levels = String(scholarship.eligible_education_levels ?? '')
         .split(/\r?\n|,/)
         .map((item) => item.trim())
-        .filter(Boolean)
-        .map(labelFromKey);
+        .filter(Boolean);
 
-    return items.length ? items.join(', ') : fallback;
+    if (levels.length === 0 || levels.length >= 7) {
+        return 'All learners';
+    }
+
+    if (levels.includes('preschool') && levels.includes('elementary') && levels.length === 2) {
+        return 'Preschool / Elementary';
+    }
+
+    return levels.slice(0, 2).map(labelFromKey).join(', ') + (levels.length > 2 ? ` +${levels.length - 2}` : '');
 }
 
 function formatAmount(amount) {
@@ -116,7 +119,7 @@ onMounted(loadProviderData);
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
-                <header class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <header class="provider-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
@@ -125,9 +128,6 @@ onMounted(loadProviderData);
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 Program directory
                             </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Review saved scholarship programs and open a focused page when you need to create or edit details.
-                            </p>
                         </div>
 
                         <div class="flex flex-col gap-2 sm:flex-row">
@@ -177,9 +177,6 @@ onMounted(loadProviderData);
                                 <h3 class="mt-1 text-lg font-bold text-slate-950">
                                     Created scholarships
                                 </h3>
-                                <p class="mt-1 text-sm text-slate-500">
-                                    {{ scholarships.length }} program{{ scholarships.length === 1 ? '' : 's' }} saved by this provider.
-                                </p>
                             </div>
 
                             <a
@@ -214,6 +211,10 @@ onMounted(loadProviderData);
                                         <p class="mt-1 truncate text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
                                             {{ scholarship.category || 'Uncategorized' }}
                                         </p>
+                                        <p class="mt-2 inline-flex items-center rounded-md bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-800 ring-1 ring-sky-100">
+                                            <i class="fa-solid fa-users mr-1.5"></i>
+                                            {{ targetApplicantLabel(scholarship) }}
+                                        </p>
                                     </div>
 
                                     <span :class="['shrink-0 rounded-md px-2 py-1 text-[11px] font-bold uppercase', statusClass(scholarship.status)]">
@@ -221,18 +222,9 @@ onMounted(loadProviderData);
                                     </span>
                                 </div>
 
-                                <p class="mt-3 line-clamp-2 text-sm leading-5 text-slate-600">
+                                <p class="mt-3 line-clamp-1 text-sm leading-5 text-slate-600">
                                     {{ scholarship.description }}
                                 </p>
-
-                                <div class="mt-3 grid gap-2 text-xs font-bold text-slate-600">
-                                    <p class="line-clamp-1 rounded-md bg-white px-3 py-2">
-                                        Education: {{ criteriaLabel(scholarship.eligible_education_levels) }}
-                                    </p>
-                                    <p class="line-clamp-1 rounded-md bg-white px-3 py-2">
-                                        School type: {{ criteriaLabel(scholarship.eligible_school_types) }}
-                                    </p>
-                                </div>
 
                                 <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
                                     <div class="rounded-md bg-white px-3 py-2">
@@ -261,18 +253,6 @@ onMounted(loadProviderData);
                                     <span class="rounded-md bg-white px-2.5 py-1">
                                         {{ scholarship.bookmarks_count || 0 }} saved
                                     </span>
-                                </div>
-
-                                <div
-                                    v-if="scholarship.location_name || scholarship.location_address"
-                                    class="mt-3 rounded-md border border-sky-100 bg-white px-3 py-2 text-xs text-slate-600"
-                                >
-                                    <p class="truncate font-bold text-slate-800">
-                                        {{ scholarship.location_name || 'Map location' }}
-                                    </p>
-                                    <p class="mt-1 line-clamp-1">
-                                        {{ scholarship.location_address || 'No address added yet.' }}
-                                    </p>
                                 </div>
 
                                 <div :class="[
