@@ -87,6 +87,19 @@ class ApplicantDashboardController extends Controller
         return view('dashboard-documents');
     }
 
+    public function applicationDetail(Request $request, ScholarshipApplication $application): View|RedirectResponse
+    {
+        if ($redirect = $this->ensureApplicant($request)) {
+            return $redirect;
+        }
+
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+
+        return view('dashboard-application-detail', [
+            'application' => $application,
+        ]);
+    }
+
     public function profile(Request $request): View|RedirectResponse
     {
         if ($redirect = $this->ensureApplicant($request)) {
@@ -143,6 +156,23 @@ class ApplicantDashboardController extends Controller
             'stats' => $this->statsPayload($request),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))->values(),
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
+            'notifications' => $this->notificationsPayload($request),
+        ]);
+    }
+
+    public function applicationDetailData(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+
+        $application->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
+        app(DecisionSupportService::class)->syncApplication($application);
+        $application = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
+
+        return response()->json([
+            'user' => $this->userPayload($request),
+            'stats' => $this->statsPayload($request),
+            'application' => $this->applicationPayload($application),
             'notifications' => $this->notificationsPayload($request),
         ]);
     }
@@ -255,6 +285,15 @@ class ApplicantDashboardController extends Controller
         return Storage::disk('local')->download($document->path, $document->original_name);
     }
 
+    public function viewPreparedDocument(Request $request, StudentDocument $document)
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($document->user_id === $request->user()->id, 403);
+        abort_unless(Storage::disk('local')->exists($document->path), 404);
+
+        return Storage::disk('local')->response($document->path, $document->original_name);
+    }
+
     public function updateProfile(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isApplicant(), 403);
@@ -364,6 +403,15 @@ class ApplicantDashboardController extends Controller
 
         $scholarship = Scholarship::query()->findOrFail($validated['scholarship_id']);
         $eligibilityMatch = $this->eligibilityMatch($scholarship, $request->user());
+        $eligibilityBlockers = $this->applicationEligibilityBlockers($eligibilityMatch);
+
+        if ($eligibilityBlockers !== []) {
+            return response()->json([
+                'message' => 'You are not eligible to apply for this scholarship based on your current student profile.',
+                'eligibility_match' => $eligibilityMatch,
+                'blocking_criteria' => $eligibilityBlockers,
+            ], 422);
+        }
 
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
@@ -611,6 +659,7 @@ class ApplicantDashboardController extends Controller
                 ->where('applicant_id', $user->id)
                 ->exists()
             : false;
+        $profileComplete = $user ? (bool) $user->applicantProfileReadiness()['complete'] : false;
 
         return [
             'id' => $scholarship->id,
@@ -648,6 +697,7 @@ class ApplicantDashboardController extends Controller
             'bookmarks_count' => $scholarship->bookmarks_count ?? $scholarship->bookmarks()->count(),
             'is_saved' => $saved,
             'has_applied' => $hasApplied,
+            'can_start_application' => $profileComplete && (bool) ($match['is_eligible'] ?? false) && ! $hasApplied,
             'eligibility_match' => $match,
             'prepared_documents' => $preparedDocuments,
             'eligibility_guide' => [
@@ -729,6 +779,7 @@ class ApplicantDashboardController extends Controller
 
         return [
             'id' => $application->id,
+            'detail_url' => route('dashboard.applications.show', $application),
             'status' => $application->status,
             'document_checklist' => $application->document_checklist ?? [],
             'document_readiness' => $this->documentReadiness($application),
@@ -938,6 +989,7 @@ class ApplicantDashboardController extends Controller
             'review_notes' => $document->review_notes,
             'reviewed_at' => $document->reviewed_at?->format('M d, Y h:i A'),
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'view_url' => route('documents.view', $document),
             'download_url' => route('documents.download', $document),
         ];
     }
@@ -950,6 +1002,7 @@ class ApplicantDashboardController extends Controller
             'original_name' => $document->original_name,
             'size' => $document->size,
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'view_url' => route('dashboard.student-documents.view', $document),
             'download_url' => route('dashboard.student-documents.download', $document),
         ];
     }
@@ -1145,17 +1198,35 @@ class ApplicantDashboardController extends Controller
         }
 
         $score = $applicable === 0 ? 100 : (int) round(($passed / $applicable) * 100);
+        $blockingCriteria = $this->applicationEligibilityBlockers(['criteria' => $criteria]);
 
         return [
             'score' => $score,
             'passed' => $passed,
             'applicable' => $applicable,
+            'is_eligible' => $blockingCriteria === [],
+            'blocking_criteria' => $blockingCriteria,
             'label' => $score >= 80 ? 'Strong match' : ($score >= 50 ? 'Needs review' : 'Low match'),
             'summary' => $applicable === 0
                 ? 'This scholarship has no structured matching rules yet.'
                 : "{$passed} of {$applicable} structured criteria match your profile.",
             'criteria' => $criteria,
         ];
+    }
+
+    private function applicationEligibilityBlockers(array $eligibilityMatch): array
+    {
+        return collect($eligibilityMatch['criteria'] ?? [])
+            ->filter(fn (array $criterion) => ($criterion['status'] ?? null) === 'fail' && ($criterion['key'] ?? null) !== 'documents')
+            ->map(fn (array $criterion) => [
+                'key' => $criterion['key'] ?? null,
+                'label' => $criterion['label'] ?? 'Eligibility requirement',
+                'student_value' => $criterion['student_value'] ?? null,
+                'requirement' => $criterion['requirement'] ?? null,
+                'note' => $criterion['note'] ?? null,
+            ])
+            ->values()
+            ->all();
     }
 
     private function splitOptions(?string $value): array
@@ -1235,6 +1306,15 @@ class ApplicantDashboardController extends Controller
             'all regions',
             'any region',
             'nationwide',
+            'philippines',
+            'the philippines',
+            'republic of the philippines',
+            'nationwide philippines',
+            'philippines nationwide',
+            'anywhere in the philippines',
+            'within the philippines',
+            'all over the philippines',
+            'all philippines',
             'no income requirement',
         ], true)
             || str_starts_with($normalized, 'any ')
@@ -1243,7 +1323,11 @@ class ApplicantDashboardController extends Controller
             || str_contains($normalized, 'open to all')
             || str_contains($normalized, 'no restriction')
             || str_contains($normalized, 'no preference')
-            || str_contains($normalized, 'not applicable');
+            || str_contains($normalized, 'not applicable')
+            || (str_contains($normalized, 'nationwide') && ! str_contains($normalized, 'not nationwide'))
+            || str_contains($normalized, 'anywhere in the philippines')
+            || str_contains($normalized, 'within the philippines')
+            || str_contains($normalized, 'all over the philippines');
     }
 
     private function notificationsPayload(Request $request): array

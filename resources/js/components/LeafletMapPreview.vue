@@ -85,6 +85,10 @@ function markerLabel() {
     return props.markerText || props.title || props.address || 'Selected location';
 }
 
+function philippineSearchQuery(query) {
+    return /\bphilippines\b/i.test(query) ? query : `${query}, Philippines`;
+}
+
 function loadScript(src, id) {
     return new Promise((resolve, reject) => {
         const existingScript = document.getElementById(id);
@@ -135,7 +139,14 @@ async function geocodeAddress() {
     statusMessage.value = 'Searching address on OpenStreetMap...';
 
     try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`, {
+        const params = new URLSearchParams({
+            format: 'jsonv2',
+            limit: '1',
+            addressdetails: '1',
+            countrycodes: 'ph',
+            q: philippineSearchQuery(query),
+        });
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
             headers: {
                 Accept: 'application/json',
             },

@@ -337,6 +337,7 @@ async function loadProviderData() {
         documentNotes.value = Object.fromEntries(
             applications.value.flatMap((application) => (application.documents ?? []).map((document) => [document.id, document.review_notes ?? ''])),
         );
+
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider applications.';
     } finally {
@@ -432,7 +433,7 @@ onMounted(loadProviderData);
                         {{ statusMessage }}
                     </div>
 
-                    <details class="rounded-lg border border-indigo-100 bg-indigo-50/70 p-4 text-sm shadow-sm">
+                    <details class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm shadow-sm">
                         <summary class="cursor-pointer font-bold text-slate-950">
                             DSS queue guide
                         </summary>
@@ -482,7 +483,7 @@ onMounted(loadProviderData);
                                         :class="[
                                             'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
                                             selectedQueueSort === 'priority'
-                                                ? 'border-sky-900 bg-sky-900 text-white'
+                                                ? 'border-slate-900 bg-slate-900 text-white'
                                                 : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
                                         ]"
                                         @click="selectedQueueSort = 'priority'"
@@ -494,7 +495,7 @@ onMounted(loadProviderData);
                                         :class="[
                                             'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
                                             selectedQueueSort === 'dss'
-                                                ? 'border-sky-900 bg-sky-900 text-white'
+                                                ? 'border-slate-900 bg-slate-900 text-white'
                                                 : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
                                         ]"
                                         @click="selectedQueueSort = 'dss'"
@@ -506,7 +507,7 @@ onMounted(loadProviderData);
                                         :class="[
                                             'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
                                             selectedQueueSort === 'documents'
-                                                ? 'border-sky-900 bg-sky-900 text-white'
+                                                ? 'border-slate-900 bg-slate-900 text-white'
                                                 : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
                                         ]"
                                         @click="selectedQueueSort = 'documents'"
@@ -533,7 +534,7 @@ onMounted(loadProviderData);
                             >
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
+                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
                                             {{ application.scholarship?.title || 'Scholarship' }}
                                         </p>
                                         <h4 class="mt-2 text-lg font-bold text-slate-950">
@@ -543,13 +544,19 @@ onMounted(loadProviderData);
                                             Submitted {{ application.submitted_at || 'recently' }}
                                         </p>
                                     </div>
-                                    <div class="flex flex-wrap gap-2">
+                                    <div class="flex flex-wrap justify-end gap-2">
                                         <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', reviewPriorityClass(application)]">
                                             {{ reviewPriorityLabel(application) }}
                                         </span>
                                         <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
                                             {{ statusLabel(application.status) }}
                                         </span>
+                                        <a
+                                            :href="application.detail_url || `/provider/applications/${application.id}`"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                        >
+                                            View details
+                                        </a>
                                     </div>
                                 </div>
 
@@ -564,26 +571,15 @@ onMounted(loadProviderData);
                                 </div>
 
                                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-                                    <div class="rounded-md border border-indigo-100 bg-indigo-50 p-3">
-                                        <p class="font-semibold text-indigo-800">
-                                            DSS recommendation
+                                    <div class="rounded-md bg-white p-3 ring-1 ring-slate-200">
+                                        <p class="font-semibold text-slate-500">
+                                            DSS score
                                         </p>
-                                        <div class="mt-2 flex flex-wrap items-center gap-2">
-                                            <span class="rounded-md bg-white px-2.5 py-1 text-xs font-bold uppercase text-indigo-800 ring-1 ring-indigo-100">
-                                                DSS {{ application.dss_score ?? 0 }}%
-                                            </span>
-                                            <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', recommendationClass(application.dss_recommendation)]">
-                                                {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
-                                            </span>
-                                        </div>
-                                        <p class="mt-2 text-xs leading-5 text-indigo-900">
-                                            {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'Decision support score based on applicant data.' }}
-                                        </p>
-                                        <p class="mt-2 rounded-md bg-white/80 p-2 text-xs font-semibold leading-5 text-indigo-900">
-                                            {{ application.dss_explanation?.next_action || 'Review eligibility, documents, and notes before deciding.' }}
+                                        <p class="mt-1 font-bold text-slate-950">
+                                            {{ application.dss_score ?? 0 }}%
                                         </p>
                                     </div>
-                                    <div class="rounded-md bg-white p-3">
+                                    <div class="rounded-md bg-white p-3 ring-1 ring-slate-200">
                                         <p class="font-semibold text-slate-500">
                                             Eligibility match
                                         </p>
@@ -591,423 +587,24 @@ onMounted(loadProviderData);
                                             {{ application.eligibility_score ?? 0 }}%
                                         </p>
                                     </div>
-                                    <div class="rounded-md bg-white p-3">
+                                    <div class="rounded-md bg-white p-3 ring-1 ring-slate-200">
                                         <p class="font-semibold text-slate-500">
-                                            Education level
+                                            Documents
                                         </p>
                                         <p class="mt-1 font-bold text-slate-950">
-                                            {{ labelFromKey(application.applicant?.education_level || 'not_set') }}
-                                        </p>
-                                        <p class="mt-1 text-xs text-slate-500">
-                                            {{ application.applicant?.course_or_strand || 'Track not set' }} - {{ application.applicant?.year_level || 'Grade/year not set' }}
-                                        </p>
-                                    </div>
-                                    <div class="rounded-md bg-white p-3">
-                                        <p class="font-semibold text-slate-500">
-                                            Academic / income
-                                        </p>
-                                        <p class="mt-1 font-bold text-slate-950">
-                                            {{ applicantAcademicLabel(application.applicant) }} - {{ application.applicant?.income_bracket || 'No income data' }}
-                                        </p>
-                                        <p v-if="application.applicant?.household_size" class="mt-1 text-xs text-slate-500">
-                                            Household size: {{ application.applicant.household_size }}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div
-                                    v-if="application.applicant?.support_needs || application.applicant?.scholarship_goal || application.applicant?.preferred_categories || application.applicant?.preferred_locations"
-                                    class="mt-4 rounded-md bg-white p-3 text-sm"
-                                >
-                                    <p class="font-semibold text-slate-500">
-                                        Student support context
-                                    </p>
-                                    <div class="mt-2 grid gap-2 sm:grid-cols-2">
-                                        <p v-if="application.applicant?.preferred_categories" class="rounded-md bg-slate-50 p-2 text-xs leading-5 text-slate-600">
-                                            <span class="font-bold text-slate-800">Preferred types:</span> {{ application.applicant.preferred_categories }}
-                                        </p>
-                                        <p v-if="application.applicant?.preferred_locations" class="rounded-md bg-slate-50 p-2 text-xs leading-5 text-slate-600">
-                                            <span class="font-bold text-slate-800">Preferred locations:</span> {{ application.applicant.preferred_locations }}
-                                        </p>
-                                        <p v-if="application.applicant?.support_needs" class="rounded-md bg-slate-50 p-2 text-xs leading-5 text-slate-600">
-                                            <span class="font-bold text-slate-800">Support needs:</span> {{ application.applicant.support_needs }}
-                                        </p>
-                                        <p v-if="application.applicant?.scholarship_goal" class="rounded-md bg-slate-50 p-2 text-xs leading-5 text-slate-600">
-                                            <span class="font-bold text-slate-800">Goal:</span> {{ application.applicant.scholarship_goal }}
-                                        </p>
-                                    </div>
-                                    <p v-if="application.applicant?.willing_to_relocate" class="mt-2 w-fit rounded-md bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">
-                                        Relocation: {{ labelFromKey(application.applicant.willing_to_relocate) }}
-                                    </p>
-                                </div>
-
-                                <div
-                                    v-if="application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length"
-                                    class="mt-4 grid gap-3 text-sm md:grid-cols-2"
-                                >
-                                    <div class="rounded-md border border-emerald-100 bg-emerald-50 p-3">
-                                        <p class="font-semibold text-emerald-800">
-                                            DSS strengths
-                                        </p>
-                                        <div v-if="application.dss_explanation?.strengths?.length" class="mt-2 grid gap-2">
-                                            <p
-                                                v-for="item in application.dss_explanation.strengths.slice(0, 3)"
-                                                :key="item"
-                                                class="rounded-md bg-white px-3 py-2 text-xs leading-5 text-slate-600"
-                                            >
-                                                {{ item }}
-                                            </p>
-                                        </div>
-                                        <p v-else class="mt-2 text-xs text-emerald-800">
-                                            No strong signals yet.
-                                        </p>
-                                    </div>
-                                    <div class="rounded-md border border-amber-100 bg-amber-50 p-3">
-                                        <p class="font-semibold text-amber-800">
-                                            DSS review flags
-                                        </p>
-                                        <div v-if="application.dss_explanation?.needs_attention?.length" class="mt-2 grid gap-2">
-                                            <p
-                                                v-for="item in application.dss_explanation.needs_attention.slice(0, 3)"
-                                                :key="item"
-                                                class="rounded-md bg-white px-3 py-2 text-xs leading-5 text-slate-600"
-                                            >
-                                                {{ item }}
-                                            </p>
-                                        </div>
-                                        <p v-else class="mt-2 text-xs text-amber-800">
-                                            No major DSS flags.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div v-if="application.dss_breakdown?.criteria?.length" class="mt-4 rounded-md bg-white p-3 text-sm">
-                                    <p class="font-semibold text-slate-500">
-                                        DSS weighted criteria
-                                    </p>
-                                    <div class="mt-3 grid gap-2 sm:grid-cols-2">
-                                        <div
-                                            v-for="criterion in application.dss_breakdown.criteria"
-                                            :key="criterion.key"
-                                            class="rounded-md border border-slate-200 bg-slate-50 p-3"
-                                        >
-                                            <div class="flex items-center justify-between gap-3">
-                                                <p class="font-bold text-slate-950">
-                                                    {{ criterion.label }}
-                                                </p>
-                                                <p class="text-xs font-bold text-slate-500">
-                                                    {{ criterion.weight }}%
-                                                </p>
-                                            </div>
-                                            <p class="mt-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
-                                                Score {{ criterion.score }}%
-                                            </p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">
-                                                {{ criterion.note }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div v-if="application.status_progress" class="mt-4 rounded-md bg-white p-3 text-sm">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <p class="font-semibold text-slate-500">
-                                                Review stage
-                                            </p>
-                                            <p class="mt-1 font-bold text-slate-950">
-                                                {{ application.status_progress.label }}
-                                            </p>
-                                        </div>
-                                        <p class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
-                                            {{ application.status_progress.percent }}%
-                                        </p>
-                                    </div>
-                                    <div class="mt-3 grid gap-2 sm:grid-cols-5">
-                                        <div
-                                            v-for="step in application.status_progress.steps"
-                                            :key="step.key"
-                                            :class="[
-                                                'rounded-md px-2.5 py-2 text-xs font-bold',
-                                                step.state === 'complete' ? 'bg-slate-900 text-white' : '',
-                                                step.state === 'current' ? 'bg-sky-100 text-sky-800 ring-1 ring-sky-200' : '',
-                                                step.state === 'upcoming' ? 'bg-slate-50 text-slate-500 ring-1 ring-slate-200' : '',
-                                                step.state === 'skipped' ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-100' : '',
-                                            ]"
-                                        >
-                                            {{ step.label }}
-                                        </div>
-                                    </div>
-                                    <p class="mt-3 text-xs font-semibold leading-5 text-slate-600">
-                                        {{ application.status_progress.next_action }}
-                                    </p>
-                                </div>
-
-                                <div class="mt-4 rounded-md bg-white p-3 text-sm">
-                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <p class="font-semibold text-slate-500">
-                                                Pipeline status
-                                            </p>
-                                            <p class="mt-1 text-xs text-slate-500">
-                                                Update where this application sits in review.
-                                            </p>
-                                        </div>
-                                        <select
-                                            :value="application.status"
-                                            :disabled="updatingId === application.id"
-                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100 disabled:opacity-60"
-                                            @change="updateStatus(application, $event.target.value)"
-                                        >
-                                            <option
-                                                v-for="option in statusOptions"
-                                                :key="option.value"
-                                                :value="option.value"
-                                            >
-                                                {{ option.label }}
-                                            </option>
-                                        </select>
-                                    </div>
-
-                                    <div class="mt-4 border-t border-slate-200 pt-3">
-                                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                            Decision reason
-                                        </label>
-                                        <select
-                                            v-model="decisionReasons[application.id]"
-                                            class="mb-3 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                        >
-                                            <option
-                                                v-for="option in decisionReasonOptions"
-                                                :key="option.value"
-                                                :value="option.value"
-                                            >
-                                                {{ option.label }}
-                                            </option>
-                                        </select>
-
-                                        <div class="mb-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
-                                            <div>
-                                                <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                    Awarded amount
-                                                </label>
-                                                <input
-                                                    v-model="awardedAmounts[application.id]"
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.01"
-                                                    placeholder="Optional"
-                                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                                >
-                                            </div>
-                                            <div>
-                                                <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                    Outcome date
-                                                </label>
-                                                <input
-                                                    v-model="outcomeDates[application.id]"
-                                                    type="date"
-                                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                                >
-                                            </div>
-                                            <div>
-                                                <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                    Outcome note
-                                                </label>
-                                                <input
-                                                    v-model="outcomeNotes[application.id]"
-                                                    type="text"
-                                                    maxlength="2000"
-                                                    placeholder="Award, release, renewal, or closure note"
-                                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                                >
-                                            </div>
-                                        </div>
-
-                                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                            Review note
-                                        </label>
-                                        <textarea
-                                            v-model="reviewNotes[application.id]"
-                                            rows="3"
-                                            maxlength="1500"
-                                            placeholder="Example: Missing proof of income, qualified for interview, or approved for final review."
-                                            class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                        ></textarea>
-                                        <button
-                                            type="button"
-                                            :disabled="updatingId === application.id"
-                                            class="mt-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                            @click="updateStatus(application, application.status)"
-                                        >
-                                            {{ updatingId === application.id ? 'Saving...' : 'Save note' }}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                                    <div class="rounded-md bg-white p-3">
-                                        <p class="font-semibold text-slate-500">
-                                            Email
-                                        </p>
-                                        <p class="mt-1 break-words font-bold text-slate-950">
-                                            {{ application.applicant?.email || 'Not provided' }}
-                                        </p>
-                                    </div>
-                                    <div class="rounded-md bg-white p-3">
-                                        <p class="font-semibold text-slate-500">
-                                            Contact number
-                                        </p>
-                                        <p class="mt-1 font-bold text-slate-950">
-                                            {{ application.applicant?.contact_number || 'Not provided' }}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="mt-4 rounded-md bg-white p-3 text-sm">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <p class="font-semibold text-slate-500">
-                                            Confirmed documents
-                                        </p>
-                                        <span class="rounded-md bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">
                                             {{ application.document_readiness?.percent ?? 0 }}% ready
-                                        </span>
-                                    </div>
-                                    <div v-if="application.document_checklist?.length" class="mt-2 flex flex-wrap gap-2">
-                                        <span
-                                            v-for="document in application.document_checklist"
-                                            :key="document"
-                                            class="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800"
-                                        >
-                                            {{ document }}
-                                        </span>
-                                    </div>
-                                    <p v-else class="mt-2 text-slate-500">
-                                        No checklist items saved.
-                                    </p>
-                                </div>
-
-                                <div class="mt-4 rounded-md bg-white p-3 text-sm">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <p class="font-semibold text-slate-500">
-                                            Uploaded files
                                         </p>
-                                        <span class="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                                            {{ application.document_readiness?.uploaded ?? 0 }} uploaded
-                                        </span>
                                     </div>
-
-                                    <div v-if="application.documents?.length" class="mt-3 grid gap-3">
-                                        <div
-                                            v-for="document in application.documents"
-                                            :key="document.id"
-                                            class="rounded-md border border-slate-200 bg-slate-50 p-3"
-                                        >
-                                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                                <div>
-                                                    <p class="font-bold text-slate-950">
-                                                        {{ document.document_name }}
-                                                    </p>
-                                                    <p class="mt-1 text-xs text-slate-500">
-                                                        {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
-                                                    </p>
-                                                </div>
-                                                <span :class="['h-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', documentStatusClass(document.status)]">
-                                                    {{ labelFromKey(document.status || 'pending') }}
-                                                </span>
-                                            </div>
-
-                                            <div class="mt-3 grid gap-2 md:grid-cols-[12rem_1fr_auto] md:items-end">
-                                                <div>
-                                                    <label class="mb-1 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                        Status
-                                                    </label>
-                                                    <select
-                                                        v-model="documentStatuses[document.id]"
-                                                        class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                                    >
-                                                        <option
-                                                            v-for="option in documentStatusOptions"
-                                                            :key="option.value"
-                                                            :value="option.value"
-                                                        >
-                                                            {{ option.label }}
-                                                        </option>
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label class="mb-1 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                        Document note
-                                                    </label>
-                                                    <input
-                                                        v-model="documentNotes[document.id]"
-                                                        type="text"
-                                                        maxlength="1000"
-                                                        placeholder="Optional note for applicant"
-                                                        class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                                    >
-                                                </div>
-                                                <div class="flex gap-2">
-                                                    <a
-                                                        :href="document.download_url"
-                                                        class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-white"
-                                                    >
-                                                        Download
-                                                    </a>
-                                                    <button
-                                                        type="button"
-                                                        :disabled="documentUpdatingId === document.id"
-                                                        class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                                                        @click="updateDocumentStatus(application, document)"
-                                                    >
-                                                        {{ documentUpdatingId === document.id ? 'Saving...' : 'Save' }}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <p v-else class="mt-2 text-slate-500">
-                                        No uploaded files yet.
-                                    </p>
-                                </div>
-
-                                <div class="mt-4 rounded-md bg-white p-3 text-sm">
-                                    <p class="font-semibold text-slate-500">
-                                        Applicant note
-                                    </p>
-                                    <p class="mt-1 leading-6 text-slate-700">
-                                        {{ application.notes || 'No note added.' }}
-                                    </p>
-                                </div>
-
-                                <div v-if="application.timeline?.length" class="mt-4 rounded-md bg-white p-3 text-sm">
-                                    <p class="font-semibold text-slate-500">
-                                        Review timeline
-                                    </p>
-                                    <div class="mt-3 grid gap-2">
-                                        <div
-                                            v-for="event in application.timeline"
-                                            :key="event.id"
-                                            class="rounded-md border border-slate-200 bg-slate-50 p-3"
-                                        >
-                                            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                                <p class="font-bold text-slate-950">
-                                                    {{ statusLabel(event.to_status) }}
-                                                </p>
-                                                <p class="text-xs text-slate-500">
-                                                    {{ event.changed_at || 'Recently' }}
-                                                </p>
-                                            </div>
-                                            <p class="mt-1 text-xs text-slate-500">
-                                                By {{ event.actor || 'System' }}
-                                                <span v-if="event.decision_reason"> - {{ labelFromKey(event.decision_reason) }}</span>
-                                            </p>
-                                            <p v-if="event.review_notes" class="mt-2 leading-5 text-slate-600">
-                                                {{ event.review_notes }}
-                                            </p>
-                                        </div>
+                                    <div class="rounded-md bg-white p-3 ring-1 ring-slate-200">
+                                        <p class="font-semibold text-slate-500">
+                                            Review stage
+                                        </p>
+                                        <p class="mt-1 font-bold text-slate-950">
+                                            {{ application.status_progress?.label || statusLabel(application.status) }}
+                                        </p>
                                     </div>
                                 </div>
+
                             </article>
                         </div>
                     </section>

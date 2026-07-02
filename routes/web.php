@@ -26,8 +26,11 @@ Route::get('/dashboard/profile', [ApplicantDashboardController::class, 'profile'
 Route::patch('/dashboard/profile', [ApplicantDashboardController::class, 'updateProfile'])->middleware('auth')->name('dashboard.profile.update');
 Route::get('/dashboard/data', [ApplicantDashboardController::class, 'data'])->middleware('auth')->name('dashboard.data');
 Route::get('/dashboard/applications/data', [ApplicantDashboardController::class, 'applicationsData'])->middleware('auth')->name('dashboard.applications.data');
+Route::get('/dashboard/applications/{application}', [ApplicantDashboardController::class, 'applicationDetail'])->middleware('auth')->name('dashboard.applications.show');
+Route::get('/dashboard/applications/{application}/data', [ApplicantDashboardController::class, 'applicationDetailData'])->middleware('auth')->name('dashboard.applications.show.data');
 Route::get('/dashboard/documents/data', [ApplicantDashboardController::class, 'documentsData'])->middleware('auth')->name('dashboard.documents.data');
 Route::post('/dashboard/student-documents', [ApplicantDashboardController::class, 'uploadPreparedDocument'])->middleware('auth')->name('dashboard.student-documents.store');
+Route::get('/dashboard/student-documents/{document}/view', [ApplicantDashboardController::class, 'viewPreparedDocument'])->middleware('auth')->name('dashboard.student-documents.view');
 Route::get('/dashboard/student-documents/{document}/download', [ApplicantDashboardController::class, 'downloadPreparedDocument'])->middleware('auth')->name('dashboard.student-documents.download');
 Route::delete('/dashboard/student-documents/{document}', [ApplicantDashboardController::class, 'deletePreparedDocument'])->middleware('auth')->name('dashboard.student-documents.destroy');
 Route::post('/dashboard/applications', [ApplicantDashboardController::class, 'storeApplication'])->middleware('auth')->name('dashboard.applications.store');
@@ -35,6 +38,7 @@ Route::post('/dashboard/applications/{application}/documents', [ApplicantDashboa
 Route::delete('/dashboard/documents/{document}', [ApplicantDashboardController::class, 'deleteDocument'])->middleware('auth')->name('dashboard.documents.destroy');
 Route::post('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardController::class, 'saveScholarship'])->middleware('auth')->name('dashboard.scholarships.save');
 Route::delete('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardController::class, 'unsaveScholarship'])->middleware('auth')->name('dashboard.scholarships.unsave');
+Route::get('/documents/{document}/view', [ApplicationDocumentController::class, 'view'])->middleware('auth')->name('documents.view');
 Route::get('/documents/{document}/download', [ApplicationDocumentController::class, 'download'])->middleware('auth')->name('documents.download');
 Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->middleware('auth')->name('notifications.read');
 Route::get('/admin', [AdminController::class, 'index'])->name('admin.index');
@@ -74,6 +78,8 @@ Route::get('/provider/verification-documents/{document}/download', [ProviderCont
 Route::delete('/provider/verification-documents/{document}', [ProviderController::class, 'deleteVerificationDocument'])->middleware('auth')->name('provider.verification-documents.destroy');
 Route::get('/provider/insights/data', [ProviderController::class, 'insightsData'])->middleware('auth')->name('provider.insights.data');
 Route::get('/provider/applications/data', [ProviderController::class, 'applicationsData'])->middleware('auth')->name('provider.applications.data');
+Route::get('/provider/applications/{application}', [ProviderController::class, 'applicationDetail'])->middleware('auth')->whereNumber('application')->name('provider.applications.show');
+Route::get('/provider/applications/{application}/data', [ProviderController::class, 'applicationDetailData'])->middleware('auth')->whereNumber('application')->name('provider.applications.show.data');
 Route::patch('/provider/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->middleware('auth')->name('provider.applications.status');
 Route::patch('/provider/documents/{document}/status', [ProviderController::class, 'updateDocumentStatus'])->middleware('auth')->name('provider.documents.status');
 Route::get('/provider/export/applications', [ProviderController::class, 'exportApplications'])->middleware('auth')->name('provider.export.applications');

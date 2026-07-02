@@ -26,9 +26,6 @@ const currentStep = ref(0);
 const selectedScholarshipId = ref('');
 const documentChecklist = ref([]);
 const notes = ref('');
-const uploadForms = ref({});
-const uploadFiles = ref({});
-const uploadingId = ref(null);
 
 const steps = [
     { label: 'Program', detail: 'Use selected scholarship' },
@@ -42,6 +39,13 @@ const applicationModeOptions = [
     { value: 'hybrid', label: 'Online and on-site' },
     { value: 'provider_review', label: 'Provider review only' },
 ];
+const dssApplicationGuideItems = [
+    { label: 'Eligibility', weight: '35%', detail: 'Profile fit with the scholarship rules.' },
+    { label: 'Documents', weight: '25%', detail: 'Confirmed, uploaded, and accepted requirements.' },
+    { label: 'Academic', weight: '20%', detail: 'Grades compared with the listed requirement.' },
+    { label: 'Need', weight: '15%', detail: 'Income information for assistance-focused programs.' },
+    { label: 'Review', weight: '5%', detail: 'Current status and provider review signals.' },
+];
 const selectedScholarship = computed(() => scholarships.value.find((scholarship) => scholarship.id === Number(selectedScholarshipId.value)));
 const selectedRequirements = computed(() => documentRequirements(selectedScholarship.value?.requirements));
 const appliedScholarshipIds = computed(() => new Set(applications.value.map((application) => application.scholarship?.id).filter(Boolean)));
@@ -49,6 +53,33 @@ const selectedAlreadyApplied = computed(() => selectedScholarship.value && appli
 const allDocumentsChecked = computed(() => selectedRequirements.value.every((requirement) => documentChecklist.value.includes(requirement)));
 const checkedDocumentCount = computed(() => selectedRequirements.value.filter((requirement) => documentChecklist.value.includes(requirement)).length);
 const canApply = computed(() => profileReadiness.value.complete);
+const selectedEligibilityBlockers = computed(() => selectedScholarship.value?.eligibility_match?.blocking_criteria ?? []);
+const selectedIsEligible = computed(() => selectedScholarship.value?.eligibility_match?.is_eligible !== false);
+const selectedCanStartApplication = computed(() => {
+    if (!selectedScholarship.value) {
+        return false;
+    }
+
+    if (selectedScholarship.value.can_start_application !== undefined) {
+        return Boolean(selectedScholarship.value.can_start_application);
+    }
+
+    return canApply.value && selectedIsEligible.value && !selectedAlreadyApplied.value;
+});
+const selectedEligibilityMessage = computed(() => {
+    if (selectedIsEligible.value) {
+        return '';
+    }
+
+    const labels = selectedEligibilityBlockers.value
+        .map((criterion) => criterion.label)
+        .filter(Boolean)
+        .slice(0, 3);
+
+    return labels.length
+        ? `Your profile does not meet: ${labels.join(', ')}.`
+        : 'Your profile does not meet this scholarship eligibility.';
+});
 const selectedPreparedDocuments = computed(() => selectedScholarship.value?.prepared_documents?.matched ?? []);
 const selectedMissingPreparedDocuments = computed(() => selectedScholarship.value?.prepared_documents?.missing ?? selectedRequirements.value);
 const selectedDocumentReadiness = computed(() => selectedScholarship.value?.prepared_documents?.percent ?? (selectedRequirements.value.length === 0 ? 100 : 0));
@@ -81,8 +112,10 @@ const wizardReadinessItems = computed(() => [
     },
     {
         label: 'Program selected',
-        complete: Boolean(selectedScholarship.value),
-        detail: selectedScholarship.value ? selectedScholarship.value.title : 'Choose from Scholarships first.',
+        complete: Boolean(selectedScholarship.value) && selectedIsEligible.value,
+        detail: selectedScholarship.value
+            ? (selectedIsEligible.value ? selectedScholarship.value.title : selectedEligibilityMessage.value)
+            : 'Choose from Scholarships first.',
     },
     {
         label: 'Documents prepared',
@@ -101,7 +134,7 @@ const wizardReadinessItems = computed(() => [
 ]);
 const wizardReadinessPercent = computed(() => Math.round((wizardReadinessItems.value.filter((item) => item.complete).length / wizardReadinessItems.value.length) * 100));
 const canGoNext = computed(() => {
-    if (!canApply.value || !selectedScholarship.value || selectedAlreadyApplied.value) {
+    if (!selectedCanStartApplication.value) {
         return false;
     }
 
@@ -117,7 +150,7 @@ function canOpenWizardStep(index) {
         return true;
     }
 
-    if (!canApply.value || !selectedScholarship.value || selectedAlreadyApplied.value) {
+    if (!selectedCanStartApplication.value) {
         return false;
     }
 
@@ -161,9 +194,22 @@ function goToWizardStep(index) {
         return;
     }
 
-    errorMessage.value = canApply.value
-        ? 'Complete the current application step before moving forward.'
-        : 'Complete your student profile before starting an application.';
+    if (!canApply.value) {
+        errorMessage.value = 'Complete your student profile before starting an application.';
+        return;
+    }
+
+    if (!selectedIsEligible.value) {
+        errorMessage.value = selectedEligibilityMessage.value;
+        return;
+    }
+
+    if (selectedAlreadyApplied.value) {
+        errorMessage.value = 'You already submitted an application for this scholarship.';
+        return;
+    }
+
+    errorMessage.value = 'Complete the current application step before moving forward.';
 }
 
 function formatAmount(amount) {
@@ -248,22 +294,6 @@ function criterionClass(status) {
     return 'border-slate-200 bg-slate-50 text-slate-600';
 }
 
-function documentStatusClass(status) {
-    if (status === 'accepted') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (status === 'needs_replacement') {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    return 'bg-sky-100 text-sky-800';
-}
-
 function labelFromKey(value) {
     return String(value ?? '')
         .replace(/_/g, ' ')
@@ -283,34 +313,6 @@ function documentRequirements(requirements) {
         .split(/\r?\n|,/)
         .map((requirement) => requirement.trim())
         .filter(Boolean);
-}
-
-function ensureUploadForm(application) {
-    if (!uploadForms.value[application.id]) {
-        uploadForms.value[application.id] = {
-            documentName: documentRequirements(application.scholarship?.requirements)[0] ?? '',
-        };
-    }
-}
-
-function requiredDocumentsForApplication(application) {
-    return documentRequirements(application.scholarship?.requirements);
-}
-
-function uploadedDocumentNames(application) {
-    return new Set((application.documents ?? []).map((document) => document.document_name));
-}
-
-function formatFileSize(size) {
-    if (!size) {
-        return '0 KB';
-    }
-
-    return `${Math.max(1, Math.round(Number(size) / 1024))} KB`;
-}
-
-function handleFileChange(application, event) {
-    uploadFiles.value[application.id] = event.target.files?.[0] ?? null;
 }
 
 function nextStep() {
@@ -362,7 +364,6 @@ async function loadApplications() {
         stats.value = response.data.stats;
         scholarships.value = response.data.scholarships;
         applications.value = response.data.applications;
-        applications.value.forEach(ensureUploadForm);
 
         const requestedScholarshipId = new URLSearchParams(window.location.search).get('scholarship');
 
@@ -373,10 +374,22 @@ async function loadApplications() {
                 selectedScholarshipId.value = String(requestedScholarship.id);
                 documentChecklist.value = [];
                 notes.value = '';
-                currentStep.value = 1;
+                currentStep.value = requestedScholarship.can_start_application ? 1 : 0;
 
                 if (appliedScholarshipIds.value.has(requestedScholarship.id)) {
                     errorMessage.value = 'You already submitted an application for this scholarship.';
+                    currentStep.value = 0;
+                } else if (!canApply.value) {
+                    errorMessage.value = 'Complete your student profile before starting an application.';
+                    currentStep.value = 0;
+                } else if (requestedScholarship.eligibility_match?.is_eligible === false) {
+                    const labels = (requestedScholarship.eligibility_match.blocking_criteria ?? [])
+                        .map((criterion) => criterion.label)
+                        .filter(Boolean)
+                        .slice(0, 3);
+                    errorMessage.value = labels.length
+                        ? `Your profile does not meet: ${labels.join(', ')}.`
+                        : 'Your profile does not meet this scholarship eligibility.';
                     currentStep.value = 0;
                 }
             } else {
@@ -393,6 +406,11 @@ async function loadApplications() {
 async function submitApplication() {
     if (!canApply.value) {
         errorMessage.value = 'Complete your student profile before submitting an application.';
+        return;
+    }
+
+    if (!selectedIsEligible.value) {
+        errorMessage.value = selectedEligibilityMessage.value;
         return;
     }
 
@@ -422,58 +440,6 @@ async function submitApplication() {
         }
     } finally {
         isSubmitting.value = false;
-    }
-}
-
-async function uploadDocument(application) {
-    const uploadForm = uploadForms.value[application.id];
-    const file = uploadFiles.value[application.id];
-
-    if (!uploadForm?.documentName || !file) {
-        errorMessage.value = 'Choose a document type and file before uploading.';
-        return;
-    }
-
-    uploadingId.value = application.id;
-    errorMessage.value = '';
-    submitMessage.value = '';
-
-    const payload = new FormData();
-    payload.append('document_name', uploadForm.documentName);
-    payload.append('document_file', file);
-
-    try {
-        const response = await window.axios.post(`/dashboard/applications/${application.id}/documents`, payload, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
-
-        applications.value = applications.value.map((item) => (item.id === application.id ? response.data.application : item));
-        ensureUploadForm(response.data.application);
-        uploadFiles.value[application.id] = null;
-        submitMessage.value = response.data.message ?? 'Document uploaded.';
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to upload document.';
-    } finally {
-        uploadingId.value = null;
-    }
-}
-
-async function deleteDocument(application, document) {
-    uploadingId.value = application.id;
-    errorMessage.value = '';
-    submitMessage.value = '';
-
-    try {
-        const response = await window.axios.delete(`/dashboard/documents/${document.id}`);
-
-        applications.value = applications.value.map((item) => (item.id === application.id ? response.data.application : item));
-        submitMessage.value = response.data.message ?? 'Document removed.';
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to remove document.';
-    } finally {
-        uploadingId.value = null;
     }
 }
 
@@ -571,84 +537,87 @@ watch(selectedScholarship, (scholarship) => {
                             </div>
                         </div>
 
-                        <div class="mt-4 grid gap-2 md:grid-cols-4">
-                            <div
-                                v-for="item in wizardReadinessItems"
-                                :key="item.label"
-                                class="rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm"
-                            >
-                                <div class="flex items-start gap-2">
-                                    <span :class="['mt-1 h-2.5 w-2.5 shrink-0 rounded-full', item.complete ? 'bg-emerald-500' : 'bg-amber-400']"></span>
-                                    <div>
+                        <details class="mt-4 rounded-md border border-slate-200 bg-[#f6faf8] p-4 text-sm">
+                            <summary class="cursor-pointer font-bold text-slate-950">
+                                How application DSS scores work
+                            </summary>
+                            <p class="mt-2 leading-6 text-slate-600">
+                                After submission, the Decision Support System scores the application from the current profile, documents, scholarship rules, and review status. The score helps providers prioritize review, but it is not the final decision.
+                            </p>
+                            <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                                <div
+                                    v-for="item in dssApplicationGuideItems"
+                                    :key="item.label"
+                                    class="rounded-md border border-slate-200 bg-white p-3"
+                                >
+                                    <div class="flex items-center justify-between gap-2">
                                         <p class="font-bold text-slate-950">{{ item.label }}</p>
+                                        <span class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+                                            {{ item.weight }}
+                                        </span>
                                     </div>
+                                    <p class="mt-1 text-xs leading-5 text-slate-600">
+                                        {{ item.detail }}
+                                    </p>
                                 </div>
                             </div>
-                        </div>
+                        </details>
                     </section>
 
-                    <details class="rounded-lg border border-indigo-100 bg-indigo-50/80 p-4 text-sm shadow-sm">
-                        <summary class="cursor-pointer font-bold text-slate-950">
-                            How DSS scores work
-                        </summary>
-                        <p class="mt-2 leading-5 text-slate-600">
-                            DSS scores are a guide only. Providers still make the final decision.
-                        </p>
-                    </details>
-
-                    <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
-                        <div class="grid lg:grid-cols-[16rem_1fr]">
-                            <aside class="p-4 text-white">
-                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
-                                    Process
-                                </p>
-                                <h3 class="mt-2 font-display text-xl font-bold">
-                                    Application flow
-                                </h3>
-
-                                <div class="mt-4 grid gap-2">
-                            <button
-                                v-for="(step, index) in steps"
-                                :key="step.label"
-                                type="button"
-                                :disabled="!canOpenWizardStep(index)"
-                                :class="[
-                                    'rounded-md border p-3 text-left text-current transition disabled:cursor-not-allowed disabled:opacity-50',
-                                    currentStep === index
-                                        ? 'border-amber-300 bg-amber-300 text-slate-950 shadow-sm'
-                                        : index < currentStep
-                                            ? 'border-emerald-300/40 bg-emerald-300/10 text-emerald-100'
-                                            : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10',
-                                ]"
-                                @click="goToWizardStep(index)"
-                            >
-                                <span class="text-xs font-bold uppercase tracking-[0.16em] opacity-70">
-                                    Step {{ index + 1 }}
-                                </span>
-                                <span class="mt-1 block font-bold">
-                                    {{ step.label }}
-                                </span>
-                                <span class="mt-1 block text-xs opacity-75">
-                                    {{ step.detail }}
-                                </span>
-                            </button>
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="border-b border-slate-200 bg-white p-4">
+                            <div class="flex flex-col gap-3">
+                                <div>
+                                    <p class="student-kicker">
+                                        Process
+                                    </p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                        Application flow
+                                    </h3>
                                 </div>
-                            </aside>
 
-                            <div class="bg-white p-5">
+                                <nav class="flex gap-2 overflow-x-auto pb-1" aria-label="Application process">
+                                    <button
+                                        v-for="(step, index) in steps"
+                                        :key="step.label"
+                                        type="button"
+                                        :disabled="!canOpenWizardStep(index)"
+                                        :class="[
+                                            'min-w-[7.75rem] flex-1 rounded-md border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50',
+                                            currentStep === index
+                                                ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                                                : index < currentStep
+                                                    ? 'border-slate-300 bg-slate-100 text-slate-800'
+                                                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-950',
+                                        ]"
+                                        @click="goToWizardStep(index)"
+                                    >
+                                        <span class="text-xs font-bold uppercase tracking-[0.14em] opacity-70">
+                                            Step {{ index + 1 }}
+                                        </span>
+                                        <span class="mt-1 block font-bold">
+                                            {{ step.label }}
+                                        </span>
+                                        <span class="mt-1 block text-xs leading-4 opacity-70">
+                                            {{ step.detail }}
+                                        </span>
+                                    </button>
+                                </nav>
+                            </div>
+                        </div>
 
-                        <div class="mt-6">
+                        <div class="bg-slate-50 p-4">
                             <div v-if="currentStep === 0">
-                                <div class="rounded-lg border border-slate-200 bg-[#f6faf8] p-5">
-                                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div class="rounded-lg border border-slate-200 bg-white p-4">
+                                    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                         <div>
-                                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                                                 Selected Program
                                             </p>
-                                            <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                            <h3 class="mt-1 text-lg font-bold text-slate-950">
                                                 Choose from Scholarships first
                                             </h3>
-                                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
                                                 Applications now use the program selected from the Scholarships page, so this area stays focused on review, checklist, and submission.
                                             </p>
                                         </div>
@@ -660,72 +629,88 @@ watch(selectedScholarship, (scholarship) => {
                                         </a>
                                     </div>
 
-                                    <div v-if="selectedScholarship" class="mt-5 rounded-lg border border-sky-100 bg-white p-4">
-                                        <img
-                                            :src="selectedScholarship.image_url"
-                                            :alt="selectedScholarship.title"
-                                            class="mb-3 h-14 w-14 rounded-md bg-[#f8fafc] object-contain p-1.5 ring-1 ring-slate-200"
-                                        >
-                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
-                                            {{ selectedScholarship.provider?.name || 'Scholarship Provider' }}
-                                        </p>
-                                        <h4 class="mt-2 text-lg font-bold text-slate-950">
-                                            {{ selectedScholarship.title }}
-                                        </h4>
-                                        <p class="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
-                                            {{ selectedScholarship.description }}
-                                        </p>
+                                    <div v-if="selectedScholarship" class="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                                        <div class="flex gap-3">
+                                            <img
+                                                :src="selectedScholarship.image_url"
+                                                :alt="selectedScholarship.title"
+                                                class="h-12 w-12 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
+                                            >
+                                            <div class="min-w-0">
+                                                <p class="truncate text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                                    {{ selectedScholarship.provider?.name || 'Scholarship Provider' }}
+                                                </p>
+                                                <h4 class="mt-1 text-lg font-bold text-slate-950">
+                                                    {{ selectedScholarship.title }}
+                                                </h4>
+                                                <p class="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">
+                                                    {{ selectedScholarship.description }}
+                                                </p>
+                                            </div>
+                                        </div>
                                         <div class="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
-                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                            <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                                 <p class="font-semibold text-slate-500">Award</p>
                                                 <p class="mt-1 font-bold text-slate-950">{{ formatAmount(selectedScholarship.award_amount) }}</p>
                                             </div>
-                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                            <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                                 <p class="font-semibold text-slate-500">Deadline</p>
                                                 <p class="mt-1 font-bold text-slate-950">{{ selectedScholarship.deadline || 'No deadline' }}</p>
                                             </div>
-                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                            <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                                 <p class="font-semibold text-slate-500">Documents</p>
                                                 <p class="mt-1 font-bold text-slate-950">{{ selectedRequirements.length }}</p>
                                             </div>
-                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                            <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                                 <p class="font-semibold text-slate-500">Mode</p>
                                                 <p class="mt-1 font-bold text-slate-950">{{ selectedApplicationMode }}</p>
                                             </div>
-                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                            <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                                 <p class="font-semibold text-slate-500">Match</p>
                                                 <p :class="['mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold', matchClass(selectedScholarship.eligibility_match?.score)]">
                                                     {{ selectedScholarship.eligibility_match?.score ?? 0 }}%
                                                 </p>
                                             </div>
                                         </div>
+                                        <div v-if="!selectedIsEligible" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm leading-6 text-rose-800">
+                                            <p class="font-bold">
+                                                Not eligible to apply
+                                            </p>
+                                            <p class="mt-1">
+                                                {{ selectedEligibilityMessage }}
+                                            </p>
+                                        </div>
                                     </div>
 
-                                    <div v-else class="mt-5 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+                                    <div v-else class="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                                         No scholarship is selected yet. Open Scholarships, pick a program, then start the application from there.
                                     </div>
                                 </div>
                             </div>
 
-                            <div v-else-if="currentStep === 1 && selectedScholarship" class="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-                                <section class="rounded-lg border border-slate-200/80 bg-[#f6faf8] p-5">
-                                    <img
-                                        :src="selectedScholarship.image_url"
-                                        :alt="selectedScholarship.title"
-                                        class="mb-3 h-16 w-16 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200"
-                                    >
-                                    <p class="student-kicker">
-                                        Scholarship Details
-                                    </p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                        {{ selectedScholarship.title }}
-                                    </h3>
-                                    <p class="mt-3 text-sm leading-6 text-slate-600">
-                                        {{ selectedScholarship.description }}
-                                    </p>
+                            <div v-else-if="currentStep === 1 && selectedScholarship" class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_19rem]">
+                                <section class="rounded-lg border border-slate-200 bg-white p-4">
+                                    <div class="flex gap-3">
+                                        <img
+                                            :src="selectedScholarship.image_url"
+                                            :alt="selectedScholarship.title"
+                                            class="h-12 w-12 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
+                                        >
+                                        <div class="min-w-0">
+                                            <p class="student-kicker">
+                                                Scholarship Details
+                                            </p>
+                                            <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                                {{ selectedScholarship.title }}
+                                            </h3>
+                                            <p class="mt-2 text-sm leading-6 text-slate-600">
+                                                {{ selectedScholarship.description }}
+                                            </p>
+                                        </div>
+                                    </div>
 
-                                    <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                                        <div class="rounded-md bg-white p-3">
+                                    <div class="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Provider
                                             </p>
@@ -733,7 +718,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ selectedScholarship.provider?.name || 'Scholarship Provider' }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Award
                                             </p>
@@ -741,7 +726,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ formatAmount(selectedScholarship.award_amount) }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Academic requirement
                                             </p>
@@ -749,7 +734,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ academicRequirementLabel(selectedScholarship) }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Deadline
                                             </p>
@@ -757,7 +742,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ selectedScholarship.deadline || 'No deadline' }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Match score
                                             </p>
@@ -765,7 +750,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ selectedScholarship.eligibility_match?.score ?? 0 }}% - {{ selectedScholarship.eligibility_match?.label || 'Needs review' }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Application mode
                                             </p>
@@ -773,7 +758,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ selectedApplicationMode }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Slots
                                             </p>
@@ -781,7 +766,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ selectedSlotsLabel }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Documents ready
                                             </p>
@@ -791,7 +776,7 @@ watch(selectedScholarship, (scholarship) => {
                                         </div>
                                     </div>
 
-                                    <div class="mt-4 rounded-md bg-white p-3 text-sm">
+                                    <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
                                         <p class="font-semibold text-slate-500">
                                             Eligibility
                                         </p>
@@ -800,12 +785,15 @@ watch(selectedScholarship, (scholarship) => {
                                         </p>
                                     </div>
 
-                                    <div class="mt-4 rounded-md border border-sky-100 bg-white p-3 text-sm">
+                                    <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
                                         <p class="font-semibold text-slate-500">
                                             Match guide
                                         </p>
                                         <p class="mt-1 leading-6 text-slate-700">
-                                            {{ selectedScholarship.eligibility_match?.summary || selectedScholarship.eligibility_guide?.note || 'Review the scholarship requirements before submitting.' }}
+                                                {{ selectedScholarship.eligibility_match?.summary || selectedScholarship.eligibility_guide?.note || 'Review the scholarship requirements before submitting.' }}
+                                            </p>
+                                        <p v-if="!selectedIsEligible" class="mt-2 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs font-bold leading-5 text-rose-800">
+                                            {{ selectedEligibilityMessage }}
                                         </p>
                                         <div v-if="selectedScholarship.eligibility_match?.criteria?.length" class="mt-3 flex flex-wrap gap-2">
                                             <span
@@ -819,15 +807,15 @@ watch(selectedScholarship, (scholarship) => {
                                     </div>
                                 </section>
 
-                                <section class="rounded-lg border border-slate-200/80 bg-white/90 p-5">
+                                <section class="rounded-lg border border-slate-200 bg-white p-4">
                                     <p class="student-kicker">
                                         Applicant Record
                                     </p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
                                         Confirm your details
                                     </h3>
-                                    <div class="mt-4 grid gap-3 text-sm">
-                                        <div class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
+                                    <div class="mt-3 grid gap-2 text-sm">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Name
                                             </p>
@@ -835,7 +823,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ user?.name }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Email
                                             </p>
@@ -843,7 +831,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ user?.email }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Contact number
                                             </p>
@@ -851,7 +839,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ user?.contact_number || 'Not provided' }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Academic details
                                             </p>
@@ -863,20 +851,20 @@ watch(selectedScholarship, (scholarship) => {
                                 </section>
                             </div>
 
-                            <div v-else-if="currentStep === 2 && selectedScholarship">
-                                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div v-else-if="currentStep === 2 && selectedScholarship" class="space-y-4">
+                                <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 lg:flex-row lg:items-start lg:justify-between">
                                     <div>
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                                             Document Checklist
                                         </p>
-                                        <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                        <h3 class="mt-1 text-lg font-bold text-slate-950">
                                             Confirm prepared documents
                                         </h3>
-                                        <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                        <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
                                             Mark only the documents you already have. The checklist will be saved with your application record.
                                         </p>
                                     </div>
-                                    <div class="rounded-md border border-slate-200 bg-[#f6faf8] px-4 py-3 text-sm">
+                                    <div class="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
                                         <p class="font-bold text-slate-950">
                                             {{ checkedDocumentCount }} / {{ selectedRequirements.length }}
                                         </p>
@@ -886,34 +874,34 @@ watch(selectedScholarship, (scholarship) => {
                                     </div>
                                 </div>
 
-                                <div v-if="selectedRequirements.length" class="mt-5 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
-                                    <div class="rounded-lg border border-sky-100 bg-sky-50 p-4">
+                                <div v-if="selectedRequirements.length" class="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+                                    <div class="rounded-lg border border-slate-200 bg-white p-4">
                                         <div class="flex items-center justify-between gap-3">
                                             <div>
-                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">
+                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                                                     Document Library Match
                                                 </p>
                                                 <p class="mt-1 text-sm font-bold text-slate-950">
                                                     {{ selectedPreparedDocuments.length }} of {{ selectedRequirements.length }} already uploaded
                                                 </p>
                                             </div>
-                                            <span class="font-display text-2xl font-bold text-sky-800">
+                                            <span class="font-display text-2xl font-bold text-slate-950">
                                                 {{ selectedDocumentReadiness }}%
                                             </span>
                                         </div>
-                                        <div class="mt-3 h-2 overflow-hidden rounded-full bg-white">
-                                            <div class="h-full rounded-full bg-sky-700 transition-all" :style="{ width: `${selectedDocumentReadiness}%` }"></div>
+                                        <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                                            <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${selectedDocumentReadiness}%` }"></div>
                                         </div>
                                         <button
                                             type="button"
-                                            class="mt-3 rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50"
+                                            class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                                             @click="applyPreparedDocuments"
                                         >
                                             Confirm uploaded documents
                                         </button>
                                     </div>
 
-                                    <div class="rounded-lg border border-slate-200 bg-[#f6faf8] p-4">
+                                    <div class="rounded-lg border border-slate-200 bg-white p-4">
                                         <p class="text-sm font-bold text-slate-950">
                                             Missing from Documents
                                         </p>
@@ -921,7 +909,7 @@ watch(selectedScholarship, (scholarship) => {
                                             <span
                                                 v-for="requirement in selectedMissingPreparedDocuments"
                                                 :key="requirement"
-                                                class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-amber-700 ring-1 ring-amber-100"
+                                                class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
                                             >
                                                 {{ requirement }}
                                             </span>
@@ -938,12 +926,12 @@ watch(selectedScholarship, (scholarship) => {
                                     </div>
                                 </div>
 
-                                <div v-if="selectedRequirements.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
+                                <div v-if="selectedRequirements.length === 0" class="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
                                     This scholarship has no listed document requirements, so you can continue to review.
                                 </div>
 
-                                <div v-else class="mt-5 space-y-3">
-                                    <div class="flex flex-col gap-2 rounded-lg border border-slate-200 bg-[#f6faf8] p-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div v-else class="space-y-3">
+                                    <div class="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
                                         <p class="text-sm font-semibold text-slate-700">
                                             Checklist progress: {{ checkedDocumentCount }} prepared, {{ selectedRequirements.length - checkedDocumentCount }} remaining.
                                         </p>
@@ -972,21 +960,21 @@ watch(selectedScholarship, (scholarship) => {
                                             :class="[
                                                 'flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition',
                                                 documentChecklist.includes(requirement)
-                                                    ? 'border-sky-300 bg-sky-50 shadow-sm ring-1 ring-sky-100'
-                                                    : 'border-slate-200 bg-[#f6faf8] hover:border-sky-200 hover:bg-white',
+                                                    ? 'border-slate-900 bg-white shadow-sm ring-1 ring-slate-300'
+                                                    : 'border-slate-200 bg-white hover:border-slate-300',
                                             ]"
                                         >
                                             <input
                                                 v-model="documentChecklist"
                                                 type="checkbox"
                                                 :value="requirement"
-                                                class="mt-1 rounded border-slate-300 text-sky-700 focus:ring-sky-200"
+                                                class="mt-1 rounded border-slate-300 text-slate-900 focus:ring-slate-200"
                                             >
                                             <span class="flex-1">
                                                 <span class="block font-semibold text-slate-800">
                                                     {{ requirement }}
                                                 </span>
-                                                <span :class="['mt-1 inline-flex rounded-md px-2 py-0.5 text-xs font-bold', documentChecklist.includes(requirement) ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-500']">
+                                                <span :class="['mt-1 inline-flex rounded-md px-2 py-0.5 text-xs font-bold', documentChecklist.includes(requirement) ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500']">
                                                     {{ selectedPreparedDocuments.includes(requirement) ? 'Uploaded in Documents' : documentChecklist.includes(requirement) ? 'Confirmed manually' : 'Needed' }}
                                                 </span>
                                             </span>
@@ -994,7 +982,7 @@ watch(selectedScholarship, (scholarship) => {
                                     </div>
                                 </div>
 
-                                <div class="mt-5">
+                                <div class="rounded-lg border border-slate-200 bg-white p-4">
                                     <label for="application-notes" class="mb-2 block text-sm font-semibold text-slate-700">
                                         Optional note to provider
                                     </label>
@@ -1004,21 +992,21 @@ watch(selectedScholarship, (scholarship) => {
                                         rows="4"
                                         maxlength="1000"
                                         placeholder="Add a short note about your application if needed"
-                                        class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                        class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-3 focus:ring-slate-100"
                                     ></textarea>
                                 </div>
                             </div>
 
-                            <div v-else-if="currentStep === 3 && selectedScholarship" class="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
-                                <section class="rounded-lg border border-slate-200/80 bg-[#f6faf8] p-5">
+                            <div v-else-if="currentStep === 3 && selectedScholarship" class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+                                <section class="rounded-lg border border-slate-200 bg-white p-4">
                                     <p class="student-kicker">
                                         Final Review
                                     </p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
                                         Ready to submit
                                     </h3>
-                                    <div class="mt-4 grid gap-3 text-sm">
-                                        <div class="rounded-md bg-white p-3">
+                                    <div class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Scholarship
                                             </p>
@@ -1026,7 +1014,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ selectedScholarship.title }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Applicant
                                             </p>
@@ -1034,7 +1022,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ user?.name }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Documents confirmed
                                             </p>
@@ -1042,7 +1030,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ documentChecklist.length }} of {{ selectedRequirements.length }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Uploaded from Documents
                                             </p>
@@ -1050,7 +1038,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ selectedPreparedDocuments.length }} of {{ selectedRequirements.length }}
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Match score
                                             </p>
@@ -1058,7 +1046,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ selectedScholarship.eligibility_match?.score ?? 0 }}%
                                             </p>
                                         </div>
-                                        <div class="rounded-md bg-white p-3">
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
                                                 Application mode
                                             </p>
@@ -1069,20 +1057,20 @@ watch(selectedScholarship, (scholarship) => {
                                     </div>
                                 </section>
 
-                                <section class="rounded-lg border border-slate-200/80 bg-white/90 p-5">
+                                <section class="rounded-lg border border-slate-200 bg-white p-4">
                                     <p class="student-kicker">
                                         Notes
                                     </p>
-                                    <div class="mt-3 rounded-md border border-sky-100 bg-sky-50 p-3 text-sm leading-6 text-sky-900">
+                                    <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
                                         Prepared documents that match this checklist will be attached automatically after submission. You can still upload or replace files from the application record below.
                                     </div>
-                                    <p class="mt-3 rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm leading-6 text-slate-600">
+                                    <p class="mt-3 rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-600">
                                         {{ notes || 'No note added.' }}
                                     </p>
 
                                     <button
                                         type="button"
-                                        :disabled="isSubmitting || !allDocumentsChecked || !canApply"
+                                        :disabled="isSubmitting || !allDocumentsChecked || !selectedCanStartApplication"
                                         class="mt-5 w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                                         @click="submitApplication"
                                     >
@@ -1092,35 +1080,35 @@ watch(selectedScholarship, (scholarship) => {
                             </div>
                         </div>
 
-                        <div class="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                            <button
-                                type="button"
-                                class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                :disabled="currentStep === 0"
-                                @click="previousStep"
-                            >
-                                Back
-                            </button>
+                        <div class="border-t border-slate-200 bg-white px-5 py-4">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <button
+                                    type="button"
+                                    class="w-full rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                                    :disabled="currentStep === 0"
+                                    @click="previousStep"
+                                >
+                                    Back
+                                </button>
 
-                            <div class="flex flex-col gap-2 sm:flex-row">
-                                <button
-                                    type="button"
-                                    class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                                    @click="resetWizard"
-                                >
-                                    Reset
-                                </button>
-                                <button
-                                    v-if="currentStep < steps.length - 1"
-                                    type="button"
-                                    :disabled="!canGoNext"
-                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                                    @click="nextStep"
-                                >
-                                    Continue
-                                </button>
-                            </div>
-                        </div>
+                                <div class="grid gap-2 sm:flex sm:justify-end">
+                                    <button
+                                        type="button"
+                                        class="w-full rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto"
+                                        @click="resetWizard"
+                                    >
+                                        Reset
+                                    </button>
+                                    <button
+                                        v-if="currentStep < steps.length - 1"
+                                        type="button"
+                                        :disabled="!canGoNext"
+                                        class="w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 sm:w-auto"
+                                        @click="nextStep"
+                                    >
+                                        Continue
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -1143,342 +1131,49 @@ watch(selectedScholarship, (scholarship) => {
                             <article
                                 v-for="application in applicationQueue"
                                 :key="application.id"
-                                class="rounded-lg border border-slate-200 border-l-4 border-l-slate-900 bg-white p-4 shadow-sm"
+                                class="overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-slate-900 bg-white shadow-sm"
                             >
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div class="flex min-w-0 gap-3">
-                                        <img
-                                            :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
-                                            :alt="application.scholarship?.title || 'Scholarship'"
-                                            class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
-                                        >
-                                        <div class="min-w-0">
-                                            <h4 class="truncate font-bold text-slate-950">
-                                                {{ application.scholarship?.title || 'Scholarship' }}
-                                            </h4>
-                                            <p class="mt-1 text-sm text-slate-500">
-                                                Submitted {{ application.submitted_at || 'recently' }}
-                                            </p>
-                                            <p class="mt-1 truncate text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                                {{ application.scholarship?.provider?.name || 'Scholarship provider' }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
-                                        {{ statusLabel(application.status) }}
-                                    </span>
-                                </div>
-
-                                <div v-if="application.status_progress" class="mt-4 rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <p class="font-semibold text-slate-500">
-                                                Application stage
-                                            </p>
-                                            <p class="mt-1 font-bold text-slate-950">
-                                                {{ application.status_progress.label }}
-                                            </p>
-                                        </div>
-                                        <p class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                                            {{ application.status_progress.percent }}% through review
-                                        </p>
-                                    </div>
-                                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-white">
-                                        <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${application.status_progress.percent}%` }"></div>
-                                    </div>
-                                    <div class="mt-3 grid gap-2 sm:grid-cols-5">
-                                        <div
-                                            v-for="step in application.status_progress.steps"
-                                            :key="step.key"
-                                            :class="[
-                                                'rounded-md px-2.5 py-2 text-xs font-bold',
-                                                step.state === 'complete' ? 'bg-slate-900 text-white' : '',
-                                                step.state === 'current' ? 'bg-sky-100 text-sky-800 ring-1 ring-sky-200' : '',
-                                                step.state === 'upcoming' ? 'bg-white text-slate-500 ring-1 ring-slate-200' : '',
-                                                step.state === 'skipped' ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-100' : '',
-                                            ]"
-                                        >
-                                            {{ step.label }}
-                                        </div>
-                                    </div>
-                                    <p class="mt-3 text-xs font-semibold leading-5 text-slate-600">
-                                        {{ application.status_progress.next_action }}
-                                    </p>
-                                </div>
-
-                                <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                                    <div class="rounded-md border border-indigo-100 bg-indigo-50 p-3">
-                                        <p class="font-semibold text-indigo-800">
-                                            Decision support
-                                        </p>
-                                        <div class="mt-2 flex flex-wrap items-center gap-2">
-                                            <span class="font-display text-2xl font-bold text-indigo-950">
-                                                {{ application.dss_score ?? 0 }}%
-                                            </span>
-                                            <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', recommendationClass(application.dss_recommendation)]">
-                                                {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
-                                            </span>
-                                        </div>
-                                        <p class="mt-2 font-bold leading-5 text-indigo-950">
-                                            {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'DSS reviewed the current application data.' }}
-                                        </p>
-                                        <p class="mt-1 text-xs leading-5 text-indigo-900">
-                                            {{ application.dss_explanation?.next_action || 'Wait for provider review and document feedback.' }}
-                                        </p>
-                                        <div
-                                            v-if="application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length"
-                                            class="mt-3 grid gap-2"
-                                        >
-                                            <div v-if="application.dss_explanation?.strengths?.length" class="rounded-md bg-white/80 p-2">
-                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">
-                                                    Strengths
+                                <div class="p-4">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div class="flex min-w-0 gap-3">
+                                            <img
+                                                :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
+                                                :alt="application.scholarship?.title || 'Scholarship'"
+                                                class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                            >
+                                            <div class="min-w-0">
+                                                <h4 class="truncate font-bold text-slate-950">
+                                                    {{ application.scholarship?.title || 'Scholarship' }}
+                                                </h4>
+                                                <p class="mt-1 text-sm text-slate-500">
+                                                    Submitted {{ application.submitted_at || 'recently' }}
                                                 </p>
-                                                <ul class="mt-1 space-y-1">
-                                                    <li
-                                                        v-for="item in application.dss_explanation.strengths.slice(0, 2)"
-                                                        :key="item"
-                                                        class="text-xs leading-5 text-slate-600"
-                                                    >
-                                                        {{ item }}
-                                                    </li>
-                                                </ul>
-                                            </div>
-                                            <div v-if="application.dss_explanation?.needs_attention?.length" class="rounded-md bg-white/80 p-2">
-                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">
-                                                    Needs attention
+                                                <p class="mt-1 truncate text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                                    {{ application.scholarship?.provider?.name || 'Scholarship provider' }}
                                                 </p>
-                                                <ul class="mt-1 space-y-1">
-                                                    <li
-                                                        v-for="item in application.dss_explanation.needs_attention.slice(0, 2)"
-                                                        :key="item"
-                                                        class="text-xs leading-5 text-slate-600"
-                                                    >
-                                                        {{ item }}
-                                                    </li>
-                                                </ul>
                                             </div>
                                         </div>
-                                        <details v-if="application.dss_breakdown?.criteria?.length" class="mt-3 rounded-md border border-indigo-100 bg-white/70 p-2">
-                                            <summary class="cursor-pointer text-xs font-bold uppercase tracking-[0.12em] text-indigo-800">
-                                                Why this score?
-                                            </summary>
-                                            <div class="mt-2 grid gap-2">
-                                                <div
-                                                    v-for="criterion in application.dss_breakdown.criteria"
-                                                    :key="criterion.key"
-                                                    class="rounded-md bg-white p-2 text-xs"
-                                                >
-                                                    <div class="flex items-center justify-between gap-2">
-                                                        <span class="font-bold text-slate-900">{{ criterion.label }}</span>
-                                                        <span class="font-bold text-indigo-700">{{ criterion.score }}% x {{ criterion.weight }}%</span>
-                                                    </div>
-                                                    <p class="mt-1 leading-5 text-slate-500">
-                                                        {{ criterion.note }}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </details>
-                                    </div>
-                                    <div class="rounded-md bg-white p-3">
-                                        <p class="font-semibold text-slate-500">
-                                            Eligibility match
-                                        </p>
-                                        <p :class="['mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold', matchClass(application.eligibility_score)]">
-                                            {{ application.eligibility_score ?? 0 }}% - {{ application.eligibility_breakdown?.label || 'Needs review' }}
-                                        </p>
-                                    </div>
-                                    <div class="rounded-md bg-white p-3">
-                                        <p class="font-semibold text-slate-500">
-                                            Decision reason
-                                        </p>
-                                        <p class="mt-1 font-bold text-slate-950">
-                                            {{ application.decision_reason ? labelFromKey(application.decision_reason) : 'Not set yet' }}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div
-                                    v-if="application.awarded_amount || application.outcome_notes || application.outcome_at || ['awarded', 'not_awarded', 'disbursed', 'renewed'].includes(application.status)"
-                                    class="mt-4 rounded-md border border-emerald-100 bg-emerald-50 p-3 text-sm"
-                                >
-                                    <p class="font-semibold text-emerald-800">
-                                        Outcome details
-                                    </p>
-                                    <div class="mt-2 grid gap-2 sm:grid-cols-3">
-                                        <p class="rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-700">
-                                            Amount: {{ application.awarded_amount || 'Not listed' }}
-                                        </p>
-                                        <p class="rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-700">
-                                            Date: {{ application.outcome_at || 'Not listed' }}
-                                        </p>
-                                        <p class="rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-700">
-                                            Status: {{ statusLabel(application.status) }}
-                                        </p>
-                                    </div>
-                                    <p v-if="application.outcome_notes" class="mt-2 rounded-md bg-white p-3 text-sm leading-6 text-slate-700">
-                                        {{ application.outcome_notes }}
-                                    </p>
-                                </div>
-
-                                <div class="mt-4 rounded-md bg-white p-3 text-sm">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <p class="font-semibold text-slate-500">
-                                            Confirmed documents
-                                        </p>
-                                        <span class="rounded-md bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">
-                                            {{ application.document_readiness?.percent ?? 0 }}% ready
-                                        </span>
-                                    </div>
-                                    <div v-if="application.document_checklist?.length" class="mt-2 flex flex-wrap gap-2">
-                                        <span
-                                            v-for="document in application.document_checklist"
-                                            :key="document"
-                                            class="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800"
-                                        >
-                                            {{ document }}
-                                        </span>
-                                    </div>
-                                    <p v-else class="mt-2 text-slate-500">
-                                        No checklist items saved.
-                                    </p>
-                                </div>
-
-                                <div class="mt-4 rounded-md bg-white p-3 text-sm">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <p class="font-semibold text-slate-500">
-                                            Uploaded files
-                                        </p>
-                                        <span class="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                                            {{ application.document_readiness?.uploaded ?? 0 }} uploaded
+                                        <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
+                                            {{ statusLabel(application.status) }}
                                         </span>
                                     </div>
 
-                                    <div v-if="application.documents?.length" class="mt-3 grid gap-2">
-                                        <div
-                                            v-for="document in application.documents"
-                                            :key="document.id"
-                                            class="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                                    <div class="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
+                                        <span class="rounded-md bg-slate-100 px-2.5 py-1">
+                                            Stage: {{ application.status_progress?.label || statusLabel(application.status) }}
+                                        </span>
+                                        <span :class="['rounded-md px-2.5 py-1', recommendationClass(application.dss_recommendation)]">
+                                            DSS {{ application.dss_score ?? 0 }}%
+                                        </span>
+                                        <span class="rounded-md bg-slate-100 px-2.5 py-1 text-slate-700">
+                                            Documents {{ application.document_readiness?.percent ?? 0 }}%
+                                        </span>
+                                        <a
+                                            :href="application.detail_url || `/dashboard/applications/${application.id}`"
+                                            class="ml-auto rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-700 transition hover:bg-slate-50"
                                         >
-                                            <div>
-                                                <p class="font-bold text-slate-950">
-                                                    {{ document.document_name }}
-                                                </p>
-                                                <p class="mt-1 text-xs text-slate-500">
-                                                    {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
-                                                </p>
-                                                <p v-if="document.review_notes" class="mt-1 text-xs font-semibold text-amber-700">
-                                                    {{ document.review_notes }}
-                                                </p>
-                                            </div>
-                                            <div class="flex gap-2">
-                                                <span :class="['h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase', documentStatusClass(document.status)]">
-                                                    {{ labelFromKey(document.status || 'pending') }}
-                                                </span>
-                                                <a
-                                                    :href="document.download_url"
-                                                    class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-white"
-                                                >
-                                                    Download
-                                                </a>
-                                                <button
-                                                    type="button"
-                                                    :disabled="uploadingId === application.id"
-                                                    class="rounded-md border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
-                                                    @click="deleteDocument(application, document)"
-                                                >
-                                                    Remove
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <p v-else class="mt-2 text-slate-500">
-                                        No uploaded files yet.
-                                    </p>
-
-                                    <div class="mt-4 grid gap-3 border-t border-slate-200 pt-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                                        <div>
-                                            <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                Requirement
-                                            </label>
-                                            <select
-                                                v-if="requiredDocumentsForApplication(application).length"
-                                                v-model="uploadForms[application.id].documentName"
-                                                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                            >
-                                                <option
-                                                    v-for="requirement in requiredDocumentsForApplication(application)"
-                                                    :key="requirement"
-                                                    :value="requirement"
-                                                >
-                                                    {{ requirement }}{{ uploadedDocumentNames(application).has(requirement) ? ' (replace)' : '' }}
-                                                </option>
-                                            </select>
-                                            <input
-                                                v-else
-                                                v-model="uploadForms[application.id].documentName"
-                                                type="text"
-                                                placeholder="Document name"
-                                                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                            >
-                                        </div>
-
-                                        <div>
-                                            <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                File
-                                            </label>
-                                            <input
-                                                type="file"
-                                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white"
-                                                @change="handleFileChange(application, $event)"
-                                            >
-                                        </div>
-
-                                        <button
-                                            type="button"
-                                            :disabled="uploadingId === application.id"
-                                            class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                            @click="uploadDocument(application)"
-                                        >
-                                            {{ uploadingId === application.id ? 'Uploading...' : 'Upload' }}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div v-if="application.review_notes" class="mt-4 rounded-md border border-amber-100 bg-amber-50 p-3 text-sm">
-                                    <p class="font-semibold text-amber-800">
-                                        Provider review note
-                                    </p>
-                                    <p class="mt-1 leading-6 text-amber-900">
-                                        {{ application.review_notes }}
-                                    </p>
-                                </div>
-
-                                <div v-if="application.timeline?.length" class="mt-4 rounded-md bg-white p-3 text-sm">
-                                    <p class="font-semibold text-slate-500">
-                                        Application timeline
-                                    </p>
-                                    <div class="mt-3 grid gap-2">
-                                        <div
-                                            v-for="event in application.timeline"
-                                            :key="event.id"
-                                            class="rounded-md border border-slate-200 bg-slate-50 p-3"
-                                        >
-                                            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                                <p class="font-bold text-slate-950">
-                                                    {{ statusLabel(event.to_status) }}
-                                                </p>
-                                                <p class="text-xs text-slate-500">
-                                                    {{ event.changed_at || 'Recently' }}
-                                                </p>
-                                            </div>
-                                            <p class="mt-1 text-xs text-slate-500">
-                                                By {{ event.actor || 'System' }}
-                                            </p>
-                                            <p v-if="event.review_notes" class="mt-2 leading-5 text-slate-600">
-                                                {{ event.review_notes }}
-                                            </p>
-                                        </div>
+                                            View details
+                                        </a>
                                     </div>
                                 </div>
                             </article>

@@ -24,17 +24,23 @@ const preparedFileInput = ref(null);
 const preparedForm = reactive({
     documentName: '',
 });
-const uploadForms = ref({});
-const uploadFiles = ref({});
-const uploadingId = ref(null);
-const removingId = ref(null);
+const updatingPreparedId = ref(null);
 const removingPreparedId = ref(null);
+const previewDocument = ref(null);
+const preparedDocumentsPerPage = 5;
+const applicationsPerPage = 3;
+const preparedDocumentsPage = ref(1);
+const applicationsPage = ref(1);
 
 const applicationsWithRequirements = computed(() => applications.value.map((application) => ({
     ...application,
     required_documents: documentRequirements(application.scholarship?.requirements),
 })));
 const preparedDocumentNames = computed(() => new Set(preparedDocuments.value.map((document) => document.document_name)));
+const preparedDocumentTotalPages = computed(() => pageCount(preparedDocuments.value.length, preparedDocumentsPerPage));
+const paginatedPreparedDocuments = computed(() => paginateItems(preparedDocuments.value, preparedDocumentsPage.value, preparedDocumentsPerPage));
+const applicationTotalPages = computed(() => pageCount(applicationsWithRequirements.value.length, applicationsPerPage));
+const paginatedApplications = computed(() => paginateItems(applicationsWithRequirements.value, applicationsPage.value, applicationsPerPage));
 
 function labelFromKey(value) {
     return String(value ?? '')
@@ -53,34 +59,44 @@ function documentRequirements(requirements) {
         .filter(Boolean);
 }
 
-function uploadedDocumentNames(application) {
-    return new Set((application.documents ?? []).map((document) => document.document_name));
+function pageCount(total, perPage) {
+    return Math.max(1, Math.ceil(Number(total || 0) / perPage));
 }
 
-function applicationDocumentForRequirement(application, requirement) {
-    return (application.documents ?? []).find((document) => document.document_name === requirement);
+function clampPage(page, totalPages) {
+    return Math.min(Math.max(Number(page) || 1, 1), totalPages);
 }
 
-function preparedDocumentForRequirement(requirement) {
-    return preparedDocuments.value.find((document) => document.document_name === requirement);
+function paginateItems(items, page, perPage) {
+    const currentPage = clampPage(page, pageCount(items.length, perPage));
+    const start = (currentPage - 1) * perPage;
+
+    return items.slice(start, start + perPage);
 }
 
-function missingApplicationDocuments(application) {
-    const uploaded = uploadedDocumentNames(application);
-
-    return documentRequirements(application.scholarship?.requirements).filter((requirement) => !uploaded.has(requirement));
-}
-
-function ensureUploadForm(application) {
-    if (uploadForms.value[application.id]) {
-        return;
+function paginationSummary(total, page, perPage) {
+    if (!total) {
+        return '0 items';
     }
 
-    const requiredDocuments = documentRequirements(application.scholarship?.requirements);
+    const currentPage = clampPage(page, pageCount(total, perPage));
+    const start = (currentPage - 1) * perPage + 1;
+    const end = Math.min(start + perPage - 1, total);
 
-    uploadForms.value[application.id] = {
-        documentName: missingApplicationDocuments(application)[0] ?? requiredDocuments[0] ?? '',
-    };
+    return `${start}-${end} of ${total}`;
+}
+
+function setPreparedDocumentsPage(page) {
+    preparedDocumentsPage.value = clampPage(page, preparedDocumentTotalPages.value);
+}
+
+function setApplicationsPage(page) {
+    applicationsPage.value = clampPage(page, applicationTotalPages.value);
+}
+
+function clampPagination() {
+    preparedDocumentsPage.value = clampPage(preparedDocumentsPage.value, preparedDocumentTotalPages.value);
+    applicationsPage.value = clampPage(applicationsPage.value, applicationTotalPages.value);
 }
 
 function documentStatusClass(status) {
@@ -125,15 +141,12 @@ function handlePreparedFileChange(event) {
     preparedFile.value = event.target.files?.[0] ?? null;
 }
 
-function handleFileChange(application, event) {
-    uploadFiles.value[application.id] = event.target.files?.[0] ?? null;
+function openDocumentPreview(document) {
+    previewDocument.value = document;
 }
 
-function replaceApplication(updatedApplication) {
-    applications.value = applications.value.map((application) => (
-        application.id === updatedApplication.id ? updatedApplication : application
-    ));
-    ensureUploadForm(updatedApplication);
+function closeDocumentPreview() {
+    previewDocument.value = null;
 }
 
 async function loadDocuments() {
@@ -149,7 +162,7 @@ async function loadDocuments() {
         applications.value = response.data.applications;
         preparedDocuments.value = response.data.prepared_documents ?? [];
         documentOptions.value = response.data.document_options ?? [];
-        applications.value.forEach(ensureUploadForm);
+        clampPagination();
 
         if (!preparedForm.documentName && documentOptions.value.length) {
             preparedForm.documentName = documentOptions.value[0];
@@ -197,6 +210,38 @@ async function uploadPreparedDocument() {
     }
 }
 
+async function updatePreparedDocument(document, event) {
+    const file = event.target.files?.[0] ?? null;
+
+    if (!file) {
+        return;
+    }
+
+    updatingPreparedId.value = document.id;
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    const payload = new FormData();
+    payload.append('document_name', document.document_name);
+    payload.append('document_file', file);
+
+    try {
+        await window.axios.post('/dashboard/student-documents', payload, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+
+        statusMessage.value = 'Prepared document updated.';
+        await loadDocuments();
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to update prepared document.';
+    } finally {
+        updatingPreparedId.value = null;
+        event.target.value = '';
+    }
+}
+
 async function deletePreparedDocument(document) {
     removingPreparedId.value = document.id;
     errorMessage.value = '';
@@ -212,65 +257,6 @@ async function deletePreparedDocument(document) {
     } finally {
         removingPreparedId.value = null;
     }
-}
-
-async function uploadDocument(application) {
-    const uploadForm = uploadForms.value[application.id];
-    const file = uploadFiles.value[application.id];
-
-    if (!uploadForm?.documentName || !file) {
-        errorMessage.value = 'Choose a document type and file before uploading.';
-        return;
-    }
-
-    uploadingId.value = application.id;
-    errorMessage.value = '';
-    statusMessage.value = '';
-
-    const payload = new FormData();
-    payload.append('document_name', uploadForm.documentName);
-    payload.append('document_file', file);
-
-    try {
-        const response = await window.axios.post(`/dashboard/applications/${application.id}/documents`, payload, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
-
-        replaceApplication(response.data.application);
-        uploadFiles.value[application.id] = null;
-        statusMessage.value = response.data.message ?? 'Application document uploaded.';
-        await refreshStats();
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to upload document.';
-    } finally {
-        uploadingId.value = null;
-    }
-}
-
-async function deleteDocument(application, document) {
-    removingId.value = document.id;
-    errorMessage.value = '';
-    statusMessage.value = '';
-
-    try {
-        const response = await window.axios.delete(`/dashboard/documents/${document.id}`);
-
-        replaceApplication(response.data.application);
-        statusMessage.value = response.data.message ?? 'Document removed.';
-        await refreshStats();
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to remove document.';
-    } finally {
-        removingId.value = null;
-    }
-}
-
-async function refreshStats() {
-    const response = await window.axios.get('/dashboard/documents/data');
-
-    stats.value = response.data.stats;
 }
 
 async function logout() {
@@ -332,83 +318,147 @@ onMounted(loadDocuments);
                             </h3>
                         </div>
 
-                        <div class="grid gap-5 p-5 lg:grid-cols-[0.9fr_1.1fr]">
-                            <div class="rounded-lg border border-slate-200 bg-white p-4">
-                                <div class="grid gap-3">
-                                    <label>
-                                        <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Document name</span>
-                                        <select
-                                            v-model="preparedForm.documentName"
-                                            class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                        >
-                                            <option
-                                                v-for="option in documentOptions"
-                                                :key="option"
-                                                :value="option"
-                                            >
-                                                {{ option }}{{ preparedDocumentNames.has(option) ? ' (replace)' : '' }}
-                                            </option>
-                                        </select>
-                                    </label>
-
-                                    <label>
-                                        <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">File</span>
-                                        <input
-                                            ref="preparedFileInput"
-                                            type="file"
-                                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                            class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-slate-800"
-                                            @change="handlePreparedFileChange"
-                                        >
-                                    </label>
-
-                                    <button
-                                        type="button"
-                                        :disabled="isUploadingPrepared"
-                                        class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                        @click="uploadPreparedDocument"
-                                    >
-                                        {{ isUploadingPrepared ? 'Saving...' : 'Save prepared document' }}
-                                    </button>
-                                </div>
+                        <div class="border-b border-slate-200 bg-white">
+                            <div class="flex items-center border-b border-slate-200 px-4 pt-3">
+                                <span class="-mb-px inline-flex items-center gap-2 border-b-2 border-slate-900 px-1 pb-3 text-sm font-bold text-slate-950">
+                                    <i class="fa-solid fa-upload text-xs"></i>
+                                    Upload file
+                                </span>
                             </div>
 
-                            <div>
-                                <div v-if="preparedDocuments.length" class="grid gap-2">
-                                    <div
-                                        v-for="document in preparedDocuments"
-                                        :key="document.id"
-                                        class="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                            <div class="grid gap-3 p-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] lg:items-end">
+                                <label class="min-w-0 flex-1">
+                                    <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Document name</span>
+                                    <select
+                                        v-model="preparedForm.documentName"
+                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
                                     >
-                                        <div class="min-w-0">
-                                            <p class="truncate text-sm font-bold text-slate-950">
-                                                {{ document.document_name }}
-                                            </p>
-                                            <p class="mt-1 truncate text-xs text-slate-500">
-                                                {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
-                                            </p>
-                                        </div>
-                                        <div class="flex flex-wrap gap-2">
-                                            <a
-                                                :href="document.download_url"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                            >
-                                                Download
-                                            </a>
-                                            <button
-                                                type="button"
-                                                :disabled="removingPreparedId === document.id"
-                                                class="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
-                                                @click="deletePreparedDocument(document)"
-                                            >
-                                                {{ removingPreparedId === document.id ? 'Removing...' : 'Remove' }}
-                                            </button>
-                                        </div>
+                                        <option
+                                            v-for="option in documentOptions"
+                                            :key="option"
+                                            :value="option"
+                                        >
+                                            {{ option }}{{ preparedDocumentNames.has(option) ? ' (replace)' : '' }}
+                                        </option>
+                                    </select>
+                                </label>
+
+                                <label class="min-w-0 cursor-pointer">
+                                    <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">File</span>
+                                    <span class="mt-2 flex min-h-[42px] items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+                                        <i class="fa-solid fa-paperclip text-xs text-slate-500"></i>
+                                        <span :class="['min-w-0 flex-1 truncate font-semibold', preparedFile ? 'text-slate-900' : 'text-slate-400']">
+                                            {{ preparedFile?.name || 'Choose file' }}
+                                        </span>
+                                        <span class="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
+                                            Browse
+                                        </span>
+                                    </span>
+                                    <input
+                                        ref="preparedFileInput"
+                                        type="file"
+                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                        class="sr-only"
+                                        @change="handlePreparedFileChange"
+                                    >
+                                </label>
+
+                                <button
+                                    type="button"
+                                    :disabled="isUploadingPrepared"
+                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 lg:min-w-[8.5rem]"
+                                    @click="uploadPreparedDocument"
+                                >
+                                    {{ isUploadingPrepared ? 'Saving...' : preparedDocumentNames.has(preparedForm.documentName) ? 'Update document' : 'Save document' }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="p-5">
+                            <div v-if="preparedDocuments.length" class="grid gap-2">
+                                <div class="mb-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <p class="text-xs font-bold text-slate-500">
+                                        Showing {{ paginationSummary(preparedDocuments.length, preparedDocumentsPage, preparedDocumentsPerPage) }} documents
+                                    </p>
+                                    <div v-if="preparedDocumentTotalPages > 1" class="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            :disabled="preparedDocumentsPage <= 1"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                            @click="setPreparedDocumentsPage(preparedDocumentsPage - 1)"
+                                        >
+                                            Previous
+                                        </button>
+                                        <span class="text-xs font-bold text-slate-500">
+                                            {{ preparedDocumentsPage }} / {{ preparedDocumentTotalPages }}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            :disabled="preparedDocumentsPage >= preparedDocumentTotalPages"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                            @click="setPreparedDocumentsPage(preparedDocumentsPage + 1)"
+                                        >
+                                            Next
+                                        </button>
                                     </div>
                                 </div>
-                                <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-                                    No prepared documents yet.
+                                <div
+                                    v-for="document in paginatedPreparedDocuments"
+                                    :key="document.id"
+                                    class="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                    <div class="min-w-0">
+                                        <p class="truncate text-sm font-bold text-slate-950">
+                                            {{ document.document_name }}
+                                        </p>
+                                        <p class="mt-1 truncate text-xs text-slate-500">
+                                            {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
+                                        </p>
+                                    </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                            @click="openDocumentPreview(document)"
+                                        >
+                                            View
+                                        </button>
+                                        <a
+                                            :href="document.download_url"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                        >
+                                            Download
+                                        </a>
+                                        <label
+                                            :class="[
+                                                'rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50',
+                                                updatingPreparedId === document.id ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+                                            ]"
+                                        >
+                                            <input
+                                                type="file"
+                                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                                class="sr-only"
+                                                :disabled="updatingPreparedId === document.id"
+                                                @change="updatePreparedDocument(document, $event)"
+                                            >
+                                            {{ updatingPreparedId === document.id ? 'Updating...' : 'Update' }}
+                                        </label>
+                                        <button
+                                            type="button"
+                                            :disabled="removingPreparedId === document.id"
+                                            class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 bg-white text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+                                            title="Remove document"
+                                            aria-label="Remove document"
+                                            @click="deletePreparedDocument(document)"
+                                        >
+                                            <i :class="[removingPreparedId === document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can', 'text-xs']"></i>
+                                        </button>
+                                    </div>
                                 </div>
+                            </div>
+                            <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+                                No prepared documents yet.
                             </div>
                         </div>
                     </section>
@@ -420,13 +470,39 @@ onMounted(loadDocuments);
                     </section>
 
                     <section v-else class="grid gap-4">
+                        <div class="flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <p class="text-xs font-bold text-slate-500">
+                                Showing {{ paginationSummary(applicationsWithRequirements.length, applicationsPage, applicationsPerPage) }} applications
+                            </p>
+                            <div v-if="applicationTotalPages > 1" class="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    :disabled="applicationsPage <= 1"
+                                    class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    @click="setApplicationsPage(applicationsPage - 1)"
+                                >
+                                    Previous
+                                </button>
+                                <span class="text-xs font-bold text-slate-500">
+                                    {{ applicationsPage }} / {{ applicationTotalPages }}
+                                </span>
+                                <button
+                                    type="button"
+                                    :disabled="applicationsPage >= applicationTotalPages"
+                                    class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    @click="setApplicationsPage(applicationsPage + 1)"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
                         <article
-                            v-for="application in applicationsWithRequirements"
+                            v-for="application in paginatedApplications"
                             :key="application.id"
-                            class="student-card overflow-hidden"
+                            class="overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-slate-900 bg-white shadow-sm"
                         >
-                            <div class="border-b border-slate-200 bg-[#f6faf8] p-5">
-                                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div class="p-4">
+                                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                     <div class="flex min-w-0 gap-3">
                                         <img
                                             :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
@@ -434,7 +510,7 @@ onMounted(loadDocuments);
                                             class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                         >
                                         <div class="min-w-0">
-                                            <p class="truncate text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                                            <p class="truncate text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                                                 {{ application.scholarship?.provider?.name || 'Scholarship Provider' }}
                                             </p>
                                             <h3 class="mt-1 truncate text-lg font-bold text-slate-950">
@@ -446,162 +522,29 @@ onMounted(loadDocuments);
                                         </div>
                                     </div>
 
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', readinessClass(application.document_readiness?.uploaded_percent)]">
-                                            {{ application.document_readiness?.uploaded_percent ?? 0 }}% copied
-                                        </span>
-                                        <span class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                                            {{ application.document_readiness?.accepted ?? 0 }} accepted
-                                        </span>
-                                    </div>
+                                    <a
+                                        :href="application.detail_url || `/dashboard/applications/${application.id}`"
+                                        class="w-full rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800 lg:w-auto"
+                                    >
+                                        View details
+                                    </a>
                                 </div>
-                            </div>
 
-                            <div class="grid gap-5 p-5 lg:grid-cols-[1fr_0.85fr]">
-                                <section>
-                                    <p class="student-kicker">
-                                        Required Checklist
-                                    </p>
-                                    <div v-if="application.required_documents.length" class="mt-3 grid gap-2">
-                                        <div
-                                            v-for="requirement in application.required_documents"
-                                            :key="requirement"
-                                            class="flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
-                                        >
-                                            <div class="min-w-0">
-                                                <p class="truncate text-sm font-bold text-slate-950">
-                                                    {{ requirement }}
-                                                </p>
-                                                <p class="mt-1 text-xs text-slate-500">
-                                                    {{ applicationDocumentForRequirement(application, requirement)?.original_name || preparedDocumentForRequirement(requirement)?.original_name || 'No matching file yet' }}
-                                                </p>
-                                            </div>
-                                            <span
-                                                v-if="applicationDocumentForRequirement(application, requirement)"
-                                                :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', documentStatusClass(applicationDocumentForRequirement(application, requirement).status)]"
-                                            >
-                                                {{ labelFromKey(applicationDocumentForRequirement(application, requirement).status || 'pending') }}
-                                            </span>
-                                            <span v-else-if="preparedDocumentNames.has(requirement)" class="w-fit rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold uppercase text-sky-800">
-                                                In library
-                                            </span>
-                                            <span v-else class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase text-slate-600">
-                                                Missing
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <p v-else class="mt-3 rounded-md border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-                                        This application has no listed document requirements.
-                                    </p>
-                                </section>
-
-                                <section>
-                                    <p class="student-kicker">
-                                        Add File
-                                    </p>
-                                    <div class="mt-3 rounded-md border border-slate-200 bg-white p-4">
-                                        <div class="grid gap-3">
-                                            <label>
-                                                <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Document type</span>
-                                                <select
-                                                    v-if="application.required_documents.length"
-                                                    v-model="uploadForms[application.id].documentName"
-                                                    class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                                >
-                                                    <option
-                                                        v-for="requirement in application.required_documents"
-                                                        :key="requirement"
-                                                        :value="requirement"
-                                                    >
-                                                        {{ requirement }}{{ uploadedDocumentNames(application).has(requirement) ? ' (replace)' : '' }}
-                                                    </option>
-                                                </select>
-                                                <input
-                                                    v-else
-                                                    v-model="uploadForms[application.id].documentName"
-                                                    type="text"
-                                                    placeholder="Document name"
-                                                    class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
-                                                >
-                                            </label>
-
-                                            <label>
-                                                <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">File</span>
-                                                <input
-                                                    type="file"
-                                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                                    class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-slate-800"
-                                                    @change="handleFileChange(application, $event)"
-                                                >
-                                            </label>
-
-                                            <button
-                                                type="button"
-                                                :disabled="uploadingId === application.id"
-                                                class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                                @click="uploadDocument(application)"
-                                            >
-                                                {{ uploadingId === application.id ? 'Uploading...' : 'Upload to application' }}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </section>
-                            </div>
-
-                            <section class="border-t border-slate-200 p-5">
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p class="student-kicker">
-                                            Submitted Files
-                                        </p>
-                                    </div>
-                                    <span class="w-fit rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                                <div class="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
+                                    <span :class="['rounded-md px-2.5 py-1 uppercase', readinessClass(application.document_readiness?.uploaded_percent)]">
+                                        {{ application.document_readiness?.uploaded_percent ?? 0 }}% uploaded
+                                    </span>
+                                    <span class="rounded-md bg-slate-100 px-2.5 py-1 text-slate-700">
+                                        {{ application.document_readiness?.accepted ?? 0 }} accepted
+                                    </span>
+                                    <span class="rounded-md bg-slate-100 px-2.5 py-1 text-slate-700">
                                         {{ application.documents?.length ?? 0 }} files
                                     </span>
+                                    <span class="rounded-md bg-slate-100 px-2.5 py-1 text-slate-700">
+                                        {{ application.required_documents.length }} requirements
+                                    </span>
                                 </div>
-
-                                <div v-if="application.documents?.length" class="mt-4 grid gap-2">
-                                    <div
-                                        v-for="document in application.documents"
-                                        :key="document.id"
-                                        class="flex flex-col gap-3 rounded-md border border-slate-200 bg-[#f6faf8] p-3 sm:flex-row sm:items-center sm:justify-between"
-                                    >
-                                        <div class="min-w-0">
-                                            <p class="truncate text-sm font-bold text-slate-950">
-                                                {{ document.document_name }}
-                                            </p>
-                                            <p class="mt-1 truncate text-xs text-slate-500">
-                                                {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
-                                            </p>
-                                            <p v-if="document.review_notes" class="mt-1 text-xs font-semibold text-amber-700">
-                                                {{ document.review_notes }}
-                                            </p>
-                                        </div>
-                                        <div class="flex flex-wrap gap-2">
-                                            <span :class="['h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase', documentStatusClass(document.status)]">
-                                                {{ labelFromKey(document.status || 'pending') }}
-                                            </span>
-                                            <a
-                                                :href="document.download_url"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                            >
-                                                Download
-                                            </a>
-                                            <button
-                                                type="button"
-                                                :disabled="removingId === document.id"
-                                                class="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
-                                                @click="deleteDocument(application, document)"
-                                            >
-                                                {{ removingId === document.id ? 'Removing...' : 'Remove' }}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <p v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-[#f6faf8] p-4 text-sm text-slate-500">
-                                    No submitted file copies yet.
-                                </p>
-                            </section>
+                            </div>
                         </article>
                     </section>
                 </div>
@@ -609,5 +552,49 @@ onMounted(loadDocuments);
                 <ApplicantFooter />
             </div>
         </section>
+
+        <div
+            v-if="previewDocument"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
+            @click.self="closeDocumentPreview"
+        >
+            <section class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+                <header class="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#f6faf8] px-4 py-3">
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-bold text-slate-950">
+                            {{ previewDocument.document_name }}
+                        </p>
+                        <p class="truncate text-xs text-slate-500">
+                            {{ previewDocument.original_name }}
+                        </p>
+                    </div>
+
+                    <div class="flex shrink-0 items-center gap-2">
+                        <a
+                            :href="previewDocument.download_url"
+                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                        >
+                            Download
+                        </a>
+                        <button
+                            type="button"
+                            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
+                            aria-label="Close preview"
+                            @click="closeDocumentPreview"
+                        >
+                            <i class="fa-solid fa-xmark text-sm"></i>
+                        </button>
+                    </div>
+                </header>
+
+                <div class="h-[72vh] bg-slate-100">
+                    <iframe
+                        :src="previewDocument.view_url || previewDocument.download_url"
+                        :title="previewDocument.document_name"
+                        class="h-full w-full border-0 bg-white"
+                    ></iframe>
+                </div>
+            </section>
+        </div>
     </main>
 </template>

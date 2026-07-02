@@ -55,8 +55,8 @@ defineProps({
         <div class="absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,_rgba(14,165,233,0.16),_transparent_30%),radial-gradient(circle_at_86%_12%,_rgba(250,204,21,0.16),_transparent_24%),linear-gradient(180deg,_#f1f6ff_0%,_#e0eaf5_48%,_#d1deeb_100%)]"></div>
         <div class="absolute inset-0 bg-[linear-gradient(120deg,_rgba(255,255,255,0.52)_0%,_transparent_34%,_rgba(15,23,42,0.04)_100%)]"></div>
 
-        <div class="relative z-10 bg-[#081426]">
-            <SiteNavbar variant="transparent" />
+        <div class="relative z-10 bg-slate-900">
+            <SiteNavbar variant="transparent" show-icons />
         </div>
 
         <div class="relative z-10 mx-auto flex min-h-[calc(100vh-4.5rem)] max-w-6xl items-center px-4 py-8 sm:px-6 lg:px-8">

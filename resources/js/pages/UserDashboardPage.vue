@@ -19,13 +19,9 @@ const profileReadiness = ref({
     missing: [],
 });
 const scholarships = ref([]);
-const applications = ref([]);
 const nextSteps = ref([]);
 const notifications = ref([]);
 
-const topMatches = computed(() => [...scholarships.value]
-    .sort((first, second) => Number(second.eligibility_match?.score ?? 0) - Number(first.eligibility_match?.score ?? 0))
-    .slice(0, 3));
 const highMatchCount = computed(() => scholarships.value
     .filter((scholarship) => Number(scholarship.eligibility_match?.score ?? 0) >= 80)
     .length);
@@ -37,9 +33,6 @@ const urgentScholarships = computed(() => scholarships.value
 const documentGaps = computed(() => scholarships.value
     .filter((scholarship) => Number(scholarship.prepared_documents?.required ?? 0) > Number(scholarship.prepared_documents?.uploaded ?? 0))
     .sort((first, second) => Number(second.eligibility_match?.score ?? 0) - Number(first.eligibility_match?.score ?? 0))
-    .slice(0, 3));
-const applicationWatchlist = computed(() => applications.value
-    .filter((application) => Number(application.document_readiness?.accepted_percent ?? 0) < 100 || ['submitted', 'under_review'].includes(application.status))
     .slice(0, 3));
 const analystSignals = computed(() => [
     {
@@ -132,7 +125,6 @@ async function loadDashboard() {
         stats.value = response.data.stats ?? stats.value;
         profileReadiness.value = response.data.profile_readiness ?? profileReadiness.value;
         scholarships.value = response.data.scholarships ?? [];
-        applications.value = response.data.applications ?? [];
         nextSteps.value = response.data.next_steps;
         notifications.value = response.data.notifications ?? [];
     } catch (error) {
@@ -216,108 +208,6 @@ onMounted(loadDashboard);
                                 </p>
                             </a>
                         </div>
-                    </section>
-
-                    <section class="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-                        <article class="student-card p-5">
-                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                <div>
-                                    <p class="student-kicker">
-                                        Top Matches
-                                    </p>
-                                    <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                        Programs worth checking
-                                    </h3>
-                                </div>
-                                <a href="/dashboard/scholarships" class="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
-                                    View all
-                                </a>
-                            </div>
-
-                            <div class="mt-5 grid gap-3">
-                                <a
-                                    v-for="scholarship in topMatches"
-                                    :key="scholarship.id"
-                                    :href="`/dashboard/scholarships/${scholarship.id}`"
-                                    class="rounded-md border border-slate-200 bg-[#f6faf8] p-3 transition hover:bg-white"
-                                >
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                        <div>
-                                            <p class="font-bold text-slate-950">
-                                                {{ scholarship.title }}
-                                            </p>
-                                            <p class="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                                {{ scholarship.provider?.name || 'Scholarship Provider' }}
-                                            </p>
-                                        </div>
-                                        <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                            {{ scholarship.eligibility_match?.score ?? 0 }}% match
-                                        </span>
-                                    </div>
-                                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                                        {{ scholarship.eligibility_match?.summary || 'Open the program to review eligibility.' }}
-                                    </p>
-                                </a>
-
-                                <div v-if="topMatches.length === 0" class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                                    No published scholarship matches are available yet.
-                                </div>
-                            </div>
-                        </article>
-
-                        <article class="student-card p-5">
-                            <p class="student-kicker">
-                                Watchlist
-                            </p>
-                            <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                Risks to clear before applying
-                            </h3>
-
-                            <div class="mt-5 grid gap-3">
-                                <div v-if="urgentScholarships.length" class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
-                                    <p class="text-sm font-bold text-slate-950">
-                                        Upcoming deadlines
-                                    </p>
-                                    <p
-                                        v-for="scholarship in urgentScholarships"
-                                        :key="scholarship.id"
-                                        class="mt-2 text-sm text-slate-600"
-                                    >
-                                        {{ scholarship.title }}: {{ scholarship.days_left }} day{{ scholarship.days_left === 1 ? '' : 's' }} left
-                                    </p>
-                                </div>
-
-                                <div v-if="documentGaps.length" class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
-                                    <p class="text-sm font-bold text-slate-950">
-                                        Document gaps
-                                    </p>
-                                    <p
-                                        v-for="scholarship in documentGaps"
-                                        :key="scholarship.id"
-                                        class="mt-2 text-sm text-slate-600"
-                                    >
-                                        {{ scholarship.title }}: {{ scholarship.prepared_documents.uploaded }} of {{ scholarship.prepared_documents.required }} ready
-                                    </p>
-                                </div>
-
-                                <div v-if="applicationWatchlist.length" class="rounded-md border border-slate-200 bg-[#f6faf8] p-3">
-                                    <p class="text-sm font-bold text-slate-950">
-                                        Application follow-up
-                                    </p>
-                                    <p
-                                        v-for="application in applicationWatchlist"
-                                        :key="application.id"
-                                        class="mt-2 text-sm text-slate-600"
-                                    >
-                                        {{ application.scholarship?.title || 'Application' }}: {{ application.status?.replaceAll('_', ' ') || 'submitted' }}
-                                    </p>
-                                </div>
-
-                                <div v-if="!urgentScholarships.length && !documentGaps.length && !applicationWatchlist.length" class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                                    No urgent risks found from the current dashboard data.
-                                </div>
-                            </div>
-                        </article>
                     </section>
 
                     <section class="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">

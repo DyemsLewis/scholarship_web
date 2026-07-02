@@ -33,6 +33,31 @@ const documentRequirementSummary = computed(() => hasDocumentRequirements.value
     ? `${documentItems.value.length} requirement${documentItems.value.length === 1 ? '' : 's'}`
     : 'No documents listed');
 const canApply = computed(() => profileReadiness.value.complete);
+const isEligible = computed(() => scholarship.value?.eligibility_match?.is_eligible !== false);
+const canStartApplication = computed(() => {
+    if (!scholarship.value) {
+        return false;
+    }
+
+    if (scholarship.value.can_start_application !== undefined) {
+        return Boolean(scholarship.value.can_start_application);
+    }
+
+    return canApply.value && isEligible.value && !scholarship.value.has_applied;
+});
+const applicationBlockedLabel = computed(() => {
+    const blockers = scholarship.value?.eligibility_match?.blocking_criteria ?? [];
+    const labels = blockers
+        .map((criterion) => criterion.label)
+        .filter(Boolean)
+        .slice(0, 3);
+
+    if (labels.length) {
+        return `Your profile does not meet: ${labels.join(', ')}.`;
+    }
+
+    return 'Your profile does not meet this scholarship eligibility.';
+});
 const scholarshipMapAddress = computed(() => {
     const parts = [
         scholarship.value?.location_address,
@@ -165,6 +190,22 @@ function criterionClass(status) {
     }
 
     return 'border-slate-200 bg-slate-50 text-slate-600';
+}
+
+function criterionStatusLabel(status) {
+    if (status === 'pass') {
+        return 'Matched';
+    }
+
+    if (status === 'fail') {
+        return 'Not matched';
+    }
+
+    if (status === 'missing') {
+        return 'Missing info';
+    }
+
+    return 'Info';
 }
 
 async function loadScholarship() {
@@ -418,9 +459,16 @@ onMounted(loadScholarship);
                                     </span>
                                 </div>
 
+                                <div class="mt-4 rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm leading-6 text-slate-600">
+                                    <p class="font-bold text-slate-900">How the DSS reads this</p>
+                                    <p class="mt-1">
+                                        The Decision Support System compares your profile with the provider rules. The score is the matched criteria divided by the applicable criteria, so open rules do not lower your score and provider review is still required.
+                                    </p>
+                                </div>
+
                                 <details v-if="scholarship.eligibility_match?.criteria?.length" class="mt-4 rounded-md border border-slate-200 bg-[#f6faf8] p-3">
                                     <summary class="cursor-pointer text-sm font-bold text-slate-700">
-                                        View checklist
+                                        View DSS checklist
                                     </summary>
                                     <div class="mt-3 grid gap-3 md:grid-cols-2">
                                         <div
@@ -430,7 +478,7 @@ onMounted(loadScholarship);
                                         >
                                             <div class="flex items-center justify-between gap-2">
                                                 <p class="font-bold">{{ criterion.label }}</p>
-                                                <p class="text-xs font-bold uppercase">{{ criterion.status }}</p>
+                                                <p class="text-xs font-bold uppercase">{{ criterionStatusLabel(criterion.status) }}</p>
                                             </div>
                                             <p class="mt-2 text-xs leading-5">
                                                 Profile: {{ criterion.student_value || criterion.studentValue || 'Not set' }}
@@ -494,12 +542,18 @@ onMounted(loadScholarship);
                                             Already applied
                                         </a>
                                         <a
-                                            v-else-if="canApply"
+                                            v-else-if="canStartApplication"
                                             :href="`/dashboard/applications?scholarship=${scholarship.id}`"
                                             class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
                                         >
                                             Start application wizard
                                         </a>
+                                        <span
+                                            v-else-if="!isEligible"
+                                            class="rounded-md bg-slate-200 px-4 py-2.5 text-center text-sm font-bold text-slate-600"
+                                        >
+                                            Not eligible
+                                        </span>
                                         <a
                                             v-else
                                             href="/dashboard/profile"
@@ -507,7 +561,10 @@ onMounted(loadScholarship);
                                         >
                                             Complete profile first
                                         </a>
-                                        <p v-if="!canApply && !scholarship.has_applied" class="text-xs leading-5 text-slate-500">
+                                        <p v-if="!isEligible && !scholarship.has_applied" class="text-xs leading-5 text-slate-500">
+                                            {{ applicationBlockedLabel }}
+                                        </p>
+                                        <p v-if="!canApply && isEligible && !scholarship.has_applied" class="text-xs leading-5 text-slate-500">
                                             Complete your profile before applying. You can still explore and save this program.
                                         </p>
                                     </div>

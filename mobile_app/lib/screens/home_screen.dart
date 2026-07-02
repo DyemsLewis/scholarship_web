@@ -1227,10 +1227,7 @@ class _ProfileCard extends StatelessWidget {
     final details = [
       _Detail('Name', stringValue(user['name'])),
       _Detail('Email', stringValue(user['email'])),
-      _Detail(
-        'Suffix',
-        stringValue(user['suffix'], fallback: 'Not provided'),
-      ),
+      _Detail('Suffix', stringValue(user['suffix'], fallback: 'Not provided')),
       _Detail('Gender', profileLabelFromKey(user['gender'])),
       _Detail(
         'Contact',
@@ -3721,6 +3718,11 @@ List<Map<String, dynamic>> filterScholarships({
     final provider = asMap(scholarship['provider']);
     final match = asMap(scholarship['eligibility_match']);
     final score = intValue(match['score']);
+    final locationText = [
+      scholarship['eligible_locations'],
+      scholarship['location_name'],
+      scholarship['location_address'],
+    ].map(stringValue).where((value) => value.isNotEmpty).join(' ');
     final matchesSearch =
         keyword.isEmpty ||
         [
@@ -3732,13 +3734,11 @@ List<Map<String, dynamic>> filterScholarships({
           scholarship['eligible_courses'],
           scholarship['eligible_school_types'],
           scholarship['eligible_year_levels'],
-          scholarship['eligible_locations'],
           scholarship['income_requirement'],
-          scholarship['location_name'],
-          scholarship['location_address'],
           scholarship['requirements'],
           provider['name'],
-        ].any((value) => stringValue(value).toLowerCase().contains(keyword));
+        ].any((value) => stringValue(value).toLowerCase().contains(keyword)) ||
+        locationKeywordMatches(locationText, keyword);
 
     return matchesSearch &&
         optionMatches(scholarship['category'], category) &&
@@ -3852,6 +3852,59 @@ bool textMatches(Object? value, String filter) {
   return haystack.isEmpty ||
       haystack.contains(needle) ||
       needle.contains(haystack);
+}
+
+String normalizeLocationText(Object? value) {
+  return stringValue(value)
+      .toLowerCase()
+      .replaceAll(RegExp(r'[.;:]'), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
+
+bool isOpenPhilippineLocationText(Object? value) {
+  final normalized = normalizeLocationText(value);
+
+  if (normalized.isEmpty) {
+    return false;
+  }
+
+  return {
+        'all locations',
+        'any location',
+        'all regions',
+        'any region',
+        'nationwide',
+        'philippines',
+        'the philippines',
+        'republic of the philippines',
+        'nationwide philippines',
+        'philippines nationwide',
+        'anywhere in the philippines',
+        'within the philippines',
+        'all over the philippines',
+        'all philippines',
+      }.contains(normalized) ||
+      normalized.contains('open to all') ||
+      normalized.contains('no restriction') ||
+      (normalized.contains('nationwide') &&
+          !normalized.contains('not nationwide'));
+}
+
+bool locationKeywordMatches(Object? value, String keyword) {
+  final needle = normalizeLocationText(keyword);
+  final haystack = normalizeLocationText(value);
+
+  if (needle.isEmpty || haystack.isEmpty) {
+    return false;
+  }
+
+  if (isOpenPhilippineLocationText(needle) &&
+      isOpenPhilippineLocationText(haystack)) {
+    return true;
+  }
+
+  return haystack.contains(needle) || needle.contains(haystack);
 }
 
 bool deadlineMatches(Map<String, dynamic> scholarship, String filter) {
@@ -4134,10 +4187,9 @@ String normalizeRelocationChoice(Object? value) {
 }
 
 String normalizeGenderChoice(Object? value) {
-  final choice = stringValue(value)
-      .toLowerCase()
-      .trim()
-      .replaceAll(RegExp(r'[\s-]+'), '_');
+  final choice = stringValue(
+    value,
+  ).toLowerCase().trim().replaceAll(RegExp(r'[\s-]+'), '_');
 
   if (choice.isEmpty) {
     return '';

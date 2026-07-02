@@ -11,6 +11,7 @@ import AccountSetupPage from './pages/AccountSetupPage.vue';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.vue';
 import LandingPage from './pages/LandingPage.vue';
 import LoginPage from './pages/LoginPage.vue';
+import ProviderApplicationDetailPage from './pages/ProviderApplicationDetailPage.vue';
 import ProviderApplicationsPage from './pages/ProviderApplicationsPage.vue';
 import ProviderInsightsPage from './pages/ProviderInsightsPage.vue';
 import ProviderPage from './pages/ProviderPage.vue';
@@ -19,6 +20,7 @@ import ProviderProfilePage from './pages/ProviderProfilePage.vue';
 import ProviderProgramsPage from './pages/ProviderProgramsPage.vue';
 import RegisterPage from './pages/RegisterPage.vue';
 import ResetPasswordPage from './pages/ResetPasswordPage.vue';
+import UserApplicationDetailPage from './pages/UserApplicationDetailPage.vue';
 import UserApplicationsPage from './pages/UserApplicationsPage.vue';
 import UserDashboardPage from './pages/UserDashboardPage.vue';
 import UserDocumentsPage from './pages/UserDocumentsPage.vue';
@@ -51,6 +53,7 @@ const pages = {
     adminReviews: AdminReviewsPage,
     adminUsers: AdminUsersPage,
     dashboard: UserDashboardPage,
+    dashboardApplicationDetail: UserApplicationDetailPage,
     dashboardApplications: UserApplicationsPage,
     dashboardDocuments: UserDocumentsPage,
     dashboardProfile: UserProfilePage,
@@ -60,6 +63,7 @@ const pages = {
     landing: LandingPage,
     login: LoginPage,
     provider: ProviderPage,
+    providerApplicationDetail: ProviderApplicationDetailPage,
     providerApplications: ProviderApplicationsPage,
     providerInsights: ProviderInsightsPage,
     providerProgramForm: ProviderProgramFormPage,

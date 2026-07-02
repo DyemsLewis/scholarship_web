@@ -960,6 +960,15 @@ class MobileAuthController extends Controller
             'all regions',
             'any region',
             'nationwide',
+            'philippines',
+            'the philippines',
+            'republic of the philippines',
+            'nationwide philippines',
+            'philippines nationwide',
+            'anywhere in the philippines',
+            'within the philippines',
+            'all over the philippines',
+            'all philippines',
             'no income requirement',
         ], true)
             || str_starts_with($normalized, 'any ')
@@ -968,7 +977,11 @@ class MobileAuthController extends Controller
             || str_contains($normalized, 'open to all')
             || str_contains($normalized, 'no restriction')
             || str_contains($normalized, 'no preference')
-            || str_contains($normalized, 'not applicable');
+            || str_contains($normalized, 'not applicable')
+            || (str_contains($normalized, 'nationwide') && ! str_contains($normalized, 'not nationwide'))
+            || str_contains($normalized, 'anywhere in the philippines')
+            || str_contains($normalized, 'within the philippines')
+            || str_contains($normalized, 'all over the philippines');
     }
 
     private function documentRequirements(?Scholarship $scholarship): array

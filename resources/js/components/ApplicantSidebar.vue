@@ -6,11 +6,11 @@ const currentPath = window.location.pathname.replace(/\/$/, '') || '/dashboard';
 const isMenuOpen = ref(false);
 
 const navLinks = [
-    { href: '/dashboard', label: 'Dashboard', icon: 'fa-solid fa-chart-line' },
-    { href: '/dashboard/scholarships', label: 'Scholarships', icon: 'fa-solid fa-graduation-cap' },
-    { href: '/dashboard/applications', label: 'Applications', icon: 'fa-solid fa-file-signature' },
-    { href: '/dashboard/documents', label: 'Documents', icon: 'fa-solid fa-folder-open' },
-    { href: '/dashboard/profile', label: 'Profile', icon: 'fa-solid fa-user-graduate' },
+    { href: '/dashboard', label: 'Dashboard' },
+    { href: '/dashboard/scholarships', label: 'Scholarships' },
+    { href: '/dashboard/applications', label: 'Applications' },
+    { href: '/dashboard/documents', label: 'Documents' },
+    { href: '/dashboard/profile', label: 'Profile' },
 ];
 
 function isActive(href) {
@@ -57,8 +57,7 @@ function logout() {
                             : 'text-slate-200 hover:bg-white/10 hover:text-white',
                     ]"
                 >
-                    <span class="inline-flex items-center gap-2">
-                        <i :class="[link.icon, 'text-xs']"></i>
+                    <span>
                         {{ link.label }}
                     </span>
                 </a>
@@ -131,8 +130,7 @@ function logout() {
                         ]"
                         @click="closeMenu"
                     >
-                        <span class="flex items-center gap-2 text-sm font-bold">
-                            <i :class="[link.icon, 'w-4 text-center']"></i>
+                        <span class="text-sm font-bold">
                             {{ link.label }}
                         </span>
                     </a>

@@ -65,6 +65,20 @@ class ProviderController extends Controller
         return view('provider-applications');
     }
 
+    public function applicationDetail(Request $request, ScholarshipApplication $application): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+
+        return view('provider-application-detail', [
+            'application' => $application,
+        ]);
+    }
+
     public function profile(Request $request): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -459,6 +473,22 @@ class ProviderController extends Controller
                     'days_left' => $scholarship->deadline ? now()->startOfDay()->diffInDays($scholarship->deadline->startOfDay(), false) : null,
                 ];
             })->values(),
+        ]);
+    }
+
+    public function applicationDetailData(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+
+        $application->load(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship']);
+        app(DecisionSupportService::class)->syncApplication($application);
+        $application = $application->fresh()->load(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship']);
+
+        return response()->json([
+            'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+            'application' => $this->applicationPayload($application),
+            'notifications' => $this->notificationsPayload($request),
         ]);
     }
 
@@ -859,6 +889,7 @@ class ProviderController extends Controller
 
         return [
             'id' => $application->id,
+            'detail_url' => route('provider.applications.show', $application),
             'status' => $application->status,
             'document_checklist' => $application->document_checklist ?? [],
             'document_readiness' => $readiness,
