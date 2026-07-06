@@ -521,13 +521,22 @@ class ProviderController extends Controller
 
         $previousStatus = $application->status;
         $isOutcomeStatus = in_array($validated['status'], $outcomeStatuses, true);
+        $decisionReason = array_key_exists('decision_reason', $validated)
+            ? $validated['decision_reason']
+            : $application->decision_reason;
+        $reviewNotes = array_key_exists('review_notes', $validated)
+            ? $validated['review_notes']
+            : $application->review_notes;
+        $outcomeNotes = array_key_exists('outcome_notes', $validated)
+            ? $validated['outcome_notes']
+            : $application->outcome_notes;
 
         $application->update([
             'status' => $validated['status'],
-            'decision_reason' => $validated['decision_reason'] ?? $application->decision_reason,
-            'review_notes' => $validated['review_notes'] ?? $application->review_notes,
+            'decision_reason' => $decisionReason,
+            'review_notes' => $reviewNotes,
             'awarded_amount' => array_key_exists('awarded_amount', $validated) ? $validated['awarded_amount'] : $application->awarded_amount,
-            'outcome_notes' => $validated['outcome_notes'] ?? $application->outcome_notes,
+            'outcome_notes' => $outcomeNotes,
             'outcome_at' => $validated['outcome_at'] ?? ($isOutcomeStatus ? ($application->outcome_at ?? now()) : $application->outcome_at),
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
@@ -556,13 +565,10 @@ class ProviderController extends Controller
             ],
         );
 
-        PortalNotification::create([
-            'user_id' => $application->applicant_id,
-            'type' => $isOutcomeStatus ? 'application_outcome' : 'application_status',
-            'title' => $isOutcomeStatus ? 'Application outcome recorded' : 'Application status updated',
-            'message' => "Your application for {$application->scholarship?->title} is now {$this->statusLabel($validated['status'])}.",
-            'action_url' => '/dashboard/applications',
-        ]);
+        PortalNotification::create(array_merge(
+            ['user_id' => $application->applicant_id],
+            $this->applicationStatusNotificationPayload($application, $validated['status'], $decisionReason, $isOutcomeStatus),
+        ));
 
         $freshApplication = $application->fresh()->load(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship']);
         app(DecisionSupportService::class)->syncApplication($freshApplication);
@@ -1152,6 +1158,98 @@ class ProviderController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function applicationStatusNotificationPayload(
+        ScholarshipApplication $application,
+        string $status,
+        ?string $decisionReason,
+        bool $isOutcomeStatus
+    ): array {
+        $programTitle = $application->scholarship?->title ?: 'this scholarship';
+        $actionUrl = route('dashboard.applications.show', $application, false);
+
+        if ($status === 'under_review' && $decisionReason === 'missing_documents') {
+            return [
+                'type' => 'application_status',
+                'title' => 'Documents needed',
+                'message' => "Your application for {$programTitle} needs updated documents. Please review the provider note.",
+                'action_url' => $actionUrl,
+            ];
+        }
+
+        $payload = $isOutcomeStatus
+            ? match ($status) {
+                'awarded' => [
+                    'type' => 'application_outcome',
+                    'title' => 'Award recorded',
+                    'message' => "Your application for {$programTitle} has been awarded. Check the provider note for release details.",
+                ],
+                'not_awarded' => [
+                    'type' => 'application_outcome',
+                    'title' => 'Award not recorded',
+                    'message' => "Your application for {$programTitle} was not selected for an award. Review the provider note for details.",
+                ],
+                'disbursed' => [
+                    'type' => 'application_outcome',
+                    'title' => 'Scholarship support released',
+                    'message' => "Scholarship support for {$programTitle} has been marked as disbursed.",
+                ],
+                'renewed' => [
+                    'type' => 'application_outcome',
+                    'title' => 'Scholarship renewed',
+                    'message' => "Your scholarship support for {$programTitle} has been renewed.",
+                ],
+                default => [
+                    'type' => 'application_outcome',
+                    'title' => 'Application outcome recorded',
+                    'message' => "Your application for {$programTitle} is now {$this->statusLabel($status)}.",
+                ],
+            }
+            : match ($status) {
+                'submitted' => [
+                    'type' => 'application_status',
+                    'title' => 'Application returned to submitted',
+                    'message' => "Your application for {$programTitle} was returned to submitted status.",
+                ],
+                'under_review' => [
+                    'type' => 'application_status',
+                    'title' => 'Application review started',
+                    'message' => "Your application for {$programTitle} is now under provider review.",
+                ],
+                'qualified' => [
+                    'type' => 'application_status',
+                    'title' => 'Application qualified',
+                    'message' => "Your application for {$programTitle} has been marked qualified for provider review.",
+                ],
+                'shortlisted' => [
+                    'type' => 'application_status',
+                    'title' => 'Application shortlisted',
+                    'message' => "Your application for {$programTitle} has been shortlisted for the next review step.",
+                ],
+                'interview' => [
+                    'type' => 'application_status',
+                    'title' => 'Interview or follow-up needed',
+                    'message' => "Your application for {$programTitle} was moved to interview or follow-up screening.",
+                ],
+                'approved' => [
+                    'type' => 'application_status',
+                    'title' => 'Application approved',
+                    'message' => "Your application for {$programTitle} has been approved. Watch for award details from the provider.",
+                ],
+                'rejected' => [
+                    'type' => 'application_status',
+                    'title' => 'Application not selected',
+                    'message' => "Your application for {$programTitle} was not selected. Review the provider note for details.",
+                ],
+                default => [
+                    'type' => 'application_status',
+                    'title' => 'Application status updated',
+                    'message' => "Your application for {$programTitle} is now {$this->statusLabel($status)}.",
+                ],
+            };
+
+        return array_merge($payload, ['action_url' => $actionUrl]);
     }
 
     private function statusLabel(string $status): string

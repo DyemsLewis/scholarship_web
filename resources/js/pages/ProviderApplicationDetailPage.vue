@@ -228,7 +228,7 @@ function quickActionNote(action) {
 
 async function applyQuickAction(action) {
     const map = {
-        under_review: { status: 'under_review', reason: 'complete_requirements' },
+        under_review: { status: 'under_review', reason: '' },
         missing_documents: { status: 'under_review', reason: 'missing_documents' },
         shortlisted: { status: 'shortlisted', reason: 'complete_requirements' },
         interview: { status: 'interview', reason: 'for_interview' },

@@ -146,14 +146,18 @@ class DecisionSupportService
             ['key' => 'submitted', 'label' => 'Submitted'],
             ['key' => 'under_review', 'label' => 'Under review'],
             ['key' => 'qualified', 'label' => 'Qualified'],
+            ['key' => 'shortlisted', 'label' => 'Shortlisted'],
+            ['key' => 'interview', 'label' => 'Interview'],
             ['key' => 'approved', 'label' => 'Approved'],
             ['key' => 'awarded', 'label' => 'Awarded'],
         ];
         $stageIndex = match ($status) {
             'under_review' => 1,
-            'qualified', 'shortlisted', 'interview' => 2,
-            'approved' => 3,
-            'awarded', 'disbursed', 'renewed', 'not_awarded' => 4,
+            'qualified' => 2,
+            'shortlisted' => 3,
+            'interview' => 4,
+            'approved' => 5,
+            'awarded', 'disbursed', 'renewed', 'not_awarded' => 6,
             'rejected' => 1,
             default => 0,
         };
