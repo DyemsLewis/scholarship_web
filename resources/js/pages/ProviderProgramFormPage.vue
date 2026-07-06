@@ -22,7 +22,7 @@ const providerAddressLookupTrigger = ref(0);
 const activeFormSection = ref('basics');
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
-const inputClass = 'w-full min-w-0 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
+const inputClass = 'w-full min-w-0 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const sectionCardClass = 'rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5';
 const fieldCardClass = 'min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm';
 const fieldStackClass = `${fieldCardClass} flex flex-col`;
@@ -1036,7 +1036,7 @@ onMounted(loadFormData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -1044,7 +1044,7 @@ onMounted(loadFormData);
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                                 Program Form
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
@@ -1093,7 +1093,7 @@ onMounted(loadFormData);
                     >
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     {{ isEditMode ? 'Edit Scholarship' : 'Create Scholarship' }}
                                 </p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">

@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import AuthShell from '../components/AuthShell.vue';
 import ToastMessage from '../components/ToastMessage.vue';
 
@@ -11,7 +11,7 @@ const form = ref({
 });
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
-const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
+const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const toggleButtonClass = 'absolute inset-y-0 right-2 my-auto h-9 rounded-md px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900';
 const primaryButtonClass = 'w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80';
 
@@ -71,12 +71,18 @@ async function submitForm() {
             remember: form.value.remember,
         });
 
+        const isEmailVerified = response.data.email_verified !== false;
+
         statusMessage.value = response.data.message ?? 'Login successful.';
-        showToast('success', 'Login successful', statusMessage.value);
+        showToast(
+            'success',
+            isEmailVerified ? 'Login successful' : 'Email verification reminder',
+            statusMessage.value,
+        );
 
         redirectTimer = window.setTimeout(() => {
             window.location.href = response.data.redirect ?? '/';
-        }, 900);
+        }, isEmailVerified ? 900 : 1400);
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Login failed. Check your details and try again.';
         showToast('error', 'Login failed', errorMessage.value);
@@ -84,6 +90,16 @@ async function submitForm() {
         isSubmitting.value = false;
     }
 }
+
+onMounted(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get('verified') === '1') {
+        statusMessage.value = 'Email verified successfully. You can now sign in.';
+        showToast('success', 'Email verified', statusMessage.value);
+        window.history.replaceState({}, '', window.location.pathname);
+    }
+});
 
 onBeforeUnmount(() => {
     if (toastTimer) {
@@ -144,7 +160,7 @@ onBeforeUnmount(() => {
                         <label class="block text-sm font-semibold text-slate-700" for="password">
                             Password
                         </label>
-                        <a href="/forgot-password" class="text-sm font-semibold text-sky-700 transition hover:text-slate-900">
+                        <a href="/forgot-password" class="text-sm font-semibold text-amber-700 transition hover:text-slate-900">
                             Forgot password?
                         </a>
                     </div>
@@ -175,7 +191,7 @@ onBeforeUnmount(() => {
                     <input
                         v-model="form.remember"
                         type="checkbox"
-                        class="h-4 w-4 rounded border-slate-300 bg-white text-sky-700 focus:ring-sky-300"
+                        class="h-4 w-4 rounded border-slate-300 bg-white text-amber-600 focus:ring-amber-300"
                     >
                     Remember me
                 </label>

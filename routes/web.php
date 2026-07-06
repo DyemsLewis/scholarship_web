@@ -15,6 +15,8 @@ Route::get('/forgot-password', [PageController::class, 'forgotPassword'])->name(
 Route::get('/reset-password', [PageController::class, 'resetPassword'])->name('password.reset');
 Route::get('/register', [PageController::class, 'register'])->name('register');
 Route::get('/provider/register', [PageController::class, 'providerRegister'])->name('provider.register');
+Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])->middleware(['signed', 'throttle:6,1'])->name('verification.verify');
+Route::post('/email/verification-notification', [AuthController::class, 'resendVerificationEmail'])->middleware(['auth', 'throttle:6,1'])->name('verification.send');
 Route::get('/account/setup', [PageController::class, 'accountSetup'])->middleware('auth')->name('account.setup');
 Route::get('/dashboard', [ApplicantDashboardController::class, 'index'])->middleware('auth')->name('dashboard');
 Route::get('/dashboard/scholarships', [ApplicantDashboardController::class, 'scholarships'])->middleware('auth')->name('dashboard.scholarships');
@@ -40,6 +42,7 @@ Route::post('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardCon
 Route::delete('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardController::class, 'unsaveScholarship'])->middleware('auth')->name('dashboard.scholarships.unsave');
 Route::get('/documents/{document}/view', [ApplicationDocumentController::class, 'view'])->middleware('auth')->name('documents.view');
 Route::get('/documents/{document}/download', [ApplicationDocumentController::class, 'download'])->middleware('auth')->name('documents.download');
+Route::get('/notifications', [NotificationController::class, 'index'])->middleware('auth')->name('notifications.index');
 Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->middleware('auth')->name('notifications.read');
 Route::get('/admin', [AdminController::class, 'index'])->name('admin.index');
 Route::get('/admin/manage-users', [AdminController::class, 'manageUsers'])->name('admin.manage-users');

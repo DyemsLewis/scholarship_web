@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\PortalNotification;
 use App\Models\User;
+use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -80,6 +83,8 @@ class AuthController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+        $emailVerificationSent = $this->sendVerificationEmail($user, $request);
+        $this->syncEmailVerificationReminder($user, $emailVerificationSent);
         ActivityLog::record(
             $user,
             'registered',
@@ -88,8 +93,12 @@ class AuthController extends Controller
         );
 
         return response()->json([
-            'message' => 'Registration complete. You are now signed in.',
+            'message' => $emailVerificationSent
+                ? 'Registration complete. We sent a verification link to your email.'
+                : 'Registration complete. You are signed in, but the verification email could not be sent yet.',
             'redirect' => $user->isProvider() ? '/provider' : '/dashboard',
+            'email_verified' => $user->hasVerifiedEmail(),
+            'email_verification_sent' => $emailVerificationSent,
             'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ], 201);
     }
@@ -130,13 +139,100 @@ class AuthController extends Controller
         );
 
         return response()->json([
-            'message' => 'Login successful.',
+            'message' => $request->user()->hasVerifiedEmail()
+                ? 'Login successful.'
+                : 'Login successful. Please verify your email when you can.',
             'redirect' => match (true) {
                 $request->user()->isAdmin() => '/admin',
                 $request->user()->isProvider() => '/provider',
                 default => '/dashboard',
             },
+            'email_verified' => $request->user()->hasVerifiedEmail(),
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+        ]);
+    }
+
+    public function verifyEmail(Request $request, int $id, string $hash): RedirectResponse|JsonResponse
+    {
+        $user = User::query()->findOrFail($id);
+
+        abort_unless(hash_equals((string) $hash, sha1($user->getEmailForVerification())), 403);
+
+        if (! $user->hasVerifiedEmail() && $user->markEmailAsVerified()) {
+            event(new Verified($user));
+
+            PortalNotification::query()
+                ->where('user_id', $user->id)
+                ->where('type', 'email_verification')
+                ->where('title', 'Verify your email address')
+                ->update(['read_at' => now()]);
+
+            PortalNotification::create([
+                'user_id' => $user->id,
+                'type' => 'email_verified',
+                'title' => 'Email verified',
+                'message' => 'Your email address has been verified successfully.',
+                'action_url' => $user->isProvider() ? '/provider' : '/dashboard',
+            ]);
+
+            ActivityLog::record(
+                $user,
+                'email_verified',
+                "{$user->name} verified their email address.",
+                $request,
+            );
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Email verified successfully.',
+                'email_verified' => true,
+            ]);
+        }
+
+        if (! $request->user()) {
+            return redirect('/login?verified=1');
+        }
+
+        $redirect = match (true) {
+            $request->user()->isAdmin() => '/admin',
+            $request->user()->isProvider() => '/provider',
+            default => '/dashboard',
+        };
+
+        return redirect($redirect.'?verified=1');
+    }
+
+    public function resendVerificationEmail(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        abort_unless($user, 403);
+
+        if ($user->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => 'Your email is already verified.',
+                'email_verified' => true,
+                'email_verification_sent' => false,
+            ]);
+        }
+
+        $emailVerificationSent = $this->sendVerificationEmail($user, $request);
+        $this->syncEmailVerificationReminder($user, $emailVerificationSent);
+
+        ActivityLog::record(
+            $user,
+            'email_verification_resent',
+            "{$user->name} requested another email verification link.",
+            $request,
+        );
+
+        return response()->json([
+            'message' => $emailVerificationSent
+                ? 'Verification email sent. Please check your inbox.'
+                : 'Unable to send the verification email right now. Check the mail settings and try again.',
+            'email_verified' => false,
+            'email_verification_sent' => $emailVerificationSent,
         ]);
     }
 
@@ -248,6 +344,48 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Password reset successful. You can now log in.',
             'redirect' => '/login',
+        ]);
+    }
+
+    private function sendVerificationEmail(User $user, Request $request): bool
+    {
+        if ($user->hasVerifiedEmail()) {
+            return false;
+        }
+
+        try {
+            $user->sendEmailVerificationNotification();
+
+            return true;
+        } catch (Throwable $error) {
+            ActivityLog::record(
+                $user,
+                'email_verification_email_failed',
+                "Email verification link could not be sent to {$user->email}.",
+                $request,
+                ['error' => $error->getMessage()],
+            );
+
+            return false;
+        }
+    }
+
+    private function syncEmailVerificationReminder(User $user, bool $emailSent): void
+    {
+        if ($user->hasVerifiedEmail()) {
+            return;
+        }
+
+        PortalNotification::updateOrCreate([
+            'user_id' => $user->id,
+            'type' => 'email_verification',
+            'title' => 'Verify your email address',
+        ], [
+            'message' => $emailSent
+                ? 'A verification link was sent to your email. Verify your email to secure your account.'
+                : 'Your email is not verified yet. Resend the verification link when mail settings are available.',
+            'action_url' => null,
+            'read_at' => null,
         ]);
     }
 }

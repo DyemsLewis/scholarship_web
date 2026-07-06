@@ -38,10 +38,10 @@ const heroSlides = [
         image: '/images/application-documents.jpg',
         primaryAction: 'Explore Programs',
         primaryHref: '/register',
-        secondaryAction: 'Admin Access',
-        secondaryHref: '/admin',
+        secondaryAction: 'Learn More',
+        secondaryHref: '/register',
         metric: 'DSS Ready',
-        metricText: 'Weighted scores, recommendations, analytics, and exports.',
+        metricText: 'Eligibility guidance, recommendations, and application support.',
     },
 ];
 
@@ -100,9 +100,37 @@ const scholarshipSteps = [
     },
     {
         title: 'Keep records organized',
-        text: 'Admins can monitor account roles and review registered users from the admin panel.',
+        text: 'Applicants and providers can keep scholarship records in one organized portal.',
         image: '/images/application-documents.jpg',
         icon: 'fa-solid fa-folder-tree',
+    },
+];
+
+const supportTools = [
+    {
+        title: 'Scholarship recommendations',
+        text: 'See programs that may fit the learner profile and eligibility rules.',
+        icon: 'fa-solid fa-wand-magic-sparkles',
+    },
+    {
+        title: 'Document checklist',
+        text: 'Know which requirements are prepared and which ones are still missing.',
+        icon: 'fa-solid fa-list-check',
+    },
+    {
+        title: 'Guided application',
+        text: 'Apply through simple steps instead of one long confusing form.',
+        icon: 'fa-solid fa-route',
+    },
+    {
+        title: 'Deadline reminders',
+        text: 'Receive portal reminders for deadlines, missing details, and updates.',
+        icon: 'fa-solid fa-bell',
+    },
+    {
+        title: 'Location view',
+        text: 'Check scholarship location details and see how far a program may be.',
+        icon: 'fa-solid fa-map-location-dot',
     },
 ];
 
@@ -228,7 +256,7 @@ const audiences = [
         <section class="border-b border-slate-200 bg-white px-4 py-10 sm:px-6 lg:px-8">
             <div class="mx-auto grid max-w-6xl gap-6 sm:grid-cols-3">
                 <div>
-                    <span class="flex h-11 w-11 items-center justify-center rounded-md bg-emerald-100 text-emerald-700">
+                    <span class="flex h-11 w-11 items-center justify-center rounded-md bg-amber-100 text-amber-800">
                         <i class="fa-solid fa-id-card"></i>
                     </span>
                     <h2 class="mt-2 text-lg font-bold text-slate-950">
@@ -252,15 +280,49 @@ const audiences = [
                 </div>
 
                 <div>
-                    <span class="flex h-11 w-11 items-center justify-center rounded-md bg-sky-100 text-sky-700">
+                    <span class="flex h-11 w-11 items-center justify-center rounded-md bg-slate-100 text-slate-800">
                         <i class="fa-solid fa-shield-halved"></i>
                     </span>
                     <h2 class="mt-2 text-lg font-bold text-slate-950">
-                        Admin oversight
+                        Organized records
                     </h2>
                     <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Admins can review users and role distribution.
+                        Applicants and providers can keep scholarship activity easier to track.
                     </p>
+                </div>
+            </div>
+        </section>
+
+        <section class="border-b border-slate-200 bg-slate-50 px-4 py-14 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-6xl">
+                <div class="max-w-2xl">
+                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
+                        Helpful Tools
+                    </p>
+                    <h2 class="mt-3 font-display text-3xl font-bold text-slate-950">
+                        Built to make scholarship searching easier
+                    </h2>
+                    <p class="mt-3 text-sm leading-6 text-slate-600">
+                        The platform keeps the important parts clear: suitable programs, requirements, reminders, applications, and location details.
+                    </p>
+                </div>
+
+                <div class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <article
+                        v-for="tool in supportTools"
+                        :key="tool.title"
+                        class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                        <span class="flex h-10 w-10 items-center justify-center rounded-md bg-slate-950 text-amber-200">
+                            <i :class="[tool.icon, 'text-sm']"></i>
+                        </span>
+                        <h3 class="mt-4 font-bold leading-6 text-slate-950">
+                            {{ tool.title }}
+                        </h3>
+                        <p class="mt-2 text-sm leading-6 text-slate-600">
+                            {{ tool.text }}
+                        </p>
+                    </article>
                 </div>
             </div>
         </section>
@@ -268,7 +330,7 @@ const audiences = [
         <section class="border-b border-slate-200 bg-white px-4 py-14 sm:px-6 lg:px-8">
             <div class="mx-auto max-w-6xl">
                 <div class="max-w-2xl">
-                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
+                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                         Built for both sides
                     </p>
                     <h2 class="mt-3 font-display text-3xl font-bold text-slate-950">
@@ -313,7 +375,7 @@ const audiences = [
         <section class="bg-slate-50 px-4 py-14 sm:px-6 lg:px-8">
             <div class="mx-auto max-w-6xl">
                 <div class="max-w-2xl">
-                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                         Portal Flow
                     </p>
                     <h2 class="mt-3 font-display text-3xl font-bold text-slate-950">
@@ -330,7 +392,7 @@ const audiences = [
                         <img :src="assetUrl(step.image)" :alt="step.title" class="h-36 w-full object-cover">
                         <div class="p-5">
                             <div class="flex items-center gap-3">
-                                <span class="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
+                                <span class="flex h-9 w-9 items-center justify-center rounded-md bg-amber-100 text-amber-800">
                                     <i :class="[step.icon, 'text-sm']"></i>
                                 </span>
                                 <h3 class="text-lg font-bold text-slate-950">

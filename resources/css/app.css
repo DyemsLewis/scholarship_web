@@ -17,6 +17,10 @@
     --color-aurora-400: #2dd4bf;
     --color-mist-100: #e2ecff;
     --color-mist-200: #bfd6ff;
+    --color-portal-navy: #081426;
+    --color-portal-paper: #f8fafc;
+    --color-portal-soft: #eef2f6;
+    --color-portal-gold: #fcd34d;
 }
 
 @layer base {
@@ -29,9 +33,9 @@
     .student-shell {
         @apply min-h-screen text-slate-900;
         background:
-            radial-gradient(circle at 12% 8%, rgba(14, 165, 233, 0.12), transparent 30%),
-            radial-gradient(circle at 88% 12%, rgba(250, 204, 21, 0.16), transparent 28%),
-            linear-gradient(180deg, #f5f8f5 0%, #edf5f2 46%, #e8f0ec 100%);
+            radial-gradient(circle at 10% 8%, rgba(252, 211, 77, 0.16), transparent 26%),
+            radial-gradient(circle at 90% 12%, rgba(8, 20, 38, 0.08), transparent 30%),
+            linear-gradient(180deg, #f8fafc 0%, #eef2f6 52%, #e7edf4 100%);
     }
 
     .student-page {
@@ -45,12 +49,12 @@
     .student-hero,
     .provider-hero,
     .admin-hero {
-        @apply relative flex min-h-32 flex-col justify-center overflow-hidden border border-white/75 bg-white/95 px-5 py-4 shadow-[0_18px_54px_rgba(15,23,42,0.09)] backdrop-blur;
+        @apply relative flex min-h-32 flex-col justify-center overflow-hidden border border-white/80 bg-white/95 px-5 py-4 shadow-[0_18px_54px_rgba(8,20,38,0.10)] backdrop-blur;
         border-radius: 1.15rem 2rem 1.15rem 1.15rem;
         clip-path: polygon(0 0, calc(100% - 2rem) 0, 100% 2rem, 100% 100%, 0 100%);
         background:
-            radial-gradient(circle at 92% 8%, rgba(15, 23, 42, 0.08), transparent 25%),
-            linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.9));
+            radial-gradient(circle at 92% 8%, rgba(252, 211, 77, 0.18), transparent 24%),
+            linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.92));
     }
 
     .student-hero::before,
@@ -75,15 +79,15 @@
     }
 
     .student-card {
-        @apply rounded-lg border border-white/70 bg-white/90 shadow-[0_14px_42px_rgba(15,23,42,0.08)] backdrop-blur;
+        @apply rounded-lg border border-white/80 bg-white/95 shadow-[0_14px_42px_rgba(8,20,38,0.08)] backdrop-blur;
     }
 
     .student-soft-card {
-        @apply rounded-lg border border-slate-200/80 bg-slate-50/90;
+        @apply rounded-lg border border-slate-200/80 bg-slate-50/95;
     }
 
     .student-kicker {
-        @apply text-xs font-semibold uppercase tracking-[0.18em] text-sky-700;
+        @apply text-xs font-semibold uppercase tracking-[0.18em] text-amber-700;
     }
 
     .student-chip {

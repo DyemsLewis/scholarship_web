@@ -21,6 +21,26 @@ const profileReadiness = ref({
 const scholarships = ref([]);
 const nextSteps = ref([]);
 const notifications = ref([]);
+const quickTools = [
+    {
+        title: 'Recommended programs',
+        text: 'Browse scholarships arranged by profile fit.',
+        href: '/dashboard/scholarships',
+        icon: 'fa-solid fa-wand-magic-sparkles',
+    },
+    {
+        title: 'Prepared documents',
+        text: 'Upload common files before applying.',
+        href: '/dashboard/documents',
+        icon: 'fa-solid fa-list-check',
+    },
+    {
+        title: 'Application wizard',
+        text: 'Continue an application step by step.',
+        href: '/dashboard/applications',
+        icon: 'fa-solid fa-route',
+    },
+];
 
 const highMatchCount = computed(() => scholarships.value
     .filter((scholarship) => Number(scholarship.eligibility_match?.score ?? 0) >= 80)
@@ -210,6 +230,27 @@ onMounted(loadDashboard);
                         </div>
                     </section>
 
+                    <section class="grid gap-3 md:grid-cols-3">
+                        <a
+                            v-for="tool in quickTools"
+                            :key="tool.title"
+                            :href="tool.href"
+                            class="student-card flex items-start gap-3 p-4 transition hover:border-amber-200 hover:shadow-md"
+                        >
+                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-950 text-amber-200">
+                                <i :class="[tool.icon, 'text-sm']"></i>
+                            </span>
+                            <span>
+                                <span class="block text-sm font-bold text-slate-950">
+                                    {{ tool.title }}
+                                </span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-600">
+                                    {{ tool.text }}
+                                </span>
+                            </span>
+                        </a>
+                    </section>
+
                     <section class="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
                         <div class="student-card p-5">
                             <p class="student-kicker">
@@ -222,7 +263,7 @@ onMounted(loadDashboard);
                                 <div
                                     v-for="(step, index) in nextSteps"
                                     :key="step"
-                                    class="flex gap-3 rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200/70"
+                                    class="flex gap-3 rounded-md bg-slate-50 p-3 ring-1 ring-slate-200/70"
                                 >
                                     <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-sm font-bold text-slate-700 ring-1 ring-slate-200">
                                         {{ index + 1 }}
@@ -249,7 +290,7 @@ onMounted(loadDashboard);
                                     v-for="notification in notifications"
                                     :key="notification.id"
                                     :href="notification.action_url || '/dashboard/applications'"
-                                    class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-4 transition hover:bg-white"
+                                    class="rounded-md border border-slate-200/80 bg-slate-50 p-4 transition hover:bg-white"
                                 >
                                     <p class="font-bold text-slate-950">
                                         {{ notification.title }}

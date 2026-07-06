@@ -43,7 +43,7 @@ function actionClass(action) {
     }
 
     if (action === 'logout') {
-        return 'bg-sky-100 text-sky-800';
+        return 'bg-slate-100 text-slate-700';
     }
 
     return 'bg-slate-100 text-slate-700';
@@ -86,7 +86,7 @@ onMounted(() => loadLogs());
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <AdminSidebar active="logs" @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -94,7 +94,7 @@ onMounted(() => loadLogs());
                 <header class="admin-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                                 Logs
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">

@@ -309,7 +309,7 @@ onMounted(loadDocuments);
                     </p>
 
                     <section class="student-card overflow-hidden">
-                        <div class="border-b border-slate-200 bg-[#f6faf8] p-5">
+                        <div class="border-b border-slate-200 bg-slate-50 p-5">
                             <p class="student-kicker">
                                 Library
                             </p>
@@ -331,7 +331,7 @@ onMounted(loadDocuments);
                                     <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Document name</span>
                                     <select
                                         v-model="preparedForm.documentName"
-                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                                     >
                                         <option
                                             v-for="option in documentOptions"
@@ -431,7 +431,7 @@ onMounted(loadDocuments);
                                         </a>
                                         <label
                                             :class="[
-                                                'rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50',
+                                                'rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50',
                                                 updatingPreparedId === document.id ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
                                             ]"
                                         >
@@ -464,7 +464,7 @@ onMounted(loadDocuments);
                     </section>
 
                     <section v-if="applications.length === 0" class="student-card p-6">
-                        <div class="rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
+                        <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
                             No submitted applications yet. You can still upload prepared documents above.
                         </div>
                     </section>
@@ -559,7 +559,7 @@ onMounted(loadDocuments);
             @click.self="closeDocumentPreview"
         >
             <section class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
-                <header class="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#f6faf8] px-4 py-3">
+                <header class="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-slate-950">
                             {{ previewDocument.document_name }}

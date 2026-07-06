@@ -77,7 +77,7 @@ function documentStatusClass(status) {
         return 'bg-amber-100 text-amber-800';
     }
 
-    return 'bg-sky-100 text-sky-800';
+    return 'bg-slate-100 text-slate-700';
 }
 
 function documentPriorityLabel(document) {
@@ -109,7 +109,7 @@ function documentPriorityClass(document) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    return 'bg-sky-100 text-sky-800';
+    return 'bg-slate-100 text-slate-700';
 }
 
 function labelFromKey(value) {
@@ -182,7 +182,7 @@ onMounted(loadInsights);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -214,7 +214,7 @@ onMounted(loadInsights);
 
                     <section class="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
                         <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Application Funnel
                             </p>
                             <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -237,7 +237,7 @@ onMounted(loadInsights);
                         </article>
 
                         <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Program Review
                             </p>
                             <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -276,7 +276,7 @@ onMounted(loadInsights);
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Document Review
                                 </p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -313,7 +313,7 @@ onMounted(loadInsights);
                                     <div class="min-w-0 flex-1">
                                         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                             <div class="min-w-0">
-                                                <p class="truncate text-xs font-bold uppercase tracking-[0.14em] text-sky-700">
+                                                <p class="truncate text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
                                                     {{ document.scholarship || 'Scholarship' }}
                                                 </p>
                                                 <h4 class="mt-1 truncate text-base font-bold text-slate-950">
@@ -352,7 +352,7 @@ onMounted(loadInsights);
                                                 </label>
                                                 <select
                                                     v-model="documentStatuses[document.id]"
-                                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                                                 >
                                                     <option
                                                         v-for="option in documentStatusOptions"
@@ -372,7 +372,7 @@ onMounted(loadInsights);
                                                     type="text"
                                                     maxlength="1000"
                                                     placeholder="Optional note for student"
-                                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                                                 >
                                             </div>
                                             <div class="flex gap-2">
@@ -448,7 +448,7 @@ onMounted(loadInsights);
                         </article>
 
                         <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 DSS Summary
                             </p>
                             <h3 class="mt-2 text-xl font-bold text-slate-950">

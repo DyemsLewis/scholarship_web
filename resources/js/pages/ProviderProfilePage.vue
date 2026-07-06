@@ -201,13 +201,13 @@ onMounted(loadProviderProfile);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-5xl">
                 <header class="provider-hero">
-                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                         Provider Profile
                     </p>
                     <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
@@ -342,7 +342,7 @@ onMounted(loadProviderProfile);
 
                     <form class="grid gap-6" @submit.prevent="saveProviderProfile">
                         <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Organization Details
                             </p>
 
@@ -386,7 +386,7 @@ onMounted(loadProviderProfile);
                         </section>
 
                         <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Contact and Account
                             </p>
 
@@ -430,7 +430,7 @@ onMounted(loadProviderProfile);
                         <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                         Publishing Access
                                     </p>
                                     <p class="mt-2 text-sm leading-6 text-slate-600">

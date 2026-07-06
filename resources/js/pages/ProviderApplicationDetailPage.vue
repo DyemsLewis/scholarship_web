@@ -195,6 +195,58 @@ function applyApplication(payload) {
     );
 }
 
+function quickActionNote(action) {
+    if (action === 'under_review') {
+        return 'Application moved to provider review.';
+    }
+
+    if (action === 'missing_documents') {
+        const missingDocuments = application.value?.document_readiness?.missing ?? [];
+        const missingList = missingDocuments.length ? missingDocuments.slice(0, 3).join(', ') : 'remaining listed documents';
+
+        return `Please upload or replace ${missingList}.`;
+    }
+
+    if (action === 'shortlisted') {
+        return 'Applicant shortlisted for the next review step.';
+    }
+
+    if (action === 'interview') {
+        return 'Applicant selected for interview or follow-up screening.';
+    }
+
+    if (action === 'approved') {
+        return 'Application approved after provider review.';
+    }
+
+    if (action === 'rejected') {
+        return 'Application was not selected after provider review.';
+    }
+
+    return '';
+}
+
+async function applyQuickAction(action) {
+    const map = {
+        under_review: { status: 'under_review', reason: 'complete_requirements' },
+        missing_documents: { status: 'under_review', reason: 'missing_documents' },
+        shortlisted: { status: 'shortlisted', reason: 'complete_requirements' },
+        interview: { status: 'interview', reason: 'for_interview' },
+        approved: { status: 'approved', reason: 'approved_for_award' },
+        rejected: { status: 'rejected', reason: 'not_selected' },
+    };
+    const selected = map[action];
+
+    if (!selected) {
+        return;
+    }
+
+    reviewForm.value.status = selected.status;
+    reviewForm.value.decisionReason = selected.reason;
+    reviewForm.value.reviewNotes = quickActionNote(action);
+    await updateStatus();
+}
+
 async function loadApplication() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -272,7 +324,7 @@ onMounted(loadApplication);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -283,7 +335,7 @@ onMounted(loadApplication);
                             <a href="/provider/applications" class="inline-flex w-fit rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
                                 Back to applications
                             </a>
-                            <p class="mt-4 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                            <p class="mt-4 text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                                 Application Details
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
@@ -363,7 +415,7 @@ onMounted(loadApplication);
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                     <div>
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                             Provider Review
                                         </p>
                                         <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -381,6 +433,62 @@ onMounted(loadApplication);
                                 </div>
 
                                 <div class="mt-5 grid gap-3 md:grid-cols-2">
+                                    <div class="md:col-span-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                            Quick actions
+                                        </p>
+                                        <div class="mt-3 flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('under_review')"
+                                            >
+                                                Start review
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('missing_documents')"
+                                            >
+                                                Request documents
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('shortlisted')"
+                                            >
+                                                Shortlist
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('interview')"
+                                            >
+                                                Interview
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('approved')"
+                                            >
+                                                Approve
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('rejected')"
+                                            >
+                                                Reject
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <label :class="labelClass">Pipeline status</label>
                                         <select v-model="reviewForm.status" :class="inputClass">
@@ -417,7 +525,7 @@ onMounted(loadApplication);
                             </section>
 
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Decision Support
                                 </p>
                                 <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -475,7 +583,7 @@ onMounted(loadApplication);
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                             Documents
                                         </p>
                                         <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -544,7 +652,7 @@ onMounted(loadApplication);
                             </section>
 
                             <section v-if="timeline.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Timeline
                                 </p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -570,7 +678,7 @@ onMounted(loadApplication);
 
                         <aside class="space-y-5">
                             <section v-if="application.status_progress" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Progress
                                 </p>
                                 <h3 class="mt-2 text-lg font-bold text-slate-950">
@@ -590,7 +698,7 @@ onMounted(loadApplication);
                             </section>
 
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Applicant
                                 </p>
                                 <div class="mt-3 grid gap-3 text-sm">
@@ -616,7 +724,7 @@ onMounted(loadApplication);
                             </section>
 
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Context
                                 </p>
                                 <div class="mt-3 grid gap-2 text-sm">
@@ -636,7 +744,7 @@ onMounted(loadApplication);
                             </section>
 
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Notes
                                 </p>
                                 <p class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">

@@ -72,7 +72,7 @@ onMounted(loadAdminData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <AdminSidebar active="users" @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -80,7 +80,7 @@ onMounted(loadAdminData);
                 <header class="admin-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                                 Manage Users
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
@@ -125,7 +125,7 @@ onMounted(loadAdminData);
                                     v-model="search"
                                     type="search"
                                     placeholder="Search users"
-                                    class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100 sm:w-72"
+                                    class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100 sm:w-72"
                                 >
 
                                 <button
@@ -218,7 +218,7 @@ onMounted(loadAdminData);
                                                 user.role === 'admin'
                                                     ? 'bg-amber-100 text-amber-800'
                                                     : user.role === 'provider'
-                                                        ? 'bg-sky-100 text-sky-800'
+                                                        ? 'bg-slate-100 text-slate-700'
                                                         : 'bg-emerald-100 text-emerald-800'
                                             ]"
                                         >

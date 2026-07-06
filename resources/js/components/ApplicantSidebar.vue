@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue';
+import NotificationBell from './NotificationBell.vue';
 
 const emit = defineEmits(['logout']);
 const currentPath = window.location.pathname.replace(/\/$/, '') || '/dashboard';
@@ -32,7 +33,7 @@ function logout() {
 </script>
 
 <template>
-    <header class="sticky top-0 z-40 border-b border-white/10 bg-[#081426]/95 text-white shadow-[0_12px_36px_rgba(8,20,38,0.22)] backdrop-blur">
+    <header class="sticky top-0 z-40 border-b border-white/10 bg-slate-950/95 text-white shadow-[0_12px_36px_rgba(8,20,38,0.22)] backdrop-blur">
         <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
             <a href="/dashboard" class="group flex items-center gap-3">
                 <span class="flex h-9 w-9 items-center justify-center rounded-md bg-amber-300 font-display text-sm font-bold text-slate-950">
@@ -64,6 +65,7 @@ function logout() {
             </nav>
 
             <div class="hidden items-center gap-3 md:flex">
+                <NotificationBell />
                 <span class="rounded-md bg-white/10 px-3 py-2 text-xs font-semibold text-slate-200 ring-1 ring-white/10">
                     Applicant
                 </span>
@@ -92,7 +94,7 @@ function logout() {
         class="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm md:hidden"
         @click.self="closeMenu"
     >
-        <aside class="h-full w-[min(21rem,86vw)] bg-[#081426] text-white shadow-2xl">
+        <aside class="h-full w-[min(21rem,86vw)] bg-slate-950 text-white shadow-2xl">
             <div class="flex h-full flex-col gap-6 px-5 py-6">
                 <div class="flex items-start justify-between gap-4">
                     <a href="/dashboard" class="font-display text-xl font-bold text-white" @click="closeMenu">
@@ -140,6 +142,9 @@ function logout() {
                     <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
                         Applicant Account
                     </p>
+                    <div class="mt-4">
+                        <NotificationBell align="left" mode="sidebar" />
+                    </div>
                     <button
                         type="button"
                         class="mt-4 w-full rounded-md border border-white/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white hover:text-slate-950"

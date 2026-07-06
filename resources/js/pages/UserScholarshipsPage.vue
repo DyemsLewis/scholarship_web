@@ -563,7 +563,7 @@ onMounted(loadScholarships);
                             </div>
                         </div>
 
-                        <details class="border-b border-slate-200 bg-[#f6faf8] px-4 py-3">
+                        <details class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                             <summary class="cursor-pointer text-sm font-bold text-slate-800">
                                 How DSS matching works
                             </summary>
@@ -584,25 +584,25 @@ onMounted(loadScholarships);
                                 v-model="search"
                                 type="search"
                                 placeholder="Search program or provider"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                             >
 
-                            <label class="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-[#f6faf8] px-3.5 py-2.5 text-sm font-semibold text-slate-700">
+                            <label class="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-700">
                                 <span>Saved only</span>
                                 <input
                                     v-model="savedOnly"
                                     type="checkbox"
-                                    class="h-4 w-4 rounded border-slate-300 text-sky-700 focus:ring-sky-200"
+                                    class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-200"
                                 >
                             </label>
 
-                            <select v-model="selectedCategory" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                            <select v-model="selectedCategory" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
                                 <option v-for="category in categories" :key="category" :value="category">
                                     {{ category === 'all' ? 'All categories' : category }}
                                 </option>
                             </select>
 
-                            <select v-model="selectedProviderType" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                            <select v-model="selectedProviderType" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
                                 <option v-for="type in providerTypes" :key="type" :value="type">
                                     {{ type === 'all' ? 'All provider types' : providerTypeLabel(type) }}
                                 </option>
@@ -617,27 +617,27 @@ onMounted(loadScholarships);
                             </button>
 
                             <div v-if="showAdvancedFilters" class="grid gap-3 border-t border-slate-200 pt-3 md:col-span-2 md:grid-cols-2 xl:col-span-6 xl:grid-cols-4">
-                                <select v-model="selectedEducationLevel" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <select v-model="selectedEducationLevel" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
                                     <option v-for="level in educationLevels" :key="level" :value="level">
                                         {{ level === 'all' ? 'All education levels' : labelFromKey(level) }}
                                     </option>
                                 </select>
-                                <select v-model="selectedSchoolType" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <select v-model="selectedSchoolType" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
                                     <option v-for="type in schoolTypes" :key="type" :value="type">
                                         {{ type === 'all' ? 'All school types' : labelFromKey(type) }}
                                     </option>
                                 </select>
-                                <input v-model="maxGwa" type="number" min="0" max="100" step="0.01" placeholder="My grade value, e.g. 85 or 2.00" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
-                                <input v-model="minimumMatch" type="number" min="0" max="100" step="1" placeholder="Minimum match %" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
-                                <input v-model="courseFilter" type="search" placeholder="Track / strand / course" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
-                                <input v-model="yearFilter" type="search" placeholder="Grade / year level" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
-                                <input v-model="locationFilter" type="search" placeholder="City, province, or region" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
-                                <select v-model="selectedIncome" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <input v-model="maxGwa" type="number" min="0" max="100" step="0.01" placeholder="My grade value, e.g. 85 or 2.00" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
+                                <input v-model="minimumMatch" type="number" min="0" max="100" step="1" placeholder="Minimum match %" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
+                                <input v-model="courseFilter" type="search" placeholder="Track / strand / course" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
+                                <input v-model="yearFilter" type="search" placeholder="Grade / year level" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
+                                <input v-model="locationFilter" type="search" placeholder="City, province, or region" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
+                                <select v-model="selectedIncome" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
                                     <option v-for="income in incomeRequirements" :key="income" :value="income">
                                         {{ income === 'all' ? 'All income rules' : income }}
                                     </option>
                                 </select>
-                                <select v-model="deadlineFilter" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-600 focus:ring-3 focus:ring-sky-100">
+                                <select v-model="deadlineFilter" class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
                                     <option value="all">All deadlines</option>
                                     <option value="next_7_days">Due in 7 days</option>
                                     <option value="next_30_days">Due in 30 days</option>
@@ -657,13 +657,13 @@ onMounted(loadScholarships);
                         </div>
 
                         <div v-if="scholarships.length === 0" class="student-card p-6">
-                            <div class="rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
+                            <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
                                 No published scholarships yet. Once providers publish programs, they will show up here.
                             </div>
                         </div>
 
                         <div v-else-if="filteredScholarships.length === 0" class="student-card p-6">
-                            <div class="rounded-lg border border-dashed border-slate-300 bg-[#f6faf8] p-6 text-sm text-slate-500">
+                            <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
                                 No scholarships match your filters.
                             </div>
                         </div>
@@ -672,7 +672,7 @@ onMounted(loadScholarships);
                             <article
                                 v-for="scholarship in filteredScholarships"
                                 :key="scholarship.id"
-                                class="group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-200 hover:shadow-md"
+                                class="group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-amber-200 hover:shadow-md"
                             >
                                 <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                     <div class="flex min-w-0 gap-3">
@@ -705,19 +705,19 @@ onMounted(loadScholarships);
                                 </div>
 
                                 <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-4">
-                                    <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200">
+                                    <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
                                         <dt class="font-semibold text-slate-500">Award</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ formatAmount(scholarship.award_amount) }}</dd>
                                     </div>
-                                    <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200">
+                                    <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
                                         <dt class="font-semibold text-slate-500">For</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ targetApplicantLabel(scholarship) }}</dd>
                                     </div>
-                                    <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200">
+                                    <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
                                         <dt class="font-semibold text-slate-500">Grades</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ academicRequirementLabel(scholarship) }}</dd>
                                     </div>
-                                    <div class="rounded-md bg-[#f6faf8] p-3 ring-1 ring-slate-200">
+                                    <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
                                         <dt class="font-semibold text-slate-500">Documents</dt>
                                         <dd class="mt-1 line-clamp-2 font-bold text-slate-950">{{ requirementsLabel(scholarship.requirements) }}</dd>
                                     </div>

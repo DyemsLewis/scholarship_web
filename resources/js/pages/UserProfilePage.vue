@@ -15,8 +15,8 @@ const activeSection = ref('personal');
 const addressLookupTrigger = ref(0);
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
-const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
-const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
+const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 
 const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
 const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
@@ -385,7 +385,7 @@ function sectionStatusClass(section) {
 
     if (!section.required) {
         return progress.completed > 0
-            ? 'bg-sky-100 text-sky-800'
+            ? 'bg-slate-100 text-slate-700'
             : 'bg-slate-100 text-slate-600';
     }
 
@@ -902,13 +902,13 @@ onMounted(loadProfile);
                                     <p class="text-sm font-bold text-slate-950">
                                         {{ profileQuality.label }}
                                     </p>
-                                    <span class="rounded-md bg-[#f6faf8] px-2 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                                    <span class="rounded-md bg-slate-50 px-2 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
                                         {{ completedRequiredFields }}/{{ requiredFieldData.length }} done
                                     </span>
                                     <span v-if="missingProfileFields.length" class="text-xs font-semibold text-slate-500">
                                         Next: {{ missingProfileFields.slice(0, 3).map((field) => field.label).join(', ') }}
                                     </span>
-                                    <span v-else class="text-xs font-semibold text-emerald-700">
+                                    <span v-else class="text-xs font-semibold text-slate-700">
                                         Ready to submit applications.
                                     </span>
                                 </div>
@@ -940,13 +940,13 @@ onMounted(loadProfile);
                                 type="button"
                                 :class="[
                                     'min-w-[10rem] flex-1 rounded-lg border px-3 py-2.5 text-left transition hover:border-slate-400 hover:bg-white',
-                                    activeSection === section.id ? 'border-slate-900 bg-white shadow-sm' : 'border-slate-200 bg-[#f6faf8]',
+                                    activeSection === section.id ? 'border-slate-900 bg-white shadow-sm' : 'border-slate-200 bg-slate-50',
                                 ]"
                                 @click="openSection(section.id)"
                             >
                                 <span class="flex items-center justify-between gap-3">
                                     <span class="flex min-w-0 items-center gap-2 font-bold text-slate-950">
-                                        <i :class="[section.icon, 'w-4 shrink-0 text-center text-xs text-sky-700']"></i>
+                                        <i :class="[section.icon, 'w-4 shrink-0 text-center text-xs text-amber-700']"></i>
                                         <span class="truncate">{{ section.label }}</span>
                                     </span>
                                     <span
@@ -1212,7 +1212,7 @@ onMounted(loadProfile);
                                 </div>
                             </div>
 
-                            <details class="mt-5 rounded-lg border border-slate-200 bg-[#f6faf8] p-4">
+                            <details class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
                                 <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
                                     Optional school details
                                 </summary>
@@ -1323,7 +1323,7 @@ onMounted(loadProfile);
                                 </div>
                             </div>
 
-                            <details class="mt-5 rounded-lg border border-slate-200 bg-[#f6faf8] p-4">
+                            <details class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
                                 <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
                                     Optional address details
                                 </summary>
@@ -1417,7 +1417,7 @@ onMounted(loadProfile);
                                 </div>
                             </div>
 
-                            <details class="mt-5 rounded-lg border border-slate-200 bg-[#f6faf8] p-4">
+                            <details class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
                                 <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
                                     Optional guardian details
                                 </summary>
@@ -1475,7 +1475,7 @@ onMounted(loadProfile);
                                 <article
                                     v-for="group in reviewGroups"
                                     :key="group.title"
-                                    class="rounded-lg border border-slate-200 bg-[#f6faf8] p-4"
+                                    class="rounded-lg border border-slate-200 bg-slate-50 p-4"
                                 >
                                     <h4 class="font-bold text-slate-950">
                                         {{ group.title }}

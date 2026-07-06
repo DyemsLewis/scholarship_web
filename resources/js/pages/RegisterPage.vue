@@ -32,14 +32,17 @@ const providerTypeOptions = [
 ];
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
-const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
-const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-center text-slate-900 uppercase outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
+const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-center text-slate-900 uppercase outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const toggleButtonClass = 'absolute inset-y-0 right-2 my-auto h-9 rounded-md px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900';
 const primaryButtonClass = 'w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80';
 const secondaryButtonClass = 'rounded-md border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100';
 
 const isSubmitting = ref(false);
+const isResendingVerification = ref(false);
 const isRegistered = ref(false);
+const emailVerified = ref(false);
+const emailVerificationSent = ref(false);
 const nextUrl = ref('/');
 const statusMessage = ref('');
 const errorMessage = ref('');
@@ -182,6 +185,8 @@ async function submitForm() {
 
         statusMessage.value = response.data.message ?? 'Registration complete.';
         nextUrl.value = response.data.redirect ?? '/';
+        emailVerified.value = Boolean(response.data.email_verified);
+        emailVerificationSent.value = Boolean(response.data.email_verification_sent);
         isRegistered.value = true;
         showToast('success', 'Registration complete', statusMessage.value);
     } catch (error) {
@@ -189,6 +194,25 @@ async function submitForm() {
         showToast('error', 'Registration failed', errorMessage.value);
     } finally {
         isSubmitting.value = false;
+    }
+}
+
+async function resendVerificationEmail() {
+    isResendingVerification.value = true;
+    errorMessage.value = '';
+
+    try {
+        const response = await window.axios.post('/email/verification-notification');
+
+        statusMessage.value = response.data.message ?? 'Verification email sent.';
+        emailVerified.value = Boolean(response.data.email_verified);
+        emailVerificationSent.value = Boolean(response.data.email_verification_sent);
+        showToast(emailVerified.value || emailVerificationSent.value ? 'success' : 'error', 'Email verification', statusMessage.value);
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to resend the verification email.';
+        showToast('error', 'Email verification failed', errorMessage.value);
+    } finally {
+        isResendingVerification.value = false;
     }
 }
 
@@ -226,6 +250,23 @@ onBeforeUnmount(() => {
                 {{ statusMessage }}
             </p>
 
+            <div v-if="!emailVerified" class="rounded-md border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-slate-700">
+                <p class="font-bold text-slate-950">
+                    Verify your email address
+                </p>
+                <p class="mt-1 leading-6">
+                    Check the inbox for {{ form.email }} and open the verification link. You can still explore the portal, but verification helps secure the account and future notifications.
+                </p>
+                <button
+                    type="button"
+                    :disabled="isResendingVerification"
+                    class="mt-3 rounded-md border border-amber-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-70"
+                    @click="resendVerificationEmail"
+                >
+                    {{ isResendingVerification ? 'Sending...' : 'Resend verification email' }}
+                </button>
+            </div>
+
             <div v-if="isProviderRegistration">
                 <a
                     :href="nextUrl"
@@ -253,7 +294,7 @@ onBeforeUnmount(() => {
 
         <form v-else ref="formElement" class="space-y-5" @submit.prevent="submitForm">
             <div v-if="isProviderRegistration" class="rounded-md border border-slate-200 bg-slate-50 p-4">
-                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                     Provider Details
                 </p>
                 <p class="mt-1 text-sm leading-6 text-slate-500">

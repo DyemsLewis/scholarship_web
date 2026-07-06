@@ -263,7 +263,7 @@ onMounted(loadScholarship);
         <section class="student-page">
             <div class="student-container">
                 <div class="mb-4">
-                    <a href="/dashboard/scholarships" class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white/80 px-3 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:border-sky-200 hover:text-sky-800">
+                    <a href="/dashboard/scholarships" class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white/80 px-3 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:border-amber-200 hover:text-slate-950">
                         <i class="fa-solid fa-arrow-left text-xs"></i>
                         Back to scholarships
                     </a>
@@ -304,14 +304,14 @@ onMounted(loadScholarship);
                                     <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
                                         {{ scholarship.eligibility_match?.label || 'Needs review' }}
                                     </span>
-                                    <span class="inline-flex items-center rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800">
+                                    <span class="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                         <i class="fa-solid fa-users mr-1.5"></i>
                                         {{ targetApplicantLabel(scholarship) }}
                                     </span>
                                     <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                         {{ scholarship.deadline || 'No deadline' }}
                                     </span>
-                                    <span v-if="scholarship.distance_label" class="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800">
+                                    <span v-if="scholarship.distance_label" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                         {{ scholarship.distance_label }}
                                     </span>
                                 </div>
@@ -323,19 +323,19 @@ onMounted(loadScholarship);
                         </div>
 
                         <div class="grid gap-px bg-slate-200 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                            <div class="bg-[#f6faf8] p-4">
+                            <div class="bg-slate-50 p-4">
                                 <p class="font-semibold text-slate-500">Award</p>
                                 <p class="mt-1 font-bold text-slate-950">{{ formatAmount(scholarship.award_amount) }}</p>
                             </div>
-                            <div class="bg-[#f6faf8] p-4">
+                            <div class="bg-slate-50 p-4">
                                 <p class="font-semibold text-slate-500">Academic</p>
                                 <p class="mt-1 font-bold text-slate-950">{{ academicRequirementLabel(scholarship) }}</p>
                             </div>
-                            <div class="bg-[#f6faf8] p-4">
+                            <div class="bg-slate-50 p-4">
                                 <p class="font-semibold text-slate-500">Documents</p>
                                 <p class="mt-1 font-bold text-slate-950">{{ documentRequirementSummary }}</p>
                             </div>
-                            <div class="bg-[#f6faf8] p-4">
+                            <div class="bg-slate-50 p-4">
                                 <p class="font-semibold text-slate-500">Apply through</p>
                                 <p class="mt-1 font-bold text-slate-950">{{ applicationModeLabel(scholarship.application_mode) }}</p>
                             </div>
@@ -368,23 +368,23 @@ onMounted(loadScholarship);
                                 </p>
 
                                 <div class="mt-5 grid gap-3 md:grid-cols-2">
-                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
+                                    <div class="rounded-md border border-slate-200/80 bg-slate-50 p-3 text-sm">
                                         <p class="font-semibold text-slate-500">Education level</p>
                                         <p class="mt-1 font-semibold text-slate-800">{{ criteriaLabel(scholarship.eligible_education_levels) }}</p>
                                     </div>
-                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
+                                    <div class="rounded-md border border-slate-200/80 bg-slate-50 p-3 text-sm">
                                         <p class="font-semibold text-slate-500">School type</p>
                                         <p class="mt-1 font-semibold text-slate-800">{{ criteriaLabel(scholarship.eligible_school_types) }}</p>
                                     </div>
-                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm md:col-span-2">
+                                    <div class="rounded-md border border-slate-200/80 bg-slate-50 p-3 text-sm md:col-span-2">
                                         <p class="font-semibold text-slate-500">Track, strand, course, or program</p>
                                         <p class="mt-1 whitespace-pre-line font-semibold text-slate-800">{{ scholarship.eligible_courses || 'Any' }}</p>
                                     </div>
-                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
+                                    <div class="rounded-md border border-slate-200/80 bg-slate-50 p-3 text-sm">
                                         <p class="font-semibold text-slate-500">Grade / year level</p>
                                         <p class="mt-1 whitespace-pre-line font-semibold text-slate-800">{{ scholarship.eligible_year_levels || 'Any' }}</p>
                                     </div>
-                                    <div class="rounded-md border border-slate-200/80 bg-[#f6faf8] p-3 text-sm">
+                                    <div class="rounded-md border border-slate-200/80 bg-slate-50 p-3 text-sm">
                                         <p class="font-semibold text-slate-500">Income rule</p>
                                         <p class="mt-1 font-semibold text-slate-800">{{ scholarship.income_requirement || 'Any' }}</p>
                                     </div>
@@ -392,7 +392,7 @@ onMounted(loadScholarship);
                             </article>
 
                             <article class="student-card overflow-hidden">
-                                <div class="border-b border-slate-200 bg-[#f6faf8] p-5">
+                                <div class="border-b border-slate-200 bg-slate-50 p-5">
                                     <p class="student-kicker">
                                         Requirements
                                     </p>
@@ -425,18 +425,18 @@ onMounted(loadScholarship);
                                             Application details
                                         </p>
                                         <div class="mt-3 grid gap-3 text-sm">
-                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                            <div class="rounded-md bg-slate-50 p-3">
                                                 <p class="font-semibold text-slate-500">Available slots</p>
                                                 <p class="mt-1 font-bold text-slate-950">{{ scholarship.slots_available ?? 'Not listed yet' }}</p>
                                             </div>
-                                            <div class="rounded-md bg-[#f6faf8] p-3">
+                                            <div class="rounded-md bg-slate-50 p-3">
                                                 <p class="font-semibold text-slate-500">Contact</p>
                                                 <p class="mt-1 break-words font-bold text-slate-950">
                                                     {{ scholarship.contact_email || scholarship.contact_number || 'Not listed yet' }}
                                                 </p>
                                             </div>
                                         </div>
-                                        <div v-if="scholarship.renewal_policy" class="mt-3 rounded-md bg-[#f6faf8] p-3 text-sm">
+                                        <div v-if="scholarship.renewal_policy" class="mt-3 rounded-md bg-slate-50 p-3 text-sm">
                                             <p class="font-semibold text-slate-500">Renewal / continuation</p>
                                             <p class="mt-1 leading-6 text-slate-800">{{ scholarship.renewal_policy }}</p>
                                         </div>
@@ -459,14 +459,14 @@ onMounted(loadScholarship);
                                     </span>
                                 </div>
 
-                                <div class="mt-4 rounded-md border border-slate-200 bg-[#f6faf8] p-3 text-sm leading-6 text-slate-600">
+                                <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
                                     <p class="font-bold text-slate-900">How the DSS reads this</p>
                                     <p class="mt-1">
                                         The Decision Support System compares your profile with the provider rules. The score is the matched criteria divided by the applicable criteria, so open rules do not lower your score and provider review is still required.
                                     </p>
                                 </div>
 
-                                <details v-if="scholarship.eligibility_match?.criteria?.length" class="mt-4 rounded-md border border-slate-200 bg-[#f6faf8] p-3">
+                                <details v-if="scholarship.eligibility_match?.criteria?.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
                                     <summary class="cursor-pointer text-sm font-bold text-slate-700">
                                         View DSS checklist
                                     </summary>
@@ -511,7 +511,7 @@ onMounted(loadScholarship);
                                 </div>
 
                                 <div class="p-5">
-                                    <div class="rounded-md bg-[#f6faf8] p-3">
+                                    <div class="rounded-md bg-slate-50 p-3">
                                         <div class="flex items-center justify-between gap-3">
                                             <p class="text-sm font-bold text-slate-950">
                                                 Profile readiness
@@ -581,14 +581,14 @@ onMounted(loadScholarship);
                                 <p class="mt-2 text-sm leading-6 text-slate-600">
                                     {{ scholarship.location_address || scholarship.eligible_locations || 'No map address added yet.' }}
                                 </p>
-                                <p v-if="scholarship.distance_label" class="mt-2 text-xs font-bold text-sky-700">
+                                <p v-if="scholarship.distance_label" class="mt-2 text-xs font-bold text-slate-700">
                                     About {{ scholarship.distance_label }} from your saved location.
                                 </p>
 
                                 <button
                                     v-if="hasMapPreview"
                                     type="button"
-                                    class="mt-4 w-full rounded-md border border-sky-200 px-4 py-2.5 text-sm font-bold text-sky-700 transition hover:bg-sky-50"
+                                    class="mt-4 w-full rounded-md border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                                     @click="showMapModal = true"
                                 >
                                     Preview Map
@@ -610,7 +610,7 @@ onMounted(loadScholarship);
             <section class="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl">
                 <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">Map Preview</p>
+                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Map Preview</p>
                         <h3 class="mt-1 text-xl font-bold text-slate-950">
                             {{ scholarship.location_name || scholarship.title }}
                         </h3>

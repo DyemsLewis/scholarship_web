@@ -38,7 +38,7 @@ function statusClass(status) {
     }
 
     if (['under_review', 'shortlisted', 'interview'].includes(status)) {
-        return 'bg-sky-100 text-sky-800';
+        return 'bg-slate-100 text-slate-700';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -50,7 +50,7 @@ function recommendationClass(recommendation) {
     }
 
     if (recommendation === 'recommended') {
-        return 'bg-sky-100 text-sky-800';
+        return 'bg-slate-100 text-slate-700';
     }
 
     if (recommendation === 'needs_review') {

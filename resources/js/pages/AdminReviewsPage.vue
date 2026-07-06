@@ -103,7 +103,7 @@ function statusClass(status) {
     }
 
     if (['under_review', 'shortlisted', 'interview', 'pending_review'].includes(status)) {
-        return 'bg-sky-100 text-sky-800';
+        return 'bg-slate-100 text-slate-700';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -122,7 +122,7 @@ function documentStatusClass(status) {
         return 'bg-amber-100 text-amber-800';
     }
 
-    return 'bg-sky-100 text-sky-800';
+    return 'bg-slate-100 text-slate-700';
 }
 
 function inferGradeScale(value) {
@@ -412,7 +412,7 @@ onMounted(loadReviewData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <AdminSidebar active="reviews" @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -420,7 +420,7 @@ onMounted(loadReviewData);
                 <header class="admin-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                                 Reviews
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
@@ -491,7 +491,7 @@ onMounted(loadReviewData);
                             >
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0">
-                                        <p class="truncate text-[11px] font-bold uppercase tracking-[0.14em] text-sky-700">
+                                        <p class="truncate text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700">
                                             {{ provider.provider_type || 'provider' }}
                                         </p>
                                         <h4 class="mt-1 truncate text-base font-bold text-slate-950">
@@ -562,7 +562,7 @@ onMounted(loadReviewData);
                                         rows="1"
                                         maxlength="1500"
                                         placeholder="Optional note for this provider."
-                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100"
+                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                                     ></textarea>
                                 </div>
 
@@ -593,7 +593,7 @@ onMounted(loadReviewData);
                     <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Program Review Queue
                                 </p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -601,7 +601,7 @@ onMounted(loadReviewData);
                                 </h3>
                             </div>
                             <div class="flex flex-wrap gap-2 text-xs font-bold">
-                                <span class="rounded-md bg-sky-100 px-2.5 py-1 text-sky-800">
+                                <span class="rounded-md bg-slate-100 px-2.5 py-1 text-slate-700">
                                     {{ stats.pending_programs }} pending
                                 </span>
                                 <span class="rounded-md bg-emerald-100 px-2.5 py-1 text-emerald-800">
@@ -680,7 +680,7 @@ onMounted(loadReviewData);
                     </section>
 
                     <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                             Application Review Snapshot
                         </p>
                         <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -712,7 +712,7 @@ onMounted(loadReviewData);
                                         :class="[
                                             'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
                                             selectedApplicationSort === 'priority'
-                                                ? 'border-sky-900 bg-sky-900 text-white'
+                                                ? 'border-slate-900 bg-slate-900 text-white'
                                                 : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
                                         ]"
                                         @click="selectedApplicationSort = 'priority'"
@@ -724,7 +724,7 @@ onMounted(loadReviewData);
                                         :class="[
                                             'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
                                             selectedApplicationSort === 'dss'
-                                                ? 'border-sky-900 bg-sky-900 text-white'
+                                                ? 'border-slate-900 bg-slate-900 text-white'
                                                 : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
                                         ]"
                                         @click="selectedApplicationSort = 'dss'"
@@ -736,7 +736,7 @@ onMounted(loadReviewData);
                                         :class="[
                                             'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
                                             selectedApplicationSort === 'documents'
-                                                ? 'border-sky-900 bg-sky-900 text-white'
+                                                ? 'border-slate-900 bg-slate-900 text-white'
                                                 : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
                                         ]"
                                         @click="selectedApplicationSort = 'documents'"
@@ -781,7 +781,7 @@ onMounted(loadReviewData);
                                         <p v-if="application.awarded_amount || application.outcome_at" class="mt-1 truncate text-xs font-semibold text-emerald-700">
                                             Outcome: {{ application.awarded_amount || 'Amount not listed' }} <span v-if="application.outcome_at">on {{ application.outcome_at }}</span>
                                         </p>
-                                        <p class="mt-2 inline-flex w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-indigo-700 ring-1 ring-indigo-100">
+                                        <p class="mt-2 inline-flex w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
                                             DSS: {{ application.dss_score ?? 0 }}% - {{ statusLabel(application.dss_recommendation || 'needs_review') }}
                                         </p>
                                         <p v-if="application.dss_explanation?.headline" class="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-600">

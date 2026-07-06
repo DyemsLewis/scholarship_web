@@ -48,7 +48,7 @@ function statusClass(status) {
     }
 
     if (status === 'pending_review') {
-        return 'bg-sky-100 text-sky-800';
+        return 'bg-slate-100 text-slate-700';
     }
 
     if (status === 'rejected') {
@@ -144,7 +144,7 @@ onMounted(loadProviderData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -152,7 +152,7 @@ onMounted(loadProviderData);
                 <header class="provider-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                                 Scholarship Programs
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
@@ -204,7 +204,7 @@ onMounted(loadProviderData);
                     <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Saved Programs
                                 </p>
                                 <h3 class="mt-1 text-lg font-bold text-slate-950">
@@ -244,7 +244,7 @@ onMounted(loadProviderData);
                                         <p class="mt-1 truncate text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
                                             {{ scholarship.category || 'Uncategorized' }}
                                         </p>
-                                        <p class="mt-2 inline-flex items-center rounded-md bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-800 ring-1 ring-sky-100">
+                                        <p class="mt-2 inline-flex items-center rounded-md bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
                                             <i class="fa-solid fa-users mr-1.5"></i>
                                             {{ targetApplicantLabel(scholarship) }}
                                         </p>
@@ -302,7 +302,7 @@ onMounted(loadProviderData);
                                     <button
                                         v-if="hasScholarshipMapPreview(scholarship)"
                                         type="button"
-                                        class="rounded-md border border-sky-200 bg-white px-3 py-2 text-sm font-bold text-sky-700 transition hover:bg-sky-50"
+                                        class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                                         @click="openMapModal(scholarship)"
                                     >
                                         Map
@@ -325,7 +325,7 @@ onMounted(loadProviderData);
             <section class="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl">
                 <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
+                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
                             Provider Map Preview
                         </p>
                         <h3 class="mt-1 text-xl font-bold text-slate-950">

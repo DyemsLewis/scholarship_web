@@ -34,10 +34,10 @@ const tone = computed(() => {
     }
 
     return {
-        border: 'border-emerald-200',
-        icon: 'bg-emerald-100 text-emerald-700',
-        title: 'text-emerald-950',
-        message: 'text-emerald-700',
+        border: 'border-amber-200',
+        icon: 'bg-amber-100 text-amber-800',
+        title: 'text-slate-950',
+        message: 'text-slate-700',
     };
 });
 </script>

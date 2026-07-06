@@ -25,7 +25,7 @@ const links = [
         :class="[
             'border-t',
             isDark
-                ? 'border-white/10 bg-[#081426] text-slate-300'
+                ? 'border-white/10 bg-slate-950 text-slate-300'
                 : 'border-slate-200 bg-white text-slate-500'
         ]"
     >

@@ -81,7 +81,7 @@ onMounted(loadProfile);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <AdminSidebar active="profile" @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -130,7 +130,7 @@ onMounted(loadProfile);
                     </section>
 
                     <form class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm" @submit.prevent="saveProfile">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                             Profile Details
                         </p>
 

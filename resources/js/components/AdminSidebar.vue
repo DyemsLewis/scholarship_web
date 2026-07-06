@@ -1,4 +1,6 @@
 <script setup>
+import NotificationBell from './NotificationBell.vue';
+
 const props = defineProps({
     active: {
         type: String,
@@ -29,7 +31,7 @@ function navLinkClass(link) {
 </script>
 
 <template>
-    <aside class="relative overflow-hidden border-r border-slate-800 bg-slate-950 text-white lg:sticky lg:top-0 lg:h-screen">
+    <aside class="relative overflow-visible border-r border-slate-800 bg-slate-950 text-white lg:sticky lg:top-0 lg:h-screen">
         <div class="absolute inset-x-0 top-0 h-px bg-amber-300/70"></div>
 
         <div class="relative flex min-h-72 flex-col px-5 py-6 lg:h-full">
@@ -64,6 +66,10 @@ function navLinkClass(link) {
                     </span>
                 </a>
             </nav>
+
+            <div class="mt-6">
+                <NotificationBell align="left" mode="sidebar" />
+            </div>
 
             <div class="mt-6 border-t border-white/10 pt-4 lg:mt-auto">
                 <button

@@ -51,9 +51,9 @@ defineProps({
 </script>
 
 <template>
-    <main class="relative min-h-screen overflow-hidden bg-[#e8eff8] text-slate-900">
-        <div class="absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,_rgba(14,165,233,0.16),_transparent_30%),radial-gradient(circle_at_86%_12%,_rgba(250,204,21,0.16),_transparent_24%),linear-gradient(180deg,_#f1f6ff_0%,_#e0eaf5_48%,_#d1deeb_100%)]"></div>
-        <div class="absolute inset-0 bg-[linear-gradient(120deg,_rgba(255,255,255,0.52)_0%,_transparent_34%,_rgba(15,23,42,0.04)_100%)]"></div>
+    <main class="relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,_rgba(252,211,77,0.16),_transparent_30%),radial-gradient(circle_at_86%_12%,_rgba(8,20,38,0.10),_transparent_28%),linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)]"></div>
+        <div class="absolute inset-0 bg-[linear-gradient(120deg,_rgba(255,255,255,0.56)_0%,_transparent_34%,_rgba(15,23,42,0.04)_100%)]"></div>
 
         <div class="relative z-10 bg-slate-900">
             <SiteNavbar variant="transparent" show-icons />
@@ -115,7 +115,7 @@ defineProps({
                     <div class="mx-auto max-w-xl">
                         <div class="flex items-start justify-between gap-4">
                             <div>
-                                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">
+                                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">
                                     <i class="fa-solid fa-circle-nodes mr-2"></i>
                                     {{ eyebrow }}
                                 </p>
@@ -142,7 +142,7 @@ defineProps({
 
                         <div class="mt-5 text-sm text-slate-500">
                             <span>{{ switchText }}</span>
-                            <a :href="switchHref" class="ml-1 font-semibold text-slate-950 transition hover:text-sky-700">
+                            <a :href="switchHref" class="ml-1 font-semibold text-slate-950 transition hover:text-amber-700">
                                 {{ switchLabel }}
                             </a>
                         </div>

@@ -117,7 +117,7 @@ function statusClass(status) {
     }
 
     if (['under_review', 'shortlisted', 'interview'].includes(status)) {
-        return 'bg-sky-100 text-sky-800';
+        return 'bg-slate-100 text-slate-700';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -151,7 +151,7 @@ function recommendationClass(recommendation) {
     }
 
     if (recommendation === 'recommended') {
-        return 'bg-sky-100 text-sky-800';
+        return 'bg-slate-100 text-slate-700';
     }
 
     if (recommendation === 'needs_review') {
@@ -178,7 +178,7 @@ function documentStatusClass(status) {
         return 'bg-amber-100 text-amber-800';
     }
 
-    return 'bg-sky-100 text-sky-800';
+    return 'bg-slate-100 text-slate-700';
 }
 
 function documentIssueCount(application) {
@@ -292,6 +292,57 @@ function reviewReasons(application) {
     return reasons.slice(0, 3);
 }
 
+function quickActionNote(application, action) {
+    if (action === 'under_review') {
+        return 'Application moved to provider review.';
+    }
+
+    if (action === 'missing_documents') {
+        const missingDocuments = application.document_readiness?.missing ?? [];
+        const missingList = missingDocuments.length ? missingDocuments.slice(0, 3).join(', ') : 'remaining listed documents';
+
+        return `Please upload or replace ${missingList}.`;
+    }
+
+    if (action === 'shortlisted') {
+        return 'Applicant shortlisted for the next review step.';
+    }
+
+    if (action === 'interview') {
+        return 'Applicant selected for interview or follow-up screening.';
+    }
+
+    if (action === 'approved') {
+        return 'Application approved after provider review.';
+    }
+
+    if (action === 'rejected') {
+        return 'Application was not selected after provider review.';
+    }
+
+    return '';
+}
+
+async function applyQuickAction(application, action) {
+    const map = {
+        under_review: { status: 'under_review', reason: 'complete_requirements' },
+        missing_documents: { status: 'under_review', reason: 'missing_documents' },
+        shortlisted: { status: 'shortlisted', reason: 'complete_requirements' },
+        interview: { status: 'interview', reason: 'for_interview' },
+        approved: { status: 'approved', reason: 'approved_for_award' },
+        rejected: { status: 'rejected', reason: 'not_selected' },
+    };
+    const selected = map[action];
+
+    if (!selected) {
+        return;
+    }
+
+    decisionReasons.value[application.id] = selected.reason;
+    reviewNotes.value[application.id] = quickActionNote(application, action);
+    await updateStatus(application, selected.status);
+}
+
 function labelFromKey(value) {
     return String(value ?? '')
         .replace(/_/g, ' ')
@@ -399,7 +450,7 @@ onMounted(loadProviderData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -602,6 +653,62 @@ onMounted(loadProviderData);
                                         <p class="mt-1 font-bold text-slate-950">
                                             {{ application.status_progress?.label || statusLabel(application.status) }}
                                         </p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 rounded-md border border-slate-200 bg-white p-3">
+                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                        Quick review actions
+                                    </p>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'under_review')"
+                                        >
+                                            Start review
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'missing_documents')"
+                                        >
+                                            Request documents
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'shortlisted')"
+                                        >
+                                            Shortlist
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'interview')"
+                                        >
+                                            Interview
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'approved')"
+                                        >
+                                            Approve
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'rejected')"
+                                        >
+                                            Reject
+                                        </button>
                                     </div>
                                 </div>
 

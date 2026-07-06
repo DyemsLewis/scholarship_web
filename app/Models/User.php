@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
@@ -184,6 +184,8 @@ class User extends Authenticatable
             'suffix' => $this->suffix,
             'gender' => $this->gender,
             'email' => $this->email,
+            'email_verified' => $this->hasVerifiedEmail(),
+            'email_verified_at' => $this->email_verified_at?->format('M d, Y h:i A'),
             'username' => $this->username,
             'contact_number' => $this->contact_number,
             'account_managed_by' => $this->studentProfile?->account_managed_by,

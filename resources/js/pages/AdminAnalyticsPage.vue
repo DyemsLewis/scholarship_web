@@ -77,7 +77,7 @@ onMounted(loadAnalytics);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <AdminSidebar active="analytics" @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -105,7 +105,7 @@ onMounted(loadAnalytics);
                 <div v-else class="mt-6 space-y-6">
                     <section class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
                         <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Application Trend
                             </p>
                             <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -129,7 +129,7 @@ onMounted(loadAnalytics);
                         </article>
 
                         <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Provider Performance
                             </p>
                             <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -186,7 +186,7 @@ onMounted(loadAnalytics);
                         </article>
 
                         <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 DSS Audit
                             </p>
                             <h3 class="mt-2 text-xl font-bold text-slate-950">

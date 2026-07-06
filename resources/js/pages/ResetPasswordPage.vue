@@ -13,7 +13,7 @@ const isSubmitting = ref(false);
 const statusMessage = ref('');
 const errorMessage = ref('');
 
-const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
+const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 
 async function submitForm() {
     statusMessage.value = '';

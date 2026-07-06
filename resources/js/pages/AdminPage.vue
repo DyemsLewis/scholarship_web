@@ -87,7 +87,7 @@ function signalClass(tone) {
         return 'border-amber-100 bg-amber-50 text-amber-900';
     }
 
-    return 'border-sky-100 bg-sky-50 text-sky-800';
+    return 'border-slate-200 bg-slate-50 text-slate-700';
 }
 
 function roleClass(role) {
@@ -96,7 +96,7 @@ function roleClass(role) {
     }
 
     if (role === 'provider') {
-        return 'bg-sky-100 text-sky-800';
+        return 'bg-slate-100 text-slate-700';
     }
 
     return 'bg-emerald-100 text-emerald-800';
@@ -127,7 +127,7 @@ onMounted(loadAdminData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f1f6ff_0%,_#e7eef8_48%,_#f8fafc_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <AdminSidebar active="dashboard" @logout="logout" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -195,7 +195,7 @@ onMounted(loadAdminData);
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Platform Risk Signals
                                 </p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">
@@ -231,7 +231,7 @@ onMounted(loadAdminData);
                         <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                         Recent Accounts
                                     </p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">

@@ -9,7 +9,7 @@ const statusMessage = ref('');
 const errorMessage = ref('');
 const resetUrl = ref('');
 
-const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-600 focus:ring-3 focus:ring-sky-100';
+const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 
 async function submitForm() {
     statusMessage.value = '';
@@ -87,7 +87,7 @@ async function submitForm() {
         <a
             v-if="resetUrl"
             :href="resetUrl"
-            class="mt-3 block rounded-md border border-sky-200 bg-sky-50 px-3.5 py-3 text-sm font-bold text-sky-800 transition hover:bg-sky-100"
+            class="mt-3 block rounded-md border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-100"
         >
             Open local reset link
         </a>
