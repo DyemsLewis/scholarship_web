@@ -25,6 +25,9 @@ class User extends Authenticatable implements MustVerifyEmail
         'username',
         'role',
         'password',
+        'account_status',
+        'must_reset_password',
+        'password_reset_required_at',
     ];
 
     /**
@@ -47,6 +50,9 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'suspended_at' => 'datetime',
+            'must_reset_password' => 'boolean',
+            'password_reset_required_at' => 'datetime',
         ];
     }
 
@@ -98,6 +104,16 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isApplicant(): bool
     {
         return $this->role === 'applicant';
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->account_status === 'suspended';
+    }
+
+    public function isActive(): bool
+    {
+        return ! $this->isSuspended();
     }
 
     public function getNameAttribute(): string
@@ -188,6 +204,12 @@ class User extends Authenticatable implements MustVerifyEmail
             'email_verified_at' => $this->email_verified_at?->format('M d, Y h:i A'),
             'username' => $this->username,
             'contact_number' => $this->contact_number,
+            'account_status' => $this->account_status ?? 'active',
+            'is_suspended' => $this->isSuspended(),
+            'suspended_at' => $this->suspended_at?->format('M d, Y h:i A'),
+            'suspension_reason' => $this->suspension_reason,
+            'must_reset_password' => (bool) $this->must_reset_password,
+            'password_reset_required_at' => $this->password_reset_required_at?->format('M d, Y h:i A'),
             'account_managed_by' => $this->studentProfile?->account_managed_by,
             'display_name' => $this->adminProfile?->display_name,
             'provider_name' => $this->provider_name,

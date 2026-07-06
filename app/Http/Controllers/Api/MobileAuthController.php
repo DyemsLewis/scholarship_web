@@ -95,6 +95,32 @@ class MobileAuthController extends Controller
             ], 403);
         }
 
+        if ($user->isSuspended()) {
+            ActivityLog::record(
+                $user,
+                'mobile_login_blocked_suspended',
+                "{$user->name} attempted mobile login while suspended.",
+                $request,
+            );
+
+            return response()->json([
+                'message' => 'Your account is suspended. Contact an administrator for help.',
+            ], 403);
+        }
+
+        if ($user->must_reset_password) {
+            ActivityLog::record(
+                $user,
+                'mobile_login_blocked_password_reset_required',
+                "{$user->name} attempted mobile login with a required password reset.",
+                $request,
+            );
+
+            return response()->json([
+                'message' => 'A password reset is required before you can use the mobile app.',
+            ], 423);
+        }
+
         ActivityLog::record(
             $user,
             'mobile_login',
@@ -547,7 +573,7 @@ class MobileAuthController extends Controller
             return [null, null];
         }
 
-        if ($token->user?->role !== 'applicant') {
+        if ($token->user?->role !== 'applicant' || $token->user?->isSuspended() || $token->user?->must_reset_password) {
             return [null, null];
         }
 

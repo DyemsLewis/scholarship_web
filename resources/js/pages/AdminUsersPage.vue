@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 
@@ -13,8 +13,19 @@ const stats = ref({
     applicants: 0,
     providers: 0,
     recent_signups: 0,
+    suspended_users: 0,
+    password_resets_required: 0,
 });
 const users = ref([]);
+const pagination = ref({
+    current_page: 1,
+    last_page: 1,
+    per_page: 10,
+    total: 0,
+    from: null,
+    to: null,
+});
+let searchTimer;
 
 const roleFilters = computed(() => [
     { value: 'all', label: 'All roles', count: stats.value.total_users },
@@ -23,22 +34,12 @@ const roleFilters = computed(() => [
     { value: 'admin', label: 'Admins', count: stats.value.admins },
 ]);
 
-const filteredUsers = computed(() => {
-    const query = search.value.trim().toLowerCase();
-    const role = selectedRole.value;
+const paginationLabel = computed(() => {
+    if (!pagination.value.total) {
+        return `0 matching accounts from ${stats.value.total_users} total accounts.`;
+    }
 
-    return users.value.filter((user) => {
-        const matchesRole = role === 'all' || user.role === role;
-        const matchesSearch = !query || [
-            user.name,
-            user.email,
-            user.username,
-            user.contact_number,
-            user.role,
-        ].some((value) => String(value ?? '').toLowerCase().includes(query));
-
-        return matchesRole && matchesSearch;
-    });
+    return `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total} matching accounts from ${stats.value.total_users} total accounts.`;
 });
 
 function roleLabel(role) {
@@ -47,15 +48,27 @@ function roleLabel(role) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-async function loadAdminData() {
+function statusLabel(status) {
+    return status === 'suspended' ? 'Suspended' : 'Active';
+}
+
+async function loadAdminData(page = 1) {
     isLoading.value = true;
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/admin/users');
+        const response = await window.axios.get('/admin/users', {
+            params: {
+                search: search.value.trim() || undefined,
+                role: selectedRole.value,
+                page,
+                per_page: pagination.value.per_page,
+            },
+        });
 
         stats.value = response.data.stats;
         users.value = response.data.users;
+        pagination.value = response.data.pagination;
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load users.';
     } finally {
@@ -63,10 +76,27 @@ async function loadAdminData() {
     }
 }
 
+function selectRole(role) {
+    selectedRole.value = role;
+}
+
+function goToPage(page) {
+    if (page < 1 || page > pagination.value.last_page || page === pagination.value.current_page) {
+        return;
+    }
+
+    loadAdminData(page);
+}
+
 async function logout() {
     await window.axios.post('/logout');
     window.location.href = '/';
 }
+
+watch([search, selectedRole], () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadAdminData(1), 300);
+});
 
 onMounted(loadAdminData);
 </script>
@@ -115,10 +145,13 @@ onMounted(loadAdminData);
                                 <h3 class="text-lg font-bold text-slate-950">
                                     User Records
                                 </h3>
-                                <p class="mt-1 text-sm text-slate-500">
-                                    {{ filteredUsers.length }} shown from {{ stats.total_users }} total accounts.
-                                </p>
-                            </div>
+                            <p class="mt-1 text-sm text-slate-500">
+                                {{ paginationLabel }}
+                            </p>
+                            <p class="mt-1 text-xs font-semibold text-slate-500">
+                                {{ stats.suspended_users }} suspended / {{ stats.password_resets_required }} password resets required
+                            </p>
+                        </div>
 
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                                 <input
@@ -131,7 +164,7 @@ onMounted(loadAdminData);
                                 <button
                                     type="button"
                                     class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
-                                    @click="loadAdminData"
+                                    @click="loadAdminData(pagination.current_page)"
                                 >
                                     Refresh
                                 </button>
@@ -149,7 +182,7 @@ onMounted(loadAdminData);
                                         ? 'border-slate-900 bg-slate-900 text-white'
                                         : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'
                                 ]"
-                                @click="selectedRole = filter.value"
+                                @click="selectRole(filter.value)"
                             >
                                 {{ filter.label }} ({{ filter.count }})
                             </button>
@@ -186,6 +219,9 @@ onMounted(loadAdminData);
                                         Role
                                     </th>
                                     <th class="px-4 py-3">
+                                        Status
+                                    </th>
+                                    <th class="px-4 py-3">
                                         Registered
                                     </th>
                                     <th class="px-4 py-3 text-right">
@@ -195,7 +231,7 @@ onMounted(loadAdminData);
                             </thead>
                             <tbody class="divide-y divide-slate-100 bg-white">
                                 <tr
-                                    v-for="user in filteredUsers"
+                                    v-for="user in users"
                                     :key="user.id"
                                     class="hover:bg-slate-50"
                                 >
@@ -225,6 +261,26 @@ onMounted(loadAdminData);
                                             {{ roleLabel(user.role) }}
                                         </span>
                                     </td>
+                                    <td class="px-4 py-3">
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <span
+                                                :class="[
+                                                    'rounded-md px-2 py-1 text-xs font-bold',
+                                                    user.account_status === 'suspended'
+                                                        ? 'bg-rose-100 text-rose-800'
+                                                        : 'bg-emerald-100 text-emerald-800'
+                                                ]"
+                                            >
+                                                {{ statusLabel(user.account_status) }}
+                                            </span>
+                                            <span
+                                                v-if="user.must_reset_password"
+                                                class="rounded-md bg-slate-900 px-2 py-1 text-xs font-bold text-white"
+                                            >
+                                                Reset required
+                                            </span>
+                                        </div>
+                                    </td>
                                     <td class="px-4 py-3 text-slate-600">
                                         {{ user.created_at }}
                                     </td>
@@ -240,8 +296,35 @@ onMounted(loadAdminData);
                             </tbody>
                         </table>
 
-                        <div v-if="filteredUsers.length === 0" class="p-6 text-sm text-slate-500">
+                        <div v-if="users.length === 0" class="p-6 text-sm text-slate-500">
                             No users found.
+                        </div>
+
+                        <div
+                            v-if="pagination.last_page > 1"
+                            class="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                            <span>
+                                Page {{ pagination.current_page }} of {{ pagination.last_page }}
+                            </span>
+                            <div class="flex gap-2">
+                                <button
+                                    type="button"
+                                    class="rounded-md border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    :disabled="pagination.current_page <= 1"
+                                    @click="goToPage(pagination.current_page - 1)"
+                                >
+                                    Previous
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    :disabled="pagination.current_page >= pagination.last_page"
+                                    @click="goToPage(pagination.current_page + 1)"
+                                >
+                                    Next
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

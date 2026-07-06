@@ -11,6 +11,10 @@ const statusMessage = ref('');
 const errorMessage = ref('');
 const formElement = ref(null);
 const form = ref(emptyForm());
+const account = ref(null);
+const accountAction = ref('');
+const suspensionReason = ref('');
+const supportLink = ref('');
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
@@ -31,6 +35,9 @@ function emptyForm() {
 }
 
 function fillForm(user) {
+    account.value = user ?? null;
+    suspensionReason.value = user?.suspension_reason ?? '';
+
     form.value = {
         firstName: user?.first_name ?? '',
         lastName: user?.last_name ?? '',
@@ -44,6 +51,15 @@ function fillForm(user) {
     };
 }
 
+const accountStatusLabel = computed(() => account.value?.account_status === 'suspended' ? 'Suspended' : 'Active');
+const accountStatusClass = computed(() => account.value?.account_status === 'suspended'
+    ? 'bg-rose-100 text-rose-800'
+    : 'bg-emerald-100 text-emerald-800');
+const emailStatusLabel = computed(() => account.value?.email_verified ? 'Email verified' : 'Email unverified');
+const emailStatusClass = computed(() => account.value?.email_verified
+    ? 'bg-emerald-100 text-emerald-800'
+    : 'bg-amber-100 text-amber-800');
+
 function handleMiddleInitialInput(event) {
     form.value.middleInitial = event.target.value.replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase();
 }
@@ -54,6 +70,9 @@ function handleNumberInput(event) {
 
 function resetForm() {
     form.value = emptyForm();
+    account.value = null;
+    supportLink.value = '';
+    suspensionReason.value = '';
     statusMessage.value = '';
     errorMessage.value = '';
 }
@@ -80,6 +99,7 @@ async function loadAccount() {
 async function saveAccount() {
     statusMessage.value = '';
     errorMessage.value = '';
+    supportLink.value = '';
 
     if (!formElement.value?.reportValidity()) {
         return;
@@ -144,6 +164,104 @@ async function saveAccount() {
         errorMessage.value = error.response?.data?.message ?? 'Unable to save account.';
     } finally {
         isSaving.value = false;
+    }
+}
+
+async function updateAccountStatus(status) {
+    if (!accountId) {
+        return;
+    }
+
+    statusMessage.value = '';
+    errorMessage.value = '';
+    supportLink.value = '';
+
+    if (status === 'suspended' && !suspensionReason.value.trim()) {
+        errorMessage.value = 'Add a reason before suspending this account.';
+        return;
+    }
+
+    accountAction.value = status === 'suspended' ? 'suspend' : 'activate';
+
+    try {
+        const response = await window.axios.patch(`/admin/users/${accountId}/status`, {
+            account_status: status,
+            suspension_reason: status === 'suspended' ? suspensionReason.value.trim() : null,
+        });
+
+        statusMessage.value = response.data.message ?? 'Account status updated.';
+        fillForm(response.data.user);
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to update account status.';
+    } finally {
+        accountAction.value = '';
+    }
+}
+
+async function forcePasswordReset() {
+    if (!accountId) {
+        return;
+    }
+
+    statusMessage.value = '';
+    errorMessage.value = '';
+    supportLink.value = '';
+    accountAction.value = 'force-reset';
+
+    try {
+        const response = await window.axios.post(`/admin/users/${accountId}/force-password-reset`);
+
+        statusMessage.value = response.data.message ?? 'Password reset required.';
+        supportLink.value = response.data.reset_url ?? '';
+        fillForm(response.data.user);
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to require a password reset.';
+    } finally {
+        accountAction.value = '';
+    }
+}
+
+async function verifyEmail() {
+    if (!accountId) {
+        return;
+    }
+
+    statusMessage.value = '';
+    errorMessage.value = '';
+    supportLink.value = '';
+    accountAction.value = 'verify-email';
+
+    try {
+        const response = await window.axios.patch(`/admin/users/${accountId}/email-verification`);
+
+        statusMessage.value = response.data.message ?? 'Email marked as verified.';
+        fillForm(response.data.user);
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to verify this email.';
+    } finally {
+        accountAction.value = '';
+    }
+}
+
+async function resendVerificationEmail() {
+    if (!accountId) {
+        return;
+    }
+
+    statusMessage.value = '';
+    errorMessage.value = '';
+    supportLink.value = '';
+    accountAction.value = 'resend-verification';
+
+    try {
+        const response = await window.axios.post(`/admin/users/${accountId}/verification-email`);
+
+        statusMessage.value = response.data.message ?? 'Verification email processed.';
+        fillForm(response.data.user);
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to resend verification email.';
+    } finally {
+        accountAction.value = '';
     }
 }
 
@@ -299,6 +417,12 @@ onMounted(loadAccount);
                             <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">
                                 {{ errorMessage }}
                             </p>
+                            <p v-if="supportLink" class="mt-1 text-sm text-slate-600">
+                                Reset link:
+                                <a :href="supportLink" class="break-all font-semibold text-slate-900 underline">
+                                    {{ supportLink }}
+                                </a>
+                            </p>
                         </div>
 
                         <div class="flex flex-col gap-2 sm:flex-row">
@@ -320,6 +444,107 @@ onMounted(loadAccount);
                         </div>
                     </div>
                 </form>
+
+                <section
+                    v-if="isEditMode && account"
+                    class="mt-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+                >
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                Account controls
+                            </p>
+                            <h3 class="mt-2 text-lg font-bold text-slate-950">
+                                Support and security
+                            </h3>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', accountStatusClass]">
+                                    {{ accountStatusLabel }}
+                                </span>
+                                <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', emailStatusClass]">
+                                    {{ emailStatusLabel }}
+                                </span>
+                                <span
+                                    v-if="account.must_reset_password"
+                                    class="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-bold text-white"
+                                >
+                                    Password reset required
+                                </span>
+                            </div>
+                            <p v-if="account.suspended_at" class="mt-3 text-sm text-slate-500">
+                                Suspended {{ account.suspended_at }}.
+                            </p>
+                            <p v-if="account.password_reset_required_at" class="mt-1 text-sm text-slate-500">
+                                Password reset required since {{ account.password_reset_required_at }}.
+                            </p>
+                        </div>
+
+                        <div class="grid gap-2 sm:grid-cols-2 lg:min-w-[24rem]">
+                            <button
+                                type="button"
+                                class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+                                :disabled="Boolean(accountAction)"
+                                @click="forcePasswordReset"
+                            >
+                                {{ accountAction === 'force-reset' ? 'Preparing reset...' : 'Force password reset' }}
+                            </button>
+
+                            <button
+                                v-if="!account.email_verified"
+                                type="button"
+                                class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+                                :disabled="Boolean(accountAction)"
+                                @click="resendVerificationEmail"
+                            >
+                                {{ accountAction === 'resend-verification' ? 'Sending...' : 'Resend verification' }}
+                            </button>
+
+                            <button
+                                v-if="!account.email_verified"
+                                type="button"
+                                class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+                                :disabled="Boolean(accountAction)"
+                                @click="verifyEmail"
+                            >
+                                {{ accountAction === 'verify-email' ? 'Verifying...' : 'Mark email verified' }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 grid gap-3 border-t border-slate-200 pt-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                        <div>
+                            <label :class="labelClass" for="admin-suspension-reason">Suspension reason</label>
+                            <textarea
+                                id="admin-suspension-reason"
+                                v-model="suspensionReason"
+                                rows="3"
+                                placeholder="Reason shown in admin records"
+                                class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
+                            />
+                        </div>
+
+                        <div class="flex flex-col gap-2 sm:flex-row lg:justify-end">
+                            <button
+                                v-if="account.account_status === 'suspended'"
+                                type="button"
+                                class="rounded-md bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-80"
+                                :disabled="Boolean(accountAction)"
+                                @click="updateAccountStatus('active')"
+                            >
+                                {{ accountAction === 'activate' ? 'Reactivating...' : 'Reactivate account' }}
+                            </button>
+                            <button
+                                v-else
+                                type="button"
+                                class="rounded-md bg-rose-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-80"
+                                :disabled="Boolean(accountAction)"
+                                @click="updateAccountStatus('suspended')"
+                            >
+                                {{ accountAction === 'suspend' ? 'Suspending...' : 'Suspend account' }}
+                            </button>
+                        </div>
+                    </div>
+                </section>
 
                 <AdminFooter />
             </div>

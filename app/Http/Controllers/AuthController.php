@@ -5,15 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\PortalNotification;
 use App\Models\User;
+use App\Services\PasswordResetLinkService;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Throwable;
 
@@ -131,6 +131,47 @@ class AuthController extends Controller
         }
 
         $request->session()->regenerate();
+
+        if ($request->user()->isSuspended()) {
+            ActivityLog::record(
+                $request->user(),
+                'login_blocked_suspended',
+                "{$request->user()->name} attempted to log in while suspended.",
+                $request,
+            );
+
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return response()->json([
+                'message' => 'Your account is suspended. Contact an administrator for help.',
+            ], 403);
+        }
+
+        if ($request->user()->must_reset_password) {
+            $reset = app(PasswordResetLinkService::class)->prepare($request->user(), $request);
+
+            ActivityLog::record(
+                $request->user(),
+                'login_blocked_password_reset_required',
+                "{$request->user()->name} attempted to log in with a required password reset.",
+                $request,
+                ['email_sent' => $reset['email_sent']],
+            );
+
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return response()->json([
+                'message' => $reset['email_sent']
+                    ? 'A password reset is required. We sent a reset link to your email.'
+                    : 'A password reset is required, but the reset email could not be sent yet.',
+                'reset_url' => $this->shouldExposeResetUrl() ? $reset['reset_url'] : null,
+            ], 423);
+        }
+
         ActivityLog::record(
             $request->user(),
             'login',
@@ -267,33 +308,8 @@ class AuthController extends Controller
         $resetUrl = null;
 
         if ($user) {
-            $token = Str::random(64);
-
-            DB::table('password_reset_tokens')->updateOrInsert([
-                'email' => $validated['email'],
-            ], [
-                'token' => Hash::make($token),
-                'created_at' => now(),
-            ]);
-
-            $resetUrl = url('/reset-password').'?token='.$token.'&email='.urlencode($validated['email']);
-
-            try {
-                Mail::raw(
-                    "Hello {$user->name},\n\nUse this link to reset your Scholarship Portal password:\n\n{$resetUrl}\n\nThis link expires in one hour. If you did not request this, you can ignore this email.",
-                    fn ($message) => $message
-                        ->to($user->email)
-                        ->subject('Scholarship Portal password reset'),
-                );
-            } catch (Throwable $error) {
-                ActivityLog::record(
-                    $user,
-                    'password_reset_email_failed',
-                    "Password reset email could not be sent to {$user->email}.",
-                    $request,
-                    ['error' => $error->getMessage()],
-                );
-            }
+            $reset = app(PasswordResetLinkService::class)->prepare($user, $request);
+            $resetUrl = $reset['reset_url'];
 
             ActivityLog::record(
                 $user,
@@ -305,7 +321,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'If that email exists, a password reset link has been prepared.',
-            'reset_url' => app()->isLocal() ? $resetUrl : null,
+            'reset_url' => $this->shouldExposeResetUrl() ? $resetUrl : null,
         ]);
     }
 
@@ -321,7 +337,7 @@ class AuthController extends Controller
             ->where('email', $validated['email'])
             ->first();
 
-        if (! $record || ! Hash::check($validated['token'], $record->token) || \Illuminate\Support\Carbon::parse($record->created_at)->lessThan(now()->subHour())) {
+        if (! $record || ! Hash::check($validated['token'], $record->token) || Carbon::parse($record->created_at)->lessThan(now()->subHour())) {
             return response()->json([
                 'message' => 'The reset link is invalid or expired.',
             ], 422);
@@ -330,6 +346,8 @@ class AuthController extends Controller
         $user = User::query()->where('email', $validated['email'])->firstOrFail();
         $user->forceFill([
             'password' => $validated['password'],
+            'must_reset_password' => false,
+            'password_reset_required_at' => null,
         ])->save();
 
         DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
@@ -345,6 +363,11 @@ class AuthController extends Controller
             'message' => 'Password reset successful. You can now log in.',
             'redirect' => '/login',
         ]);
+    }
+
+    private function shouldExposeResetUrl(): bool
+    {
+        return app()->isLocal() || app()->runningUnitTests();
     }
 
     private function sendVerificationEmail(User $user, Request $request): bool

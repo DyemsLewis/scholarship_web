@@ -11,13 +11,16 @@ use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
 use App\Models\User;
 use App\Services\DecisionSupportService;
+use App\Services\PasswordResetLinkService;
 use App\Support\AcademicRequirement;
+use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Throwable;
 
 class AdminController extends Controller
 {
@@ -102,29 +105,83 @@ class AdminController extends Controller
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
-        $users = User::query()
+        $validated = $request->validate([
+            'search' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'role' => ['sometimes', 'nullable', Rule::in(['all', 'applicant', 'provider', 'admin'])],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:5', 'max:50'],
+        ]);
+
+        $search = trim((string) ($validated['search'] ?? ''));
+        $role = $validated['role'] ?? 'all';
+        $perPage = (int) ($validated['per_page'] ?? 10);
+        $roleCounts = User::query()
+            ->selectRaw('role, count(*) as total')
+            ->groupBy('role')
+            ->pluck('total', 'role');
+        $totalUsers = (int) $roleCounts->sum();
+
+        $query = User::query()
             ->with(['studentProfile', 'providerProfile', 'adminProfile'])
-            ->latest()
-            ->get([
-                'id',
-                'email',
-                'username',
-                'role',
-                'created_at',
-            ]);
+            ->latest();
+
+        if ($role !== 'all') {
+            $query->where('role', $role);
+        }
+
+        if ($search !== '') {
+            $likeSearch = '%'.$search.'%';
+
+            $query->where(function ($query) use ($likeSearch): void {
+                $query
+                    ->where('account_status', 'like', $likeSearch)
+                    ->orWhere('email', 'like', $likeSearch)
+                    ->orWhere('username', 'like', $likeSearch)
+                    ->orWhere('role', 'like', $likeSearch)
+                    ->orWhereHas('studentProfile', fn ($profileQuery) => $profileQuery
+                        ->where('first_name', 'like', $likeSearch)
+                        ->orWhere('last_name', 'like', $likeSearch)
+                        ->orWhere('contact_number', 'like', $likeSearch)
+                    )
+                    ->orWhereHas('providerProfile', fn ($profileQuery) => $profileQuery
+                        ->where('first_name', 'like', $likeSearch)
+                        ->orWhere('last_name', 'like', $likeSearch)
+                        ->orWhere('contact_number', 'like', $likeSearch)
+                        ->orWhere('provider_name', 'like', $likeSearch)
+                    )
+                    ->orWhereHas('adminProfile', fn ($profileQuery) => $profileQuery
+                        ->where('first_name', 'like', $likeSearch)
+                        ->orWhere('last_name', 'like', $likeSearch)
+                        ->orWhere('contact_number', 'like', $likeSearch)
+                        ->orWhere('display_name', 'like', $likeSearch)
+                    );
+            });
+        }
+
+        $users = $query->paginate($perPage);
 
         return response()->json([
             'stats' => [
-                'total_users' => $users->count(),
-                'admins' => $users->where('role', 'admin')->count(),
-                'applicants' => $users->where('role', 'applicant')->count(),
-                'providers' => $users->where('role', 'provider')->count(),
-                'recent_signups' => $users->where('created_at', '>=', now()->subDays(7))->count(),
+                'total_users' => $totalUsers,
+                'admins' => (int) ($roleCounts['admin'] ?? 0),
+                'applicants' => (int) ($roleCounts['applicant'] ?? 0),
+                'providers' => (int) ($roleCounts['provider'] ?? 0),
+                'recent_signups' => User::query()->where('created_at', '>=', now()->subDays(7))->count(),
+                'suspended_users' => User::query()->where('account_status', 'suspended')->count(),
+                'password_resets_required' => User::query()->where('must_reset_password', true)->count(),
             ],
-            'users' => $users->map(fn (User $user) => [
+            'users' => $users->getCollection()->map(fn (User $user) => [
                 ...$user->publicPayload(),
                 'created_at' => $user->created_at?->format('M d, Y'),
             ])->values(),
+            'pagination' => [
+                'current_page' => $users->currentPage(),
+                'last_page' => $users->lastPage(),
+                'per_page' => $users->perPage(),
+                'total' => $users->total(),
+                'from' => $users->firstItem(),
+                'to' => $users->lastItem(),
+            ],
         ]);
     }
 
@@ -330,7 +387,7 @@ class AdminController extends Controller
                         'label' => $month->format('M Y'),
                         'total' => $applications
                             ->filter(fn (ScholarshipApplication $application) => $application->submitted_at?->format('Y-m') === $month->format('Y-m'))
-                        ->count(),
+                            ->count(),
                     ];
                 })
                 ->values(),
@@ -625,6 +682,13 @@ class AdminController extends Controller
         ]);
 
         $previousRole = $user->role;
+
+        if ($previousRole === 'admin' && $validated['role'] !== 'admin' && $this->lastActiveAdminWouldBeLost($user)) {
+            return response()->json([
+                'message' => 'At least one active admin account must remain.',
+            ], 422);
+        }
+
         $middleInitial = strtoupper($validated['middle_initial']);
         $displayName = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
         $userPayload = [
@@ -681,6 +745,198 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'Account updated successfully.',
+            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+        ]);
+    }
+
+    public function updateUserStatus(Request $request, User $user): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $validated = $request->validate([
+            'account_status' => ['required', Rule::in(['active', 'suspended'])],
+            'suspension_reason' => ['nullable', 'required_if:account_status,suspended', 'string', 'max:1000'],
+        ]);
+
+        $status = $validated['account_status'];
+
+        if ($status === 'suspended') {
+            if ($user->is($request->user())) {
+                return response()->json([
+                    'message' => 'You cannot suspend your own admin account.',
+                ], 422);
+            }
+
+            if ($this->lastActiveAdminWouldBeLost($user)) {
+                return response()->json([
+                    'message' => 'At least one active admin account must remain.',
+                ], 422);
+            }
+
+            $user->forceFill([
+                'account_status' => 'suspended',
+                'suspended_at' => now(),
+                'suspended_by' => $request->user()->id,
+                'suspension_reason' => $validated['suspension_reason'],
+            ])->save();
+        } else {
+            $user->forceFill([
+                'account_status' => 'active',
+                'suspended_at' => null,
+                'suspended_by' => null,
+                'suspension_reason' => null,
+            ])->save();
+        }
+
+        ActivityLog::record(
+            $request->user(),
+            'account_status_updated',
+            "{$request->user()->name} marked {$user->email} as {$status}.",
+            $request,
+            ['updated_user_id' => $user->id, 'account_status' => $status],
+        );
+
+        PortalNotification::create([
+            'user_id' => $user->id,
+            'type' => 'account_status',
+            'title' => $status === 'suspended' ? 'Account suspended' : 'Account reactivated',
+            'message' => $status === 'suspended'
+                ? 'Your account has been suspended. Contact an administrator for help.'
+                : 'Your account has been reactivated. You can sign in again.',
+            'action_url' => $status === 'active' ? '/login' : null,
+        ]);
+
+        return response()->json([
+            'message' => $status === 'suspended' ? 'Account suspended.' : 'Account reactivated.',
+            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+        ]);
+    }
+
+    public function forcePasswordReset(Request $request, User $user): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $user->forceFill([
+            'must_reset_password' => true,
+            'password_reset_required_at' => now(),
+        ])->save();
+
+        $reset = app(PasswordResetLinkService::class)->prepare($user, $request);
+
+        ActivityLog::record(
+            $request->user(),
+            'account_password_reset_forced',
+            "{$request->user()->name} forced a password reset for {$user->email}.",
+            $request,
+            ['updated_user_id' => $user->id, 'email_sent' => $reset['email_sent']],
+        );
+
+        PortalNotification::create([
+            'user_id' => $user->id,
+            'type' => 'password_reset_required',
+            'title' => 'Password reset required',
+            'message' => 'An administrator requires you to reset your password before signing in again.',
+            'action_url' => null,
+        ]);
+
+        return response()->json([
+            'message' => $reset['email_sent']
+                ? 'Password reset required. A reset link was sent to the user.'
+                : 'Password reset required, but the reset email could not be sent yet.',
+            'reset_url' => $this->shouldExposeResetUrl() ? $reset['reset_url'] : null,
+            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+        ]);
+    }
+
+    public function verifyUserEmail(Request $request, User $user): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        if (! $user->hasVerifiedEmail() && $user->markEmailAsVerified()) {
+            event(new Verified($user));
+
+            PortalNotification::query()
+                ->where('user_id', $user->id)
+                ->where('type', 'email_verification')
+                ->where('title', 'Verify your email address')
+                ->update(['read_at' => now()]);
+
+            PortalNotification::create([
+                'user_id' => $user->id,
+                'type' => 'email_verified',
+                'title' => 'Email verified',
+                'message' => 'An administrator verified your email address.',
+                'action_url' => $user->isProvider() ? '/provider' : '/dashboard',
+            ]);
+        }
+
+        ActivityLog::record(
+            $request->user(),
+            'account_email_verified_by_admin',
+            "{$request->user()->name} verified {$user->email}.",
+            $request,
+            ['updated_user_id' => $user->id],
+        );
+
+        return response()->json([
+            'message' => 'Email marked as verified.',
+            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+        ]);
+    }
+
+    public function resendUserVerificationEmail(Request $request, User $user): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        if ($user->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => 'This email is already verified.',
+                'email_verification_sent' => false,
+                'user' => $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+            ]);
+        }
+
+        $emailSent = true;
+
+        try {
+            $user->sendEmailVerificationNotification();
+        } catch (Throwable $error) {
+            $emailSent = false;
+
+            ActivityLog::record(
+                $user,
+                'email_verification_email_failed',
+                "Email verification link could not be sent to {$user->email}.",
+                $request,
+                ['error' => $error->getMessage()],
+            );
+        }
+
+        PortalNotification::updateOrCreate([
+            'user_id' => $user->id,
+            'type' => 'email_verification',
+            'title' => 'Verify your email address',
+        ], [
+            'message' => $emailSent
+                ? 'A verification link was sent to your email. Verify your email to secure your account.'
+                : 'Your email is not verified yet. Ask an administrator to resend the link when mail settings are available.',
+            'action_url' => null,
+            'read_at' => null,
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'account_email_verification_resent_by_admin',
+            "{$request->user()->name} resent email verification for {$user->email}.",
+            $request,
+            ['updated_user_id' => $user->id, 'email_sent' => $emailSent],
+        );
+
+        return response()->json([
+            'message' => $emailSent
+                ? 'Verification email sent.'
+                : 'Unable to send the verification email right now.',
+            'email_verification_sent' => $emailSent,
             'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ]);
     }
@@ -745,7 +1001,7 @@ class AdminController extends Controller
 
         return response()->streamDownload(function () {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['ID', 'Name', 'Email', 'Username', 'Contact Number', 'Role', 'Created At']);
+            fputcsv($handle, ['ID', 'Name', 'Email', 'Email Verified', 'Username', 'Contact Number', 'Role', 'Account Status', 'Must Reset Password', 'Created At']);
 
             User::query()
                 ->with(['studentProfile', 'providerProfile', 'adminProfile'])
@@ -756,9 +1012,12 @@ class AdminController extends Controller
                             $user->id,
                             $user->name,
                             $user->email,
+                            $user->hasVerifiedEmail() ? 'Yes' : 'No',
                             $user->username,
                             $user->contact_number,
                             $user->role,
+                            $user->account_status ?? 'active',
+                            $user->must_reset_password ? 'Yes' : 'No',
                             $user->created_at?->format('Y-m-d H:i:s'),
                         ]);
                     }
@@ -808,6 +1067,24 @@ class AdminController extends Controller
 
             fclose($handle);
         }, 'scholarship-applications.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    private function lastActiveAdminWouldBeLost(User $user): bool
+    {
+        if (! $user->isAdmin() || ! $user->isActive()) {
+            return false;
+        }
+
+        return User::query()
+            ->where('role', 'admin')
+            ->where('account_status', 'active')
+            ->whereKeyNot($user->id)
+            ->doesntExist();
+    }
+
+    private function shouldExposeResetUrl(): bool
+    {
+        return app()->isLocal() || app()->runningUnitTests();
     }
 
     private function metadataSummary(array $metadata): string
