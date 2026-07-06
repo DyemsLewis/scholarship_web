@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
+const NOTIFICATION_SYNC_EVENT = 'portal-notifications:sync';
+
 const props = defineProps({
     align: {
         type: String,
@@ -18,6 +20,7 @@ const props = defineProps({
 
 const isOpen = ref(false);
 const isLoading = ref(false);
+const isMarkingAllRead = ref(false);
 const errorMessage = ref('');
 const notifications = ref([]);
 const unreadCount = ref(0);
@@ -40,23 +43,38 @@ function normalizeNotification(notification) {
     };
 }
 
-async function loadNotifications() {
-    isLoading.value = true;
+function applyNotificationList(items, count) {
+    notifications.value = (items ?? []).map(normalizeNotification);
+    unreadCount.value = Number.isFinite(Number(count))
+        ? Number(count)
+        : notifications.value.filter((item) => !item.is_read).length;
+}
+
+async function loadNotifications({ silent = false } = {}) {
+    if (!silent) {
+        isLoading.value = true;
+    }
+
     errorMessage.value = '';
 
     try {
         const response = await window.axios.get('/notifications');
-        notifications.value = (response.data.notifications ?? []).map(normalizeNotification);
-        unreadCount.value = response.data.unread_count ?? notifications.value.filter((item) => !item.is_read).length;
+        applyNotificationList(response.data.notifications ?? [], response.data.unread_count);
     } catch (error) {
         errorMessage.value = 'Unable to load notifications right now.';
     } finally {
-        isLoading.value = false;
+        if (!silent) {
+            isLoading.value = false;
+        }
     }
 }
 
 function toggleDropdown() {
     isOpen.value = !isOpen.value;
+
+    if (isOpen.value) {
+        loadNotifications({ silent: notifications.value.length > 0 });
+    }
 }
 
 function closeDropdown() {
@@ -75,6 +93,41 @@ function closeOnEscape(event) {
     if (event.key === 'Escape') {
         closeDropdown();
     }
+}
+
+function syncFromEvent(event) {
+    const detail = event.detail ?? {};
+
+    if (Number.isFinite(Number(detail.unread_count))) {
+        unreadCount.value = Number(detail.unread_count);
+    }
+
+    if (detail.all_read) {
+        notifications.value = notifications.value.map((notification) => ({
+            ...notification,
+            is_read: true,
+            read_at: notification.read_at || new Date().toISOString(),
+        }));
+        return;
+    }
+
+    if (!detail.notification_id) {
+        return;
+    }
+
+    notifications.value = notifications.value.map((notification) => (
+        notification.id === detail.notification_id
+            ? {
+                ...notification,
+                is_read: true,
+                read_at: detail.read_at || notification.read_at || new Date().toISOString(),
+            }
+            : notification
+    ));
+}
+
+function dispatchNotificationSync(detail) {
+    window.dispatchEvent(new CustomEvent(NOTIFICATION_SYNC_EVENT, { detail }));
 }
 
 function formatDate(value) {
@@ -100,9 +153,19 @@ async function openNotification(notification) {
     if (!notification.is_read) {
         try {
             const response = await window.axios.patch(`/notifications/${notification.id}/read`);
+            const readAt = response.data.notification?.read_at ?? new Date().toISOString();
+
             notification.is_read = true;
-            notification.read_at = new Date().toISOString();
-            unreadCount.value = response.data.unread_count ?? Math.max(0, unreadCount.value - 1);
+            notification.read_at = readAt;
+            unreadCount.value = Number.isFinite(Number(response.data.unread_count))
+                ? Number(response.data.unread_count)
+                : Math.max(0, unreadCount.value - 1);
+
+            dispatchNotificationSync({
+                notification_id: notification.id,
+                read_at: readAt,
+                unread_count: unreadCount.value,
+            });
         } catch (error) {
             errorMessage.value = 'Unable to mark that notification as read.';
             return;
@@ -117,15 +180,43 @@ async function openNotification(notification) {
     closeDropdown();
 }
 
+async function markAllRead() {
+    if (unreadCount.value <= 0) {
+        return;
+    }
+
+    isMarkingAllRead.value = true;
+    errorMessage.value = '';
+
+    try {
+        const response = await window.axios.patch('/notifications/read-all');
+        applyNotificationList(response.data.notifications ?? notifications.value.map((notification) => ({
+            ...notification,
+            is_read: true,
+            read_at: notification.read_at || new Date().toISOString(),
+        })), response.data.unread_count ?? 0);
+        dispatchNotificationSync({
+            all_read: true,
+            unread_count: 0,
+        });
+    } catch (error) {
+        errorMessage.value = 'Unable to mark notifications as read.';
+    } finally {
+        isMarkingAllRead.value = false;
+    }
+}
+
 onMounted(() => {
     document.addEventListener('click', closeOnOutsideClick);
     document.addEventListener('keydown', closeOnEscape);
+    window.addEventListener(NOTIFICATION_SYNC_EVENT, syncFromEvent);
     loadNotifications();
 });
 
 onBeforeUnmount(() => {
     document.removeEventListener('click', closeOnOutsideClick);
     document.removeEventListener('keydown', closeOnEscape);
+    window.removeEventListener(NOTIFICATION_SYNC_EVENT, syncFromEvent);
 });
 </script>
 
@@ -176,13 +267,24 @@ onBeforeUnmount(() => {
                         Recent portal updates
                     </p>
                 </div>
-                <button
-                    type="button"
-                    class="rounded-md px-2.5 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
-                    @click.stop="loadNotifications"
-                >
-                    Refresh
-                </button>
+                <div class="flex items-center gap-1">
+                    <button
+                        v-if="unreadCount > 0"
+                        type="button"
+                        :disabled="isMarkingAllRead"
+                        class="rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        @click.stop="markAllRead"
+                    >
+                        {{ isMarkingAllRead ? 'Marking...' : 'Mark all' }}
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-md px-2.5 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
+                        @click.stop="loadNotifications"
+                    >
+                        Refresh
+                    </button>
+                </div>
             </div>
 
             <div v-if="isLoading" class="px-4 py-5 text-sm text-slate-500">

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PortalNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class NotificationController extends Controller
 {
@@ -22,7 +23,6 @@ class NotificationController extends Controller
             ], [
                 'message' => 'Please verify your email address to help secure your account and receive portal updates.',
                 'action_url' => null,
-                'read_at' => null,
             ]);
         } else {
             PortalNotification::query()
@@ -32,29 +32,9 @@ class NotificationController extends Controller
                 ->update(['read_at' => now()]);
         }
 
-        $notifications = PortalNotification::query()
-            ->where('user_id', $user->id)
-            ->latest()
-            ->limit(8)
-            ->get()
-            ->map(fn (PortalNotification $notification) => [
-                'id' => $notification->id,
-                'type' => $notification->type,
-                'title' => $notification->title,
-                'message' => $notification->message,
-                'action_url' => $notification->action_url,
-                'is_read' => $notification->read_at !== null,
-                'read_at' => $notification->read_at?->toISOString(),
-                'created_at' => $notification->created_at?->toISOString(),
-            ])
-            ->values();
-
         return response()->json([
-            'notifications' => $notifications,
-            'unread_count' => PortalNotification::query()
-                ->where('user_id', $user->id)
-                ->whereNull('read_at')
-                ->count(),
+            'notifications' => $this->latestNotifications($user->id),
+            'unread_count' => $this->unreadCount($user->id),
         ]);
     }
 
@@ -62,14 +42,65 @@ class NotificationController extends Controller
     {
         abort_unless($request->user() && $notification->user_id === $request->user()->id, 403);
 
-        $notification->markRead();
+        if ($notification->read_at === null) {
+            $notification->markRead();
+        }
 
         return response()->json([
             'message' => 'Notification marked as read.',
-            'unread_count' => PortalNotification::query()
-                ->where('user_id', $request->user()->id)
-                ->whereNull('read_at')
-                ->count(),
+            'notification' => $this->notificationPayload($notification->fresh()),
+            'unread_count' => $this->unreadCount($request->user()->id),
         ]);
+    }
+
+    public function markAllRead(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        abort_unless($user, 403);
+
+        PortalNotification::query()
+            ->where('user_id', $user->id)
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        return response()->json([
+            'message' => 'All notifications marked as read.',
+            'notifications' => $this->latestNotifications($user->id),
+            'unread_count' => 0,
+        ]);
+    }
+
+    private function latestNotifications(int $userId): Collection
+    {
+        return PortalNotification::query()
+            ->where('user_id', $userId)
+            ->latest()
+            ->limit(8)
+            ->get()
+            ->map(fn (PortalNotification $notification) => $this->notificationPayload($notification))
+            ->values();
+    }
+
+    private function notificationPayload(PortalNotification $notification): array
+    {
+        return [
+            'id' => $notification->id,
+            'type' => $notification->type,
+            'title' => $notification->title,
+            'message' => $notification->message,
+            'action_url' => $notification->action_url,
+            'is_read' => $notification->read_at !== null,
+            'read_at' => $notification->read_at?->toISOString(),
+            'created_at' => $notification->created_at?->toISOString(),
+        ];
+    }
+
+    private function unreadCount(int $userId): int
+    {
+        return PortalNotification::query()
+            ->where('user_id', $userId)
+            ->whereNull('read_at')
+            ->count();
     }
 }

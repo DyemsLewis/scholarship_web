@@ -43,6 +43,7 @@ Route::delete('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardC
 Route::get('/documents/{document}/view', [ApplicationDocumentController::class, 'view'])->middleware('auth')->name('documents.view');
 Route::get('/documents/{document}/download', [ApplicationDocumentController::class, 'download'])->middleware('auth')->name('documents.download');
 Route::get('/notifications', [NotificationController::class, 'index'])->middleware('auth')->name('notifications.index');
+Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead'])->middleware('auth')->name('notifications.read-all');
 Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->middleware('auth')->name('notifications.read');
 Route::get('/admin', [AdminController::class, 'index'])->name('admin.index');
 Route::get('/admin/manage-users', [AdminController::class, 'manageUsers'])->name('admin.manage-users');
