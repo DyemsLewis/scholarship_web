@@ -373,6 +373,58 @@ function slotLabel(scholarship) {
     return `${slots} slot${Number(slots) === 1 ? '' : 's'}`;
 }
 
+function coverageLabel(scholarship) {
+    const coverage = scholarship?.eligible_locations || scholarship?.location_name || scholarship?.location_address;
+
+    if (!coverage) {
+        return 'Coverage not listed';
+    }
+
+    return String(coverage)
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .join(', ');
+}
+
+function documentReadinessLabel(scholarship) {
+    const readiness = scholarship?.prepared_documents;
+    const required = Number(readiness?.required ?? 0);
+    const uploaded = Number(readiness?.uploaded ?? 0);
+
+    if (required === 0) {
+        return 'No required documents listed';
+    }
+
+    return `${uploaded} of ${required} ready`;
+}
+
+function documentReadinessHint(scholarship) {
+    const readiness = scholarship?.prepared_documents;
+    const required = Number(readiness?.required ?? 0);
+    const uploaded = Number(readiness?.uploaded ?? 0);
+
+    if (required === 0) {
+        return 'Provider has not listed document requirements yet.';
+    }
+
+    if (uploaded >= required) {
+        return 'Your prepared documents cover this program.';
+    }
+
+    const missing = (readiness?.missing ?? []).slice(0, 2);
+
+    return missing.length
+        ? `Missing: ${missing.join(', ')}${(readiness?.missing ?? []).length > 2 ? '...' : ''}`
+        : 'Upload matching documents before applying.';
+}
+
+function documentReadinessWidth(scholarship) {
+    const percent = Number(scholarship?.prepared_documents?.percent ?? 0);
+
+    return `${Math.min(Math.max(percent, 0), 100)}%`;
+}
+
 function deadlineLabel(scholarship) {
     const days = deadlineDays(scholarship);
 
@@ -812,6 +864,25 @@ onMounted(loadScholarships);
                                                 </span>
                                             </div>
                                         </div>
+
+                                        <div class="mt-4 grid gap-3 md:grid-cols-2">
+                                            <div class="rounded-md border border-slate-200 bg-white px-3 py-2.5">
+                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                                    Coverage
+                                                </p>
+                                                <p class="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-700">
+                                                    {{ coverageLabel(scholarship) }}
+                                                </p>
+                                            </div>
+                                            <div class="rounded-md border border-slate-200 bg-white px-3 py-2.5">
+                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                                    Application
+                                                </p>
+                                                <p class="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-700">
+                                                    {{ applicationModeLabel(scholarship.application_mode) }}
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <aside class="border-t border-slate-200 bg-slate-50 p-4 lg:border-l lg:border-t-0">
@@ -832,10 +903,26 @@ onMounted(loadScholarships);
                                                     {{ academicRequirementLabel(scholarship) }}
                                                 </p>
                                             </div>
+                                            <div class="rounded-md border border-slate-200 bg-white p-3">
+                                                <div class="flex items-center justify-between gap-3">
+                                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                                        Documents
+                                                    </p>
+                                                    <p class="text-xs font-bold text-slate-700">
+                                                        {{ documentReadinessLabel(scholarship) }}
+                                                    </p>
+                                                </div>
+                                                <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                                                    <div
+                                                        class="h-full rounded-full bg-slate-900"
+                                                        :style="{ width: documentReadinessWidth(scholarship) }"
+                                                    ></div>
+                                                </div>
+                                                <p class="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">
+                                                    {{ documentReadinessHint(scholarship) }}
+                                                </p>
+                                            </div>
                                             <div class="flex flex-wrap gap-2 text-xs font-bold text-slate-600">
-                                                <span class="rounded-md bg-white px-2.5 py-1 ring-1 ring-slate-200">
-                                                    {{ applicationModeLabel(scholarship.application_mode) }}
-                                                </span>
                                                 <span class="rounded-md bg-white px-2.5 py-1 ring-1 ring-slate-200">
                                                     {{ slotLabel(scholarship) }}
                                                 </span>
