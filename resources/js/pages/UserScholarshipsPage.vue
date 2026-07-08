@@ -296,6 +296,61 @@ function applicationBlockedActionLabel(scholarship) {
         : 'Complete profile first';
 }
 
+function matchReasonHeading(scholarship) {
+    return scholarship?.eligibility_match?.is_eligible === false
+        ? 'What to check'
+        : 'Why this fits';
+}
+
+function highlightedCriteria(scholarship) {
+    const criteria = scholarship?.eligibility_match?.criteria ?? [];
+
+    if (!criteria.length) {
+        return [];
+    }
+
+    const failing = criteria.filter((criterion) => criterion.status === 'fail' && criterion.key !== 'documents');
+    const missing = criteria.filter((criterion) => criterion.status === 'missing');
+    const passing = criteria.filter((criterion) => criterion.status === 'pass');
+    const selected = [...failing, ...missing, ...passing];
+
+    return (selected.length ? selected : criteria).slice(0, 3);
+}
+
+function criterionReasonClass(status) {
+    if (status === 'fail') {
+        return 'border-rose-200 bg-rose-50 text-rose-700';
+    }
+
+    if (status === 'missing') {
+        return 'border-amber-200 bg-amber-50 text-amber-800';
+    }
+
+    if (status === 'pass') {
+        return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+    }
+
+    return 'border-slate-200 bg-white text-slate-600';
+}
+
+function criterionReasonText(criterion) {
+    const label = criterion?.label || 'Requirement';
+
+    if (criterion?.status === 'fail') {
+        return `${label} not matched`;
+    }
+
+    if (criterion?.status === 'missing') {
+        return `${label} missing`;
+    }
+
+    if (criterion?.status === 'pass') {
+        return `${label} matched`;
+    }
+
+    return criterion?.note || `${label} open`;
+}
+
 function deadlineLabel(scholarship) {
     const days = deadlineDays(scholarship);
 
@@ -722,6 +777,29 @@ onMounted(loadScholarships);
                                         <dd class="mt-1 line-clamp-2 font-bold text-slate-950">{{ requirementsLabel(scholarship.requirements) }}</dd>
                                     </div>
                                 </dl>
+
+                                <div
+                                    v-if="highlightedCriteria(scholarship).length"
+                                    class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"
+                                >
+                                    <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                            {{ matchReasonHeading(scholarship) }}
+                                        </p>
+                                        <p class="text-xs font-semibold text-slate-500">
+                                            {{ scholarship.eligibility_match?.summary || 'Profile match will update as your details change.' }}
+                                        </p>
+                                    </div>
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        <span
+                                            v-for="criterion in highlightedCriteria(scholarship)"
+                                            :key="`${scholarship.id}-${criterion.key}`"
+                                            :class="['rounded-md border px-2.5 py-1 text-xs font-bold', criterionReasonClass(criterion.status)]"
+                                        >
+                                            {{ criterionReasonText(criterion) }}
+                                        </span>
+                                    </div>
+                                </div>
 
                                 <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-600">
                                     <span class="rounded-md bg-white px-2.5 py-1 ring-1 ring-slate-200">
