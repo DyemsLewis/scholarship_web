@@ -1116,6 +1116,8 @@ class AdminController extends Controller
             'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             'deadline' => $scholarship->deadline?->format('M d, Y'),
             'requirements' => $scholarship->requirements,
+            'return_service_contract' => $scholarship->return_service_contract,
+            'other_contract_terms' => $scholarship->other_contract_terms,
             'eligible_education_levels' => $scholarship->eligible_education_levels,
             'eligible_locations' => $scholarship->eligible_locations,
             'bookmarks_count' => $scholarship->bookmarks_count ?? 0,

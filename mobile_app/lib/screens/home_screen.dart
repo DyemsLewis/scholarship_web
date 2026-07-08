@@ -2443,6 +2443,26 @@ class _ScholarshipDetailScreenState extends State<_ScholarshipDetailScreen> {
                 const SizedBox(height: 8),
                 _DetailTile(
                   detail: _Detail(
+                    'Return service contract',
+                    stringValue(
+                      scholarship['return_service_contract'],
+                      fallback: 'Not listed',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _DetailTile(
+                  detail: _Detail(
+                    'Other contract terms',
+                    stringValue(
+                      scholarship['other_contract_terms'],
+                      fallback: 'Not listed',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _DetailTile(
+                  detail: _Detail(
                     'Contact',
                     [
                           scholarship['contact_email'],

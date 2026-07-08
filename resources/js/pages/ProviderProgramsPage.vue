@@ -283,6 +283,18 @@ onMounted(loadProviderData);
                                     <span class="rounded-md bg-white px-2.5 py-1">
                                         {{ academicRequirementLabel(scholarship) }}
                                     </span>
+                                    <span
+                                        v-if="scholarship.return_service_contract"
+                                        class="rounded-md bg-white px-2.5 py-1"
+                                    >
+                                        Return service
+                                    </span>
+                                    <span
+                                        v-if="scholarship.other_contract_terms"
+                                        class="rounded-md bg-white px-2.5 py-1"
+                                    >
+                                        Contract terms
+                                    </span>
                                     <span class="rounded-md bg-white px-2.5 py-1">
                                         {{ scholarship.bookmarks_count || 0 }} saved
                                     </span>

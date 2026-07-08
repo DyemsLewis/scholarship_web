@@ -646,6 +646,18 @@ onMounted(loadReviewData);
                                         <p class="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">
                                             {{ scholarship.description || 'No description provided.' }}
                                         </p>
+                                        <p
+                                            v-if="scholarship.return_service_contract"
+                                            class="mt-2 rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
+                                        >
+                                            Return service contract listed
+                                        </p>
+                                        <p
+                                            v-if="scholarship.other_contract_terms"
+                                            class="mt-2 rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
+                                        >
+                                            Other contract terms listed
+                                        </p>
                                     </div>
                                 </div>
 

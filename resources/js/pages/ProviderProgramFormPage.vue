@@ -31,7 +31,7 @@ const wideFieldStackClass = `${fieldStackClass} xl:col-span-2`;
 const formGridClass = 'grid items-stretch gap-4 md:grid-cols-2';
 const formSections = [
     { id: 'basics', label: 'Basics', help: 'Name, logo, amount, and review action.' },
-    { id: 'workflow', label: 'Apply', help: 'How applicants submit and contact you.' },
+    { id: 'workflow', label: 'Apply', help: 'Submission, contact, renewal, and service contract.' },
     { id: 'target', label: 'Target', help: 'Who can match with this program.' },
     { id: 'location', label: 'Location', help: 'Address and map pin.' },
     { id: 'documents', label: 'Docs', help: 'Required files.' },
@@ -466,6 +466,11 @@ const programReadinessItems = computed(() => [
             ),
         help: 'How students apply and who they can contact for questions.',
     },
+    {
+        label: 'Return service contract',
+        complete: hasText(scholarshipForm.value.returnServiceContract),
+        help: 'Any required service obligation, teaching placement, or post-award commitment.',
+    },
 ]);
 const missingProgramReadinessItems = computed(() => programReadinessItems.value.filter((item) => !item.complete));
 const activeFormSectionIndex = computed(() => formSections.findIndex((section) => section.id === activeFormSection.value));
@@ -555,6 +560,8 @@ const workflowSummary = computed(() => [
         : 'Application mode not set',
     hasText(scholarshipForm.value.slotsAvailable) ? `${scholarshipForm.value.slotsAvailable} available slot${Number(scholarshipForm.value.slotsAvailable) === 1 ? '' : 's'}` : 'Slots not listed',
     hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber) ? 'Contact available' : 'No contact channel',
+    hasText(scholarshipForm.value.returnServiceContract) ? 'Return service listed' : 'No return service listed',
+    hasText(scholarshipForm.value.otherContractTerms) ? 'Other contract terms listed' : 'No other contract terms',
 ]);
 const statusOptions = computed(() => {
     const options = [
@@ -695,6 +702,8 @@ function emptyScholarshipForm() {
         slotsAvailable: '',
         applicationMode: '',
         renewalPolicy: '',
+        returnServiceContract: '',
+        otherContractTerms: '',
         contactEmail: '',
         contactNumber: '',
         deadline: '',
@@ -804,6 +813,8 @@ function fillScholarshipForm(scholarship) {
         slotsAvailable: scholarship.slots_available ?? '',
         applicationMode: scholarship.application_mode ?? '',
         renewalPolicy: scholarship.renewal_policy ?? '',
+        returnServiceContract: scholarship.return_service_contract ?? '',
+        otherContractTerms: scholarship.other_contract_terms ?? '',
         contactEmail: scholarship.contact_email ?? '',
         contactNumber: scholarship.contact_number ?? '',
         deadline: scholarship.deadline ?? '',
@@ -989,6 +1000,8 @@ async function saveScholarship() {
         slots_available: scholarshipForm.value.slotsAvailable || '',
         application_mode: scholarshipForm.value.applicationMode || '',
         renewal_policy: scholarshipForm.value.renewalPolicy || '',
+        return_service_contract: scholarshipForm.value.returnServiceContract || '',
+        other_contract_terms: scholarshipForm.value.otherContractTerms || '',
         contact_email: scholarshipForm.value.contactEmail || '',
         contact_number: scholarshipForm.value.contactNumber || '',
         deadline: scholarshipForm.value.deadline || '',
@@ -1424,6 +1437,38 @@ onMounted(loadFormData);
                                             placeholder="Example: Renewable every semester if the learner maintains eligibility and submits updated requirements."
                                             :class="inputClass"
                                         ></textarea>
+                                    </div>
+
+                                    <div :class="[fieldStackClass, 'lg:col-span-2']">
+                                        <label :class="labelClass" for="scholarship-return-service-contract">
+                                            Return service contract
+                                        </label>
+                                        <textarea
+                                            id="scholarship-return-service-contract"
+                                            v-model="scholarshipForm.returnServiceContract"
+                                            rows="4"
+                                            placeholder="Example: Awardees sign a scholarship agreement and render return service after graduation for the period required by the program."
+                                            :class="inputClass"
+                                        ></textarea>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">
+                                            State service duration, placement rules, teaching obligations, deferment rules, or where applicants should verify the official contract.
+                                        </p>
+                                    </div>
+
+                                    <div :class="[fieldStackClass, 'lg:col-span-2']">
+                                        <label :class="labelClass" for="scholarship-other-contract-terms">
+                                            Other contract terms
+                                        </label>
+                                        <textarea
+                                            id="scholarship-other-contract-terms"
+                                            v-model="scholarshipForm.otherContractTerms"
+                                            rows="4"
+                                            placeholder="Example: Scholarship agreement, data privacy consent, approved course rules, refund terms, termination rules, travel clearance, or parent/guardian undertaking."
+                                            :class="inputClass"
+                                        ></textarea>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">
+                                            Use this for contract items beyond return service, including data privacy, truthful declarations, approved course or school rules, refund clauses, and termination conditions.
+                                        </p>
                                     </div>
                                 </div>
                             </fieldset>

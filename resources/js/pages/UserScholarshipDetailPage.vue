@@ -440,6 +440,14 @@ onMounted(loadScholarship);
                                             <p class="font-semibold text-slate-500">Renewal / continuation</p>
                                             <p class="mt-1 leading-6 text-slate-800">{{ scholarship.renewal_policy }}</p>
                                         </div>
+                                        <div v-if="scholarship.return_service_contract" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                                            <p class="font-semibold text-slate-500">Return service contract</p>
+                                            <p class="mt-1 whitespace-pre-line leading-6 text-slate-800">{{ scholarship.return_service_contract }}</p>
+                                        </div>
+                                        <div v-if="scholarship.other_contract_terms" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                                            <p class="font-semibold text-slate-500">Other contract terms</p>
+                                            <p class="mt-1 whitespace-pre-line leading-6 text-slate-800">{{ scholarship.other_contract_terms }}</p>
+                                        </div>
                                     </div>
                                 </div>
                             </article>

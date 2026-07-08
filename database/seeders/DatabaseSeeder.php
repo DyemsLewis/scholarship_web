@@ -152,6 +152,9 @@ class DatabaseSeeder extends Seeder
             'Signed applicant and parent/legal guardian declaration',
             'DOST-SEI scholarship examination and award documents',
         ]);
+        $undergraduateReturnService = 'Awardees and a parent/legal guardian sign the DOST-SEI Scholarship Agreement before availing benefits. The scholar must finish the approved priority S&T degree and render return service in the Philippines along the scholar\'s field for the period required by the signed agreement and current DOST-SEI policies.';
+        $jlssReturnService = 'JLSS awardees sign a DOST-SEI scholarship agreement before availing benefits. Merit and RA 7687 JLSS scholars render return service in the Philippines under the signed agreement. RA 10612 scholars render teaching service in science, mathematics, or STEM in a secondary school as assigned or validated by the program. Exact duration and placement follow the signed agreement and DOST-SEI/DepEd rules.';
+        $dostOtherContractTerms = 'Applicants and awardees should review the official DOST-SEI Scholarship Agreement and required forms before acceptance. Other commitments may include truthful declaration of application data, parent/legal guardian undertaking, consent for DOST-SEI to process personal data, background or socio-economic verification, approved course and school rules, grade and report submission, shifting or transfer approval, travel or clearance requirements, scholarship suspension or termination, and refund or repayment duties when required by the signed agreement.';
         $dostProgramDefaults = [
             'category' => 'DOST-SEI S&T Scholarship',
             'eligible_locations' => 'Philippines',
@@ -165,6 +168,7 @@ class DatabaseSeeder extends Seeder
             'deadline' => null,
             'status' => 'published',
             'views_count' => 0,
+            'other_contract_terms' => $dostOtherContractTerms,
         ];
         $dostPrograms = [
             'DOST-SEI RA 7687 Undergraduate Scholarship' => [
@@ -189,7 +193,8 @@ class DatabaseSeeder extends Seeder
                 'minimum_gwa' => null,
                 'minimum_grade_scale' => null,
                 'slots_available' => null,
-                'renewal_policy' => 'Continued assistance depends on the DOST-SEI scholarship agreement, enrollment in a priority S&T course, good academic standing, submitted semester requirements, and the required service obligation after graduation.',
+                'renewal_policy' => 'Continued assistance depends on the DOST-SEI scholarship agreement, enrollment in an approved priority S&T course, good academic standing, and submitted semester requirements.',
+                'return_service_contract' => $undergraduateReturnService,
             ],
             'DOST-SEI Merit Undergraduate Scholarship' => [
                 'description' => 'A DOST-SEI undergraduate scholarship for students with high aptitude in science and mathematics who are willing to pursue careers in science and technology through priority S&T degree programs.',
@@ -209,7 +214,8 @@ class DatabaseSeeder extends Seeder
                 'minimum_gwa' => null,
                 'minimum_grade_scale' => null,
                 'slots_available' => null,
-                'renewal_policy' => 'Continued assistance depends on the DOST-SEI scholarship agreement, enrollment in a priority S&T course, good academic standing, submitted semester requirements, and the required service obligation after graduation.',
+                'renewal_policy' => 'Continued assistance depends on the DOST-SEI scholarship agreement, enrollment in an approved priority S&T course, good academic standing, and submitted semester requirements.',
+                'return_service_contract' => $undergraduateReturnService,
             ],
             'DOST-SEI Junior Level Science Scholarship (JLSS)' => [
                 'description' => 'A DOST-SEI scholarship for regular college students entering the third year of a priority S&T course, including JLSS components under Merit, RA 7687, and RA 10612.',
@@ -240,7 +246,8 @@ class DatabaseSeeder extends Seeder
                 'minimum_gwa' => 83,
                 'minimum_grade_scale' => 'percentage',
                 'slots_available' => null,
-                'renewal_policy' => 'Continued assistance depends on DOST-SEI academic standing rules, submitted semester requirements, and the applicable service obligation. RA 10612 scholars render teaching service in science, mathematics, or STEM after graduation.',
+                'renewal_policy' => 'Continued assistance depends on DOST-SEI academic standing rules, enrollment in a priority S&T course, and submitted semester requirements.',
+                'return_service_contract' => $jlssReturnService,
             ],
         ];
 

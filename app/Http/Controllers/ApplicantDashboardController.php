@@ -691,6 +691,8 @@ class ApplicantDashboardController extends Controller
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
             'renewal_policy' => $scholarship->renewal_policy,
+            'return_service_contract' => $scholarship->return_service_contract,
+            'other_contract_terms' => $scholarship->other_contract_terms,
             'contact_email' => $scholarship->contact_email,
             'contact_number' => $scholarship->contact_number,
             'deadline' => $scholarship->deadline?->format('M d, Y'),

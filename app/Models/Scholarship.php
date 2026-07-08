@@ -32,6 +32,8 @@ class Scholarship extends Model
         'slots_available',
         'application_mode',
         'renewal_policy',
+        'return_service_contract',
+        'other_contract_terms',
         'contact_email',
         'contact_number',
         'deadline',

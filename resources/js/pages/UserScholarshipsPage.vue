@@ -93,6 +93,8 @@ const filteredScholarships = computed(() => scholarships.value
             scholarship.requirements,
             scholarship.application_mode,
             scholarship.renewal_policy,
+            scholarship.return_service_contract,
+            scholarship.other_contract_terms,
             scholarship.contact_email,
             scholarship.contact_number,
         ].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword)) || locationSearchMatches(locationText, search.value);
@@ -818,6 +820,18 @@ onMounted(loadScholarships);
                                                     </span>
                                                     <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                                         {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
+                                                    </span>
+                                                    <span
+                                                        v-if="scholarship.return_service_contract"
+                                                        class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700"
+                                                    >
+                                                        Return service
+                                                    </span>
+                                                    <span
+                                                        v-if="scholarship.other_contract_terms"
+                                                        class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700"
+                                                    >
+                                                        Contract terms
                                                     </span>
                                                 </div>
                                                 <h3 class="mt-2 text-lg font-bold leading-snug text-slate-950">
