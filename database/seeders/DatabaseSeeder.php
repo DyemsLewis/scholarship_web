@@ -47,17 +47,17 @@ class DatabaseSeeder extends Seeder
         $provider->providerProfile()->updateOrCreate([
             'user_id' => $provider->id,
         ], [
-            'first_name' => 'Provider',
-            'last_name' => 'Account',
-            'middle_initial' => 'P',
-            'contact_number' => '09170000001',
-            'provider_name' => 'Provider',
-            'provider_type' => 'foundation',
-            'provider_website' => 'https://example.com',
-            'provider_address' => 'Manila City Hall, Padre Burgos Avenue, Manila',
-            'provider_description' => 'A demo provider account for publishing scholarship programs.',
+            'first_name' => 'DOST',
+            'last_name' => 'SEI',
+            'middle_initial' => null,
+            'contact_number' => '(02) 8330 8876',
+            'provider_name' => 'Department of Science and Technology - Science Education Institute',
+            'provider_type' => 'government',
+            'provider_website' => 'https://www.sei.dost.gov.ph/',
+            'provider_address' => 'DOST-SEI, DOST Compound, General Santos Avenue, Bicutan, Taguig City',
+            'provider_description' => 'DOST-SEI administers science and technology scholarship programs for Filipino students pursuing priority S&T courses.',
             'verification_status' => 'approved',
-            'verification_notes' => 'Demo provider approved for local testing.',
+            'verification_notes' => 'Seeded DOST-SEI provider profile for local scholarship testing.',
             'verified_at' => now(),
             'verified_by' => $admin->id,
         ]);
@@ -109,97 +109,148 @@ class DatabaseSeeder extends Seeder
             'guardian_is_account_owner' => false,
         ]);
 
-        Scholarship::query()
-            ->where('provider_id', $provider->id)
-            ->where('title', 'Bright Future Student Grant')
-            ->update(['title' => 'Demo Program 1']);
+        $legacyProgramTitles = [
+            'Bright Future Student Grant' => 'DOST-SEI RA 7687 Undergraduate Scholarship',
+            'Demo Program 1' => 'DOST-SEI RA 7687 Undergraduate Scholarship',
+            'Demo Program 2' => 'DOST-SEI Merit Undergraduate Scholarship',
+            'Demo Program 3' => 'DOST-SEI Junior Level Science Scholarship (JLSS)',
+        ];
 
-        $demoProgram = [
-            'category' => 'Demo Scholarship',
-            'description' => 'A generic demo scholarship program for testing the student finder, eligibility matching, and application workflow.',
-            'eligibility' => 'Open to currently enrolled students who meet the listed academic, location, and document requirements.',
-            'eligible_education_levels' => implode("\n", [
-                'elementary',
-                'junior_high_school',
-                'senior_high_school',
-                'college',
-                'tvet',
-                'als',
-            ]),
-            'eligible_courses' => 'Any track, strand, or course',
-            'eligible_school_types' => implode("\n", [
-                'public',
-                'private',
-                'state_university',
-                'local_college',
-                'tvet_center',
-                'als_center',
-            ]),
-            'eligible_year_levels' => implode("\n", [
-                'Grade 1',
-                'Grade 2',
-                'Grade 3',
-                'Grade 4',
-                'Grade 5',
-                'Grade 6',
-                'Grade 7',
-                'Grade 8',
-                'Grade 9',
-                'Grade 10',
-                'Grade 11',
-                'Grade 12',
-                '1st year',
-                '2nd year',
-                '3rd year',
-                '4th year',
-            ]),
+        foreach ($legacyProgramTitles as $oldTitle => $newTitle) {
+            Scholarship::query()
+                ->where('provider_id', $provider->id)
+                ->where('title', $oldTitle)
+                ->update(['title' => $newTitle]);
+        }
+
+        $dostContactEmail = 'dostsei@sei.dost.gov.ph';
+        $dostContactNumber = '(02) 8330 8876';
+        $priorityCourses = implode("\n", [
+            'Science, Technology, Engineering, and Mathematics (STEM)',
+            'Engineering',
+            'Computer Science',
+            'Information Technology',
+            'Mathematics',
+            'Statistics',
+            'Biology',
+            'Chemistry',
+            'Physics',
+            'Agriculture',
+            'Fisheries',
+            'Food Technology',
+            'Geology',
+            'Meteorology',
+            'Science and Mathematics Teaching',
+        ]);
+        $undergraduateRequirements = implode("\n", [
+            'DOST-SEI online application form',
+            'Certificate of good moral character',
+            'Certificate of good health',
+            'Principal certification for STEM strand or upper 5% non-STEM ranking',
+            'Parent or legal guardian certifications required by DOST-SEI',
+            'Applicant certification of no post-secondary units',
+            'Signed applicant and parent/legal guardian declaration',
+            'DOST-SEI scholarship examination and award documents',
+        ]);
+        $dostProgramDefaults = [
+            'category' => 'DOST-SEI S&T Scholarship',
             'eligible_locations' => 'Philippines',
-            'income_requirement' => 'Any',
-            'requirements' => implode("\n", [
-                'Certificate of enrollment',
-                'Latest report card or grades',
-                'School ID',
-                'Proof of income',
-            ]),
-            'award_amount' => 10000,
-            'minimum_gwa' => 85,
-            'slots_available' => 25,
-            'application_mode' => 'hybrid',
-            'renewal_policy' => 'Renewal depends on continued eligibility, submitted updated requirements, and available funding.',
-            'contact_email' => 'provider@scholarship.test',
-            'contact_number' => '09170000001',
-            'deadline' => now()->addMonth()->toDateString(),
+            'location_name' => 'DOST-SEI and DOST Regional Scholarship Offices',
+            'location_address' => 'Nationwide processing through DOST-SEI and DOST Regional Offices',
+            'latitude' => null,
+            'longitude' => null,
+            'application_mode' => 'online',
+            'contact_email' => $dostContactEmail,
+            'contact_number' => $dostContactNumber,
+            'deadline' => null,
             'status' => 'published',
             'views_count' => 0,
         ];
-        $demoLocations = [
-            1 => [
-                'location_name' => 'Demo Scholarship Office - Manila',
-                'location_address' => 'Manila City Hall, Padre Burgos Avenue, Ermita, Manila, Metro Manila',
-                'latitude' => 14.5896000,
-                'longitude' => 120.9817000,
+        $dostPrograms = [
+            'DOST-SEI RA 7687 Undergraduate Scholarship' => [
+                'description' => 'A DOST-SEI undergraduate scholarship for poor, talented, and deserving Filipino students who will pursue priority science, mathematics, engineering, and other S&T bachelor degree programs.',
+                'eligibility' => 'Natural-born Filipino citizen; Grade 12 STEM student or qualified upper 5% non-STEM/high school graduate; family socio-economic status within DOST-SEI RA 7687 indicators; resident of the municipality for at least four years when required; of good moral character and good health; no college or post-high-school vocational units; must qualify through the DOST-SEI Undergraduate Scholarship Examination.',
+                'eligible_education_levels' => 'senior_high_school',
+                'eligible_courses' => $priorityCourses,
+                'eligible_school_types' => implode("\n", [
+                    'public',
+                    'private',
+                    'state_university',
+                    'local_college',
+                ]),
+                'eligible_year_levels' => 'Grade 12',
+                'income_requirement' => 'Within RA 7687 socioeconomic indicators',
+                'requirements' => implode("\n", [
+                    $undergraduateRequirements,
+                    'Certificate of residency',
+                    'Household or socio-economic information required for RA 7687 screening',
+                ]),
+                'award_amount' => 40000,
+                'minimum_gwa' => null,
+                'minimum_grade_scale' => null,
+                'slots_available' => null,
+                'renewal_policy' => 'Continued assistance depends on the DOST-SEI scholarship agreement, enrollment in a priority S&T course, good academic standing, submitted semester requirements, and the required service obligation after graduation.',
             ],
-            2 => [
-                'location_name' => 'Demo Scholarship Office - Cebu',
-                'location_address' => 'Cebu City Hall, M.C. Briones Street, Cebu City, Cebu',
-                'latitude' => 10.2929000,
-                'longitude' => 123.9016000,
+            'DOST-SEI Merit Undergraduate Scholarship' => [
+                'description' => 'A DOST-SEI undergraduate scholarship for students with high aptitude in science and mathematics who are willing to pursue careers in science and technology through priority S&T degree programs.',
+                'eligibility' => 'Natural-born Filipino citizen; Grade 12 STEM student or qualified upper 5% non-STEM/high school graduate; of good moral character and good health; no college or post-high-school vocational units; must qualify through the DOST-SEI Undergraduate Scholarship Examination.',
+                'eligible_education_levels' => 'senior_high_school',
+                'eligible_courses' => $priorityCourses,
+                'eligible_school_types' => implode("\n", [
+                    'public',
+                    'private',
+                    'state_university',
+                    'local_college',
+                ]),
+                'eligible_year_levels' => 'Grade 12',
+                'income_requirement' => 'No income ceiling',
+                'requirements' => $undergraduateRequirements,
+                'award_amount' => 40000,
+                'minimum_gwa' => null,
+                'minimum_grade_scale' => null,
+                'slots_available' => null,
+                'renewal_policy' => 'Continued assistance depends on the DOST-SEI scholarship agreement, enrollment in a priority S&T course, good academic standing, submitted semester requirements, and the required service obligation after graduation.',
             ],
-            3 => [
-                'location_name' => 'Demo Scholarship Office - Davao',
-                'location_address' => 'Davao City Hall, San Pedro Street, Davao City, Davao del Sur',
-                'latitude' => 7.0644000,
-                'longitude' => 125.6086000,
+            'DOST-SEI Junior Level Science Scholarship (JLSS)' => [
+                'description' => 'A DOST-SEI scholarship for regular college students entering the third year of a priority S&T course, including JLSS components under Merit, RA 7687, and RA 10612.',
+                'eligibility' => 'Natural-born Filipino citizen; regular second-year college student and incoming third-year student in a DOST-SEI priority S&T course; general weighted average of at least 83% or equivalent; no conditional or failing grades from first year through the required evaluation period; of good moral character and good health; must qualify through the JLSS examination.',
+                'eligible_education_levels' => 'college',
+                'eligible_courses' => $priorityCourses,
+                'eligible_school_types' => implode("\n", [
+                    'state_university',
+                    'local_college',
+                    'private',
+                ]),
+                'eligible_year_levels' => implode("\n", [
+                    '2nd year',
+                    '3rd year',
+                ]),
+                'income_requirement' => 'Depends on JLSS component',
+                'requirements' => implode("\n", [
+                    'DOST-SEI JLSS online application form',
+                    'Certificate of enrollment or regular second-year standing',
+                    'Certified true copy of grades',
+                    'Certificate of good moral character',
+                    'Certificate of good health',
+                    'Proof of citizenship or birth certificate',
+                    'Parent or legal guardian certifications required by DOST-SEI',
+                    'DOST-SEI JLSS examination and award documents',
+                ]),
+                'award_amount' => 40000,
+                'minimum_gwa' => 83,
+                'minimum_grade_scale' => 'percentage',
+                'slots_available' => null,
+                'renewal_policy' => 'Continued assistance depends on DOST-SEI academic standing rules, submitted semester requirements, and the applicable service obligation. RA 10612 scholars render teaching service in science, mathematics, or STEM after graduation.',
             ],
         ];
 
-        foreach ([1, 2, 3] as $programNumber) {
+        foreach ($dostPrograms as $title => $program) {
             Scholarship::query()->updateOrCreate([
                 'provider_id' => $provider->id,
-                'title' => "Demo Program {$programNumber}",
+                'title' => $title,
             ], [
-                ...$demoProgram,
-                ...$demoLocations[$programNumber],
+                ...$dostProgramDefaults,
+                ...$program,
             ]);
         }
     }
