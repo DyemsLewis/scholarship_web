@@ -5,6 +5,8 @@ import AdminSidebar from '../components/AdminSidebar.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
+const statusMessage = ref('');
+const activeAction = ref('');
 const search = ref('');
 const selectedRole = ref('all');
 const stats = ref({
@@ -52,8 +54,19 @@ function statusLabel(status) {
     return status === 'suspended' ? 'Suspended' : 'Active';
 }
 
-async function loadAdminData(page = 1) {
-    isLoading.value = true;
+function actionKey(user, action) {
+    return `${user.id}:${action}`;
+}
+
+function isActionLoading(user, action) {
+    return activeAction.value === actionKey(user, action);
+}
+
+async function loadAdminData(page = 1, options = {}) {
+    if (!options.silent) {
+        isLoading.value = true;
+    }
+
     errorMessage.value = '';
 
     try {
@@ -72,8 +85,90 @@ async function loadAdminData(page = 1) {
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load users.';
     } finally {
-        isLoading.value = false;
+        if (!options.silent) {
+            isLoading.value = false;
+        }
     }
+}
+
+async function runUserAction(user, action, request, fallbackMessage) {
+    activeAction.value = actionKey(user, action);
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    try {
+        const response = await request();
+
+        statusMessage.value = response.data.message ?? fallbackMessage;
+        await loadAdminData(pagination.value.current_page, { silent: true });
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to update this account.';
+    } finally {
+        activeAction.value = '';
+    }
+}
+
+async function toggleAccountStatus(user) {
+    if (user.account_status === 'suspended') {
+        await runUserAction(
+            user,
+            'status',
+            () => window.axios.patch(`/admin/users/${user.id}/status`, {
+                account_status: 'active',
+            }),
+            'Account reactivated.',
+        );
+        return;
+    }
+
+    const reason = window.prompt('Reason for suspending this account:', user.suspension_reason ?? '');
+
+    if (reason === null) {
+        return;
+    }
+
+    if (!reason.trim()) {
+        errorMessage.value = 'Add a reason before suspending this account.';
+        statusMessage.value = '';
+        return;
+    }
+
+    await runUserAction(
+        user,
+        'status',
+        () => window.axios.patch(`/admin/users/${user.id}/status`, {
+            account_status: 'suspended',
+            suspension_reason: reason.trim(),
+        }),
+        'Account suspended.',
+    );
+}
+
+async function forcePasswordReset(user) {
+    await runUserAction(
+        user,
+        'force-reset',
+        () => window.axios.post(`/admin/users/${user.id}/force-password-reset`),
+        'Password reset required.',
+    );
+}
+
+async function verifyEmail(user) {
+    await runUserAction(
+        user,
+        'verify-email',
+        () => window.axios.patch(`/admin/users/${user.id}/email-verification`),
+        'Email marked as verified.',
+    );
+}
+
+async function resendVerificationEmail(user) {
+    await runUserAction(
+        user,
+        'resend-verification',
+        () => window.axios.post(`/admin/users/${user.id}/verification-email`),
+        'Verification email sent.',
+    );
 }
 
 function selectRole(role) {
@@ -95,6 +190,7 @@ async function logout() {
 
 watch([search, selectedRole], () => {
     clearTimeout(searchTimer);
+    statusMessage.value = '';
     searchTimer = setTimeout(() => loadAdminData(1), 300);
 });
 
@@ -145,13 +241,13 @@ onMounted(loadAdminData);
                                 <h3 class="text-lg font-bold text-slate-950">
                                     User Records
                                 </h3>
-                            <p class="mt-1 text-sm text-slate-500">
-                                {{ paginationLabel }}
-                            </p>
-                            <p class="mt-1 text-xs font-semibold text-slate-500">
-                                {{ stats.suspended_users }} suspended / {{ stats.password_resets_required }} password resets required
-                            </p>
-                        </div>
+                                <p class="mt-1 text-sm text-slate-500">
+                                    {{ paginationLabel }}
+                                </p>
+                                <p class="mt-1 text-xs font-semibold text-slate-500">
+                                    {{ stats.suspended_users }} suspended / {{ stats.password_resets_required }} password resets required
+                                </p>
+                            </div>
 
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                                 <input
@@ -187,6 +283,13 @@ onMounted(loadAdminData);
                                 {{ filter.label }} ({{ filter.count }})
                             </button>
                         </div>
+
+                        <p
+                            v-if="statusMessage"
+                            class="rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm font-semibold text-emerald-700"
+                        >
+                            {{ statusMessage }}
+                        </p>
                     </div>
 
                     <div v-if="isLoading" class="p-6 text-sm text-slate-500">
@@ -225,7 +328,7 @@ onMounted(loadAdminData);
                                         Registered
                                     </th>
                                     <th class="px-4 py-3 text-right">
-                                        Action
+                                        Actions
                                     </th>
                                 </tr>
                             </thead>
@@ -285,12 +388,57 @@ onMounted(loadAdminData);
                                         {{ user.created_at }}
                                     </td>
                                     <td class="px-4 py-3 text-right">
-                                        <a
-                                            :href="`/admin/accounts/${user.id}/edit`"
-                                            class="inline-flex rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                        >
-                                            Edit
-                                        </a>
+                                        <div class="flex min-w-[19rem] flex-wrap justify-end gap-1.5">
+                                            <button
+                                                type="button"
+                                                class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                :disabled="Boolean(activeAction)"
+                                                @click="toggleAccountStatus(user)"
+                                            >
+                                                <span v-if="isActionLoading(user, 'status')">
+                                                    {{ user.account_status === 'suspended' ? 'Reactivating...' : 'Suspending...' }}
+                                                </span>
+                                                <span v-else>
+                                                    {{ user.account_status === 'suspended' ? 'Reactivate' : 'Suspend' }}
+                                                </span>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                :disabled="Boolean(activeAction)"
+                                                @click="forcePasswordReset(user)"
+                                            >
+                                                {{ isActionLoading(user, 'force-reset') ? 'Resetting...' : 'Force reset' }}
+                                            </button>
+
+                                            <button
+                                                v-if="!user.email_verified"
+                                                type="button"
+                                                class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                :disabled="Boolean(activeAction)"
+                                                @click="verifyEmail(user)"
+                                            >
+                                                {{ isActionLoading(user, 'verify-email') ? 'Verifying...' : 'Verify email' }}
+                                            </button>
+
+                                            <button
+                                                v-if="!user.email_verified"
+                                                type="button"
+                                                class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                :disabled="Boolean(activeAction)"
+                                                @click="resendVerificationEmail(user)"
+                                            >
+                                                {{ isActionLoading(user, 'resend-verification') ? 'Sending...' : 'Resend email' }}
+                                            </button>
+
+                                            <a
+                                                :href="`/admin/accounts/${user.id}/edit`"
+                                                class="inline-flex rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                            >
+                                                Edit
+                                            </a>
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>

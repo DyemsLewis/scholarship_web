@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import TermsAgreement from '../components/TermsAgreement.vue';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
@@ -15,6 +16,7 @@ const uploadForm = ref({ documentName: '' });
 const uploadFile = ref(null);
 const fileInput = ref(null);
 const previewDocument = ref(null);
+const documentTermsAccepted = ref(false);
 
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
 const uploadedDocumentNames = computed(() => new Set((application.value?.documents ?? []).map((document) => document.document_name)));
@@ -209,6 +211,11 @@ async function uploadDocument() {
         return;
     }
 
+    if (!documentTermsAccepted.value) {
+        errorMessage.value = 'Please accept the document upload terms before uploading.';
+        return;
+    }
+
     isUploading.value = true;
     errorMessage.value = '';
     statusMessage.value = '';
@@ -216,6 +223,7 @@ async function uploadDocument() {
     const payload = new FormData();
     payload.append('document_name', uploadForm.value.documentName);
     payload.append('document_file', uploadFile.value);
+    payload.append('terms_accepted', '1');
 
     try {
         const response = await window.axios.post(`/dashboard/applications/${application.value.id}/documents`, payload, {
@@ -604,6 +612,12 @@ onMounted(loadApplication);
                                         {{ isUploading ? 'Uploading...' : 'Upload' }}
                                     </button>
                                 </div>
+
+                                <TermsAgreement
+                                    v-model="documentTermsAccepted"
+                                    class="mt-3"
+                                    context="document"
+                                />
                             </section>
 
                             <section v-if="timeline.length" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

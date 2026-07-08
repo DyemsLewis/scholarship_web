@@ -620,6 +620,7 @@ onMounted(loadReviewData);
                         <div v-else class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                             <article
                                 v-for="scholarship in scholarships"
+                                :id="`program-${scholarship.id}`"
                                 :key="scholarship.id"
                                 class="rounded-md border border-slate-200 bg-slate-50 p-3"
                             >

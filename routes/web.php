@@ -15,6 +15,7 @@ Route::get('/forgot-password', [PageController::class, 'forgotPassword'])->name(
 Route::get('/reset-password', [PageController::class, 'resetPassword'])->name('password.reset');
 Route::get('/register', [PageController::class, 'register'])->name('register');
 Route::get('/provider/register', [PageController::class, 'providerRegister'])->name('provider.register');
+Route::get('/terms', [PageController::class, 'terms'])->name('terms');
 Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])->middleware(['signed', 'throttle:6,1'])->name('verification.verify');
 Route::post('/email/verification-notification', [AuthController::class, 'resendVerificationEmail'])->middleware(['auth', 'throttle:6,1'])->name('verification.send');
 Route::get('/account/setup', [PageController::class, 'accountSetup'])->middleware('auth')->name('account.setup');

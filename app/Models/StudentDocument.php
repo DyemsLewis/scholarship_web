@@ -15,12 +15,15 @@ class StudentDocument extends Model
         'mime_type',
         'size',
         'uploaded_at',
+        'terms_accepted_at',
+        'terms_version',
     ];
 
     protected function casts(): array
     {
         return [
             'uploaded_at' => 'datetime',
+            'terms_accepted_at' => 'datetime',
         ];
     }
 

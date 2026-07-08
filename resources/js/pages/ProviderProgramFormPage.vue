@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TermsAgreement from '../components/TermsAgreement.vue';
 
 const scholarshipId = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit$/)?.[1] ?? null;
 const isEditMode = computed(() => Boolean(scholarshipId));
@@ -709,6 +710,7 @@ function emptyScholarshipForm() {
         deadline: '',
         status: 'draft',
         imageUrl: '/uploads/scholarship-default.jpg',
+        termsAccepted: false,
     };
 }
 
@@ -820,6 +822,7 @@ function fillScholarshipForm(scholarship) {
         deadline: scholarship.deadline ?? '',
         status: scholarship.status ?? 'draft',
         imageUrl: scholarship.image_url ?? '/uploads/scholarship-default.jpg',
+        termsAccepted: false,
     };
     imageFile.value = null;
     imagePreviewUrl.value = '';
@@ -975,6 +978,11 @@ async function saveScholarship() {
         return;
     }
 
+    if (!scholarshipForm.value.termsAccepted) {
+        formError.value = 'Please accept the provider scholarship terms before saving.';
+        return;
+    }
+
     isSaving.value = true;
 
     const payload = new FormData();
@@ -1006,6 +1014,7 @@ async function saveScholarship() {
         contact_number: scholarshipForm.value.contactNumber || '',
         deadline: scholarshipForm.value.deadline || '',
         status: scholarshipForm.value.status,
+        terms_accepted: scholarshipForm.value.termsAccepted ? '1' : '',
     };
 
     Object.entries(fields).forEach(([key, value]) => {
@@ -1901,7 +1910,14 @@ onMounted(loadFormData);
                                 </div>
                             </fieldset>
 
-                        <div class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div class="mt-5 border-t border-slate-200 pt-4">
+                            <TermsAgreement
+                                v-model="scholarshipForm.termsAccepted"
+                                context="scholarship"
+                            />
+                        </div>
+
+                        <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                             <div class="min-h-5">
                                 <p v-if="formMessage" class="text-sm font-semibold text-emerald-700">
                                     {{ formMessage }}

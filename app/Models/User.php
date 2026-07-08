@@ -28,6 +28,9 @@ class User extends Authenticatable implements MustVerifyEmail
         'account_status',
         'must_reset_password',
         'password_reset_required_at',
+        'terms_accepted_at',
+        'privacy_accepted_at',
+        'terms_version',
     ];
 
     /**
@@ -53,6 +56,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'suspended_at' => 'datetime',
             'must_reset_password' => 'boolean',
             'password_reset_required_at' => 'datetime',
+            'terms_accepted_at' => 'datetime',
+            'privacy_accepted_at' => 'datetime',
         ];
     }
 
@@ -202,6 +207,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'email' => $this->email,
             'email_verified' => $this->hasVerifiedEmail(),
             'email_verified_at' => $this->email_verified_at?->format('M d, Y h:i A'),
+            'terms_accepted_at' => $this->terms_accepted_at?->format('M d, Y h:i A'),
+            'privacy_accepted_at' => $this->privacy_accepted_at?->format('M d, Y h:i A'),
+            'terms_version' => $this->terms_version,
             'username' => $this->username,
             'contact_number' => $this->contact_number,
             'account_status' => $this->account_status ?? 'active',

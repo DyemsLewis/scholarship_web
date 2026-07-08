@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import TermsAgreement from '../components/TermsAgreement.vue';
 
 const isLoading = ref(true);
 const isSubmitting = ref(false);
@@ -26,6 +27,7 @@ const currentStep = ref(0);
 const selectedScholarshipId = ref('');
 const documentChecklist = ref([]);
 const notes = ref('');
+const applicationTermsAccepted = ref(false);
 
 const steps = [
     { label: 'Program', detail: 'Use selected scholarship' },
@@ -144,6 +146,7 @@ const canGoNext = computed(() => {
 
     return true;
 });
+const canSubmitApplication = computed(() => allDocumentsChecked.value && selectedCanStartApplication.value && applicationTermsAccepted.value);
 
 function canOpenWizardStep(index) {
     if (index === 0) {
@@ -347,6 +350,7 @@ function resetWizard() {
     selectedScholarshipId.value = '';
     documentChecklist.value = [];
     notes.value = '';
+    applicationTermsAccepted.value = false;
     errorMessage.value = '';
     submitMessage.value = '';
     currentStep.value = 0;
@@ -434,6 +438,11 @@ async function submitApplication() {
         return;
     }
 
+    if (!applicationTermsAccepted.value) {
+        errorMessage.value = 'Please accept the application terms before submitting.';
+        return;
+    }
+
     isSubmitting.value = true;
     submitMessage.value = '';
     errorMessage.value = '';
@@ -443,6 +452,7 @@ async function submitApplication() {
             scholarship_id: selectedScholarship.value.id,
             document_checklist: documentChecklist.value,
             notes: notes.value,
+            terms_accepted: applicationTermsAccepted.value ? '1' : '',
         });
 
         const message = response.data.message ?? 'Application submitted successfully.';
@@ -473,6 +483,7 @@ watch(selectedScholarship, (scholarship) => {
     }
 
     documentChecklist.value = [...(scholarship.prepared_documents?.matched ?? [])];
+    applicationTermsAccepted.value = false;
 });
 </script>
 
@@ -1084,9 +1095,15 @@ watch(selectedScholarship, (scholarship) => {
                                         {{ notes || 'No note added.' }}
                                     </p>
 
+                                    <TermsAgreement
+                                        v-model="applicationTermsAccepted"
+                                        class="mt-4"
+                                        context="application"
+                                    />
+
                                     <button
                                         type="button"
-                                        :disabled="isSubmitting || !allDocumentsChecked || !selectedCanStartApplication"
+                                        :disabled="isSubmitting || !canSubmitApplication"
                                         class="mt-5 w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                                         @click="submitApplication"
                                     >

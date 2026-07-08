@@ -17,6 +17,7 @@ const links = [
     { href: '/login', label: 'Login' },
     { href: '/register', label: 'Register' },
     { href: '/provider/register', label: 'Provider Registration' },
+    { href: '/terms', label: 'Terms' },
 ];
 </script>
 

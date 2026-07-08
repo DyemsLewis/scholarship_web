@@ -12,6 +12,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Support\AcademicRequirement;
+use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -204,6 +205,7 @@ class ProviderController extends Controller
                 'other',
             ])],
             'document_file' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
+            'terms_accepted' => ['accepted'],
         ]);
 
         $file = $validated['document_file'];
@@ -219,6 +221,8 @@ class ProviderController extends Controller
             'size' => $file->getSize() ?: 0,
             'status' => 'submitted',
             'uploaded_at' => now(),
+            'terms_accepted_at' => now(),
+            'terms_version' => Terms::VERSION,
         ]);
 
         User::query()
@@ -708,9 +712,11 @@ class ProviderController extends Controller
         $validated = $this->validateScholarship($request);
         $imagePath = $this->storeScholarshipImage($request);
 
-        unset($validated['image_file']);
+        unset($validated['image_file'], $validated['terms_accepted']);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated['status'] = $validated['status'] === 'draft' ? 'draft' : 'pending_review';
+        $validated['provider_terms_accepted_at'] = now();
+        $validated['provider_terms_version'] = Terms::VERSION;
 
         $scholarship = Scholarship::create([
             ...$validated,
@@ -747,8 +753,10 @@ class ProviderController extends Controller
         $validated = $this->validateScholarship($request);
         $imagePath = $this->storeScholarshipImage($request, $scholarship);
 
-        unset($validated['image_file']);
+        unset($validated['image_file'], $validated['terms_accepted']);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
+        $validated['provider_terms_accepted_at'] = now();
+        $validated['provider_terms_version'] = Terms::VERSION;
 
         if ($imagePath) {
             $validated['image_path'] = $imagePath;
@@ -811,6 +819,7 @@ class ProviderController extends Controller
             'deadline' => ['nullable', 'date'],
             'status' => ['required', Rule::in(['draft', 'pending_review', 'published', 'closed', 'rejected'])],
             'image_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'terms_accepted' => ['accepted'],
         ]);
     }
 

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue';
 import AuthShell from '../components/AuthShell.vue';
+import TermsAgreement from '../components/TermsAgreement.vue';
 import ToastMessage from '../components/ToastMessage.vue';
 
 const formElement = ref(null);
@@ -20,6 +21,7 @@ const form = ref({
     providerDescription: '',
     password: '',
     passwordConfirmation: '',
+    termsAccepted: false,
 });
 
 const providerTypeOptions = [
@@ -156,6 +158,13 @@ async function submitForm() {
     }
 
     formElement.value?.querySelector('#password-confirmation')?.setCustomValidity('');
+
+    if (!form.value.termsAccepted) {
+        errorMessage.value = 'Please accept the Terms and Privacy Notice before creating an account.';
+        showToast('error', 'Registration failed', errorMessage.value);
+        return;
+    }
+
     isSubmitting.value = true;
 
     const payload = {
@@ -168,6 +177,7 @@ async function submitForm() {
         role: registrationRole,
         password: form.value.password,
         password_confirmation: form.value.passwordConfirmation,
+        terms_accepted: form.value.termsAccepted ? '1' : '',
     };
 
     if (isProviderRegistration) {
@@ -536,6 +546,8 @@ onBeforeUnmount(() => {
                     >
                 </div>
             </div>
+
+            <TermsAgreement v-model="form.termsAccepted" context="account" />
 
             <button
                 type="submit"

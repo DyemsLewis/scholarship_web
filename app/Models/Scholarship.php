@@ -39,6 +39,8 @@ class Scholarship extends Model
         'deadline',
         'status',
         'views_count',
+        'provider_terms_accepted_at',
+        'provider_terms_version',
     ];
 
     protected function casts(): array
@@ -51,6 +53,7 @@ class Scholarship extends Model
             'longitude' => 'decimal:7',
             'deadline' => 'date',
             'views_count' => 'integer',
+            'provider_terms_accepted_at' => 'datetime',
         ];
     }
 

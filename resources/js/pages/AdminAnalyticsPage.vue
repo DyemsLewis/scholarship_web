@@ -11,6 +11,7 @@ const providerPerformance = ref([]);
 const coverageSummary = ref([]);
 const dssRecommendations = ref({});
 const decisionReasons = ref([]);
+const deadlineWatch = ref([]);
 const dssAudit = ref({
     average_score: 0,
     provider_decisions: {},
@@ -24,6 +25,8 @@ const dssItems = computed(() => [
 ]);
 const maxMonthlyApplications = computed(() => Math.max(1, ...monthlyApplications.value.map((month) => Number(month.total ?? 0))));
 const maxCoveragePrograms = computed(() => Math.max(1, ...coverageSummary.value.map((coverage) => Number(coverage.programs ?? 0))));
+const expiredPrograms = computed(() => deadlineWatch.value.filter((program) => Number(program.days_left ?? 0) < 0));
+const soonToExpirePrograms = computed(() => deadlineWatch.value.filter((program) => Number(program.days_left ?? 0) >= 0));
 
 function barWidth(value, max) {
     const numericValue = Number(value ?? 0);
@@ -47,6 +50,38 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function deadlineLabel(program) {
+    const daysLeft = Number(program.days_left ?? 0);
+
+    if (daysLeft < 0) {
+        const overdueDays = Math.abs(daysLeft);
+
+        return overdueDays === 1 ? 'Expired yesterday' : `Expired ${overdueDays} days ago`;
+    }
+
+    if (daysLeft === 0) {
+        return 'Expires today';
+    }
+
+    return daysLeft === 1 ? 'Expires tomorrow' : `Expires in ${daysLeft} days`;
+}
+
+function deadlineCardClass(program) {
+    return Number(program.days_left ?? 0) < 0
+        ? 'border-rose-200 bg-rose-50'
+        : 'border-amber-200 bg-amber-50';
+}
+
+function deadlineBadgeClass(program) {
+    return Number(program.days_left ?? 0) < 0
+        ? 'bg-rose-100 text-rose-800'
+        : 'bg-amber-100 text-amber-800';
+}
+
+function reviewProgramUrl(program) {
+    return `/admin/reviews#program-${program.id}`;
+}
+
 async function loadAnalytics() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -60,6 +95,7 @@ async function loadAnalytics() {
         coverageSummary.value = response.data.coverage_summary ?? [];
         dssRecommendations.value = response.data.dss_recommendations ?? {};
         decisionReasons.value = response.data.decision_reasons ?? [];
+        deadlineWatch.value = response.data.deadline_watch ?? [];
         dssAudit.value = response.data.dss_audit ?? dssAudit.value;
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load platform analytics.';
@@ -103,6 +139,145 @@ onMounted(loadAnalytics);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
+                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                    Deadline Watch
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    Published programs needing deadline attention
+                                </h3>
+                                <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                                    Track published programs that are already expired or close to expiring, then jump back to the admin review queue for action.
+                                </p>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 text-sm sm:min-w-64">
+                                <div class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
+                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-rose-700">
+                                        Expired
+                                    </p>
+                                    <p class="mt-1 font-display text-2xl font-bold text-rose-900">
+                                        {{ stats.expired_published ?? expiredPrograms.length }}
+                                    </p>
+                                </div>
+                                <div class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">
+                                        Soon
+                                    </p>
+                                    <p class="mt-1 font-display text-2xl font-bold text-amber-900">
+                                        {{ stats.upcoming_deadlines ?? soonToExpirePrograms.length }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-5 grid gap-5 xl:grid-cols-2">
+                            <div>
+                                <div class="flex items-center justify-between gap-3">
+                                    <h4 class="text-sm font-bold uppercase tracking-[0.12em] text-rose-700">
+                                        Expired programs
+                                    </h4>
+                                    <a href="/admin/reviews" class="text-sm font-bold text-slate-700 underline">
+                                        Open reviews
+                                    </a>
+                                </div>
+
+                                <div v-if="expiredPrograms.length === 0" class="mt-3 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                                    No expired published programs in the current watch list.
+                                </div>
+
+                                <div v-else class="mt-3 grid gap-3">
+                                    <article
+                                        v-for="program in expiredPrograms"
+                                        :key="`expired-${program.id}`"
+                                        :class="['rounded-md border p-4', deadlineCardClass(program)]"
+                                    >
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div>
+                                                <p class="font-bold text-slate-950">
+                                                    {{ program.title }}
+                                                </p>
+                                                <p class="mt-1 text-sm text-slate-600">
+                                                    Deadline: {{ program.deadline || 'Not set' }}
+                                                </p>
+                                            </div>
+                                            <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', deadlineBadgeClass(program)]">
+                                                {{ deadlineLabel(program) }}
+                                            </span>
+                                        </div>
+                                        <div class="mt-4 flex flex-wrap gap-2">
+                                            <a
+                                                :href="reviewProgramUrl(program)"
+                                                class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                            >
+                                                Review program
+                                            </a>
+                                            <a
+                                                href="/admin/reviews"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                            >
+                                                Admin review page
+                                            </a>
+                                        </div>
+                                    </article>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex items-center justify-between gap-3">
+                                    <h4 class="text-sm font-bold uppercase tracking-[0.12em] text-amber-700">
+                                        Soon to expire
+                                    </h4>
+                                    <a href="/admin/reviews" class="text-sm font-bold text-slate-700 underline">
+                                        Open reviews
+                                    </a>
+                                </div>
+
+                                <div v-if="soonToExpirePrograms.length === 0" class="mt-3 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                                    No upcoming published deadlines in the current watch list.
+                                </div>
+
+                                <div v-else class="mt-3 grid gap-3">
+                                    <article
+                                        v-for="program in soonToExpirePrograms"
+                                        :key="`soon-${program.id}`"
+                                        :class="['rounded-md border p-4', deadlineCardClass(program)]"
+                                    >
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div>
+                                                <p class="font-bold text-slate-950">
+                                                    {{ program.title }}
+                                                </p>
+                                                <p class="mt-1 text-sm text-slate-600">
+                                                    Deadline: {{ program.deadline || 'Not set' }}
+                                                </p>
+                                            </div>
+                                            <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', deadlineBadgeClass(program)]">
+                                                {{ deadlineLabel(program) }}
+                                            </span>
+                                        </div>
+                                        <div class="mt-4 flex flex-wrap gap-2">
+                                            <a
+                                                :href="reviewProgramUrl(program)"
+                                                class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                            >
+                                                Review program
+                                            </a>
+                                            <a
+                                                href="/admin/reviews"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                            >
+                                                Admin review page
+                                            </a>
+                                        </div>
+                                    </article>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
                     <section class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
                         <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">

@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\PortalNotification;
 use App\Models\User;
 use App\Services\PasswordResetLinkService;
+use App\Support\Terms;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -30,6 +31,7 @@ class AuthController extends Controller
             'number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
             'role' => ['required', 'string', 'in:applicant,provider'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'terms_accepted' => ['accepted'],
         ];
 
         if ($request->input('role') === 'provider') {
@@ -59,6 +61,9 @@ class AuthController extends Controller
             'username' => $validated['username'],
             'role' => $validated['role'],
             'password' => $validated['password'],
+            'terms_accepted_at' => now(),
+            'privacy_accepted_at' => now(),
+            'terms_version' => Terms::VERSION,
         ]);
 
         $profile = [

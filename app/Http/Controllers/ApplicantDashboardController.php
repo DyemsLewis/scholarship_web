@@ -13,6 +13,7 @@ use App\Models\StudentDocument;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Support\AcademicRequirement;
+use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -216,6 +217,7 @@ class ApplicantDashboardController extends Controller
         $validated = $request->validate([
             'document_name' => ['required', 'string', 'max:255'],
             'document_file' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
+            'terms_accepted' => ['accepted'],
         ]);
 
         $documentName = trim($validated['document_name']);
@@ -239,6 +241,8 @@ class ApplicantDashboardController extends Controller
             'mime_type' => $file->getClientMimeType(),
             'size' => $file->getSize(),
             'uploaded_at' => now(),
+            'terms_accepted_at' => now(),
+            'terms_version' => Terms::VERSION,
         ]);
 
         ActivityLog::record(
@@ -388,6 +392,7 @@ class ApplicantDashboardController extends Controller
             'document_checklist' => ['sometimes', 'array'],
             'document_checklist.*' => ['string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            'terms_accepted' => ['accepted'],
         ]);
 
         $alreadyApplied = ScholarshipApplication::query()
@@ -422,6 +427,8 @@ class ApplicantDashboardController extends Controller
             'eligibility_breakdown' => $eligibilityMatch,
             'notes' => $validated['notes'] ?? null,
             'submitted_at' => now(),
+            'terms_accepted_at' => now(),
+            'terms_version' => Terms::VERSION,
         ]);
 
         ApplicationStatusHistory::create([
@@ -524,6 +531,7 @@ class ApplicantDashboardController extends Controller
         $validated = $request->validate([
             'document_name' => ['required', 'string', 'max:255'],
             'document_file' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
+            'terms_accepted' => ['accepted'],
         ]);
 
         $file = $validated['document_file'];
@@ -551,6 +559,8 @@ class ApplicantDashboardController extends Controller
             'reviewed_by' => null,
             'reviewed_at' => null,
             'uploaded_at' => now(),
+            'terms_accepted_at' => now(),
+            'terms_version' => Terms::VERSION,
         ]);
 
         ActivityLog::record(
@@ -976,6 +986,8 @@ class ApplicantDashboardController extends Controller
                 'reviewed_by' => null,
                 'reviewed_at' => null,
                 'uploaded_at' => now(),
+                'terms_accepted_at' => $application->terms_accepted_at ?? now(),
+                'terms_version' => $application->terms_version ?? Terms::VERSION,
             ]);
         }
     }

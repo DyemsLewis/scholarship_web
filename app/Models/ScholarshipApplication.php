@@ -27,6 +27,8 @@ class ScholarshipApplication extends Model
         'reviewed_by',
         'reviewed_at',
         'submitted_at',
+        'terms_accepted_at',
+        'terms_version',
     ];
 
     protected function casts(): array
@@ -41,6 +43,7 @@ class ScholarshipApplication extends Model
             'dss_breakdown' => 'array',
             'reviewed_at' => 'datetime',
             'submitted_at' => 'datetime',
+            'terms_accepted_at' => 'datetime',
         ];
     }
 

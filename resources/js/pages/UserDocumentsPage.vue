@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import TermsAgreement from '../components/TermsAgreement.vue';
 
 const isLoading = ref(true);
 const isUploadingPrepared = ref(false);
@@ -24,6 +25,7 @@ const preparedFileInput = ref(null);
 const preparedForm = reactive({
     documentName: '',
 });
+const preparedDocumentTermsAccepted = ref(false);
 const updatingPreparedId = ref(null);
 const removingPreparedId = ref(null);
 const previewDocument = ref(null);
@@ -180,6 +182,11 @@ async function uploadPreparedDocument() {
         return;
     }
 
+    if (!preparedDocumentTermsAccepted.value) {
+        errorMessage.value = 'Please accept the document upload terms before saving.';
+        return;
+    }
+
     isUploadingPrepared.value = true;
     errorMessage.value = '';
     statusMessage.value = '';
@@ -187,6 +194,7 @@ async function uploadPreparedDocument() {
     const payload = new FormData();
     payload.append('document_name', preparedForm.documentName);
     payload.append('document_file', preparedFile.value);
+    payload.append('terms_accepted', '1');
 
     try {
         const response = await window.axios.post('/dashboard/student-documents', payload, {
@@ -217,6 +225,12 @@ async function updatePreparedDocument(document, event) {
         return;
     }
 
+    if (!preparedDocumentTermsAccepted.value) {
+        errorMessage.value = 'Please accept the document upload terms before updating.';
+        event.target.value = '';
+        return;
+    }
+
     updatingPreparedId.value = document.id;
     errorMessage.value = '';
     statusMessage.value = '';
@@ -224,6 +238,7 @@ async function updatePreparedDocument(document, event) {
     const payload = new FormData();
     payload.append('document_name', document.document_name);
     payload.append('document_file', file);
+    payload.append('terms_accepted', '1');
 
     try {
         await window.axios.post('/dashboard/student-documents', payload, {
@@ -371,6 +386,13 @@ onMounted(loadDocuments);
                                 >
                                     {{ isUploadingPrepared ? 'Saving...' : preparedDocumentNames.has(preparedForm.documentName) ? 'Update document' : 'Save document' }}
                                 </button>
+                            </div>
+
+                            <div class="px-4 pb-4">
+                                <TermsAgreement
+                                    v-model="preparedDocumentTermsAccepted"
+                                    context="document"
+                                />
                             </div>
                         </div>
 

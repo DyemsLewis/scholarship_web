@@ -20,6 +20,8 @@ class ApplicationDocument extends Model
         'reviewed_by',
         'reviewed_at',
         'uploaded_at',
+        'terms_accepted_at',
+        'terms_version',
     ];
 
     protected function casts(): array
@@ -27,6 +29,7 @@ class ApplicationDocument extends Model
         return [
             'uploaded_at' => 'datetime',
             'reviewed_at' => 'datetime',
+            'terms_accepted_at' => 'datetime',
         ];
     }
 

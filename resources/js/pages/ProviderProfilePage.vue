@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TermsAgreement from '../components/TermsAgreement.vue';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -12,6 +13,7 @@ const user = ref(null);
 const verificationDocuments = ref([]);
 const verificationDocumentType = ref('organization_registration');
 const verificationDocumentFile = ref(null);
+const verificationDocumentTermsAccepted = ref(false);
 const isUploadingDocument = ref(false);
 const deletingDocumentId = ref(null);
 const form = reactive({
@@ -131,6 +133,11 @@ async function uploadVerificationDocument() {
         return;
     }
 
+    if (!verificationDocumentTermsAccepted.value) {
+        errorMessage.value = 'Please accept the provider document terms before uploading.';
+        return;
+    }
+
     isUploadingDocument.value = true;
     errorMessage.value = '';
     statusMessage.value = '';
@@ -138,6 +145,7 @@ async function uploadVerificationDocument() {
     const payload = new FormData();
     payload.append('document_type', verificationDocumentType.value);
     payload.append('document_file', verificationDocumentFile.value);
+    payload.append('terms_accepted', '1');
 
     try {
         const response = await window.axios.post('/provider/verification-documents', payload, {
@@ -301,6 +309,12 @@ onMounted(loadProviderProfile);
                                 {{ isUploadingDocument ? 'Uploading...' : 'Upload proof' }}
                             </button>
                         </div>
+
+                        <TermsAgreement
+                            v-model="verificationDocumentTermsAccepted"
+                            class="mt-4"
+                            context="providerDocument"
+                        />
 
                         <div v-if="verificationDocuments.length === 0" class="mt-5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                             No verification documents uploaded yet.

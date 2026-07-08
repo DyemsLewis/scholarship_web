@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Scholarship;
 use App\Models\User;
+use App\Support\Terms;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -24,6 +25,9 @@ class DatabaseSeeder extends Seeder
             'username' => env('ADMIN_USERNAME', 'admin'),
             'role' => 'admin',
             'password' => env('ADMIN_PASSWORD', $password),
+            'terms_accepted_at' => now(),
+            'privacy_accepted_at' => now(),
+            'terms_version' => Terms::VERSION,
         ]);
 
         $admin->adminProfile()->updateOrCreate([
@@ -42,6 +46,9 @@ class DatabaseSeeder extends Seeder
             'username' => env('PROVIDER_USERNAME', 'provider'),
             'role' => 'provider',
             'password' => env('PROVIDER_PASSWORD', $password),
+            'terms_accepted_at' => now(),
+            'privacy_accepted_at' => now(),
+            'terms_version' => Terms::VERSION,
         ]);
 
         $provider->providerProfile()->updateOrCreate([
@@ -68,6 +75,9 @@ class DatabaseSeeder extends Seeder
             'username' => env('STUDENT_USERNAME', 'student'),
             'role' => 'applicant',
             'password' => env('STUDENT_PASSWORD', $password),
+            'terms_accepted_at' => now(),
+            'privacy_accepted_at' => now(),
+            'terms_version' => Terms::VERSION,
         ]);
 
         $student->studentProfile()->updateOrCreate([
@@ -169,6 +179,8 @@ class DatabaseSeeder extends Seeder
             'status' => 'published',
             'views_count' => 0,
             'other_contract_terms' => $dostOtherContractTerms,
+            'provider_terms_accepted_at' => now(),
+            'provider_terms_version' => Terms::VERSION,
         ];
         $dostPrograms = [
             'DOST-SEI RA 7687 Undergraduate Scholarship' => [
