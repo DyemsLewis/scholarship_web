@@ -35,6 +35,7 @@ class NotificationController extends Controller
         return response()->json([
             'notifications' => $this->latestNotifications($user->id),
             'unread_count' => $this->unreadCount($user->id),
+            'email_verified' => $user->hasVerifiedEmail(),
         ]);
     }
 

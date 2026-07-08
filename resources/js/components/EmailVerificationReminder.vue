@@ -36,9 +36,8 @@ async function checkVerificationReminder() {
 
     try {
         const response = await window.axios.get('/notifications');
-        const notifications = response.data.notifications ?? [];
 
-        isVisible.value = notifications.some((notification) => notification.type === 'email_verification');
+        isVisible.value = response.data.email_verified === false;
     } catch (error) {
         isVisible.value = false;
     } finally {
