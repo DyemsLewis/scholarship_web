@@ -89,6 +89,18 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function responseClass(status) {
+    if (status === 'accepted') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'declined') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
 function matchClass(score) {
     if (Number(score) >= 80) {
         return 'bg-emerald-100 text-emerald-800';
@@ -694,6 +706,40 @@ onMounted(loadApplication);
                                 </div>
                                 <p class="mt-3 text-sm leading-6 text-slate-600">
                                     {{ application.status_progress.next_action }}
+                                </p>
+                            </section>
+
+                            <section
+                                v-if="application.requires_student_response || application.student_response_status"
+                                class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                            >
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                    Applicant Response
+                                </p>
+                                <div class="mt-3">
+                                    <span
+                                        v-if="application.student_response_status"
+                                        :class="['inline-flex rounded-md px-2.5 py-1 text-xs font-bold uppercase', responseClass(application.student_response_status)]"
+                                    >
+                                        {{ application.student_response_label || statusLabel(application.student_response_status) }}
+                                    </span>
+                                    <span
+                                        v-else
+                                        class="inline-flex rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
+                                    >
+                                        Waiting for applicant
+                                    </span>
+                                </div>
+                                <p class="mt-3 text-sm leading-6 text-slate-600">
+                                    <template v-if="application.student_response_status">
+                                        Recorded {{ application.student_responded_at || 'recently' }}.
+                                    </template>
+                                    <template v-else>
+                                        The applicant can accept or decline from their application detail page.
+                                    </template>
+                                </p>
+                                <p v-if="application.student_response_note" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+                                    {{ application.student_response_note }}
                                 </p>
                             </section>
 

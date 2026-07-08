@@ -104,7 +104,10 @@ const applicationQueue = computed(() => [...applications.value].sort((first, sec
         not_awarded: 0,
     };
 
-    return (statusRank[second.status ?? 'submitted'] ?? 0) - (statusRank[first.status ?? 'submitted'] ?? 0);
+    const firstRank = (statusRank[first.status ?? 'submitted'] ?? 0) + (first.can_respond ? 20 : 0);
+    const secondRank = (statusRank[second.status ?? 'submitted'] ?? 0) + (second.can_respond ? 20 : 0);
+
+    return secondRank - firstRank;
 }));
 const wizardReadinessItems = computed(() => [
     {
@@ -244,6 +247,18 @@ function statusClass(status) {
 
     if (['under_review', 'shortlisted', 'interview'].includes(status)) {
         return 'bg-slate-100 text-slate-700';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
+function responseClass(status) {
+    if (status === 'accepted') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'declined') {
+        return 'bg-rose-100 text-rose-800';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -1186,9 +1201,23 @@ watch(selectedScholarship, (scholarship) => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
-                                            {{ statusLabel(application.status) }}
-                                        </span>
+                                        <div class="flex flex-wrap gap-2 sm:justify-end">
+                                            <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
+                                                {{ statusLabel(application.status) }}
+                                            </span>
+                                            <span
+                                                v-if="application.can_respond"
+                                                class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
+                                            >
+                                                Response needed
+                                            </span>
+                                            <span
+                                                v-else-if="application.student_response_status"
+                                                :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', responseClass(application.student_response_status)]"
+                                            >
+                                                {{ application.student_response_label || statusLabel(application.student_response_status) }}
+                                            </span>
+                                        </div>
                                     </div>
 
                                     <div class="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
@@ -1200,6 +1229,12 @@ watch(selectedScholarship, (scholarship) => {
                                         </span>
                                         <span class="rounded-md bg-slate-100 px-2.5 py-1 text-slate-700">
                                             Documents {{ application.document_readiness?.percent ?? 0 }}%
+                                        </span>
+                                        <span
+                                            v-if="application.student_responded_at"
+                                            class="rounded-md bg-slate-100 px-2.5 py-1 text-slate-700"
+                                        >
+                                            Responded {{ application.student_responded_at }}
                                         </span>
                                         <a
                                             :href="application.detail_url || `/dashboard/applications/${application.id}`"

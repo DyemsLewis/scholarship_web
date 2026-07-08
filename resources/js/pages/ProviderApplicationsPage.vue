@@ -123,6 +123,18 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function responseClass(status) {
+    if (status === 'accepted') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'declined') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
 function matchClass(score) {
     if (Number(score) >= 80) {
         return 'bg-emerald-100 text-emerald-800';
@@ -221,11 +233,15 @@ function reviewPriorityScore(application) {
         score += 10;
     }
 
+    if (application.can_receive_student_response) {
+        score += 18;
+    }
+
     if (!application.review_notes && ['submitted', 'under_review'].includes(status)) {
         score += 5;
     }
 
-    if (['approved', 'awarded', 'not_awarded', 'disbursed', 'renewed', 'rejected'].includes(status)) {
+    if (['approved', 'awarded', 'not_awarded', 'disbursed', 'renewed', 'rejected'].includes(status) && !application.can_receive_student_response) {
         score -= 25;
     }
 
@@ -283,6 +299,12 @@ function reviewReasons(application) {
 
     if (application.dss_recommendation === 'needs_review') {
         reasons.push('DSS asks for manual review');
+    }
+
+    if (application.can_receive_student_response) {
+        reasons.push('Waiting for applicant response');
+    } else if (application.student_response_label) {
+        reasons.push(application.student_response_label);
     }
 
     if (reasons.length === 0) {
@@ -601,6 +623,18 @@ onMounted(loadProviderData);
                                         </span>
                                         <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
                                             {{ statusLabel(application.status) }}
+                                        </span>
+                                        <span
+                                            v-if="application.can_receive_student_response"
+                                            class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
+                                        >
+                                            Awaiting response
+                                        </span>
+                                        <span
+                                            v-else-if="application.student_response_status"
+                                            :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', responseClass(application.student_response_status)]"
+                                        >
+                                            {{ application.student_response_label || statusLabel(application.student_response_status) }}
                                         </span>
                                         <a
                                             :href="application.detail_url || `/provider/applications/${application.id}`"

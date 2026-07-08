@@ -608,6 +608,95 @@ class ApplicantDashboardController extends Controller
         ]);
     }
 
+    public function respondToApplication(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+
+        $application->loadMissing('scholarship.provider.providerProfile');
+
+        if (! $this->canRespondToApplication($application)) {
+            return response()->json([
+                'message' => $application->student_response_status
+                    ? 'You already responded to this scholarship offer.'
+                    : 'You can only respond after the provider approves or awards the application.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'response' => ['required', Rule::in(['accepted', 'declined'])],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $response = $validated['response'];
+
+        if ($response === 'accepted') {
+            $request->validate([
+                'terms_accepted' => ['accepted'],
+            ]);
+        }
+
+        $responseSentence = $response === 'accepted'
+            ? 'accepted the scholarship offer'
+            : 'declined the scholarship offer';
+        $programTitle = $application->scholarship?->title ?? 'this scholarship';
+
+        $application->update([
+            'student_response_status' => $response,
+            'student_responded_at' => now(),
+            'student_response_note' => $validated['note'] ?? null,
+            'student_response_terms_accepted_at' => $response === 'accepted' ? now() : null,
+            'student_response_terms_version' => $response === 'accepted' ? Terms::VERSION : null,
+        ]);
+
+        ApplicationStatusHistory::create([
+            'scholarship_application_id' => $application->id,
+            'changed_by' => $request->user()->id,
+            'from_status' => $application->status,
+            'to_status' => "student_{$response}",
+            'review_notes' => "Applicant {$responseSentence}.",
+            'changed_at' => now(),
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            "application_{$response}",
+            "{$request->user()->name} {$responseSentence} for application #{$application->id}.",
+            $request,
+            [
+                'application_id' => $application->id,
+                'scholarship_id' => $application->scholarship_id,
+                'student_response_status' => $response,
+            ],
+        );
+
+        if ($application->scholarship?->provider_id) {
+            PortalNotification::create([
+                'user_id' => $application->scholarship->provider_id,
+                'type' => 'application_response',
+                'title' => $response === 'accepted' ? 'Applicant accepted offer' : 'Applicant declined offer',
+                'message' => "{$request->user()->name} {$responseSentence} for {$programTitle}.",
+                'action_url' => route('provider.applications.show', $application, false),
+            ]);
+        }
+
+        PortalNotification::create([
+            'user_id' => $request->user()->id,
+            'type' => 'application_response_recorded',
+            'title' => 'Scholarship response recorded',
+            'message' => "Your response for {$programTitle} was recorded.",
+            'action_url' => route('dashboard.applications.show', $application, false),
+        ]);
+
+        $freshApplication = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
+        app(DecisionSupportService::class)->syncApplication($freshApplication);
+
+        return response()->json([
+            'message' => 'Scholarship response saved.',
+            'application' => $this->applicationPayload($freshApplication),
+        ]);
+    }
+
     private function ensureApplicant(Request $request): ?RedirectResponse
     {
         if (! $request->user()) {
@@ -804,6 +893,12 @@ class ApplicantDashboardController extends Controller
             'awarded_amount' => $application->awarded_amount,
             'outcome_notes' => $application->outcome_notes,
             'outcome_at' => $application->outcome_at?->format('M d, Y'),
+            'student_response_status' => $application->student_response_status,
+            'student_response_label' => $this->studentResponseLabel($application->student_response_status),
+            'student_responded_at' => $application->student_responded_at?->format('M d, Y h:i A'),
+            'student_response_note' => $application->student_response_note,
+            'requires_student_response' => in_array($application->status, ['approved', 'awarded'], true),
+            'can_respond' => $this->canRespondToApplication($application),
             'dss_score' => $dss['score'],
             'dss_recommendation' => $dss['recommendation'],
             'dss_breakdown' => $dss,
@@ -815,6 +910,21 @@ class ApplicantDashboardController extends Controller
                 ? $this->scholarshipPayload($application->scholarship, $application->applicant)
                 : null,
         ];
+    }
+
+    private function canRespondToApplication(ScholarshipApplication $application): bool
+    {
+        return in_array($application->status, ['approved', 'awarded'], true)
+            && blank($application->student_response_status);
+    }
+
+    private function studentResponseLabel(?string $status): ?string
+    {
+        return match ($status) {
+            'accepted' => 'Accepted by applicant',
+            'declined' => 'Declined by applicant',
+            default => null,
+        };
     }
 
     private function documentReadiness(ScholarshipApplication $application): array

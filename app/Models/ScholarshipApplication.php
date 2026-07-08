@@ -29,6 +29,11 @@ class ScholarshipApplication extends Model
         'submitted_at',
         'terms_accepted_at',
         'terms_version',
+        'student_response_status',
+        'student_responded_at',
+        'student_response_terms_accepted_at',
+        'student_response_terms_version',
+        'student_response_note',
     ];
 
     protected function casts(): array
@@ -44,6 +49,8 @@ class ScholarshipApplication extends Model
             'reviewed_at' => 'datetime',
             'submitted_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
+            'student_responded_at' => 'datetime',
+            'student_response_terms_accepted_at' => 'datetime',
         ];
     }
 

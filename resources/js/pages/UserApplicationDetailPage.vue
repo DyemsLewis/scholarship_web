@@ -17,12 +17,16 @@ const uploadFile = ref(null);
 const fileInput = ref(null);
 const previewDocument = ref(null);
 const documentTermsAccepted = ref(false);
+const isResponding = ref(false);
+const responseNote = ref('');
+const responseTermsAccepted = ref(false);
 
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
 const uploadedDocumentNames = computed(() => new Set((application.value?.documents ?? []).map((document) => document.document_name)));
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
 const timeline = computed(() => application.value?.timeline ?? []);
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
+const canRespondToOffer = computed(() => Boolean(application.value?.can_respond));
 
 function statusLabel(status) {
     return String(status ?? 'submitted')
@@ -41,6 +45,18 @@ function statusClass(status) {
 
     if (['under_review', 'shortlisted', 'interview'].includes(status)) {
         return 'bg-slate-100 text-slate-700';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
+function responseClass(status) {
+    if (status === 'accepted') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'declined') {
+        return 'bg-rose-100 text-rose-800';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -268,6 +284,38 @@ async function deleteDocument(document) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to remove document.';
     } finally {
         isUploading.value = false;
+    }
+}
+
+async function submitOfferResponse(response) {
+    if (!application.value || !canRespondToOffer.value) {
+        return;
+    }
+
+    if (response === 'accepted' && !responseTermsAccepted.value) {
+        errorMessage.value = 'Please accept the scholarship response terms before accepting the offer.';
+        return;
+    }
+
+    isResponding.value = true;
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    try {
+        const result = await window.axios.patch(`/dashboard/applications/${application.value.id}/response`, {
+            response,
+            note: responseNote.value,
+            terms_accepted: response === 'accepted' ? '1' : '',
+        });
+
+        application.value = result.data.application;
+        responseNote.value = '';
+        responseTermsAccepted.value = false;
+        statusMessage.value = result.data.message ?? 'Scholarship response saved.';
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to save scholarship response.';
+    } finally {
+        isResponding.value = false;
     }
 }
 
@@ -651,6 +699,70 @@ onMounted(loadApplication);
                         </div>
 
                         <aside class="space-y-4">
+                            <section
+                                v-if="application.requires_student_response || application.student_response_status"
+                                class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                            >
+                                <p class="student-kicker">Scholarship Response</p>
+
+                                <div v-if="application.student_response_status" class="mt-3">
+                                    <span :class="['inline-flex rounded-md px-2.5 py-1 text-xs font-bold uppercase', responseClass(application.student_response_status)]">
+                                        {{ application.student_response_label || statusLabel(application.student_response_status) }}
+                                    </span>
+                                    <p class="mt-3 text-sm leading-6 text-slate-600">
+                                        Response recorded {{ application.student_responded_at || 'recently' }}.
+                                    </p>
+                                    <p v-if="application.student_response_note" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+                                        {{ application.student_response_note }}
+                                    </p>
+                                </div>
+
+                                <div v-else-if="canRespondToOffer" class="mt-3 space-y-3">
+                                    <h3 class="text-lg font-bold text-slate-950">
+                                        Confirm your decision
+                                    </h3>
+                                    <p class="text-sm leading-6 text-slate-600">
+                                        The provider marked this application as {{ statusLabel(application.status).toLowerCase() }}. Accept if you want to continue with the next steps, or decline if you will not proceed.
+                                    </p>
+
+                                    <textarea
+                                        v-model="responseNote"
+                                        rows="3"
+                                        maxlength="1000"
+                                        placeholder="Optional note to the provider"
+                                        class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-3 focus:ring-slate-100"
+                                    ></textarea>
+
+                                    <TermsAgreement
+                                        v-model="responseTermsAccepted"
+                                        context="acceptance"
+                                    />
+
+                                    <div class="grid gap-2">
+                                        <button
+                                            type="button"
+                                            :disabled="isResponding || !responseTermsAccepted"
+                                            class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                            @click="submitOfferResponse('accepted')"
+                                        >
+                                            {{ isResponding ? 'Saving...' : 'Accept offer' }}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="isResponding"
+                                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="submitOfferResponse('declined')"
+                                        >
+                                            Decline offer
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <p v-else class="mt-3 text-sm leading-6 text-slate-600">
+                                    No response is needed yet.
+                                </p>
+                            </section>
+
                             <section class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                                 <p class="student-kicker">Application</p>
                                 <div class="mt-3 grid gap-3 text-sm">

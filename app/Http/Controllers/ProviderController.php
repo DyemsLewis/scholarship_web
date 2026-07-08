@@ -640,7 +640,7 @@ class ProviderController extends Controller
 
         return response()->streamDownload(function () use ($provider) {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Outcome Date', 'Outcome Notes', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Review Notes']);
+            fputcsv($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'Applicant Response', 'Responded At', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Outcome Date', 'Outcome Notes', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Response Note', 'Review Notes']);
 
             ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship'])
@@ -658,6 +658,8 @@ class ProviderController extends Controller
                             $application->applicant?->email,
                             $application->applicant?->contact_number,
                             $application->status,
+                            $this->studentResponseLabel($application->student_response_status),
+                            $application->student_responded_at?->format('Y-m-d H:i:s'),
                             $application->dss_score,
                             $application->dss_recommendation,
                             $application->eligibility_score,
@@ -670,6 +672,7 @@ class ProviderController extends Controller
                             implode('; ', $application->document_checklist ?? []),
                             $application->documents->count().' uploaded',
                             $application->notes,
+                            $application->student_response_note,
                             $application->review_notes,
                         ]);
                     }
@@ -925,6 +928,13 @@ class ProviderController extends Controller
             'outcome_notes' => $application->outcome_notes,
             'outcome_at' => $application->outcome_at?->format('Y-m-d'),
             'reviewed_at' => $application->reviewed_at?->format('M d, Y h:i A'),
+            'student_response_status' => $application->student_response_status,
+            'student_response_label' => $this->studentResponseLabel($application->student_response_status),
+            'student_responded_at' => $application->student_responded_at?->format('M d, Y h:i A'),
+            'student_response_note' => $application->student_response_note,
+            'requires_student_response' => in_array($application->status, ['approved', 'awarded'], true),
+            'can_receive_student_response' => in_array($application->status, ['approved', 'awarded'], true)
+                && blank($application->student_response_status),
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             'applicant' => [
@@ -1196,7 +1206,7 @@ class ProviderController extends Controller
                 'awarded' => [
                     'type' => 'application_outcome',
                     'title' => 'Award recorded',
-                    'message' => "Your application for {$programTitle} has been awarded. Check the provider note for release details.",
+                    'message' => "Your application for {$programTitle} has been awarded. Open the record to confirm whether you will proceed.",
                 ],
                 'not_awarded' => [
                     'type' => 'application_outcome',
@@ -1248,7 +1258,7 @@ class ProviderController extends Controller
                 'approved' => [
                     'type' => 'application_status',
                     'title' => 'Application approved',
-                    'message' => "Your application for {$programTitle} has been approved. Watch for award details from the provider.",
+                    'message' => "Your application for {$programTitle} has been approved. Open the record to accept or decline the offer.",
                 ],
                 'rejected' => [
                     'type' => 'application_status',
@@ -1268,5 +1278,14 @@ class ProviderController extends Controller
     private function statusLabel(string $status): string
     {
         return str($status)->replace('_', ' ')->title()->toString();
+    }
+
+    private function studentResponseLabel(?string $status): ?string
+    {
+        return match ($status) {
+            'accepted' => 'Accepted by applicant',
+            'declined' => 'Declined by applicant',
+            default => null,
+        };
     }
 }

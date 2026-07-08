@@ -64,6 +64,15 @@ const content = {
             'Admin review is required before new or resubmitted programs become visible to students.',
         ],
     },
+    acceptance: {
+        title: 'I understand and confirm my scholarship response.',
+        summary: 'If you accept, the provider may proceed with the next award, release, or verification steps. If you decline, the provider will be notified.',
+        details: [
+            'Final release of support still depends on the provider requirements and schedule.',
+            'For younger applicants, a parent or guardian should help confirm the response.',
+            'Keep your contact details and documents updated for any next steps.',
+        ],
+    },
 };
 
 const selectedContent = computed(() => content[props.context] ?? content.account);

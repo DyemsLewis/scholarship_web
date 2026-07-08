@@ -37,6 +37,7 @@ Route::get('/dashboard/student-documents/{document}/view', [ApplicantDashboardCo
 Route::get('/dashboard/student-documents/{document}/download', [ApplicantDashboardController::class, 'downloadPreparedDocument'])->middleware('auth')->name('dashboard.student-documents.download');
 Route::delete('/dashboard/student-documents/{document}', [ApplicantDashboardController::class, 'deletePreparedDocument'])->middleware('auth')->name('dashboard.student-documents.destroy');
 Route::post('/dashboard/applications', [ApplicantDashboardController::class, 'storeApplication'])->middleware('auth')->name('dashboard.applications.store');
+Route::patch('/dashboard/applications/{application}/response', [ApplicantDashboardController::class, 'respondToApplication'])->middleware('auth')->name('dashboard.applications.response');
 Route::post('/dashboard/applications/{application}/documents', [ApplicantDashboardController::class, 'uploadDocument'])->middleware('auth')->name('dashboard.applications.documents.store');
 Route::delete('/dashboard/documents/{document}', [ApplicantDashboardController::class, 'deleteDocument'])->middleware('auth')->name('dashboard.documents.destroy');
 Route::post('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardController::class, 'saveScholarship'])->middleware('auth')->name('dashboard.scholarships.save');
