@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue';
+import EmailVerificationReminder from './EmailVerificationReminder.vue';
 import NotificationBell from './NotificationBell.vue';
 
 const emit = defineEmits(['logout']);
@@ -89,6 +90,8 @@ function logout() {
         </div>
     </header>
 
+    <EmailVerificationReminder class="mx-4 my-3 sm:mx-6 lg:mx-auto lg:max-w-7xl" />
+
     <div
         v-if="isMenuOpen"
         class="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm md:hidden"
@@ -145,6 +148,7 @@ function logout() {
                     <div class="mt-4">
                         <NotificationBell align="left" mode="sidebar" />
                     </div>
+                    <EmailVerificationReminder class="mt-4" mode="dark" />
                     <button
                         type="button"
                         class="mt-4 w-full rounded-md border border-white/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white hover:text-slate-950"

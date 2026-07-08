@@ -1,4 +1,5 @@
 <script setup>
+import EmailVerificationReminder from './EmailVerificationReminder.vue';
 import NotificationBell from './NotificationBell.vue';
 
 const emit = defineEmits(['logout']);
@@ -66,6 +67,8 @@ function isActive(href) {
             <div class="mt-6">
                 <NotificationBell align="left" mode="sidebar" />
             </div>
+
+            <EmailVerificationReminder class="mt-4" mode="dark" />
 
             <div class="mt-6 border-t border-white/10 pt-4 lg:mt-auto">
                 <button
