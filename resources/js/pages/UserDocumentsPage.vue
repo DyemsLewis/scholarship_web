@@ -38,17 +38,17 @@ const applicationsPage = ref(1);
 const documentGuideItems = [
     {
         title: 'Choose type',
-        text: 'Pick the requirement name from the list before uploading.',
+        text: 'Select the requirement.',
         icon: 'fa-solid fa-list-check',
     },
     {
         title: 'Upload once',
-        text: 'Reusable files can be attached to matching applications later.',
+        text: 'Reuse files later.',
         icon: 'fa-solid fa-cloud-arrow-up',
     },
     {
         title: 'Keep updated',
-        text: 'Replace old files when providers request clearer copies.',
+        text: 'Replace when needed.',
         icon: 'fa-solid fa-rotate',
     },
 ];
@@ -310,7 +310,7 @@ onMounted(loadDocuments);
                 <ApplicantPageHeader
                     eyebrow="Documents"
                     title="Prepare files once"
-                    description="Save common requirements here so applications feel lighter later."
+                    description="Upload reusable requirements before applying."
                     icon="fa-solid fa-folder-open"
                     action-href="/dashboard/scholarships"
                     action-label="Find scholarships"
@@ -334,12 +334,19 @@ onMounted(loadDocuments);
 
                     <section class="student-card overflow-hidden">
                         <div class="border-b border-slate-200 bg-slate-50 p-5">
-                            <p class="student-kicker">
-                                Library
-                            </p>
-                            <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                Upload reusable requirements
-                            </h3>
+                            <div class="flex items-center gap-3">
+                                <span class="student-section-mark">
+                                    <i class="fa-solid fa-folder-plus text-sm"></i>
+                                </span>
+                                <div>
+                                    <p class="student-kicker">
+                                        Library
+                                    </p>
+                                    <h3 class="mt-1 text-xl font-bold text-slate-950">
+                                        Reusable requirements
+                                    </h3>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="border-b border-slate-200 bg-white">
@@ -489,14 +496,14 @@ onMounted(loadDocuments);
                                 </div>
                             </div>
                             <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-                                No prepared documents yet.
+                                No prepared documents yet. Upload one file to start your library.
                             </div>
                         </div>
                     </section>
 
                     <section v-if="applications.length === 0" class="student-card p-6">
                         <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                            No submitted applications yet. You can still upload prepared documents above.
+                            No submitted applications yet. Prepared documents will be ready when you apply.
                         </div>
                     </section>
 

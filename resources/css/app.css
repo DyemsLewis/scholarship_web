@@ -33,9 +33,12 @@
     .student-shell {
         @apply min-h-screen text-slate-900;
         background:
-            radial-gradient(circle at 10% 8%, rgba(252, 211, 77, 0.16), transparent 26%),
-            radial-gradient(circle at 90% 12%, rgba(8, 20, 38, 0.08), transparent 30%),
+            radial-gradient(circle at 8% 6%, rgba(252, 211, 77, 0.18), transparent 22%),
+            radial-gradient(circle at 94% 10%, rgba(14, 165, 233, 0.10), transparent 26%),
+            linear-gradient(90deg, rgba(8, 20, 38, 0.05) 1px, transparent 1px),
+            linear-gradient(180deg, rgba(8, 20, 38, 0.04) 1px, transparent 1px),
             linear-gradient(180deg, #f8fafc 0%, #eef2f6 52%, #e7edf4 100%);
+        background-size: auto, auto, 3.8rem 3.8rem, 3.8rem 3.8rem, auto;
     }
 
     .student-page {
@@ -92,7 +95,12 @@
     }
 
     .student-visual-card {
-        @apply rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md;
+        @apply relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md;
+    }
+
+    .student-visual-card::after {
+        content: '';
+        @apply pointer-events-none absolute -right-8 -top-8 h-20 w-20 rounded-full bg-amber-100/60;
     }
 
     .student-icon-badge {
@@ -113,5 +121,26 @@
 
     .student-chip {
         @apply rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white;
+    }
+
+    .student-section-head {
+        @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+    }
+
+    .student-section-mark {
+        @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-950 text-amber-200 shadow-sm;
+    }
+
+    .student-stat-tile {
+        @apply rounded-lg border border-slate-200 bg-slate-50 p-3;
+    }
+
+    .student-action-card {
+        @apply relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md;
+    }
+
+    .student-action-card::before {
+        content: '';
+        @apply absolute inset-x-0 top-0 h-1 bg-slate-900;
     }
 }

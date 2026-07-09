@@ -32,25 +32,25 @@ const notes = ref('');
 const applicationTermsAccepted = ref(false);
 
 const steps = [
-    { label: 'Program', detail: 'Use selected scholarship' },
-    { label: 'Details', detail: 'Review requirements' },
-    { label: 'Documents', detail: 'Confirm checklist' },
-    { label: 'Submit', detail: 'Final review' },
+    { label: 'Program', detail: 'Selected scholarship' },
+    { label: 'Details', detail: 'Quick review' },
+    { label: 'Documents', detail: 'Checklist' },
+    { label: 'Submit', detail: 'Final check' },
 ];
 const applicationGuideItems = [
     {
         title: 'Start from a program',
-        text: 'Choose a scholarship first so the application stays focused.',
+        text: 'Pick one scholarship.',
         icon: 'fa-solid fa-graduation-cap',
     },
     {
         title: 'Confirm documents',
-        text: 'Prepared files are matched automatically when possible.',
+        text: 'Use prepared files.',
         icon: 'fa-solid fa-folder-tree',
     },
     {
         title: 'Track response',
-        text: 'After provider review, approved offers can be accepted or declined.',
+        text: 'Follow review status.',
         icon: 'fa-solid fa-timeline',
     },
 ];
@@ -61,11 +61,11 @@ const applicationModeOptions = [
     { value: 'provider_review', label: 'Provider review only' },
 ];
 const dssApplicationGuideItems = [
-    { label: 'Eligibility', weight: '35%', detail: 'Profile fit with the scholarship rules.' },
-    { label: 'Documents', weight: '25%', detail: 'Confirmed, uploaded, and accepted requirements.' },
-    { label: 'Academic', weight: '20%', detail: 'Grades compared with the listed requirement.' },
-    { label: 'Need', weight: '15%', detail: 'Income information for assistance-focused programs.' },
-    { label: 'Review', weight: '5%', detail: 'Current status and provider review signals.' },
+    { label: 'Eligibility', weight: '35%', detail: 'Profile fit.' },
+    { label: 'Documents', weight: '25%', detail: 'File readiness.' },
+    { label: 'Academic', weight: '20%', detail: 'Grade rule.' },
+    { label: 'Need', weight: '15%', detail: 'Income context.' },
+    { label: 'Review', weight: '5%', detail: 'Status signals.' },
 ];
 const selectedScholarship = computed(() => scholarships.value.find((scholarship) => scholarship.id === Number(selectedScholarshipId.value)));
 const selectedRequirements = computed(() => documentRequirements(selectedScholarship.value?.requirements));
@@ -530,7 +530,7 @@ watch(selectedScholarship, (scholarship) => {
                 <ApplicantPageHeader
                     eyebrow="Application Desk"
                     title="Apply step by step"
-                    description="Pick a scholarship, confirm files, then submit when everything is ready."
+                    description="Choose a program, confirm files, and submit."
                     icon="fa-solid fa-route"
                     action-href="/dashboard/scholarships"
                     action-label="Choose scholarship"
@@ -599,10 +599,10 @@ watch(selectedScholarship, (scholarship) => {
 
                         <details class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm">
                             <summary class="cursor-pointer font-bold text-slate-950">
-                                How application DSS scores work
+                                DSS score guide
                             </summary>
                             <p class="mt-2 leading-6 text-slate-600">
-                                After submission, the Decision Support System scores the application from the current profile, documents, scholarship rules, and review status. The score helps providers prioritize review, but it is not the final decision.
+                                DSS summarizes profile fit, documents, and review signals. Providers still make the final decision.
                             </p>
                             <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                                 <div
@@ -678,7 +678,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 Choose from Scholarships first
                                             </h3>
                                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                                Applications now use the program selected from the Scholarships page, so this area stays focused on review, checklist, and submission.
+                                                Applications use the program selected from Scholarships.
                                             </p>
                                         </div>
                                         <a
@@ -921,7 +921,7 @@ watch(selectedScholarship, (scholarship) => {
                                             Confirm prepared documents
                                         </h3>
                                         <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                            Mark only the documents you already have. The checklist will be saved with your application record.
+                                            Mark the files you already have.
                                         </p>
                                     </div>
                                     <div class="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm">

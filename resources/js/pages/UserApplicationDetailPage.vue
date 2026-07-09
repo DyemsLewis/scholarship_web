@@ -377,7 +377,7 @@ onMounted(loadApplication);
                                     <h3 class="mt-1 text-lg font-bold text-slate-950">
                                         {{ application.scholarship?.title || 'Scholarship' }}
                                     </h3>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">
+                                    <p class="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">
                                         {{ application.scholarship?.description || 'No description provided.' }}
                                     </p>
                                 </div>
@@ -434,7 +434,7 @@ onMounted(loadApplication);
                                         {{ step.label }}
                                     </div>
                                 </div>
-                                <p class="mt-3 text-sm leading-6 text-slate-600">
+                                <p class="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
                                     {{ application.status_progress.next_action }}
                                 </p>
                             </section>
@@ -451,10 +451,10 @@ onMounted(loadApplication);
                                         {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
                                     </span>
                                 </div>
-                                <p class="mt-3 text-sm font-semibold leading-6 text-slate-800">
+                                <p class="mt-3 line-clamp-2 text-sm font-semibold leading-6 text-slate-800">
                                     {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'DSS reviewed the current application data.' }}
                                 </p>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">
+                                <p class="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">
                                     {{ application.dss_explanation?.next_action || 'Wait for provider review and document feedback.' }}
                                 </p>
 
@@ -470,7 +470,7 @@ onMounted(loadApplication);
                                             <li
                                                 v-for="item in application.dss_explanation.strengths"
                                                 :key="item"
-                                                class="text-sm leading-6 text-slate-600"
+                                                class="line-clamp-2 text-sm leading-6 text-slate-600"
                                             >
                                                 {{ item }}
                                             </li>
@@ -484,7 +484,7 @@ onMounted(loadApplication);
                                             <li
                                                 v-for="item in application.dss_explanation.needs_attention"
                                                 :key="item"
-                                                class="text-sm leading-6 text-slate-600"
+                                                class="line-clamp-2 text-sm leading-6 text-slate-600"
                                             >
                                                 {{ item }}
                                             </li>
@@ -509,7 +509,7 @@ onMounted(loadApplication);
                                             <p class="mt-1 text-xs font-bold uppercase tracking-[0.1em] text-slate-400">
                                                 {{ criterion.score }}% score x {{ criterion.weight }}% weight
                                             </p>
-                                            <p class="mt-1 leading-6 text-slate-600">
+                                            <p class="mt-1 line-clamp-2 leading-6 text-slate-600">
                                                 {{ criterion.note }}
                                             </p>
                                         </div>

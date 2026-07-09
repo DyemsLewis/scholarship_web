@@ -37,6 +37,12 @@ defineProps({
 
 <template>
     <header class="student-hero">
+        <div class="pointer-events-none absolute right-6 top-4 hidden items-center gap-2 opacity-70 sm:flex">
+            <span class="h-2 w-8 rounded-full bg-amber-300"></span>
+            <span class="h-2 w-2 rounded-full bg-slate-900"></span>
+            <span class="h-2 w-2 rounded-full bg-slate-300"></span>
+        </div>
+
         <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex min-w-0 gap-4">
                 <span class="student-hero-icon">
@@ -49,7 +55,7 @@ defineProps({
                     <span class="mt-2 block font-display text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">
                         {{ title }}
                     </span>
-                    <span v-if="description" class="mt-3 block max-w-2xl text-sm leading-6 text-slate-600">
+                    <span v-if="description" class="mt-3 block max-w-2xl text-sm leading-6 text-slate-600 sm:line-clamp-2">
                         {{ description }}
                     </span>
                 </span>

@@ -266,7 +266,7 @@ onMounted(loadScholarship);
                 <ApplicantPageHeader
                     eyebrow="Scholarship Details"
                     title="Review the program"
-                    description="Check fit, requirements, location, and application steps before applying."
+                    description="Check fit, requirements, and location."
                     icon="fa-solid fa-graduation-cap"
                     action-href="/dashboard/scholarships"
                     action-label="Back to scholarships"
@@ -322,7 +322,7 @@ onMounted(loadScholarship);
                                 </div>
                             </div>
 
-                            <p class="mt-5 max-w-4xl text-sm leading-6 text-slate-600">
+                            <p class="mt-5 line-clamp-3 max-w-4xl text-sm leading-6 text-slate-600">
                                 {{ scholarship.description }}
                             </p>
                         </div>
@@ -368,7 +368,7 @@ onMounted(loadScholarship);
                                     </span>
                                 </div>
 
-                                <p class="mt-4 text-sm leading-6 text-slate-600">
+                                <p class="mt-4 line-clamp-3 text-sm leading-6 text-slate-600">
                                     {{ scholarship.eligibility || 'No eligibility description has been posted yet.' }}
                                 </p>
 
@@ -475,7 +475,7 @@ onMounted(loadScholarship);
                                 <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
                                     <p class="font-bold text-slate-900">How the DSS reads this</p>
                                     <p class="mt-1">
-                                        The Decision Support System compares your profile with the provider rules. The score is the matched criteria divided by the applicable criteria, so open rules do not lower your score and provider review is still required.
+                                        DSS compares your profile with provider rules. Provider review is still final.
                                     </p>
                                 </div>
 
@@ -519,7 +519,7 @@ onMounted(loadScholarship);
                                         Ready to continue?
                                     </h2>
                                     <p class="mt-2 text-sm leading-6 text-slate-300">
-                                        Save this program or start the application wizard when your profile is ready.
+                                        Save this program or start the wizard.
                                     </p>
                                 </div>
 
@@ -591,7 +591,7 @@ onMounted(loadScholarship);
                                 <h3 class="mt-2 text-lg font-bold text-slate-950">
                                     {{ scholarship.location_name || 'Location not named' }}
                                 </h3>
-                                <p class="mt-2 text-sm leading-6 text-slate-600">
+                                <p class="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">
                                     {{ scholarship.location_address || scholarship.eligible_locations || 'No map address added yet.' }}
                                 </p>
                                 <p v-if="scholarship.distance_label" class="mt-2 text-xs font-bold text-slate-700">

@@ -12,16 +12,16 @@ defineProps({
         <article
             v-for="item in items"
             :key="item.title"
-            class="student-visual-card flex gap-3"
+            class="student-action-card flex min-h-24 gap-3"
         >
             <span class="student-icon-badge">
                 <i :class="[item.icon || 'fa-solid fa-circle-check', 'text-sm']"></i>
             </span>
-            <span class="min-w-0">
+            <span class="relative min-w-0">
                 <span class="block text-sm font-bold text-slate-950">
                     {{ item.title }}
                 </span>
-                <span class="mt-1 block text-xs leading-5 text-slate-600">
+                <span class="mt-1 block line-clamp-2 text-xs leading-5 text-slate-600">
                     {{ item.text }}
                 </span>
             </span>

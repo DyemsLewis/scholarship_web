@@ -1,7 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
-import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
@@ -16,26 +15,10 @@ const form = ref(emptyForm());
 const activeSection = ref('personal');
 const addressLookupTrigger = ref(0);
 
-const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
-const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
-const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
-const profileGuideItems = [
-    {
-        title: 'Learner details',
-        text: 'Basic identity and contact information for applications.',
-        icon: 'fa-solid fa-address-card',
-    },
-    {
-        title: 'School record',
-        text: 'Education level, grade/year, and academic value for matching.',
-        icon: 'fa-solid fa-book-open-reader',
-    },
-    {
-        title: 'Support context',
-        text: 'Location, need, and guardian details when they apply.',
-        icon: 'fa-solid fa-user-shield',
-    },
-];
+const fieldClass = 'min-w-0';
+const labelClass = 'mb-2 block min-h-10 text-sm font-semibold leading-5 text-slate-700';
+const inputClass = 'min-h-11 w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const compactInputClass = 'min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 
 const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
 const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
@@ -137,7 +120,7 @@ const profileSections = [
         label: 'Personal',
         detail: 'Identity',
         icon: 'fa-solid fa-address-card',
-        impact: 'Basic applicant information.',
+        impact: 'Applicant identity.',
         required: true,
         fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'gender', 'birthdate', 'contact_number', 'account_managed_by'],
         requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number'],
@@ -147,7 +130,7 @@ const profileSections = [
         label: 'Learning',
         detail: 'School record',
         icon: 'fa-solid fa-book-open-reader',
-        impact: 'Used for matching and eligibility.',
+        impact: 'Matching details.',
         required: true,
         fields: ['education_level', 'school', 'school_type', 'learner_reference_number', 'course_or_strand', 'year_level', 'enrollment_status', 'grading_scale', 'gwa'],
         requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'grading_scale', 'gwa'],
@@ -157,7 +140,7 @@ const profileSections = [
         label: 'Location and need',
         detail: 'Address and need',
         icon: 'fa-solid fa-location-dot',
-        impact: 'Used for distance and need-based matching.',
+        impact: 'Distance and need.',
         required: true,
         fields: ['income_bracket', 'household_size', 'address', 'barangay', 'city', 'province', 'region'],
         requiredFields: ['income_bracket', 'city', 'province', 'region'],
@@ -167,7 +150,7 @@ const profileSections = [
         label: 'Guardian',
         detail: 'Contact person',
         icon: 'fa-solid fa-user-shield',
-        impact: 'Parent or guardian contact.',
+        impact: 'Trusted contact.',
         required: true,
         fields: ['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
         requiredFields: ['guardian_name', 'guardian_contact'],
@@ -177,7 +160,7 @@ const profileSections = [
         label: 'Review',
         detail: 'Final check',
         icon: 'fa-solid fa-clipboard-check',
-        impact: 'Confirm the profile before applying.',
+        impact: 'Check before applying.',
         required: false,
         fields: [],
     },
@@ -241,7 +224,7 @@ const profileQuality = computed(() => {
     };
 });
 const activeProfileSection = computed(() => profileSections.find((section) => section.id === activeSection.value) ?? profileSections[0]);
-const activeSectionIndex = computed(() => profileSections.findIndex((section) => section.id === activeProfileSection.value.id));
+const visibleActiveSectionIndex = computed(() => visibleProfileSections.value.findIndex((section) => section.id === activeProfileSection.value.id));
 const recommendedSection = computed(() => {
     const section = profileSections.find((item) => item.required && sectionProgress(item).complete === false);
 
@@ -421,7 +404,7 @@ function openSection(sectionId) {
 }
 
 function goToPreviousSection() {
-    const previous = profileSections[activeSectionIndex.value - 1];
+    const previous = visibleProfileSections.value[visibleActiveSectionIndex.value - 1];
 
     if (previous) {
         openSection(previous.id);
@@ -429,7 +412,7 @@ function goToPreviousSection() {
 }
 
 function goToNextSection() {
-    const next = profileSections[activeSectionIndex.value + 1];
+    const next = visibleProfileSections.value[visibleActiveSectionIndex.value + 1];
 
     if (next) {
         openSection(next.id);
@@ -893,7 +876,7 @@ onMounted(loadProfile);
                 <ApplicantPageHeader
                     eyebrow="Student Profile"
                     title="Build your learner profile"
-                    description="Keep learner, school, guardian, and matching details organized by page."
+                    description="Keep learner details organized for better matching."
                     icon="fa-solid fa-id-card"
                     action-href="/dashboard/scholarships"
                     action-label="See matches"
@@ -901,86 +884,112 @@ onMounted(loadProfile);
                     secondary-label="Prepare files"
                 />
 
-                <ApplicantGuideStrip class="mt-5" :items="profileGuideItems" />
-
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading profile...
                 </div>
 
-                <div v-else class="mt-6 space-y-5">
-                    <section class="student-card p-4">
-                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div>
-                                <p class="student-kicker">
-                                    Profile Pages
-                                </p>
-                                <div class="mt-2 flex flex-wrap items-center gap-2">
-                                    <p class="text-sm font-bold text-slate-950">
+                <div v-else class="mt-6 grid gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+                    <aside class="student-card h-fit p-4 lg:sticky lg:top-24">
+                        <div class="rounded-lg bg-slate-950 p-4 text-white">
+                            <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
+                                Profile Progress
+                            </p>
+                            <div class="mt-4 flex items-end justify-between gap-3">
+                                <div>
+                                    <p class="font-display text-3xl font-bold">
+                                        {{ profileCompletion }}%
+                                    </p>
+                                    <p class="mt-1 text-sm font-semibold text-slate-200">
                                         {{ profileQuality.label }}
                                     </p>
-                                    <span class="rounded-md bg-slate-50 px-2 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                                        {{ completedRequiredFields }}/{{ requiredFieldData.length }} done
-                                    </span>
-                                    <span v-if="missingProfileFields.length" class="text-xs font-semibold text-slate-500">
-                                        Next: {{ missingProfileFields.slice(0, 3).map((field) => field.label).join(', ') }}
-                                    </span>
-                                    <span v-else class="text-xs font-semibold text-slate-700">
-                                        Ready to submit applications.
-                                    </span>
                                 </div>
+                                <span class="rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold text-slate-200 ring-1 ring-white/10">
+                                    {{ completedRequiredFields }}/{{ requiredFieldData.length }}
+                                </span>
                             </div>
-                            <div class="flex flex-wrap gap-2">
-                                <button
-                                    type="button"
-                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                    :disabled="isSaving"
-                                    @click="saveProfile(false)"
-                                >
-                                    {{ isSaving ? 'Saving...' : 'Save profile' }}
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                    :disabled="isSaving || missingProfileFields.length > 0"
-                                    @click="saveProfile(true)"
-                                >
-                                    Complete profile
-                                </button>
+                            <div class="mt-4 h-2 overflow-hidden rounded-full bg-white/15">
+                                <div class="h-full rounded-full bg-amber-300 transition-all" :style="{ width: `${profileCompletion}%` }"></div>
                             </div>
+                            <p class="mt-3 text-xs leading-5 text-slate-300">
+                                {{ profileQuality.detail }}
+                            </p>
                         </div>
 
-                        <nav class="mt-4 flex w-full flex-nowrap gap-2 overflow-x-auto pb-1">
+                        <div v-if="missingProfileFields.length" class="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-3">
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">
+                                Next needed
+                            </p>
+                            <p class="mt-1 text-sm leading-5 text-slate-700">
+                                {{ missingProfileFields.slice(0, 3).map((field) => field.label).join(', ') }}{{ missingProfileFields.length > 3 ? ', and more' : '' }}
+                            </p>
+                        </div>
+
+                        <nav class="mt-4 grid gap-2">
                             <button
                                 v-for="section in visibleProfileSections"
                                 :key="section.id"
                                 type="button"
                                 :class="[
-                                    'min-w-[10rem] flex-1 rounded-lg border px-3 py-2.5 text-left transition hover:border-slate-400 hover:bg-white',
+                                    'rounded-lg border px-3 py-3 text-left transition hover:border-slate-400 hover:bg-white',
                                     activeSection === section.id ? 'border-slate-900 bg-white shadow-sm' : 'border-slate-200 bg-slate-50',
                                 ]"
                                 @click="openSection(section.id)"
                             >
-                                <span class="flex items-center justify-between gap-3">
-                                    <span class="flex min-w-0 items-center gap-2 font-bold text-slate-950">
-                                        <i :class="[section.icon, 'w-4 shrink-0 text-center text-xs text-amber-700']"></i>
-                                        <span class="truncate">{{ section.label }}</span>
-                                    </span>
+                                <span class="flex items-start gap-3">
                                     <span
-                                        v-if="section.fields.length"
                                         :class="[
-                                            'shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold',
-                                            sectionStatusClass(section),
+                                            'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+                                            activeSection === section.id ? 'bg-slate-900 text-amber-200' : 'bg-white text-slate-700 ring-1 ring-slate-200',
                                         ]"
                                     >
-                                        {{ sectionStatusLabel(section) }}
+                                        <i :class="[section.icon, 'text-xs']"></i>
                                     </span>
-                                    <span v-else class="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
-                                        Check
+                                    <span class="min-w-0 flex-1">
+                                        <span class="flex items-center justify-between gap-2">
+                                            <span class="truncate text-sm font-bold text-slate-950">{{ section.label }}</span>
+                                            <span
+                                                v-if="section.fields.length"
+                                                :class="[
+                                                    'shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold',
+                                                    sectionStatusClass(section),
+                                                ]"
+                                            >
+                                                {{ sectionStatusLabel(section) }}
+                                            </span>
+                                            <span v-else class="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+                                                Check
+                                            </span>
+                                        </span>
+                                        <span class="mt-1 block text-xs leading-4 text-slate-500">
+                                            {{ section.detail }}
+                                        </span>
+                                        <span v-if="section.fields.length" class="mt-2 block h-1 overflow-hidden rounded-full bg-slate-200">
+                                            <span class="block h-full rounded-full bg-slate-900" :style="{ width: `${sectionProgress(section).percent}%` }"></span>
+                                        </span>
                                     </span>
                                 </span>
                             </button>
                         </nav>
-                    </section>
+
+                        <div class="mt-4 grid gap-2">
+                            <button
+                                type="button"
+                                class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                :disabled="isSaving"
+                                @click="saveProfile(false)"
+                            >
+                                {{ isSaving ? 'Saving...' : 'Save progress' }}
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                :disabled="isSaving || missingProfileFields.length > 0"
+                                @click="saveProfile(true)"
+                            >
+                                Mark complete
+                            </button>
+                        </div>
+                    </aside>
 
                     <section class="space-y-5">
                         <div v-if="statusMessage || errorMessage" class="student-card p-4">
@@ -1003,13 +1012,13 @@ onMounted(loadProfile);
                                 </span>
                             </div>
 
-                            <div class="mt-5 grid gap-4 md:grid-cols-[1fr_5rem_1fr_7rem] md:items-end">
-                                <div>
+                            <div class="mt-5 grid gap-4 md:grid-cols-12">
+                                <div :class="[fieldClass, 'md:col-span-4']">
                                     <label :class="labelClass" for="profile-first-name">First name</label>
                                     <input id="profile-first-name" v-model="form.first_name" :class="inputClass">
                                 </div>
-                                <div>
-                                    <label :class="[labelClass, 'md:text-center']" for="profile-middle">M.I.</label>
+                                <div :class="[fieldClass, 'md:col-span-2']">
+                                    <label :class="[labelClass, 'text-center']" for="profile-middle">M.I.</label>
                                     <input
                                         id="profile-middle"
                                         :value="form.middle_initial"
@@ -1018,11 +1027,11 @@ onMounted(loadProfile);
                                         @input="handleMiddleInitialInput"
                                     >
                                 </div>
-                                <div>
+                                <div :class="[fieldClass, 'md:col-span-4']">
                                     <label :class="labelClass" for="profile-last-name">Last name</label>
                                     <input id="profile-last-name" v-model="form.last_name" :class="inputClass">
                                 </div>
-                                <div>
+                                <div :class="[fieldClass, 'md:col-span-2']">
                                     <label :class="labelClass" for="profile-suffix">Suffix <span class="font-normal text-sky-600">(optional)</span></label>
                                     <select id="profile-suffix" v-model="form.suffix" :class="inputClass">
                                         <option value="">None</option>
@@ -1070,7 +1079,7 @@ onMounted(loadProfile);
                                         Account context
                                     </p>
                                     <p class="mt-1 text-xs leading-5 text-slate-500">
-                                        Helps the portal handle child or guardian-managed profiles correctly.
+                                        Use this for guardian-managed accounts.
                                     </p>
                                 </div>
                                 <div>
@@ -1532,6 +1541,30 @@ onMounted(loadProfile);
                                 Profile is application-ready. You can save it as complete.
                             </div>
                         </section>
+
+                        <div class="student-card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <button
+                                type="button"
+                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                :disabled="visibleActiveSectionIndex <= 0"
+                                @click="goToPreviousSection"
+                            >
+                                Previous
+                            </button>
+
+                            <p class="text-center text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                {{ activeProfileSection.label }} · {{ visibleActiveSectionIndex + 1 }} of {{ visibleProfileSections.length }}
+                            </p>
+
+                            <button
+                                type="button"
+                                class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                :disabled="visibleActiveSectionIndex >= visibleProfileSections.length - 1"
+                                @click="goToNextSection"
+                            >
+                                Next section
+                            </button>
+                        </div>
                     </section>
 
                 </div>

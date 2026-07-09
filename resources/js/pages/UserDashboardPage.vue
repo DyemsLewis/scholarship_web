@@ -25,19 +25,19 @@ const notifications = ref([]);
 const quickTools = [
     {
         title: 'Recommended programs',
-        text: 'Browse scholarships arranged by profile fit.',
+        text: 'Best-fit scholarships.',
         href: '/dashboard/scholarships',
         icon: 'fa-solid fa-wand-magic-sparkles',
     },
     {
         title: 'Prepared documents',
-        text: 'Upload common files before applying.',
+        text: 'Reusable files.',
         href: '/dashboard/documents',
         icon: 'fa-solid fa-list-check',
     },
     {
         title: 'Application wizard',
-        text: 'Continue an application step by step.',
+        text: 'Apply step by step.',
         href: '/dashboard/applications',
         icon: 'fa-solid fa-route',
     },
@@ -172,7 +172,7 @@ onMounted(loadDashboard);
                 <ApplicantPageHeader
                     eyebrow="Dashboard"
                     :title="`Welcome back, ${user?.first_name || 'Scholar'}`"
-                    description="Your profile, matches, documents, and next steps at a glance."
+                    description="A quick view of matches, files, and next actions."
                     icon="fa-solid fa-table-columns"
                     action-href="/dashboard/scholarships"
                     action-label="Browse scholarships"
@@ -190,14 +190,19 @@ onMounted(loadDashboard);
 
                 <div v-else class="mt-6 space-y-6">
                     <section class="student-card p-4">
-                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                            <div>
-                                <p class="student-kicker">
-                                    To Do
-                                </p>
-                                <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                    What needs attention
-                                </h3>
+                        <div class="student-section-head">
+                            <div class="flex items-center gap-3">
+                                <span class="student-section-mark">
+                                    <i class="fa-solid fa-compass text-sm"></i>
+                                </span>
+                                <div>
+                                    <p class="student-kicker">
+                                        To Do
+                                    </p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                        Needs attention
+                                    </h3>
+                                </div>
                             </div>
                         </div>
 
@@ -231,12 +236,12 @@ onMounted(loadDashboard);
                             v-for="tool in quickTools"
                             :key="tool.title"
                             :href="tool.href"
-                            class="student-visual-card flex items-start gap-3"
+                            class="student-action-card flex items-start gap-3"
                         >
                             <span class="student-icon-badge">
                                 <i :class="[tool.icon, 'text-sm']"></i>
                             </span>
-                            <span>
+                            <span class="relative">
                                 <span class="block text-sm font-bold text-slate-950">
                                     {{ tool.title }}
                                 </span>
@@ -249,22 +254,32 @@ onMounted(loadDashboard);
 
                     <section class="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
                         <div class="student-card p-5">
-                            <p class="student-kicker">
-                                Next Steps
-                            </p>
-                            <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                Continue your scholarship work
-                            </h3>
-                            <div class="mt-4 grid gap-2">
+                            <div class="flex items-center gap-3">
+                                <span class="student-section-mark">
+                                    <i class="fa-solid fa-shoe-prints text-sm"></i>
+                                </span>
+                                <div>
+                                    <p class="student-kicker">
+                                        Next
+                                    </p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                        Continue here
+                                    </h3>
+                                </div>
+                            </div>
+                            <div v-if="nextSteps.length === 0" class="student-empty-state mt-4">
+                                Nothing urgent right now.
+                            </div>
+                            <div v-else class="mt-4 grid gap-2">
                                 <div
-                                    v-for="(step, index) in nextSteps"
+                                    v-for="(step, index) in nextSteps.slice(0, 4)"
                                     :key="step"
                                     class="flex gap-3 rounded-md bg-slate-50 p-3 ring-1 ring-slate-200/70"
                                 >
-                                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-sm font-bold text-slate-700 ring-1 ring-slate-200">
+                                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-950 text-xs font-bold text-amber-200">
                                         {{ index + 1 }}
                                     </span>
-                                    <p class="text-sm leading-6 text-slate-600">
+                                    <p class="line-clamp-2 text-sm leading-6 text-slate-600">
                                         {{ step }}
                                     </p>
                                 </div>
@@ -272,12 +287,19 @@ onMounted(loadDashboard);
                         </div>
 
                         <div class="student-card p-5">
-                            <p class="student-kicker">
-                                Notifications
-                            </p>
-                            <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                Recent portal updates
-                            </h3>
+                            <div class="flex items-center gap-3">
+                                <span class="student-section-mark">
+                                    <i class="fa-solid fa-bell text-sm"></i>
+                                </span>
+                                <div>
+                                    <p class="student-kicker">
+                                        Updates
+                                    </p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                        Recent notices
+                                    </h3>
+                                </div>
+                            </div>
                             <div v-if="notifications.length === 0" class="mt-5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                                 No notifications yet.
                             </div>
@@ -288,12 +310,19 @@ onMounted(loadDashboard);
                                     :href="notification.action_url || '/dashboard/applications'"
                                     class="rounded-md border border-slate-200/80 bg-slate-50 p-4 transition hover:bg-white"
                                 >
-                                    <p class="font-bold text-slate-950">
-                                        {{ notification.title }}
-                                    </p>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">
-                                        {{ notification.message }}
-                                    </p>
+                                    <div class="flex gap-3">
+                                        <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200">
+                                            <i class="fa-solid fa-envelope-open-text text-xs"></i>
+                                        </span>
+                                        <span class="min-w-0">
+                                            <span class="block truncate font-bold text-slate-950">
+                                                {{ notification.title }}
+                                            </span>
+                                            <span class="mt-1 block line-clamp-2 text-sm leading-6 text-slate-600">
+                                                {{ notification.message }}
+                                            </span>
+                                        </span>
+                                    </div>
                                     <p class="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                                         {{ notification.created_at }}
                                     </p>
