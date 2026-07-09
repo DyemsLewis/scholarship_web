@@ -1,5 +1,6 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import TermsModal from './TermsModal.vue';
 
 const props = defineProps({
     variant: {
@@ -11,13 +12,13 @@ const props = defineProps({
 
 const currentYear = new Date().getFullYear();
 const isDark = computed(() => props.variant === 'dark');
+const showTermsModal = ref(false);
 
 const links = [
     { href: '/', label: 'Home' },
     { href: '/login', label: 'Login' },
     { href: '/register', label: 'Register' },
     { href: '/provider/register', label: 'Provider Registration' },
-    { href: '/terms', label: 'Terms' },
 ];
 </script>
 
@@ -50,6 +51,13 @@ const links = [
                     >
                         {{ link.label }}
                     </a>
+                    <button
+                        type="button"
+                        :class="isDark ? 'text-left text-slate-300 transition hover:text-amber-200' : 'text-left text-slate-600 transition hover:text-slate-950'"
+                        @click="showTermsModal = true"
+                    >
+                        Terms
+                    </button>
                 </nav>
 
                 <p :class="['text-sm', isDark ? 'text-slate-400' : 'text-slate-500']">
@@ -57,5 +65,7 @@ const links = [
                 </p>
             </div>
         </div>
+
+        <TermsModal v-model="showTermsModal" context="general" />
     </footer>
 </template>

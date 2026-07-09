@@ -44,11 +44,6 @@ class PageController extends Controller
         return view('provider-register');
     }
 
-    public function terms(): View
-    {
-        return view('terms');
-    }
-
     public function forgotPassword(Request $request): View|RedirectResponse
     {
         if ($redirect = $this->roleRedirect($request)) {

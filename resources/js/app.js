@@ -20,7 +20,6 @@ import ProviderProfilePage from './pages/ProviderProfilePage.vue';
 import ProviderProgramsPage from './pages/ProviderProgramsPage.vue';
 import RegisterPage from './pages/RegisterPage.vue';
 import ResetPasswordPage from './pages/ResetPasswordPage.vue';
-import TermsPage from './pages/TermsPage.vue';
 import UserApplicationDetailPage from './pages/UserApplicationDetailPage.vue';
 import UserApplicationsPage from './pages/UserApplicationsPage.vue';
 import UserDashboardPage from './pages/UserDashboardPage.vue';
@@ -72,7 +71,6 @@ const pages = {
     providerPrograms: ProviderProgramsPage,
     register: RegisterPage,
     resetPassword: ResetPasswordPage,
-    terms: TermsPage,
 };
 
 if (appElement) {
