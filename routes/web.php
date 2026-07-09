@@ -107,6 +107,7 @@ Route::middleware(['auth', 'provider'])
         Route::post('/scholarships', [ProviderController::class, 'storeScholarship'])->name('scholarships.store');
         Route::get('/scholarships/{scholarship}', [ProviderController::class, 'showScholarship'])->name('scholarships.show');
         Route::put('/scholarships/{scholarship}', [ProviderController::class, 'updateScholarship'])->name('scholarships.update');
+        Route::post('/scholarships/{scholarship}/duplicate', [ProviderController::class, 'duplicateScholarship'])->name('scholarships.duplicate');
     });
 
 Route::post('/login', [AuthController::class, 'login'])->name('login.store');

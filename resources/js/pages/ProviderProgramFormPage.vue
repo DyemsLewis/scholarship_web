@@ -387,7 +387,13 @@ const targetFormProfiles = {
     },
 };
 
-const selectedRequirementCount = computed(() => scholarshipForm.value.requirements.length);
+const customDocumentRequirements = computed(() => splitRequirementText(scholarshipForm.value.customRequirements)
+    .filter((requirement) => !documentRequirementOptions.includes(requirement)));
+const allDocumentRequirements = computed(() => [...new Set([
+    ...scholarshipForm.value.requirements,
+    ...customDocumentRequirements.value,
+])]);
+const selectedRequirementCount = computed(() => allDocumentRequirements.value.length);
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 const scholarshipImagePreview = computed(() => imagePreviewUrl.value || scholarshipForm.value.imageUrl || '/uploads/scholarship-default.jpg');
 const scholarshipFormMapAddress = computed(() => {
@@ -697,6 +703,7 @@ function emptyScholarshipForm() {
         latitude: '',
         longitude: '',
         requirements: [],
+        customRequirements: '',
         awardAmount: '',
         minimumGwa: '',
         minimumGradeScale: '',
@@ -714,7 +721,7 @@ function emptyScholarshipForm() {
     };
 }
 
-function parseRequirements(requirements) {
+function splitRequirementText(requirements) {
     if (!requirements) {
         return [];
     }
@@ -722,7 +729,17 @@ function parseRequirements(requirements) {
     return String(requirements)
         .split(/\r?\n|,/)
         .map((requirement) => requirement.trim())
+        .filter(Boolean);
+}
+
+function parseRequirements(requirements) {
+    return splitRequirementText(requirements)
         .filter((requirement) => documentRequirementOptions.includes(requirement));
+}
+
+function parseCustomRequirements(requirements) {
+    return splitRequirementText(requirements)
+        .filter((requirement) => !documentRequirementOptions.includes(requirement));
 }
 
 function parseSelections(value, validOptions) {
@@ -809,6 +826,7 @@ function fillScholarshipForm(scholarship) {
         latitude: scholarship.latitude ?? '',
         longitude: scholarship.longitude ?? '',
         requirements: parseRequirements(scholarship.requirements),
+        customRequirements: parseCustomRequirements(scholarship.requirements).join('\n'),
         awardAmount: scholarship.award_amount ?? '',
         minimumGwa: scholarship.minimum_gwa ?? '',
         minimumGradeScale: scholarship.minimum_grade_scale ?? inferGradeScale(scholarship.minimum_gwa),
@@ -844,6 +862,7 @@ function selectCommonRequirements() {
 
 function clearRequirements() {
     scholarshipForm.value.requirements = [];
+    scholarshipForm.value.customRequirements = '';
 }
 
 function inferGradeScale(value) {
@@ -1001,7 +1020,7 @@ async function saveScholarship() {
         location_address: scholarshipForm.value.locationAddress || '',
         latitude: scholarshipForm.value.latitude || '',
         longitude: scholarshipForm.value.longitude || '',
-        requirements: scholarshipForm.value.requirements.join('\n'),
+        requirements: allDocumentRequirements.value.join('\n'),
         award_amount: scholarshipForm.value.awardAmount || '',
         minimum_gwa: academicRequirementNeedsValue.value ? scholarshipForm.value.minimumGwa || '' : '',
         minimum_grade_scale: scholarshipForm.value.minimumGradeScale || '',
@@ -1892,12 +1911,29 @@ onMounted(loadFormData);
                                 </div>
 
                                 <div :class="['mt-4', fieldCardClass]">
+                                    <label :class="labelClass" for="scholarship-custom-requirements">
+                                        Custom document requirements
+                                    </label>
+                                    <textarea
+                                        id="scholarship-custom-requirements"
+                                        v-model="scholarshipForm.customRequirements"
+                                        rows="4"
+                                        maxlength="2000"
+                                        placeholder="Example: Signed scholarship agreement&#10;Return service acknowledgment&#10;Data privacy consent"
+                                        :class="inputClass"
+                                    ></textarea>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        Add one requirement per line for provider-specific files that are not in the common list.
+                                    </p>
+                                </div>
+
+                                <div :class="['mt-4', fieldCardClass]">
                                     <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                                         {{ selectedRequirementCount }} selected
                                     </p>
                                     <div v-if="selectedRequirementCount" class="mt-2 flex flex-wrap gap-2">
                                         <span
-                                            v-for="requirement in scholarshipForm.requirements"
+                                            v-for="requirement in allDocumentRequirements"
                                             :key="requirement"
                                             class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700"
                                         >

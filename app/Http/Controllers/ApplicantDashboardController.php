@@ -406,7 +406,9 @@ class ApplicantDashboardController extends Controller
             ], 422);
         }
 
-        $scholarship = Scholarship::query()->findOrFail($validated['scholarship_id']);
+        $scholarship = Scholarship::query()
+            ->with('provider.providerProfile')
+            ->findOrFail($validated['scholarship_id']);
         $eligibilityMatch = $this->eligibilityMatch($scholarship, $request->user());
         $eligibilityBlockers = $this->applicationEligibilityBlockers($eligibilityMatch);
 
@@ -418,6 +420,7 @@ class ApplicantDashboardController extends Controller
             ], 422);
         }
 
+        $acceptedAt = now();
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => $request->user()->id,
@@ -426,9 +429,14 @@ class ApplicantDashboardController extends Controller
             'eligibility_score' => $eligibilityMatch['score'],
             'eligibility_breakdown' => $eligibilityMatch,
             'notes' => $validated['notes'] ?? null,
-            'submitted_at' => now(),
-            'terms_accepted_at' => now(),
+            'submitted_at' => $acceptedAt,
+            'terms_accepted_at' => $acceptedAt,
             'terms_version' => Terms::VERSION,
+            'provider_contract_terms_snapshot' => $this->providerContractSnapshot($scholarship),
+            'provider_contract_terms_accepted_at' => $acceptedAt,
+            'provider_contract_terms_version' => $this->providerContractVersion($scholarship),
+            'provider_contract_acceptance_ip' => $request->ip(),
+            'provider_contract_acceptance_user_agent' => Str::limit($request->userAgent() ?? '', 500, ''),
         ]);
 
         ApplicationStatusHistory::create([
@@ -436,7 +444,7 @@ class ApplicantDashboardController extends Controller
             'changed_by' => $request->user()->id,
             'from_status' => null,
             'to_status' => 'submitted',
-            'review_notes' => 'Application submitted by applicant.',
+            'review_notes' => 'Application submitted by applicant. Provider contract terms accepted with submission.',
             'changed_at' => now(),
         ]);
 
@@ -906,10 +914,35 @@ class ApplicantDashboardController extends Controller
             'status_progress' => $decisionSupport->statusProgress($application),
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
+            'provider_contract_terms_snapshot' => $application->provider_contract_terms_snapshot ?? [],
+            'provider_contract_terms_accepted_at' => $application->provider_contract_terms_accepted_at?->format('M d, Y h:i A'),
+            'provider_contract_terms_version' => $application->provider_contract_terms_version,
             'scholarship' => $application->scholarship
                 ? $this->scholarshipPayload($application->scholarship, $application->applicant)
                 : null,
         ];
+    }
+
+    private function providerContractSnapshot(Scholarship $scholarship): array
+    {
+        $scholarship->loadMissing('provider.providerProfile');
+
+        return [
+            'scholarship_id' => $scholarship->id,
+            'title' => $scholarship->title,
+            'provider' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
+            'return_service_contract' => $scholarship->return_service_contract,
+            'other_contract_terms' => $scholarship->other_contract_terms,
+            'renewal_policy' => $scholarship->renewal_policy,
+            'requirements' => $scholarship->requirements,
+        ];
+    }
+
+    private function providerContractVersion(Scholarship $scholarship): string
+    {
+        $timestamp = $scholarship->updated_at?->timestamp ?? now()->timestamp;
+
+        return "scholarship-{$scholarship->id}-{$timestamp}";
     }
 
     private function canRespondToApplication(ScholarshipApplication $application): bool

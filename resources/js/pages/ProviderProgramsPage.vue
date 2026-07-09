@@ -6,9 +6,11 @@ import ProviderSidebar from '../components/ProviderSidebar.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
+const statusMessage = ref('');
 const user = ref(null);
 const scholarships = ref([]);
 const selectedMapScholarship = ref(null);
+const duplicatingId = ref(null);
 
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 const selectedMapAddress = computed(() => {
@@ -135,6 +137,23 @@ async function loadProviderData() {
     }
 }
 
+async function duplicateProgram(scholarship) {
+    duplicatingId.value = scholarship.id;
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    try {
+        const response = await window.axios.post(`/provider/scholarships/${scholarship.id}/duplicate`);
+
+        statusMessage.value = response.data.message ?? 'Program duplicated as a draft.';
+        await loadProviderData();
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to duplicate this program.';
+    } finally {
+        duplicatingId.value = null;
+    }
+}
+
 async function logout() {
     await window.axios.post('/logout');
     window.location.href = '/';
@@ -189,6 +208,10 @@ onMounted(loadProviderData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
+                    <div v-if="statusMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 shadow-sm">
+                        {{ statusMessage }}
+                    </div>
+
                     <div
                         v-if="!canPostScholarships"
                         class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm"
@@ -300,21 +323,27 @@ onMounted(loadProviderData);
                                     </span>
                                 </div>
 
-                                <div :class="[
-                                    'mt-auto grid gap-2 border-t border-slate-200 pt-3',
-                                    hasScholarshipMapPreview(scholarship) ? 'grid-cols-2' : 'grid-cols-1',
-                                ]">
+                                <div class="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-3">
                                     <a
                                         :href="`/provider/programs/${scholarship.id}/edit`"
-                                        class="rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+                                        class="min-w-24 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
                                     >
                                         Edit
                                     </a>
 
                                     <button
+                                        type="button"
+                                        :disabled="duplicatingId === scholarship.id"
+                                        class="min-w-24 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                        @click="duplicateProgram(scholarship)"
+                                    >
+                                        {{ duplicatingId === scholarship.id ? 'Duplicating...' : 'Duplicate' }}
+                                    </button>
+
+                                    <button
                                         v-if="hasScholarshipMapPreview(scholarship)"
                                         type="button"
-                                        class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                                        class="min-w-24 flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                                         @click="openMapModal(scholarship)"
                                     >
                                         Map

@@ -69,6 +69,19 @@ const dssApplicationGuideItems = [
 ];
 const selectedScholarship = computed(() => scholarships.value.find((scholarship) => scholarship.id === Number(selectedScholarshipId.value)));
 const selectedRequirements = computed(() => documentRequirements(selectedScholarship.value?.requirements));
+const selectedContractSections = computed(() => {
+    const scholarship = selectedScholarship.value;
+
+    if (!scholarship) {
+        return [];
+    }
+
+    return [
+        { label: 'Return service contract', value: scholarship.return_service_contract },
+        { label: 'Other contract terms', value: scholarship.other_contract_terms },
+        { label: 'Renewal / continuation', value: scholarship.renewal_policy },
+    ].filter((section) => section.value && String(section.value).trim());
+});
 const appliedScholarshipIds = computed(() => new Set(applications.value.map((application) => application.scholarship?.id).filter(Boolean)));
 const selectedAlreadyApplied = computed(() => selectedScholarship.value && appliedScholarshipIds.value.has(selectedScholarship.value.id));
 const allDocumentsChecked = computed(() => selectedRequirements.value.every((requirement) => documentChecklist.value.includes(requirement)));
@@ -1127,6 +1140,29 @@ watch(selectedScholarship, (scholarship) => {
                                     <p class="mt-3 rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-600">
                                         {{ notes || 'No note added.' }}
                                     </p>
+
+                                    <div v-if="selectedContractSections.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                            Provider contract terms
+                                        </p>
+                                        <div class="mt-3 grid gap-3">
+                                            <div
+                                                v-for="section in selectedContractSections"
+                                                :key="section.label"
+                                                class="rounded-md border border-slate-200 bg-white p-3 text-sm"
+                                            >
+                                                <p class="font-bold text-slate-800">
+                                                    {{ section.label }}
+                                                </p>
+                                                <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">
+                                                    {{ section.value }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <p class="mt-3 text-xs leading-5 text-slate-500">
+                                            Submitting records your acceptance of these provider terms with this application.
+                                        </p>
+                                    </div>
 
                                     <TermsAgreement
                                         v-model="applicationTermsAccepted"

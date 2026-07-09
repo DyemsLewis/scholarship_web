@@ -55,6 +55,16 @@ const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.14em] tex
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
 const timeline = computed(() => application.value?.timeline ?? []);
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
+const contractSnapshotSections = computed(() => {
+    const snapshot = application.value?.provider_contract_terms_snapshot ?? {};
+    const scholarship = application.value?.scholarship ?? {};
+
+    return [
+        { label: 'Return service contract', value: snapshot.return_service_contract ?? scholarship.return_service_contract },
+        { label: 'Other contract terms', value: snapshot.other_contract_terms ?? scholarship.other_contract_terms },
+        { label: 'Renewal / continuation', value: snapshot.renewal_policy ?? scholarship.renewal_policy },
+    ].filter((section) => section.value && String(section.value).trim());
+});
 
 function emptyReviewForm() {
     return {
@@ -741,6 +751,40 @@ onMounted(loadApplication);
                                 <p v-if="application.student_response_note" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
                                     {{ application.student_response_note }}
                                 </p>
+                            </section>
+
+                            <section
+                                v-if="application.provider_contract_terms_accepted_at || contractSnapshotSections.length"
+                                class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                            >
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                    Contract Acceptance
+                                </p>
+                                <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                                    <p class="font-bold text-slate-950">
+                                        {{ application.provider_contract_terms_accepted_at ? 'Accepted by applicant' : 'Acceptance not recorded' }}
+                                    </p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">
+                                        {{ application.provider_contract_terms_accepted_at || 'This application was created before provider contract snapshots were tracked.' }}
+                                    </p>
+                                    <p v-if="application.provider_contract_terms_version" class="mt-1 text-xs leading-5 text-slate-500">
+                                        Snapshot {{ application.provider_contract_terms_version }}
+                                    </p>
+                                </div>
+                                <div v-if="contractSnapshotSections.length" class="mt-3 grid gap-2">
+                                    <div
+                                        v-for="section in contractSnapshotSections"
+                                        :key="section.label"
+                                        class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm"
+                                    >
+                                        <p class="font-bold text-slate-800">
+                                            {{ section.label }}
+                                        </p>
+                                        <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">
+                                            {{ section.value }}
+                                        </p>
+                                    </div>
+                                </div>
                             </section>
 
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

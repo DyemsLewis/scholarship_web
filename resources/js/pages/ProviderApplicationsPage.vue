@@ -690,6 +690,23 @@ onMounted(loadProviderData);
                                     </div>
                                 </div>
 
+                                <div
+                                    v-if="application.provider_contract_terms_accepted_at"
+                                    class="mt-3 rounded-md border border-slate-200 bg-white p-3 text-sm"
+                                >
+                                    <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                        <p class="font-semibold text-slate-500">
+                                            Contract acceptance
+                                        </p>
+                                        <span class="w-fit rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                                            Recorded {{ application.provider_contract_terms_accepted_at }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        Snapshot {{ application.provider_contract_terms_version || 'current' }}
+                                    </p>
+                                </div>
+
                                 <div class="mt-4 rounded-md border border-slate-200 bg-white p-3">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                                         Quick review actions

@@ -707,6 +707,38 @@ class ProviderController extends Controller
         ]);
     }
 
+    public function duplicateScholarship(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+        $this->ensureProviderCanPost($request);
+
+        $duplicate = $scholarship->replicate([
+            'created_at',
+            'updated_at',
+        ]);
+        $duplicate->title = $this->duplicateScholarshipTitle($request->user()->id, $scholarship->title);
+        $duplicate->status = 'draft';
+        $duplicate->views_count = 0;
+        $duplicate->provider_terms_accepted_at = now();
+        $duplicate->provider_terms_version = Terms::VERSION;
+        $duplicate->save();
+        $duplicate->loadCount('bookmarks');
+
+        ActivityLog::record(
+            $request->user(),
+            'scholarship_duplicated',
+            "{$request->user()->name} duplicated scholarship {$scholarship->title}.",
+            $request,
+            ['scholarship_id' => $scholarship->id, 'duplicate_id' => $duplicate->id],
+        );
+
+        return response()->json([
+            'message' => 'Program duplicated as a draft.',
+            'scholarship' => $this->scholarshipPayload($duplicate),
+        ], 201);
+    }
+
     public function storeScholarship(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -937,6 +969,10 @@ class ProviderController extends Controller
                 && blank($application->student_response_status),
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
+            'provider_contract_terms_snapshot' => $application->provider_contract_terms_snapshot ?? [],
+            'provider_contract_terms_accepted_at' => $application->provider_contract_terms_accepted_at?->format('M d, Y h:i A'),
+            'provider_contract_terms_version' => $application->provider_contract_terms_version,
+            'provider_contract_acceptance_ip' => $application->provider_contract_acceptance_ip,
             'applicant' => [
                 'name' => $application->applicant?->name,
                 'email' => $application->applicant?->email,
@@ -1062,6 +1098,25 @@ class ProviderController extends Controller
             'created_at' => $scholarship->created_at?->format('M d, Y'),
             'updated_at' => $scholarship->updated_at?->format('M d, Y'),
         ];
+    }
+
+    private function duplicateScholarshipTitle(int $providerId, string $title): string
+    {
+        $baseTitle = preg_replace('/\s+\(Copy(?:\s+\d+)?\)$/', '', $title) ?: $title;
+        $candidate = "{$baseTitle} (Copy)";
+        $counter = 2;
+
+        while (
+            Scholarship::query()
+                ->where('provider_id', $providerId)
+                ->where('title', $candidate)
+                ->exists()
+        ) {
+            $candidate = "{$baseTitle} (Copy {$counter})";
+            $counter++;
+        }
+
+        return $candidate;
     }
 
     private function scholarshipImageUrl(Scholarship $scholarship): string
