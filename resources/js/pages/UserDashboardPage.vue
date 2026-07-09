@@ -43,6 +43,20 @@ const quickTools = [
     },
 ];
 
+const readinessGaugeStyle = computed(() => ({
+    background: `conic-gradient(#0f172a ${Number(profileReadiness.value.percent ?? 0) * 3.6}deg, #e2e8f0 0deg)`,
+}));
+const readinessMessage = computed(() => {
+    if (profileReadiness.value.complete) {
+        return 'Your profile is ready for scholarship applications.';
+    }
+
+    const missing = profileReadiness.value.missing?.length ?? 0;
+
+    return missing > 0
+        ? `Finish ${missing} profile detail${missing === 1 ? '' : 's'} to improve your matches.`
+        : 'Review your profile so matches can stay accurate.';
+});
 const highMatchCount = computed(() => scholarships.value
     .filter((scholarship) => Number(scholarship.eligibility_match?.score ?? 0) >= 80)
     .length);
@@ -55,6 +69,59 @@ const documentGaps = computed(() => scholarships.value
     .filter((scholarship) => Number(scholarship.prepared_documents?.required ?? 0) > Number(scholarship.prepared_documents?.uploaded ?? 0))
     .sort((first, second) => Number(second.eligibility_match?.score ?? 0) - Number(first.eligibility_match?.score ?? 0))
     .slice(0, 3));
+const dashboardStats = computed(() => [
+    {
+        label: 'Programs',
+        value: stats.value.available_scholarships,
+        detail: 'available now',
+    },
+    {
+        label: 'Saved',
+        value: stats.value.saved,
+        detail: 'kept for later',
+    },
+    {
+        label: 'Applications',
+        value: stats.value.applications,
+        detail: 'submitted',
+    },
+]);
+const journeySteps = computed(() => [
+    {
+        label: 'Profile',
+        detail: profileReadiness.value.complete ? 'Complete' : `${profileReadiness.value.percent}% ready`,
+        href: '/dashboard/profile',
+        icon: 'fa-solid fa-user-check',
+        state: profileReadiness.value.complete ? 'done' : 'active',
+    },
+    {
+        label: 'Find',
+        detail: highMatchCount.value > 0
+            ? `${highMatchCount.value} strong match${highMatchCount.value === 1 ? '' : 'es'}`
+            : `${stats.value.available_scholarships} program${Number(stats.value.available_scholarships) === 1 ? '' : 's'}`,
+        href: '/dashboard/scholarships',
+        icon: 'fa-solid fa-magnifying-glass',
+        state: highMatchCount.value > 0 ? 'done' : 'active',
+    },
+    {
+        label: 'Documents',
+        detail: documentGaps.value.length === 0
+            ? 'No gaps found'
+            : `${documentGaps.value.length} file gap${documentGaps.value.length === 1 ? '' : 's'}`,
+        href: '/dashboard/documents',
+        icon: 'fa-solid fa-folder-open',
+        state: documentGaps.value.length === 0 ? 'done' : 'active',
+    },
+    {
+        label: 'Apply',
+        detail: Number(stats.value.applications ?? 0) > 0
+            ? `${stats.value.applications} submitted`
+            : 'Ready when you are',
+        href: '/dashboard/applications',
+        icon: 'fa-solid fa-paper-plane',
+        state: Number(stats.value.applications ?? 0) > 0 ? 'done' : 'idle',
+    },
+]);
 const analystSignals = computed(() => [
     {
         label: 'Profile',
@@ -122,6 +189,30 @@ function signalAccentClass(tone) {
     return 'bg-slate-100 text-slate-700';
 }
 
+function journeyStepClass(state) {
+    if (state === 'done') {
+        return 'border-slate-900 bg-slate-900 text-white';
+    }
+
+    if (state === 'active') {
+        return 'border-slate-300 bg-white text-slate-900';
+    }
+
+    return 'border-slate-200 bg-white text-slate-500';
+}
+
+function journeyIconClass(state) {
+    if (state === 'done') {
+        return 'bg-white text-slate-900';
+    }
+
+    if (state === 'active') {
+        return 'bg-slate-100 text-slate-800';
+    }
+
+    return 'bg-slate-100 text-slate-500';
+}
+
 function deadlineDays(value) {
     const parsed = Date.parse(value ?? '');
 
@@ -146,7 +237,7 @@ async function loadDashboard() {
         stats.value = response.data.stats ?? stats.value;
         profileReadiness.value = response.data.profile_readiness ?? profileReadiness.value;
         scholarships.value = response.data.scholarships ?? [];
-        nextSteps.value = response.data.next_steps;
+        nextSteps.value = response.data.next_steps ?? [];
         notifications.value = response.data.notifications ?? [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load applicant dashboard.';
@@ -189,6 +280,95 @@ onMounted(loadDashboard);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="grid lg:grid-cols-[minmax(0,1fr)_18rem]">
+                            <div class="p-5 sm:p-6">
+                                <div class="flex flex-col gap-5 md:flex-row md:items-center">
+                                    <div
+                                        class="relative flex h-32 w-32 shrink-0 items-center justify-center rounded-full p-2"
+                                        :style="readinessGaugeStyle"
+                                    >
+                                        <div class="flex h-full w-full flex-col items-center justify-center rounded-full bg-white shadow-inner">
+                                            <span class="text-3xl font-bold text-slate-950">
+                                                {{ profileReadiness.percent }}%
+                                            </span>
+                                            <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                                                Ready
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div class="min-w-0 flex-1">
+                                        <p class="student-kicker">
+                                            Scholarship Readiness
+                                        </p>
+                                        <h3 class="mt-2 text-2xl font-bold leading-tight text-slate-950">
+                                            {{ readinessMessage }}
+                                        </h3>
+                                        <div class="mt-4 grid gap-2 sm:grid-cols-3">
+                                            <div
+                                                v-for="item in dashboardStats"
+                                                :key="item.label"
+                                                class="border-l-2 border-slate-200 pl-3"
+                                            >
+                                                <p class="text-2xl font-bold text-slate-950">
+                                                    {{ item.value ?? 0 }}
+                                                </p>
+                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+                                                    {{ item.label }}
+                                                </p>
+                                                <p class="mt-1 text-xs text-slate-500">
+                                                    {{ item.detail }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-6 grid gap-2 sm:grid-cols-4">
+                                    <a
+                                        v-for="step in journeySteps"
+                                        :key="step.label"
+                                        :href="step.href"
+                                        :class="['rounded-lg border p-3 transition hover:border-slate-500 hover:shadow-sm', journeyStepClass(step.state)]"
+                                    >
+                                        <div class="flex items-center justify-between gap-3">
+                                            <span :class="['flex h-8 w-8 items-center justify-center rounded-md', journeyIconClass(step.state)]">
+                                                <i :class="[step.icon, 'text-xs']"></i>
+                                            </span>
+                                            <i class="fa-solid fa-arrow-right text-xs opacity-60"></i>
+                                        </div>
+                                        <p class="mt-3 text-sm font-bold">
+                                            {{ step.label }}
+                                        </p>
+                                        <p class="mt-1 text-xs leading-5 opacity-80">
+                                            {{ step.detail }}
+                                        </p>
+                                    </a>
+                                </div>
+                            </div>
+
+                            <aside class="border-t border-slate-200 bg-slate-950 p-5 text-white lg:border-l lg:border-t-0">
+                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
+                                    Start Here
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold">
+                                    Your next best move
+                                </h3>
+                                <p class="mt-3 text-sm leading-6 text-slate-300">
+                                    {{ nextSteps[0] || 'Browse scholarships and save programs that fit your profile.' }}
+                                </p>
+                                <a
+                                    :href="profileReadiness.complete ? '/dashboard/scholarships' : '/dashboard/profile'"
+                                    class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-slate-100"
+                                >
+                                    {{ profileReadiness.complete ? 'Browse scholarships' : 'Complete profile' }}
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </a>
+                            </aside>
+                        </div>
+                    </section>
+
                     <section class="student-card p-4">
                         <div class="student-section-head">
                             <div class="flex items-center gap-3">
