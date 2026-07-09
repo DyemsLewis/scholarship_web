@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
+import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 
@@ -333,24 +334,16 @@ onMounted(loadApplication);
 
         <section class="student-page">
             <div class="student-container">
-                <header class="student-hero">
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div class="max-w-2xl">
-                            <a href="/dashboard/applications" class="inline-flex w-fit rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-                                Back to applications
-                            </a>
-                            <p class="student-kicker mt-4">
-                                Application Details
-                            </p>
-                            <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
-                                {{ application?.scholarship?.title || 'Application record' }}
-                            </h2>
-                            <p class="mt-3 text-sm leading-6 text-slate-600">
-                                {{ application?.scholarship?.provider?.name || 'Scholarship provider' }}
-                            </p>
-                        </div>
-                    </div>
-                </header>
+                <ApplicantPageHeader
+                    eyebrow="Application Details"
+                    :title="application?.scholarship?.title || 'Application record'"
+                    :description="application?.scholarship?.provider?.name || 'Scholarship provider'"
+                    icon="fa-solid fa-file-circle-check"
+                    action-href="/dashboard/applications"
+                    action-label="Back to applications"
+                    secondary-href="/dashboard/documents"
+                    secondary-label="Documents"
+                />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading application details...

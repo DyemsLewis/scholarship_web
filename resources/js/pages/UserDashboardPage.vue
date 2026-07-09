@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
+import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 
 const isLoading = ref(true);
@@ -168,21 +169,16 @@ onMounted(loadDashboard);
 
         <section class="student-page">
             <div class="student-container">
-                <header class="student-hero">
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div class="max-w-2xl">
-                            <p class="student-kicker">
-                                Dashboard
-                            </p>
-                            <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
-                                Welcome back, {{ user?.first_name || 'Scholar' }}
-                            </h2>
-                            <p class="mt-3 text-sm leading-6 text-slate-600">
-                                Review your profile, saved programs, and next scholarship steps in one place.
-                            </p>
-                        </div>
-                    </div>
-                </header>
+                <ApplicantPageHeader
+                    eyebrow="Dashboard"
+                    :title="`Welcome back, ${user?.first_name || 'Scholar'}`"
+                    description="Your profile, matches, documents, and next steps at a glance."
+                    icon="fa-solid fa-table-columns"
+                    action-href="/dashboard/scholarships"
+                    action-label="Browse scholarships"
+                    secondary-href="/dashboard/profile"
+                    secondary-label="Update profile"
+                />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading applicant dashboard...
@@ -235,9 +231,9 @@ onMounted(loadDashboard);
                             v-for="tool in quickTools"
                             :key="tool.title"
                             :href="tool.href"
-                            class="student-card flex items-start gap-3 p-4 transition hover:border-amber-200 hover:shadow-md"
+                            class="student-visual-card flex items-start gap-3"
                         >
-                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-950 text-amber-200">
+                            <span class="student-icon-badge">
                                 <i :class="[tool.icon, 'text-sm']"></i>
                             </span>
                             <span>

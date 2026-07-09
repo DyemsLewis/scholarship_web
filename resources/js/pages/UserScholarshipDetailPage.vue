@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
+import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 
@@ -262,22 +263,26 @@ onMounted(loadScholarship);
 
         <section class="student-page">
             <div class="student-container">
-                <div class="mb-4">
-                    <a href="/dashboard/scholarships" class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white/80 px-3 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:border-amber-200 hover:text-slate-950">
-                        <i class="fa-solid fa-arrow-left text-xs"></i>
-                        Back to scholarships
-                    </a>
-                </div>
+                <ApplicantPageHeader
+                    eyebrow="Scholarship Details"
+                    title="Review the program"
+                    description="Check fit, requirements, location, and application steps before applying."
+                    icon="fa-solid fa-graduation-cap"
+                    action-href="/dashboard/scholarships"
+                    action-label="Back to scholarships"
+                    secondary-href="/dashboard/applications"
+                    secondary-label="Applications"
+                />
 
-                <div v-if="isLoading" class="student-card p-6 text-sm text-slate-500">
+                <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading scholarship details...
                 </div>
 
-                <div v-else-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
+                <div v-else-if="errorMessage" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
                     {{ errorMessage }}
                 </div>
 
-                <div v-else-if="scholarship" class="space-y-5">
+                <div v-else-if="scholarship" class="mt-6 space-y-5">
                     <header class="student-card overflow-hidden">
                         <div class="border-b border-slate-200 bg-white p-5 sm:p-6">
                             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

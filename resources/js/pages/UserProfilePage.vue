@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
+import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
+import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 
@@ -17,6 +19,23 @@ const addressLookupTrigger = ref(0);
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const profileGuideItems = [
+    {
+        title: 'Learner details',
+        text: 'Basic identity and contact information for applications.',
+        icon: 'fa-solid fa-address-card',
+    },
+    {
+        title: 'School record',
+        text: 'Education level, grade/year, and academic value for matching.',
+        icon: 'fa-solid fa-book-open-reader',
+    },
+    {
+        title: 'Support context',
+        text: 'Location, need, and guardian details when they apply.',
+        icon: 'fa-solid fa-user-shield',
+    },
+];
 
 const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
 const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
@@ -871,21 +890,18 @@ onMounted(loadProfile);
 
         <section class="student-page">
             <div class="student-container">
-                <header class="student-hero">
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div class="max-w-2xl">
-                            <p class="student-kicker">
-                                Student Profile
-                            </p>
-                            <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
-                                Build a learner profile that fits your level
-                            </h2>
-                            <p class="mt-3 text-sm leading-6 text-slate-600">
-                                Keep learner, school, guardian, and scholarship matching details organized by page.
-                            </p>
-                        </div>
-                    </div>
-                </header>
+                <ApplicantPageHeader
+                    eyebrow="Student Profile"
+                    title="Build your learner profile"
+                    description="Keep learner, school, guardian, and matching details organized by page."
+                    icon="fa-solid fa-id-card"
+                    action-href="/dashboard/scholarships"
+                    action-label="See matches"
+                    secondary-href="/dashboard/documents"
+                    secondary-label="Prepare files"
+                />
+
+                <ApplicantGuideStrip class="mt-5" :items="profileGuideItems" />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading profile...

@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
+import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
+import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 
 const isLoading = ref(true);
@@ -33,6 +35,23 @@ const dssGuideItems = [
     { label: 'Profile', description: 'Grades, level, course or strand, school type, and year level.' },
     { label: 'Provider rules', description: 'Location, income, and required documents listed by the scholarship.' },
     { label: 'Score', description: 'Matched rules divided by applicable rules. It is a guide, not final approval.' },
+];
+const finderGuideItems = [
+    {
+        title: 'Filter lightly',
+        text: 'Start with search or category, then add advanced filters only when needed.',
+        icon: 'fa-solid fa-sliders',
+    },
+    {
+        title: 'Check the fit',
+        text: 'Use match badges and short reasons before opening full details.',
+        icon: 'fa-solid fa-chart-simple',
+    },
+    {
+        title: 'Save or apply',
+        text: 'Save programs for later or start the application when your profile fits.',
+        icon: 'fa-solid fa-bookmark',
+    },
 ];
 
 const providerTypes = computed(() => [
@@ -651,19 +670,18 @@ onMounted(loadScholarships);
 
         <section class="student-page">
             <div class="student-container">
-                <header class="student-hero">
-                    <div class="max-w-2xl">
-                        <p class="student-kicker">
-                            Scholarships
-                        </p>
-                        <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
-                            Find a program that fits
-                        </h2>
-                        <p class="mt-3 text-sm leading-6 text-slate-600">
-                            Browse approved scholarships and open the details page when a program looks relevant.
-                        </p>
-                    </div>
-                </header>
+                <ApplicantPageHeader
+                    eyebrow="Scholarships"
+                    title="Find programs that fit"
+                    description="Browse approved scholarships, compare fit, and open details when one looks right."
+                    icon="fa-solid fa-magnifying-glass-chart"
+                    action-href="/dashboard/applications"
+                    action-label="Go to applications"
+                    secondary-href="/dashboard/profile"
+                    secondary-label="Improve profile"
+                />
+
+                <ApplicantGuideStrip class="mt-5" :items="finderGuideItems" />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading scholarships...

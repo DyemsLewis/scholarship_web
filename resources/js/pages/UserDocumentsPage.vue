@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
+import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
+import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 
@@ -33,6 +35,23 @@ const preparedDocumentsPerPage = 5;
 const applicationsPerPage = 3;
 const preparedDocumentsPage = ref(1);
 const applicationsPage = ref(1);
+const documentGuideItems = [
+    {
+        title: 'Choose type',
+        text: 'Pick the requirement name from the list before uploading.',
+        icon: 'fa-solid fa-list-check',
+    },
+    {
+        title: 'Upload once',
+        text: 'Reusable files can be attached to matching applications later.',
+        icon: 'fa-solid fa-cloud-arrow-up',
+    },
+    {
+        title: 'Keep updated',
+        text: 'Replace old files when providers request clearer copies.',
+        icon: 'fa-solid fa-rotate',
+    },
+];
 
 const applicationsWithRequirements = computed(() => applications.value.map((application) => ({
     ...application,
@@ -288,28 +307,18 @@ onMounted(loadDocuments);
 
         <section class="student-page">
             <div class="student-container">
-                <header class="student-hero">
-                    <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-                        <div class="max-w-2xl">
-                            <p class="student-kicker">
-                                Documents
-                            </p>
-                            <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
-                                Prepare documents before applying
-                            </h2>
-                            <p class="mt-3 text-sm leading-6 text-slate-600">
-                                Upload common requirements once so they are ready when a scholarship needs them.
-                            </p>
-                        </div>
+                <ApplicantPageHeader
+                    eyebrow="Documents"
+                    title="Prepare files once"
+                    description="Save common requirements here so applications feel lighter later."
+                    icon="fa-solid fa-folder-open"
+                    action-href="/dashboard/scholarships"
+                    action-label="Find scholarships"
+                    secondary-href="/dashboard/applications"
+                    secondary-label="View applications"
+                />
 
-                        <a
-                            href="/dashboard/scholarships"
-                            class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                        >
-                            Find scholarships
-                        </a>
-                    </div>
-                </header>
+                <ApplicantGuideStrip class="mt-5" :items="documentGuideItems" />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading documents...

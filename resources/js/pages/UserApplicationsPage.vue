@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
+import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
+import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 
@@ -34,6 +36,23 @@ const steps = [
     { label: 'Details', detail: 'Review requirements' },
     { label: 'Documents', detail: 'Confirm checklist' },
     { label: 'Submit', detail: 'Final review' },
+];
+const applicationGuideItems = [
+    {
+        title: 'Start from a program',
+        text: 'Choose a scholarship first so the application stays focused.',
+        icon: 'fa-solid fa-graduation-cap',
+    },
+    {
+        title: 'Confirm documents',
+        text: 'Prepared files are matched automatically when possible.',
+        icon: 'fa-solid fa-folder-tree',
+    },
+    {
+        title: 'Track response',
+        text: 'After provider review, approved offers can be accepted or declined.',
+        icon: 'fa-solid fa-timeline',
+    },
 ];
 const applicationModeOptions = [
     { value: 'online', label: 'Online submission' },
@@ -508,19 +527,18 @@ watch(selectedScholarship, (scholarship) => {
 
         <section class="student-page">
             <div class="student-container">
-                <header class="student-hero">
-                    <div class="max-w-2xl">
-                        <p class="student-kicker">
-                            Application Desk
-                        </p>
-                        <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
-                            Start an application
-                        </h2>
-                        <p class="mt-3 text-sm leading-6 text-slate-600">
-                            Choose a scholarship, confirm your documents, and submit through a guided application flow.
-                        </p>
-                    </div>
-                </header>
+                <ApplicantPageHeader
+                    eyebrow="Application Desk"
+                    title="Apply step by step"
+                    description="Pick a scholarship, confirm files, then submit when everything is ready."
+                    icon="fa-solid fa-route"
+                    action-href="/dashboard/scholarships"
+                    action-label="Choose scholarship"
+                    secondary-href="/dashboard/documents"
+                    secondary-label="Prepare documents"
+                />
+
+                <ApplicantGuideStrip class="mt-5" :items="applicationGuideItems" />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading application wizard...
