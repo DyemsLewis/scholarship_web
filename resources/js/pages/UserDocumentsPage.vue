@@ -62,6 +62,9 @@ const preparedDocumentTotalPages = computed(() => pageCount(preparedDocuments.va
 const paginatedPreparedDocuments = computed(() => paginateItems(preparedDocuments.value, preparedDocumentsPage.value, preparedDocumentsPerPage));
 const applicationTotalPages = computed(() => pageCount(applicationsWithRequirements.value.length, applicationsPerPage));
 const paginatedApplications = computed(() => paginateItems(applicationsWithRequirements.value, applicationsPage.value, applicationsPerPage));
+const reusableDocumentCount = computed(() => preparedDocuments.value
+    .filter((document) => documentReuseCount(document) > 0)
+    .length);
 
 function labelFromKey(value) {
     return String(value ?? '')
@@ -144,6 +147,22 @@ function readinessClass(percent) {
     }
 
     return 'bg-slate-100 text-slate-700';
+}
+
+function documentReuseCount(document) {
+    return applicationsWithRequirements.value
+        .filter((application) => application.required_documents.includes(document.document_name))
+        .length;
+}
+
+function documentReuseLabel(document) {
+    const count = documentReuseCount(document);
+
+    if (count === 0) {
+        return 'Reusable when a program asks for it';
+    }
+
+    return `Reusable for ${count} submitted application${count === 1 ? '' : 's'}`;
 }
 
 function formatFileSize(size) {
@@ -332,6 +351,36 @@ onMounted(loadDocuments);
                         {{ statusMessage }}
                     </p>
 
+                    <section class="grid gap-3 md:grid-cols-3">
+                        <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                            <p class="text-2xl font-bold text-slate-950">
+                                {{ preparedDocuments.length }}
+                            </p>
+                            <p class="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                                Prepared files
+                            </p>
+                        </div>
+                        <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                            <p class="text-2xl font-bold text-slate-950">
+                                {{ reusableDocumentCount }}
+                            </p>
+                            <p class="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                                Reusable files
+                            </p>
+                        </div>
+                        <a
+                            href="/dashboard/scholarships"
+                            class="rounded-lg border border-slate-200 bg-slate-950 p-4 text-white shadow-sm transition hover:bg-slate-800"
+                        >
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-200">
+                                Recommended next action
+                            </p>
+                            <p class="mt-2 text-sm font-bold">
+                                Find programs that use your prepared files
+                            </p>
+                        </a>
+                    </section>
+
                     <section class="student-card overflow-hidden">
                         <div class="border-b border-slate-200 bg-slate-50 p-5">
                             <div class="flex items-center gap-3">
@@ -452,6 +501,9 @@ onMounted(loadDocuments);
                                         <p class="mt-1 truncate text-xs text-slate-500">
                                             {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
                                         </p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-600">
+                                            {{ documentReuseLabel(document) }}
+                                        </p>
                                     </div>
                                     <div class="flex flex-wrap gap-2">
                                         <button
@@ -495,15 +547,31 @@ onMounted(loadDocuments);
                                     </div>
                                 </div>
                             </div>
-                            <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-                                No prepared documents yet. Upload one file to start your library.
+                            <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-6">
+                                <p class="text-sm font-bold text-slate-900">
+                                    No prepared documents yet
+                                </p>
+                                <p class="mt-1 text-sm leading-6 text-slate-500">
+                                    Upload common files like Certificate of Enrollment, grades, school ID, or proof of income so applications are faster later.
+                                </p>
                             </div>
                         </div>
                     </section>
 
                     <section v-if="applications.length === 0" class="student-card p-6">
-                        <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                            No submitted applications yet. Prepared documents will be ready when you apply.
+                        <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                            <p class="text-sm font-bold text-slate-900">
+                                No submitted applications yet
+                            </p>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                                Prepared documents will stay here and can be reused once you apply for a scholarship.
+                            </p>
+                            <a
+                                href="/dashboard/scholarships"
+                                class="mt-4 inline-flex rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                            >
+                                Browse scholarships
+                            </a>
                         </div>
                     </section>
 

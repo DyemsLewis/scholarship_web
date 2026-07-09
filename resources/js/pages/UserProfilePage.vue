@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
+import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
@@ -76,6 +77,23 @@ const genderOptions = [
     { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 const suffixOptions = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
+const profileGuideItems = [
+    {
+        title: 'Fill essentials',
+        text: 'Identity, school, location.',
+        icon: 'fa-solid fa-clipboard-check',
+    },
+    {
+        title: 'Preview provider view',
+        text: 'Check what reviewers see.',
+        icon: 'fa-solid fa-eye',
+    },
+    {
+        title: 'Improve matching',
+        text: 'Add course, grades, and need.',
+        icon: 'fa-solid fa-wand-magic-sparkles',
+    },
+];
 
 const fieldLabels = {
     first_name: 'First name',
@@ -221,6 +239,23 @@ const profileQuality = computed(() => {
     return {
         label: 'Starting profile',
         detail: 'Add learner details to improve matching.',
+    };
+});
+const profileRecommendedAction = computed(() => {
+    const nextMissing = missingProfileFields.value[0];
+
+    if (nextMissing) {
+        return {
+            label: `Add ${nextMissing.label}`,
+            section: profileSections.find((section) => sectionAllFields(section).includes(nextMissing.key))?.id || 'personal',
+            detail: 'This helps providers and matching rules read your profile correctly.',
+        };
+    }
+
+    return {
+        label: 'Review provider preview',
+        section: 'review',
+        detail: 'Your required information is complete. Check the final view before applying.',
     };
 });
 const activeProfileSection = computed(() => profileSections.find((section) => section.id === activeSection.value) ?? profileSections[0]);
@@ -612,6 +647,16 @@ const reviewGroups = computed(() => [
         ],
     },
 ]);
+const providerPreviewRows = computed(() => [
+    ['Applicant', [form.value.first_name, form.value.middle_initial ? `${form.value.middle_initial}.` : '', form.value.last_name, form.value.suffix].filter(Boolean).join(' ')],
+    ['Learner level', educationLevelLabel(form.value.education_level)],
+    ['Program path', isFieldRelevant('course_or_strand') ? form.value.course_or_strand : 'Not required'],
+    ['School', form.value.school],
+    ['Grade / year', form.value.year_level],
+    ['Academic record', isFieldRelevant('gwa') ? [form.value.gwa, gradingScaleLabel(form.value.grading_scale)].filter(Boolean).join(' - ') : 'Not required'],
+    ['Location', [form.value.city, form.value.province, form.value.region].filter(Boolean).join(', ')],
+    ['Need context', [form.value.income_bracket, form.value.support_needs].filter(Boolean).join(' - ')],
+]);
 const yearLevelOptions = computed(() => {
     switch (form.value.education_level) {
         case 'preschool':
@@ -884,6 +929,8 @@ onMounted(loadProfile);
                     secondary-label="Prepare files"
                 />
 
+                <ApplicantGuideStrip class="mt-5" :items="profileGuideItems" />
+
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading profile...
                 </div>
@@ -923,6 +970,22 @@ onMounted(loadProfile);
                                 {{ missingProfileFields.slice(0, 3).map((field) => field.label).join(', ') }}{{ missingProfileFields.length > 3 ? ', and more' : '' }}
                             </p>
                         </div>
+
+                        <button
+                            type="button"
+                            class="mt-4 w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-slate-400 hover:bg-slate-50"
+                            @click="openSection(profileRecommendedAction.section)"
+                        >
+                            <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                Recommended next action
+                            </span>
+                            <span class="mt-1 block text-sm font-bold text-slate-950">
+                                {{ profileRecommendedAction.label }}
+                            </span>
+                            <span class="mt-1 block text-xs leading-5 text-slate-500">
+                                {{ profileRecommendedAction.detail }}
+                            </span>
+                        </button>
 
                         <nav class="mt-4 grid gap-2">
                             <button
@@ -1519,6 +1582,36 @@ onMounted(loadProfile);
                                     </div>
                                 </article>
                             </div>
+
+                            <section class="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p class="student-kicker">
+                                            Provider Preview
+                                        </p>
+                                        <h4 class="mt-2 text-lg font-bold text-slate-950">
+                                            What reviewers will scan first
+                                        </h4>
+                                    </div>
+                                    <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                        Preview only
+                                    </span>
+                                </div>
+                                <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                                    <div
+                                        v-for="row in providerPreviewRows"
+                                        :key="row[0]"
+                                        class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+                                    >
+                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+                                            {{ row[0] }}
+                                        </p>
+                                        <p class="mt-1 line-clamp-2 text-sm font-bold text-slate-900">
+                                            {{ hasValue(row[1]) ? row[1] : 'Not set' }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </section>
 
                             <div v-if="missingProfileFields.length" class="mt-5 rounded-lg border border-amber-100 bg-amber-50 p-4">
                                 <p class="text-sm font-bold text-amber-900">

@@ -1225,8 +1225,27 @@ watch(selectedScholarship, (scholarship) => {
                             </h3>
                         </div>
 
-                        <div v-if="applications.length === 0" class="m-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                            No submitted applications yet. Complete the wizard above to create one.
+                        <div v-if="applications.length === 0" class="m-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                            <p class="text-sm font-bold text-slate-900">
+                                No submitted applications yet
+                            </p>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                                Choose a scholarship, confirm your documents, then submit through the wizard above.
+                            </p>
+                            <div class="mt-4 flex flex-col gap-2 sm:flex-row">
+                                <a
+                                    href="/dashboard/scholarships"
+                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                                >
+                                    Browse scholarships
+                                </a>
+                                <a
+                                    href="/dashboard/documents"
+                                    class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                                >
+                                    Prepare documents
+                                </a>
+                            </div>
                         </div>
 
                         <div v-else class="grid gap-4 p-5">

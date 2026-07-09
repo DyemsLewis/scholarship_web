@@ -226,6 +226,18 @@ function deadlineDays(value) {
     return Math.ceil((parsed - startOfToday) / 86400000);
 }
 
+function urgentDeadlineLabel(scholarship) {
+    if (scholarship.days_left === 0) {
+        return 'Due today';
+    }
+
+    if (scholarship.days_left === 1) {
+        return 'Due tomorrow';
+    }
+
+    return `${scholarship.days_left} days left`;
+}
+
 async function loadDashboard() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -407,6 +419,50 @@ onMounted(loadDashboard);
                                 <p class="mt-3 text-xs font-bold text-slate-900">
                                     {{ signal.action }}
                                 </p>
+                            </a>
+                        </div>
+                    </section>
+
+                    <section v-if="urgentScholarships.length" class="student-card p-4">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="student-section-mark">
+                                    <i class="fa-solid fa-clock text-sm"></i>
+                                </span>
+                                <div>
+                                    <p class="student-kicker">
+                                        Deadline Reminder
+                                    </p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                        Programs closing soon
+                                    </h3>
+                                </div>
+                            </div>
+                            <a href="/dashboard/scholarships" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                View scholarships
+                            </a>
+                        </div>
+                        <div class="mt-4 grid gap-3 md:grid-cols-3">
+                            <a
+                                v-for="scholarship in urgentScholarships"
+                                :key="scholarship.id"
+                                :href="`/dashboard/scholarships/${scholarship.id}`"
+                                class="rounded-lg border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300 hover:bg-white"
+                            >
+                                <p class="line-clamp-2 text-sm font-bold text-slate-950">
+                                    {{ scholarship.title }}
+                                </p>
+                                <p class="mt-1 truncate text-xs font-semibold text-slate-500">
+                                    {{ scholarship.provider?.name || 'Scholarship Provider' }}
+                                </p>
+                                <div class="mt-3 flex items-center justify-between gap-2">
+                                    <span class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                                        {{ urgentDeadlineLabel(scholarship) }}
+                                    </span>
+                                    <span class="text-xs font-bold text-slate-500">
+                                        {{ scholarship.eligibility_match?.score ?? 0 }}% match
+                                    </span>
+                                </div>
                             </a>
                         </div>
                     </section>

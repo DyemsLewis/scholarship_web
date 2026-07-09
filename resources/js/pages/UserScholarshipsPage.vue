@@ -291,6 +291,37 @@ function matchLabel(score) {
     return 'Needs checking';
 }
 
+function beginnerTags(scholarship) {
+    const tags = [];
+    const score = Number(scholarship?.eligibility_match?.score ?? 0);
+    const documentsPercent = Number(scholarship?.prepared_documents?.percent ?? 0);
+    const days = deadlineDays(scholarship);
+
+    if (scholarship?.eligibility_match?.is_eligible === false) {
+        tags.push({ label: 'Not eligible yet', className: 'bg-rose-50 text-rose-700 ring-rose-100' });
+    } else if (score >= 80) {
+        tags.push({ label: 'Good fit', className: 'bg-emerald-50 text-emerald-700 ring-emerald-100' });
+    } else if (score >= 50) {
+        tags.push({ label: 'Review fit', className: 'bg-amber-50 text-amber-800 ring-amber-100' });
+    }
+
+    if (documentsPercent >= 100) {
+        tags.push({ label: 'Documents ready', className: 'bg-slate-100 text-slate-700 ring-slate-200' });
+    } else if (Number(scholarship?.prepared_documents?.required ?? 0) > 0) {
+        tags.push({ label: 'Needs documents', className: 'bg-slate-100 text-slate-700 ring-slate-200' });
+    }
+
+    if (days !== null && days >= 0 && days <= 7) {
+        tags.push({ label: days === 0 ? 'Due today' : 'Deadline soon', className: 'bg-rose-50 text-rose-700 ring-rose-100' });
+    }
+
+    if (scholarship?.has_applied) {
+        tags.push({ label: 'Already applied', className: 'bg-slate-100 text-slate-700 ring-slate-200' });
+    }
+
+    return tags.slice(0, 3);
+}
+
 function canStartApplication(scholarship) {
     if (scholarship?.can_start_application !== undefined) {
         return Boolean(scholarship.can_start_application);
@@ -882,14 +913,37 @@ onMounted(loadScholarships);
                         </div>
 
                         <div v-if="scholarships.length === 0" class="student-card p-6">
-                            <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                                No published scholarships yet. Once providers publish programs, they will show up here.
+                            <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                                <p class="text-sm font-bold text-slate-900">
+                                    No published scholarships yet
+                                </p>
+                                <p class="mt-1 text-sm leading-6 text-slate-500">
+                                    Once providers publish programs, they will show up here with match and document readiness hints.
+                                </p>
+                                <a
+                                    href="/dashboard/profile"
+                                    class="mt-4 inline-flex rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                >
+                                    Review profile while waiting
+                                </a>
                             </div>
                         </div>
 
                         <div v-else-if="filteredScholarships.length === 0" class="student-card p-6">
-                            <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                                No scholarships match your filters.
+                            <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                                <p class="text-sm font-bold text-slate-900">
+                                    No scholarships match your filters
+                                </p>
+                                <p class="mt-1 text-sm leading-6 text-slate-500">
+                                    Try removing one filter or searching with a broader course, location, or category.
+                                </p>
+                                <button
+                                    type="button"
+                                    class="mt-4 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                    @click="resetFilters"
+                                >
+                                    Reset filters
+                                </button>
                             </div>
                         </div>
 
@@ -928,6 +982,16 @@ onMounted(loadScholarships);
                                                 {{ scholarship.provider?.name || 'Scholarship Provider' }}
                                             </p>
                                         </div>
+                                    </div>
+
+                                    <div v-if="beginnerTags(scholarship).length" class="mt-3 flex flex-wrap gap-2">
+                                        <span
+                                            v-for="tag in beginnerTags(scholarship)"
+                                            :key="tag.label"
+                                            :class="['rounded-md px-2.5 py-1 text-xs font-bold ring-1', tag.className]"
+                                        >
+                                            {{ tag.label }}
+                                        </span>
                                     </div>
 
                                     <p v-if="scholarship.description" class="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
