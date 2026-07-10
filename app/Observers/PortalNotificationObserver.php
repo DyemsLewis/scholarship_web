@@ -2,6 +2,7 @@
 
 namespace App\Observers;
 
+use App\Mail\PortalNotificationMail;
 use App\Models\ActivityLog;
 use App\Models\PortalNotification;
 use Illuminate\Support\Facades\Mail;
@@ -18,14 +19,15 @@ class PortalNotificationObserver
             return;
         }
 
-        $subject = "Scholarship Portal: {$notification->title}";
         $actionUrl = $this->actionUrl($notification->action_url);
-        $body = $this->emailBody($notification, $actionUrl);
 
         try {
-            Mail::raw($body, fn ($message) => $message
-                ->to($user->email)
-                ->subject($subject));
+            Mail::to($user->email)->queue(new PortalNotificationMail(
+                $user->name,
+                $notification->title,
+                $notification->message,
+                $actionUrl,
+            ));
         } catch (Throwable $error) {
             ActivityLog::record(
                 $user,
@@ -61,24 +63,4 @@ class PortalNotificationObserver
         return url($actionUrl);
     }
 
-    private function emailBody(PortalNotification $notification, ?string $actionUrl): string
-    {
-        $lines = [
-            "Hello {$notification->user->name},",
-            '',
-            $notification->title,
-            '',
-            $notification->message,
-        ];
-
-        if ($actionUrl) {
-            $lines[] = '';
-            $lines[] = "Open this update: {$actionUrl}";
-        }
-
-        $lines[] = '';
-        $lines[] = 'You are receiving this because your Scholarship Portal account has a new notification.';
-
-        return implode("\n", $lines);
-    }
 }

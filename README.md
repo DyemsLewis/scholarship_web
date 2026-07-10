@@ -34,7 +34,11 @@ php artisan migrate --seed
 ```bash
 php artisan serve
 npm run dev
+php artisan queue:work
+php artisan schedule:work
 ```
+
+Run each long-running command in its own terminal. The queue sends notification emails, while the scheduler creates deadline reminders.
 
 ## Demo Admin Account
 
@@ -62,6 +66,9 @@ Required production settings:
 - Change the default admin password before running `php artisan db:seed`.
 - Point the web server document root to the Laravel `public` folder.
 - Run `npm run build` before deployment or during the host build step.
+- Keep a queue worker running for notification email delivery.
+- Run `php artisan schedule:run` every minute using the host's cron or task scheduler.
+- Back up the database and private `storage/app` documents outside the web root.
 
 Recommended production commands:
 
@@ -76,6 +83,15 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 ```
+
+Recommended background processes:
+
+```bash
+php artisan queue:work --tries=3 --timeout=90
+php artisan schedule:run
+```
+
+On production, supervise the queue worker so it restarts automatically. Configure cron to run `schedule:run` every minute; do not launch it manually once per day.
 
 If you change `.env` after caching config, run:
 

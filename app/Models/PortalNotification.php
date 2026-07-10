@@ -13,6 +13,7 @@ class PortalNotification extends Model
         'title',
         'message',
         'action_url',
+        'deduplication_key',
         'read_at',
     ];
 

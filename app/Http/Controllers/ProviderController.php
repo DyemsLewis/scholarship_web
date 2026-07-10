@@ -1130,6 +1130,12 @@ class ProviderController extends Controller
 
     private function ensureProviderCanPost(Request $request): void
     {
+        abort_unless(
+            $request->user()->hasVerifiedEmail(),
+            403,
+            'Verify your email address before submitting a scholarship.'
+        );
+
         if ($request->user()->providerProfile?->isVerified()) {
             return;
         }

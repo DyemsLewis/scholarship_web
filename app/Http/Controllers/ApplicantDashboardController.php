@@ -374,6 +374,13 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
 
+        if (! $request->user()->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => 'Verify your email address before submitting an application.',
+                'verification_required' => true,
+            ], 403);
+        }
+
         $profileReadiness = $request->user()->applicantProfileReadiness();
 
         if (! $profileReadiness['complete']) {

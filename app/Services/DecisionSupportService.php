@@ -9,12 +9,12 @@ use App\Support\AcademicRequirement;
 
 class DecisionSupportService
 {
+    public const METHODOLOGY_VERSION = '2.0';
+
     private const WEIGHTS = [
-        'eligibility' => 35,
-        'documents' => 25,
+        'eligibility' => 65,
         'academic' => 20,
         'financial_need' => 15,
-        'review_status' => 5,
     ];
 
     public function scoreApplication(ScholarshipApplication $application): array
@@ -29,23 +29,35 @@ class DecisionSupportService
 
         $criteria = [
             $this->criterion('eligibility', 'Eligibility match', $eligibilityScore, 'How well the applicant matches structured scholarship criteria.'),
-            $this->criterion('documents', 'Document readiness', $documentScore, 'Prepared, uploaded, and accepted requirements.'),
             $this->criterion('academic', 'Academic merit', $academicScore, 'Academic record compared with the scholarship grading requirement.'),
             $this->criterion('financial_need', 'Financial need', $financialNeedScore, 'Income bracket priority for assistance-focused scholarships.'),
-            $this->criterion('review_status', 'Review progress', $reviewStatusScore, 'Current application status and reviewer signal.'),
         ];
 
         $score = collect($criteria)->sum(fn (array $criterion) => $criterion['weighted_score']);
         $score = (int) round($score);
-        $recommendation = $this->recommendation($score, $application->status);
+        $recommendation = $this->recommendation($score);
 
         return [
+            'methodology_version' => self::METHODOLOGY_VERSION,
             'score' => $score,
+            'suitability_score' => $score,
             'recommendation' => $recommendation['value'],
             'label' => $recommendation['label'],
             'summary' => $recommendation['summary'],
             'weights' => self::WEIGHTS,
             'criteria' => $criteria,
+            'application_readiness' => [
+                'score' => $documentScore,
+                'label' => $this->readinessLabel($documentScore),
+                'summary' => 'Measures required-document preparation and acceptance. It does not change applicant suitability.',
+            ],
+            'review_progress' => [
+                'score' => $reviewStatusScore,
+                'status' => $application->status,
+                'label' => $this->statusLabel($application->status),
+                'summary' => 'Shows where the provider is in the review workflow. It does not change applicant suitability.',
+            ],
+            'decision_notice' => 'This score supports screening only. The scholarship provider makes the final decision.',
         ];
     }
 
@@ -359,7 +371,7 @@ class DecisionSupportService
         $minimumGwa = $application->scholarship?->minimum_gwa;
 
         if ($gwa === null && $minimumGwa === null) {
-            return 70;
+            return 100;
         }
 
         if ($gwa === null) {
@@ -367,7 +379,7 @@ class DecisionSupportService
         }
 
         if ($minimumGwa === null) {
-            return 85;
+            return 100;
         }
 
         $studentGwa = (float) $gwa;
@@ -395,6 +407,10 @@ class DecisionSupportService
         $income = strtolower((string) $application->applicant?->studentProfile?->income_bracket);
         $requirement = strtolower((string) $application->scholarship?->income_requirement);
 
+        if ($requirement === '' || $this->isOpenOption($requirement)) {
+            return 100;
+        }
+
         if ($income === '') {
             return 50;
         }
@@ -408,13 +424,9 @@ class DecisionSupportService
             default => 60,
         };
 
-        if ($requirement !== '' && ! $this->isOpenOption($requirement)) {
-            return $this->matchesAnyOption($income, [$requirement])
-                ? min(100, $score + 10)
-                : max(25, $score - 20);
-        }
-
-        return $score;
+        return $this->matchesAnyOption($income, [$requirement])
+            ? min(100, $score + 10)
+            : max(25, $score - 20);
     }
 
     private function reviewStatusScore(ScholarshipApplication $application): int
@@ -439,37 +451,21 @@ class DecisionSupportService
         };
     }
 
-    private function recommendation(int $score, string $status): array
+    private function recommendation(int $score): array
     {
-        if (in_array($status, ['rejected', 'not_awarded'], true)) {
-            return [
-                'value' => 'not_recommended',
-                'label' => 'Not recommended',
-                'summary' => 'The application has been closed without an award, so it is not recommended unless reopened.',
-            ];
-        }
-
-        if (in_array($status, ['awarded', 'disbursed', 'renewed'], true)) {
-            return [
-                'value' => 'highly_recommended',
-                'label' => 'Award outcome recorded',
-                'summary' => 'The provider has recorded a successful scholarship outcome for this application.',
-            ];
-        }
-
         if ($score >= 85) {
             return [
                 'value' => 'highly_recommended',
-                'label' => 'Highly recommended',
-                'summary' => 'Strong candidate based on eligibility, documents, merit, and need.',
+                'label' => 'Strong match',
+                'summary' => 'Strong suitability based on eligibility, academic information, and financial need.',
             ];
         }
 
         if ($score >= 70) {
             return [
                 'value' => 'recommended',
-                'label' => 'Recommended',
-                'summary' => 'Good candidate, with only minor items needing reviewer confirmation.',
+                'label' => 'Potential match',
+                'summary' => 'Good suitability, with some criteria still needing provider confirmation.',
             ];
         }
 
@@ -477,15 +473,24 @@ class DecisionSupportService
             return [
                 'value' => 'needs_review',
                 'label' => 'Needs review',
-                'summary' => 'Requires manual review because some criteria are incomplete or unclear.',
+                'summary' => 'Some suitability criteria are incomplete or need manual confirmation.',
             ];
         }
 
         return [
             'value' => 'low_priority',
-            'label' => 'Low priority',
-            'summary' => 'Lower priority based on the current application data.',
+            'label' => 'Limited match',
+            'summary' => 'Several current profile values do not match or are still missing.',
         ];
+    }
+
+    private function readinessLabel(int $score): string
+    {
+        return match (true) {
+            $score >= 100 => 'Documents ready',
+            $score >= 60 => 'Partly ready',
+            default => 'Documents needed',
+        };
     }
 
     private function explanationHeadline(string $recommendation, string $status): string

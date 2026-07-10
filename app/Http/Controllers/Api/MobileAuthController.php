@@ -374,6 +374,13 @@ class MobileAuthController extends Controller
             ], 401);
         }
 
+        if (! $user->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => 'Verify your email address before submitting an application.',
+                'verification_required' => true,
+            ], 403);
+        }
+
         $validated = $request->validate([
             'scholarship_id' => [
                 'required',
@@ -551,6 +558,7 @@ class MobileAuthController extends Controller
             'name' => 'mobile_app',
             'token_hash' => hash('sha256', $plainToken),
             'last_used_at' => now(),
+            'expires_at' => now()->addDays(config('auth.mobile_token_lifetime_days', 30)),
         ]);
 
         return $plainToken;

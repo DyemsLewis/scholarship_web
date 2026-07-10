@@ -29,6 +29,7 @@ class DatabaseSeeder extends Seeder
             'privacy_accepted_at' => now(),
             'terms_version' => Terms::VERSION,
         ]);
+        $admin->forceFill(['email_verified_at' => now()])->save();
 
         $admin->adminProfile()->updateOrCreate([
             'user_id' => $admin->id,
@@ -50,6 +51,7 @@ class DatabaseSeeder extends Seeder
             'privacy_accepted_at' => now(),
             'terms_version' => Terms::VERSION,
         ]);
+        $provider->forceFill(['email_verified_at' => now()])->save();
 
         $provider->providerProfile()->updateOrCreate([
             'user_id' => $provider->id,
@@ -79,6 +81,7 @@ class DatabaseSeeder extends Seeder
             'privacy_accepted_at' => now(),
             'terms_version' => Terms::VERSION,
         ]);
+        $student->forceFill(['email_verified_at' => now()])->save();
 
         $student->studentProfile()->updateOrCreate([
             'user_id' => $student->id,

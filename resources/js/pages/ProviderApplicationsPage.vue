@@ -658,7 +658,7 @@ onMounted(loadProviderData);
                                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
                                     <div class="rounded-md bg-white p-3 ring-1 ring-slate-200">
                                         <p class="font-semibold text-slate-500">
-                                            DSS score
+                                            Suitability
                                         </p>
                                         <p class="mt-1 font-bold text-slate-950">
                                             {{ application.dss_score ?? 0 }}%

@@ -414,7 +414,7 @@ onMounted(loadApplication);
 
                         <div class="grid border-t border-slate-200 text-sm sm:grid-cols-2 lg:grid-cols-4">
                             <div class="border-b border-slate-200 p-4 sm:border-r lg:border-b-0">
-                                <p class="font-semibold text-slate-500">DSS score</p>
+                                <p class="font-semibold text-slate-500">Suitability</p>
                                 <p class="mt-1 font-bold text-slate-950">{{ application.dss_score ?? 0 }}%</p>
                             </div>
                             <div class="border-b border-slate-200 p-4 lg:border-r lg:border-b-0">
@@ -553,7 +553,7 @@ onMounted(loadApplication);
                                 <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <h3 class="text-xl font-bold text-slate-950">
-                                            {{ application.dss_score ?? 0 }}% DSS score
+                                            {{ application.dss_score ?? 0 }}% suitability
                                         </h3>
                                         <p class="mt-2 text-sm font-semibold leading-6 text-slate-800">
                                             {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'DSS reviewed the current application data.' }}

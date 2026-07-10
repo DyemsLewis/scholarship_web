@@ -54,7 +54,7 @@ const applicationFilters = computed(() => [
     },
     {
         value: 'high_dss',
-        label: 'High DSS',
+        label: 'Strong match',
         count: applications.value.filter((application) => Number(application.dss_score ?? 0) >= 80).length,
     },
     {
@@ -232,11 +232,11 @@ function applicationReviewReasons(application) {
     }
 
     if (Number(application.dss_score ?? 0) >= 80) {
-        reasons.push('High DSS candidate');
+        reasons.push('Strong suitability match');
     }
 
     if (application.dss_recommendation === 'needs_review') {
-        reasons.push('DSS needs manual check');
+        reasons.push('Match needs manual check');
     }
 
     if (reasons.length === 0) {
@@ -795,7 +795,7 @@ onMounted(loadReviewData);
                                             Outcome: {{ application.awarded_amount || 'Amount not listed' }} <span v-if="application.outcome_at">on {{ application.outcome_at }}</span>
                                         </p>
                                         <p class="mt-2 inline-flex w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
-                                            DSS: {{ application.dss_score ?? 0 }}% - {{ statusLabel(application.dss_recommendation || 'needs_review') }}
+                                            Suitability: {{ application.dss_score ?? 0 }}% - {{ application.dss_breakdown?.label || statusLabel(application.dss_recommendation || 'needs_review') }}
                                         </p>
                                         <p v-if="application.dss_explanation?.headline" class="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-600">
                                             {{ application.dss_explanation.headline }}

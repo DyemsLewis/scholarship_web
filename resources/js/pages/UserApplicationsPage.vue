@@ -612,7 +612,7 @@ watch(selectedScholarship, (scholarship) => {
 
                         <details class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm">
                             <summary class="cursor-pointer font-bold text-slate-950">
-                                DSS score guide
+                                Suitability score guide
                             </summary>
                             <p class="mt-2 leading-6 text-slate-600">
                                 DSS summarizes profile fit, documents, and review signals. Providers still make the final decision.

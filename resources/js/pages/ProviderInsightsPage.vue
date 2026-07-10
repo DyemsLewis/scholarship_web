@@ -455,7 +455,7 @@ onMounted(loadInsights);
                                 Recommendation signals
                             </h3>
                             <p class="mt-3 text-sm leading-6 text-slate-600">
-                                Average DSS score: <span class="font-bold text-slate-950">{{ dssSummary.average_score || 0 }}%</span>
+                                Average suitability score: <span class="font-bold text-slate-950">{{ dssSummary.average_score || 0 }}%</span>
                             </p>
                             <div class="mt-5 flex flex-wrap gap-2">
                                 <div

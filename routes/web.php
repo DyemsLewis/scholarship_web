@@ -32,11 +32,11 @@ Route::get('/dashboard/applications/data', [ApplicantDashboardController::class,
 Route::get('/dashboard/applications/{application}', [ApplicantDashboardController::class, 'applicationDetail'])->middleware('auth')->name('dashboard.applications.show');
 Route::get('/dashboard/applications/{application}/data', [ApplicantDashboardController::class, 'applicationDetailData'])->middleware('auth')->name('dashboard.applications.show.data');
 Route::get('/dashboard/documents/data', [ApplicantDashboardController::class, 'documentsData'])->middleware('auth')->name('dashboard.documents.data');
-Route::post('/dashboard/student-documents', [ApplicantDashboardController::class, 'uploadPreparedDocument'])->middleware('auth')->name('dashboard.student-documents.store');
+Route::post('/dashboard/student-documents', [ApplicantDashboardController::class, 'uploadPreparedDocument'])->middleware(['auth', 'throttle:20,1'])->name('dashboard.student-documents.store');
 Route::get('/dashboard/student-documents/{document}/view', [ApplicantDashboardController::class, 'viewPreparedDocument'])->middleware('auth')->name('dashboard.student-documents.view');
 Route::get('/dashboard/student-documents/{document}/download', [ApplicantDashboardController::class, 'downloadPreparedDocument'])->middleware('auth')->name('dashboard.student-documents.download');
 Route::delete('/dashboard/student-documents/{document}', [ApplicantDashboardController::class, 'deletePreparedDocument'])->middleware('auth')->name('dashboard.student-documents.destroy');
-Route::post('/dashboard/applications', [ApplicantDashboardController::class, 'storeApplication'])->middleware('auth')->name('dashboard.applications.store');
+Route::post('/dashboard/applications', [ApplicantDashboardController::class, 'storeApplication'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applications.store');
 Route::patch('/dashboard/applications/{application}/response', [ApplicantDashboardController::class, 'respondToApplication'])->middleware('auth')->name('dashboard.applications.response');
 Route::post('/dashboard/applications/{application}/documents', [ApplicantDashboardController::class, 'uploadDocument'])->middleware('auth')->name('dashboard.applications.documents.store');
 Route::delete('/dashboard/documents/{document}', [ApplicantDashboardController::class, 'deleteDocument'])->middleware('auth')->name('dashboard.documents.destroy');
@@ -110,8 +110,8 @@ Route::middleware(['auth', 'provider'])
         Route::post('/scholarships/{scholarship}/duplicate', [ProviderController::class, 'duplicateScholarship'])->name('scholarships.duplicate');
     });
 
-Route::post('/login', [AuthController::class, 'login'])->name('login.store');
-Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('password.email');
-Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update');
-Route::post('/register', [AuthController::class, 'register'])->name('register.store');
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1')->name('login.store');
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1')->name('password.email');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1')->name('password.update');
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1')->name('register.store');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');

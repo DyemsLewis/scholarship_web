@@ -394,7 +394,7 @@ onMounted(loadApplication);
                                 <p class="mt-1 font-bold text-slate-950">{{ application.status_progress?.label || statusLabel(application.status) }}</p>
                             </div>
                             <div class="border-b border-slate-200 p-4 lg:border-r lg:border-b-0">
-                                <p class="font-semibold text-slate-500">DSS score</p>
+                                <p class="font-semibold text-slate-500">Suitability</p>
                                 <p class="mt-1 font-bold text-slate-950">{{ application.dss_score ?? 0 }}%</p>
                             </div>
                             <div class="border-b border-slate-200 p-4 sm:border-r sm:border-b-0">
@@ -444,7 +444,7 @@ onMounted(loadApplication);
                                     <div>
                                         <p class="student-kicker">Decision Support</p>
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                            {{ application.dss_score ?? 0 }}% DSS score
+                                            {{ application.dss_score ?? 0 }}% suitability
                                         </h3>
                                     </div>
                                     <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', recommendationClass(application.dss_recommendation)]">

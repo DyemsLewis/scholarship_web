@@ -4,6 +4,8 @@ use App\Models\User;
 
 return [
 
+    'mobile_token_lifetime_days' => (int) env('MOBILE_TOKEN_LIFETIME_DAYS', 30),
+
     /*
     |--------------------------------------------------------------------------
     | Authentication Defaults
