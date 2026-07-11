@@ -61,11 +61,13 @@ const applicationModeOptions = [
     { value: 'provider_review', label: 'Provider review only' },
 ];
 const dssApplicationGuideItems = [
-    { label: 'Eligibility', weight: '35%', detail: 'Profile fit.' },
-    { label: 'Documents', weight: '25%', detail: 'File readiness.' },
-    { label: 'Academic', weight: '20%', detail: 'Grade rule.' },
-    { label: 'Need', weight: '15%', detail: 'Income context.' },
-    { label: 'Review', weight: '5%', detail: 'Status signals.' },
+    { label: 'Eligibility', weight: '65%', detail: 'Profile fit against provider rules.' },
+    { label: 'Academic', weight: '20%', detail: 'Grade or GWA compared with the requirement.' },
+    { label: 'Financial need', weight: '15%', detail: 'Income context for assistance-focused programs.' },
+];
+const dssApplicationSupportItems = [
+    { label: 'Documents', detail: 'Shown as readiness so you know what to upload.' },
+    { label: 'Review stage', detail: 'Shown as progress after the provider starts checking.' },
 ];
 const selectedScholarship = computed(() => scholarships.value.find((scholarship) => scholarship.id === Number(selectedScholarshipId.value)));
 const selectedRequirements = computed(() => documentRequirements(selectedScholarship.value?.requirements));
@@ -615,9 +617,9 @@ watch(selectedScholarship, (scholarship) => {
                                 Suitability score guide
                             </summary>
                             <p class="mt-2 leading-6 text-slate-600">
-                                DSS summarizes profile fit, documents, and review signals. Providers still make the final decision.
+                                DSS suitability uses eligibility, academic merit, and financial need. Documents and review stage are shown separately so the score is easier to understand.
                             </p>
-                            <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                            <div class="mt-3 grid gap-2 md:grid-cols-3">
                                 <div
                                     v-for="item in dssApplicationGuideItems"
                                     :key="item.label"
@@ -634,6 +636,26 @@ watch(selectedScholarship, (scholarship) => {
                                     </p>
                                 </div>
                             </div>
+                            <div class="mt-3 grid gap-2 md:grid-cols-2">
+                                <div
+                                    v-for="item in dssApplicationSupportItems"
+                                    :key="item.label"
+                                    class="rounded-md border border-slate-200 bg-white p-3"
+                                >
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="font-bold text-slate-950">{{ item.label }}</p>
+                                        <span class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+                                            Separate
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 text-xs leading-5 text-slate-600">
+                                        {{ item.detail }}
+                                    </p>
+                                </div>
+                            </div>
+                            <p class="mt-3 text-xs font-semibold leading-5 text-slate-500">
+                                Providers still make the final scholarship decision.
+                            </p>
                         </details>
                     </section>
 
@@ -1298,7 +1320,7 @@ watch(selectedScholarship, (scholarship) => {
                                             Stage: {{ application.status_progress?.label || statusLabel(application.status) }}
                                         </span>
                                         <span :class="['rounded-md px-2.5 py-1', recommendationClass(application.dss_recommendation)]">
-                                            DSS {{ application.dss_score ?? 0 }}%
+                                            Suitability {{ application.dss_score ?? 0 }}%
                                         </span>
                                         <span class="rounded-md bg-slate-100 px-2.5 py-1 text-slate-700">
                                             Documents {{ application.document_readiness?.percent ?? 0 }}%

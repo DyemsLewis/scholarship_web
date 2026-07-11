@@ -34,7 +34,7 @@ const heroSlides = [
     {
         eyebrow: 'Decision support system',
         title: 'Use data to support fairer scholarship decisions',
-        text: 'Eligibility match, document readiness, academic merit, and financial need are combined into transparent DSS guidance.',
+        text: 'Eligibility match, academic merit, and financial need shape suitability, while document readiness stays visible as separate guidance.',
         image: '/images/application-documents.jpg',
         primaryAction: 'Explore Programs',
         primaryHref: '/register',

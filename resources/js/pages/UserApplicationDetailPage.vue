@@ -25,6 +25,35 @@ const responseTermsAccepted = ref(false);
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
 const uploadedDocumentNames = computed(() => new Set((application.value?.documents ?? []).map((document) => document.document_name)));
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
+const dssSupportSignals = computed(() => {
+    const current = application.value;
+    const breakdown = current?.dss_breakdown ?? {};
+    const readiness = breakdown.application_readiness;
+    const review = breakdown.review_progress;
+    const signals = [];
+
+    if (readiness || current?.document_readiness) {
+        const score = readiness?.score ?? current?.document_readiness?.percent;
+
+        signals.push({
+            label: 'Document readiness',
+            value: score === undefined || score === null ? (readiness?.label ?? 'Separate') : `${score}%`,
+            detail: readiness?.summary ?? 'Shows document preparation only. It does not change applicant suitability.',
+        });
+    }
+
+    if (review || current?.status_progress) {
+        signals.push({
+            label: 'Review progress',
+            value: review?.label ?? current?.status_progress?.label ?? statusLabel(current?.status),
+            detail: review?.summary ?? 'Shows where the provider is in the review workflow. It does not change applicant suitability.',
+        });
+    }
+
+    return signals;
+});
+const dssDecisionNotice = computed(() => application.value?.dss_breakdown?.decision_notice ?? 'This score supports screening only. The scholarship provider makes the final decision.');
+const applicantDssNextAction = computed(() => applicantNextAction(application.value));
 const timeline = computed(() => application.value?.timeline ?? []);
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
 const canRespondToOffer = computed(() => Boolean(application.value?.can_respond));
@@ -147,6 +176,36 @@ function labelFromKey(value) {
     return String(value ?? '')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function applicantNextAction(current) {
+    if (!current) {
+        return 'Wait for provider review and document feedback.';
+    }
+
+    if (['awarded', 'disbursed', 'renewed'].includes(current.status)) {
+        return 'Your award is recorded. Watch for release or renewal updates.';
+    }
+
+    if (['rejected', 'not_awarded'].includes(current.status)) {
+        return 'This application is closed. Check review notes for the provider decision.';
+    }
+
+    const missing = current.document_readiness?.missing ?? [];
+
+    if (missing.length) {
+        return `Confirm or upload: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', and more' : ''}.`;
+    }
+
+    if (Number(current.document_readiness?.accepted_percent ?? 100) < 100) {
+        return 'Wait for the provider to review your uploaded documents.';
+    }
+
+    if (['highly_recommended', 'recommended'].includes(current.dss_recommendation)) {
+        return 'Your profile looks suitable. Monitor updates and respond quickly if the provider asks for anything.';
+    }
+
+    return 'Wait for provider review and keep your profile and documents updated.';
 }
 
 function documentRequirements(requirements) {
@@ -455,7 +514,7 @@ onMounted(loadApplication);
                                     {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'DSS reviewed the current application data.' }}
                                 </p>
                                 <p class="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">
-                                    {{ application.dss_explanation?.next_action || 'Wait for provider review and document feedback.' }}
+                                    {{ applicantDssNextAction }}
                                 </p>
 
                                 <div
@@ -494,8 +553,11 @@ onMounted(loadApplication);
 
                                 <details v-if="dssCriteria.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
                                     <summary class="cursor-pointer text-sm font-bold text-slate-800">
-                                        Score breakdown
+                                        Suitability breakdown
                                     </summary>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        Only these criteria are weighted in the suitability score.
+                                    </p>
                                     <div class="mt-3 grid gap-2">
                                         <div
                                             v-for="criterion in dssCriteria"
@@ -515,6 +577,34 @@ onMounted(loadApplication);
                                         </div>
                                     </div>
                                 </details>
+
+                                <div v-if="dssSupportSignals.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                    <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                        <p class="text-sm font-bold text-slate-800">Separate guidance signals</p>
+                                        <span class="w-fit rounded-md bg-white px-2 py-0.5 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                                            Not weighted
+                                        </span>
+                                    </div>
+                                    <div class="mt-3 grid gap-2 md:grid-cols-2">
+                                        <div
+                                            v-for="signal in dssSupportSignals"
+                                            :key="signal.label"
+                                            class="rounded-md border border-slate-200 bg-white p-3 text-sm"
+                                        >
+                                            <div class="flex items-center justify-between gap-2">
+                                                <p class="font-bold text-slate-950">{{ signal.label }}</p>
+                                                <span class="text-xs font-bold text-slate-600">{{ signal.value }}</span>
+                                            </div>
+                                            <p class="mt-1 line-clamp-2 leading-6 text-slate-600">
+                                                {{ signal.detail }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p class="mt-3 text-xs font-semibold leading-5 text-slate-500">
+                                    {{ dssDecisionNotice }}
+                                </p>
                             </section>
 
                             <section class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
