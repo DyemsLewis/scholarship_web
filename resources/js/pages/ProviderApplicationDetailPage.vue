@@ -15,6 +15,7 @@ const application = ref(null);
 const reviewForm = ref(emptyReviewForm());
 const documentStatuses = ref({});
 const documentNotes = ref({});
+const rubricScores = ref({});
 
 const statusOptions = [
     { value: 'submitted', label: 'Submitted' },
@@ -53,6 +54,7 @@ const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2
 const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500';
 
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
+const rubricReview = computed(() => application.value?.rubric_review ?? { criteria: [], completed: 0, total_criteria: 0 });
 const timeline = computed(() => application.value?.timeline ?? []);
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
 const contractSnapshotSections = computed(() => {
@@ -215,6 +217,9 @@ function applyApplication(payload) {
     documentNotes.value = Object.fromEntries(
         (payload?.documents ?? []).map((document) => [document.id, document.review_notes ?? '']),
     );
+    rubricScores.value = Object.fromEntries(
+        (payload?.rubric_review?.criteria ?? []).map((criterion) => [criterion.key, criterion.score ?? '']),
+    );
 }
 
 function quickActionNote(action) {
@@ -295,6 +300,9 @@ async function updateStatus() {
     errorMessage.value = '';
 
     try {
+        const completedRubricScores = Object.fromEntries(
+            Object.entries(rubricScores.value).filter(([, score]) => score !== '' && score !== null),
+        );
         const response = await window.axios.patch(`/provider/applications/${application.value.id}/status`, {
             status: reviewForm.value.status,
             decision_reason: reviewForm.value.decisionReason,
@@ -302,6 +310,7 @@ async function updateStatus() {
             awarded_amount: reviewForm.value.awardedAmount,
             outcome_notes: reviewForm.value.outcomeNotes,
             outcome_at: reviewForm.value.outcomeAt,
+            rubric_scores: completedRubricScores,
         });
 
         applyApplication(response.data.application);
@@ -544,6 +553,69 @@ onMounted(loadApplication);
                                         <textarea v-model="reviewForm.reviewNotes" rows="4" maxlength="1500" placeholder="Example: Missing proof of income, qualified for interview, or approved for final review." :class="inputClass"></textarea>
                                     </div>
                                 </div>
+                            </section>
+
+                            <section v-if="rubricReview.criteria?.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                            Review Rubric
+                                        </p>
+                                        <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                            Consistent applicant scoring
+                                        </h3>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">
+                                            Score each criterion from 0 to 100. The weighted total appears when all criteria are complete.
+                                        </p>
+                                    </div>
+                                    <div class="rounded-md bg-slate-100 px-3 py-2 text-right">
+                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                                            Provider score
+                                        </p>
+                                        <p class="mt-1 text-lg font-bold text-slate-950">
+                                            {{ rubricReview.total_score !== null ? `${rubricReview.total_score}%` : `${rubricReview.completed}/${rubricReview.total_criteria}` }}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 grid gap-3">
+                                    <div
+                                        v-for="criterion in rubricReview.criteria"
+                                        :key="criterion.key"
+                                        class="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_7rem] sm:items-center"
+                                    >
+                                        <div>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <p class="font-bold text-slate-950">{{ criterion.label }}</p>
+                                                <span class="rounded bg-white px-2 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
+                                                    {{ criterion.weight }}%
+                                                </span>
+                                            </div>
+                                            <p v-if="criterion.guidance" class="mt-1 text-xs leading-5 text-slate-500">
+                                                {{ criterion.guidance }}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label :for="`rubric-score-${criterion.key}`" class="sr-only">
+                                                {{ criterion.label }} score
+                                            </label>
+                                            <input
+                                                :id="`rubric-score-${criterion.key}`"
+                                                v-model.number="rubricScores[criterion.key]"
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                step="1"
+                                                placeholder="0-100"
+                                                :class="inputClass"
+                                            >
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p class="mt-3 text-xs leading-5 text-slate-500">
+                                    {{ rubricReview.decision_notice }} Save review above to keep these scores.
+                                </p>
                             </section>
 
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

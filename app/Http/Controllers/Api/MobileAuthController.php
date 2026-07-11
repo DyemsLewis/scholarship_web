@@ -381,6 +381,16 @@ class MobileAuthController extends Controller
             ], 403);
         }
 
+        $profileReadiness = $user->applicantProfileReadiness();
+
+        if (! $profileReadiness['complete']) {
+            return response()->json([
+                'message' => 'Complete your student profile before applying.',
+                'missing_fields' => $profileReadiness['missing'],
+                'profile_readiness' => $profileReadiness,
+            ], 422);
+        }
+
         $validated = $request->validate([
             'scholarship_id' => [
                 'required',
@@ -403,7 +413,24 @@ class MobileAuthController extends Controller
         }
 
         $scholarship = Scholarship::query()->findOrFail($validated['scholarship_id']);
+
+        if (! $scholarship->isAcceptingApplications()) {
+            return response()->json([
+                'message' => 'This scholarship is no longer accepting applications.',
+            ], 422);
+        }
+
         $eligibilityMatch = $this->eligibilityMatch($scholarship, $user);
+        $eligibilityBlockers = $this->applicationEligibilityBlockers($eligibilityMatch);
+
+        if ($eligibilityBlockers !== []) {
+            return response()->json([
+                'message' => 'You are not eligible to apply for this scholarship based on your current student profile.',
+                'eligibility_match' => $eligibilityMatch,
+                'blocking_criteria' => $eligibilityBlockers,
+            ], 422);
+        }
+
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => $user->id,
@@ -411,6 +438,7 @@ class MobileAuthController extends Controller
             'document_checklist' => $validated['document_checklist'] ?? [],
             'eligibility_score' => $eligibilityMatch['score'],
             'eligibility_breakdown' => $eligibilityMatch,
+            'review_rubric_snapshot' => $scholarship->review_rubric ?? [],
             'notes' => $validated['notes'] ?? null,
             'submitted_at' => now(),
         ]);
@@ -460,7 +488,7 @@ class MobileAuthController extends Controller
             ], 401);
         }
 
-        if ($scholarship->status !== 'published') {
+        if (! $scholarship->isAcceptingApplications()) {
             return response()->json([
                 'message' => 'Scholarship not found.',
             ], 404);
@@ -598,7 +626,7 @@ class MobileAuthController extends Controller
         return Scholarship::query()
             ->with('provider.providerProfile')
             ->withCount('bookmarks')
-            ->where('status', 'published')
+            ->acceptingApplications()
             ->orderByRaw('deadline is null')
             ->orderBy('deadline')
             ->latest();
@@ -607,7 +635,7 @@ class MobileAuthController extends Controller
     private function statsPayload(User $user): array
     {
         return [
-            'available_scholarships' => Scholarship::query()->where('status', 'published')->count(),
+            'available_scholarships' => Scholarship::query()->acceptingApplications()->count(),
             'applications' => ScholarshipApplication::query()->where('applicant_id', $user->id)->count(),
             'saved' => ScholarshipBookmark::query()->where('user_id', $user->id)->count(),
         ];
@@ -642,6 +670,8 @@ class MobileAuthController extends Controller
             ->where('scholarship_id', $scholarship->id)
             ->where('applicant_id', $user->id)
             ->exists();
+        $profileComplete = (bool) $user->applicantProfileReadiness()['complete'];
+        $eligibilityBlockers = $this->applicationEligibilityBlockers($match);
 
         return [
             'id' => $scholarship->id,
@@ -684,6 +714,11 @@ class MobileAuthController extends Controller
                 ->where('user_id', $user->id)
                 ->exists(),
             'has_applied' => $hasApplied,
+            'is_accepting_applications' => $scholarship->isAcceptingApplications(),
+            'can_start_application' => $scholarship->isAcceptingApplications()
+                && $profileComplete
+                && $eligibilityBlockers === []
+                && ! $hasApplied,
             'eligibility_match' => $match,
             'prepared_documents' => $preparedDocuments,
             'eligibility_guide' => [
@@ -905,6 +940,21 @@ class MobileAuthController extends Controller
         ];
     }
 
+    private function applicationEligibilityBlockers(array $eligibilityMatch): array
+    {
+        return collect($eligibilityMatch['criteria'] ?? [])
+            ->filter(fn (array $criterion) => ($criterion['status'] ?? null) === 'fail' && ($criterion['key'] ?? null) !== 'documents')
+            ->map(fn (array $criterion) => [
+                'key' => $criterion['key'] ?? null,
+                'label' => $criterion['label'] ?? 'Eligibility requirement',
+                'student_value' => $criterion['studentValue'] ?? null,
+                'requirement' => $criterion['requirement'] ?? null,
+                'note' => $criterion['note'] ?? null,
+            ])
+            ->values()
+            ->all();
+    }
+
     private function addOptionCriterion(callable $addCriterion, string $key, string $label, ?string $studentValue, ?string $requirements): void
     {
         $options = $this->splitOptions($requirements);
@@ -1113,7 +1163,7 @@ class MobileAuthController extends Controller
         }
 
         Scholarship::query()
-            ->where('status', 'published')
+            ->acceptingApplications()
             ->whereNotNull('deadline')
             ->whereDate('deadline', '>=', now()->toDateString())
             ->whereDate('deadline', '<=', now()->addDays(7)->toDateString())
@@ -1143,7 +1193,7 @@ class MobileAuthController extends Controller
             'Recommendation letter',
         ];
         $publishedRequirements = Scholarship::query()
-            ->where('status', 'published')
+            ->acceptingApplications()
             ->whereNotNull('requirements')
             ->pluck('requirements')
             ->flatMap(fn (?string $requirements) => $this->splitOptions($requirements));

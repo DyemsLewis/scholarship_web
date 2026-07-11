@@ -48,7 +48,7 @@ class ApplicantDashboardController extends Controller
             return $redirect;
         }
 
-        abort_unless($scholarship->status === 'published', 404);
+        abort_unless($scholarship->isAcceptingApplications(), 404);
 
         return view('dashboard-scholarship-detail', [
             'scholarship' => $scholarship,
@@ -416,6 +416,13 @@ class ApplicantDashboardController extends Controller
         $scholarship = Scholarship::query()
             ->with('provider.providerProfile')
             ->findOrFail($validated['scholarship_id']);
+
+        if (! $scholarship->isAcceptingApplications()) {
+            return response()->json([
+                'message' => 'This scholarship is no longer accepting applications.',
+            ], 422);
+        }
+
         $eligibilityMatch = $this->eligibilityMatch($scholarship, $request->user());
         $eligibilityBlockers = $this->applicationEligibilityBlockers($eligibilityMatch);
 
@@ -435,6 +442,7 @@ class ApplicantDashboardController extends Controller
             'document_checklist' => $validated['document_checklist'] ?? [],
             'eligibility_score' => $eligibilityMatch['score'],
             'eligibility_breakdown' => $eligibilityMatch,
+            'review_rubric_snapshot' => $scholarship->review_rubric ?? [],
             'notes' => $validated['notes'] ?? null,
             'submitted_at' => $acceptedAt,
             'terms_accepted_at' => $acceptedAt,
@@ -736,7 +744,7 @@ class ApplicantDashboardController extends Controller
         return Scholarship::query()
             ->with('provider.providerProfile')
             ->withCount('bookmarks')
-            ->where('status', 'published')
+            ->acceptingApplications()
             ->orderByRaw('deadline is null')
             ->orderBy('deadline')
             ->latest();
@@ -750,7 +758,7 @@ class ApplicantDashboardController extends Controller
     private function statsPayload(Request $request): array
     {
         return [
-            'available_scholarships' => Scholarship::query()->where('status', 'published')->count(),
+            'available_scholarships' => Scholarship::query()->acceptingApplications()->count(),
             'applications' => ScholarshipApplication::query()->where('applicant_id', $request->user()->id)->count(),
             'saved' => ScholarshipBookmark::query()->where('user_id', $request->user()->id)->count(),
         ];
@@ -813,7 +821,10 @@ class ApplicantDashboardController extends Controller
             'bookmarks_count' => $scholarship->bookmarks_count ?? $scholarship->bookmarks()->count(),
             'is_saved' => $saved,
             'has_applied' => $hasApplied,
-            'can_start_application' => $profileComplete && (bool) ($match['is_eligible'] ?? false) && ! $hasApplied,
+            'can_start_application' => $scholarship->isAcceptingApplications()
+                && $profileComplete
+                && (bool) ($match['is_eligible'] ?? false)
+                && ! $hasApplied,
             'eligibility_match' => $match,
             'prepared_documents' => $preparedDocuments,
             'eligibility_guide' => [
@@ -1036,7 +1047,7 @@ class ApplicantDashboardController extends Controller
             'Recommendation letter',
         ];
         $publishedRequirements = Scholarship::query()
-            ->where('status', 'published')
+            ->acceptingApplications()
             ->whereNotNull('requirements')
             ->pluck('requirements')
             ->flatMap(fn (?string $requirements) => $this->splitDocumentRequirements($requirements));

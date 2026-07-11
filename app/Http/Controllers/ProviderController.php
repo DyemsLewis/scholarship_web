@@ -12,6 +12,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Support\AcademicRequirement;
+use App\Support\ReviewRubric;
 use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -521,6 +522,8 @@ class ProviderController extends Controller
             'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'outcome_notes' => ['nullable', 'string', 'max:2000'],
             'outcome_at' => ['nullable', 'date'],
+            'rubric_scores' => ['sometimes', 'array'],
+            'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
         ]);
 
         $previousStatus = $application->status;
@@ -534,6 +537,19 @@ class ProviderController extends Controller
         $outcomeNotes = array_key_exists('outcome_notes', $validated)
             ? $validated['outcome_notes']
             : $application->outcome_notes;
+        $outcomeAt = $validated['outcome_at'] ?? ($isOutcomeStatus ? ($application->outcome_at ?? now()) : $application->outcome_at);
+        $rubric = $application->review_rubric_snapshot
+            ?: ($application->scholarship?->review_rubric ?? []);
+        $rubricResult = array_key_exists('rubric_scores', $validated)
+            ? ReviewRubric::result($rubric, $validated['rubric_scores'])
+            : null;
+        $applicantFacingChanged = $previousStatus !== $validated['status']
+            || $this->comparableScholarshipValue($application->decision_reason) !== $this->comparableScholarshipValue($decisionReason)
+            || $this->comparableScholarshipValue($application->awarded_amount) !== $this->comparableScholarshipValue($validated['awarded_amount'] ?? $application->awarded_amount)
+            || $this->comparableScholarshipValue($application->outcome_notes) !== $this->comparableScholarshipValue($outcomeNotes)
+            || $this->comparableScholarshipValue($application->outcome_at) !== $this->comparableScholarshipValue($outcomeAt);
+        $reviewNoteChanged = $this->comparableScholarshipValue($application->review_notes)
+            !== $this->comparableScholarshipValue($reviewNotes);
 
         $application->update([
             'status' => $validated['status'],
@@ -541,21 +557,27 @@ class ProviderController extends Controller
             'review_notes' => $reviewNotes,
             'awarded_amount' => array_key_exists('awarded_amount', $validated) ? $validated['awarded_amount'] : $application->awarded_amount,
             'outcome_notes' => $outcomeNotes,
-            'outcome_at' => $validated['outcome_at'] ?? ($isOutcomeStatus ? ($application->outcome_at ?? now()) : $application->outcome_at),
+            'outcome_at' => $outcomeAt,
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
+            'rubric_scores' => $rubricResult ? $rubricResult['scores'] : $application->rubric_scores,
+            'rubric_total_score' => $rubricResult ? $rubricResult['total_score'] : $application->rubric_total_score,
+            'rubric_scored_by' => $rubricResult ? $request->user()->id : $application->rubric_scored_by,
+            'rubric_scored_at' => $rubricResult && $rubricResult['completed'] > 0 ? now() : $application->rubric_scored_at,
         ]);
         app(DecisionSupportService::class)->syncApplication($application);
 
-        ApplicationStatusHistory::create([
-            'scholarship_application_id' => $application->id,
-            'changed_by' => $request->user()->id,
-            'from_status' => $previousStatus,
-            'to_status' => $validated['status'],
-            'decision_reason' => $validated['decision_reason'] ?? null,
-            'review_notes' => $validated['review_notes'] ?? null,
-            'changed_at' => now(),
-        ]);
+        if ($applicantFacingChanged || $reviewNoteChanged) {
+            ApplicationStatusHistory::create([
+                'scholarship_application_id' => $application->id,
+                'changed_by' => $request->user()->id,
+                'from_status' => $previousStatus,
+                'to_status' => $validated['status'],
+                'decision_reason' => $validated['decision_reason'] ?? null,
+                'review_notes' => $validated['review_notes'] ?? null,
+                'changed_at' => now(),
+            ]);
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -566,19 +588,22 @@ class ProviderController extends Controller
                 'application_id' => $application->id,
                 'status' => $validated['status'],
                 'decision_reason' => $validated['decision_reason'] ?? null,
+                'rubric_total_score' => $rubricResult['total_score'] ?? null,
             ],
         );
 
-        PortalNotification::create(array_merge(
-            ['user_id' => $application->applicant_id],
-            $this->applicationStatusNotificationPayload($application, $validated['status'], $decisionReason, $isOutcomeStatus),
-        ));
+        if ($applicantFacingChanged) {
+            PortalNotification::create(array_merge(
+                ['user_id' => $application->applicant_id],
+                $this->applicationStatusNotificationPayload($application, $validated['status'], $decisionReason, $isOutcomeStatus),
+            ));
+        }
 
         $freshApplication = $application->fresh()->load(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship']);
         app(DecisionSupportService::class)->syncApplication($freshApplication);
 
         return response()->json([
-            'message' => 'Application status updated.',
+            'message' => $applicantFacingChanged ? 'Application status updated.' : 'Provider review saved.',
             'application' => $this->applicationPayload($freshApplication),
         ]);
     }
@@ -749,6 +774,7 @@ class ProviderController extends Controller
 
         unset($validated['image_file'], $validated['terms_accepted']);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
+        $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
         $validated['status'] = $validated['status'] === 'draft' ? 'draft' : 'pending_review';
         $validated['provider_terms_accepted_at'] = now();
         $validated['provider_terms_version'] = Terms::VERSION;
@@ -790,6 +816,7 @@ class ProviderController extends Controller
 
         unset($validated['image_file'], $validated['terms_accepted']);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
+        $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
         $validated['provider_terms_accepted_at'] = now();
         $validated['provider_terms_version'] = Terms::VERSION;
 
@@ -797,7 +824,7 @@ class ProviderController extends Controller
             $validated['image_path'] = $imagePath;
         }
 
-        $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status']);
+        $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status'], $validated);
         $scholarship->update($validated);
 
         if ($scholarship->status === 'pending_review') {
@@ -855,6 +882,7 @@ class ProviderController extends Controller
             'status' => ['required', Rule::in(['draft', 'pending_review', 'published', 'closed', 'rejected'])],
             'image_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'terms_accepted' => ['accepted'],
+            'review_rubric' => ['nullable', 'string', 'max:8000', 'json'],
         ]);
     }
 
@@ -879,10 +907,25 @@ class ProviderController extends Controller
         return $validated;
     }
 
-    private function providerScholarshipStatus(Scholarship $scholarship, string $requestedStatus): string
+    private function normalizeScholarshipReviewRubric(array $validated, Request $request, ?Scholarship $scholarship = null): array
+    {
+        if (! $request->has('review_rubric')) {
+            $validated['review_rubric'] = $scholarship?->review_rubric ?? ReviewRubric::DEFAULT;
+
+            return $validated;
+        }
+
+        $validated['review_rubric'] = ReviewRubric::fromJson($validated['review_rubric'] ?? null);
+
+        return $validated;
+    }
+
+    private function providerScholarshipStatus(Scholarship $scholarship, string $requestedStatus, array $validated): string
     {
         if ($requestedStatus === 'published' && $scholarship->status === 'published') {
-            return 'published';
+            return $this->scholarshipHasReviewableChanges($scholarship, $validated)
+                ? 'pending_review'
+                : 'published';
         }
 
         if ($requestedStatus === 'closed' && in_array($scholarship->status, ['published', 'closed'], true)) {
@@ -890,6 +933,74 @@ class ProviderController extends Controller
         }
 
         return $requestedStatus === 'draft' ? 'draft' : 'pending_review';
+    }
+
+    private function scholarshipHasReviewableChanges(Scholarship $scholarship, array $validated): bool
+    {
+        $reviewableFields = [
+            'image_path',
+            'title',
+            'category',
+            'description',
+            'eligibility',
+            'eligible_education_levels',
+            'eligible_courses',
+            'eligible_school_types',
+            'eligible_year_levels',
+            'eligible_locations',
+            'income_requirement',
+            'location_name',
+            'location_address',
+            'latitude',
+            'longitude',
+            'requirements',
+            'review_rubric',
+            'award_amount',
+            'minimum_gwa',
+            'minimum_grade_scale',
+            'slots_available',
+            'application_mode',
+            'renewal_policy',
+            'return_service_contract',
+            'other_contract_terms',
+            'contact_email',
+            'contact_number',
+            'deadline',
+        ];
+
+        foreach ($reviewableFields as $field) {
+            if (! array_key_exists($field, $validated)) {
+                continue;
+            }
+
+            if ($this->comparableScholarshipValue($scholarship->getAttribute($field))
+                !== $this->comparableScholarshipValue($validated[$field])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function comparableScholarshipValue(mixed $value): mixed
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        if (is_array($value)) {
+            return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }
+
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return (string) (float) $value;
+        }
+
+        return trim((string) $value);
     }
 
     private function notifyAdminsScholarshipSubmitted(Request $request, Scholarship $scholarship): void
@@ -952,6 +1063,11 @@ class ProviderController extends Controller
             'dss_recommendation' => $dss['recommendation'],
             'dss_breakdown' => $dss,
             'dss_explanation' => $decisionSupport->explainApplication($application, $dss),
+            'rubric_review' => ReviewRubric::result(
+                $application->review_rubric_snapshot ?: ($application->scholarship?->review_rubric ?? []),
+                $application->rubric_scores ?? [],
+            ),
+            'rubric_scored_at' => $application->rubric_scored_at?->format('M d, Y h:i A'),
             'status_progress' => $decisionSupport->statusProgress($application),
             'notes' => $application->notes,
             'review_notes' => $application->review_notes,
@@ -1080,6 +1196,7 @@ class ProviderController extends Controller
             'map_url' => $this->mapUrl($scholarship),
             'embed_map_url' => $this->embedMapUrl($scholarship),
             'requirements' => $scholarship->requirements,
+            'review_rubric' => $scholarship->review_rubric ?? [],
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
             'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),

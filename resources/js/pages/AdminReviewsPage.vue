@@ -147,6 +147,11 @@ function academicRequirementLabel(scholarship) {
         : `Min average ${scholarship.minimum_gwa}%`;
 }
 
+function rubricWeightTotal(scholarship) {
+    return (scholarship?.review_rubric ?? [])
+        .reduce((total, criterion) => total + Number(criterion.weight || 0), 0);
+}
+
 function applicationDocumentIssueCount(application) {
     if (application.documents?.length) {
         return application.documents.filter((document) => ['pending', 'needs_replacement', 'rejected'].includes(document.status ?? 'pending')).length;
@@ -672,6 +677,27 @@ onMounted(loadReviewData);
                                         <p class="mt-1 truncate font-bold text-slate-950">{{ academicRequirementLabel(scholarship) }}</p>
                                     </div>
                                 </div>
+
+                                <details v-if="scholarship.review_rubric?.length" class="mt-3 rounded-md border border-slate-200 bg-white p-2.5 text-xs">
+                                    <summary class="cursor-pointer font-bold text-slate-700">
+                                        Review rubric: {{ scholarship.review_rubric.length }} criteria, {{ rubricWeightTotal(scholarship) }}%
+                                    </summary>
+                                    <div class="mt-2 grid gap-1.5">
+                                        <div
+                                            v-for="criterion in scholarship.review_rubric"
+                                            :key="criterion.key"
+                                            class="flex items-start justify-between gap-3 rounded bg-slate-50 px-2.5 py-2"
+                                        >
+                                            <div class="min-w-0">
+                                                <p class="font-bold text-slate-800">{{ criterion.label }}</p>
+                                                <p v-if="criterion.guidance" class="mt-0.5 line-clamp-2 leading-5 text-slate-500">
+                                                    {{ criterion.guidance }}
+                                                </p>
+                                            </div>
+                                            <span class="shrink-0 font-bold text-slate-700">{{ criterion.weight }}%</span>
+                                        </div>
+                                    </div>
+                                </details>
 
                                 <div class="mt-3 flex flex-wrap gap-2">
                                     <button

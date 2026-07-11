@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -26,6 +27,7 @@ class Scholarship extends Model
         'latitude',
         'longitude',
         'requirements',
+        'review_rubric',
         'award_amount',
         'minimum_gwa',
         'minimum_grade_scale',
@@ -52,6 +54,7 @@ class Scholarship extends Model
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
             'deadline' => 'date',
+            'review_rubric' => 'array',
             'views_count' => 'integer',
             'provider_terms_accepted_at' => 'datetime',
         ];
@@ -70,5 +73,22 @@ class Scholarship extends Model
     public function bookmarks(): HasMany
     {
         return $this->hasMany(ScholarshipBookmark::class);
+    }
+
+    public function scopeAcceptingApplications(Builder $query): Builder
+    {
+        return $query
+            ->where('status', 'published')
+            ->where(function (Builder $deadlineQuery): void {
+                $deadlineQuery
+                    ->whereNull('deadline')
+                    ->orWhereDate('deadline', '>=', now()->toDateString());
+            });
+    }
+
+    public function isAcceptingApplications(): bool
+    {
+        return $this->status === 'published'
+            && ($this->deadline === null || ! $this->deadline->isBefore(now()->startOfDay()));
     }
 }

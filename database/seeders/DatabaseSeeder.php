@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Scholarship;
 use App\Models\User;
+use App\Support\ReviewRubric;
 use App\Support\Terms;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -180,6 +181,7 @@ class DatabaseSeeder extends Seeder
             'contact_number' => $dostContactNumber,
             'deadline' => null,
             'status' => 'published',
+            'review_rubric' => ReviewRubric::DEFAULT,
             'views_count' => 0,
             'other_contract_terms' => $dostOtherContractTerms,
             'provider_terms_accepted_at' => now(),

@@ -36,6 +36,7 @@ const formSections = [
     { id: 'target', label: 'Target', help: 'Who can match with this program.' },
     { id: 'location', label: 'Location', help: 'Address and map pin.' },
     { id: 'documents', label: 'Docs', help: 'Required files.' },
+    { id: 'rubric', label: 'Review', help: 'Consistent provider scoring criteria.' },
 ];
 const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
 const incomeOptions = ['Any', 'Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
@@ -394,6 +395,8 @@ const allDocumentRequirements = computed(() => [...new Set([
     ...customDocumentRequirements.value,
 ])]);
 const selectedRequirementCount = computed(() => allDocumentRequirements.value.length);
+const rubricWeightTotal = computed(() => scholarshipForm.value.reviewRubric
+    .reduce((total, criterion) => total + Number(criterion.weight || 0), 0));
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 const scholarshipImagePreview = computed(() => imagePreviewUrl.value || scholarshipForm.value.imageUrl || '/uploads/scholarship-default.jpg');
 const scholarshipFormMapAddress = computed(() => {
@@ -503,6 +506,7 @@ const formSectionProgress = computed(() => {
             && hasText(scholarshipForm.value.latitude)
             && hasText(scholarshipForm.value.longitude),
         documents: selectedRequirementCount.value > 0,
+        rubric: scholarshipForm.value.reviewRubric.length > 0 && rubricWeightTotal.value === 100,
     };
 
     return Object.fromEntries(formSections.map((section) => [section.id, Boolean(sectionChecks[section.id])]));
@@ -686,6 +690,35 @@ function inferTargetFormKey(educationLevels) {
     return 'mixed';
 }
 
+function defaultReviewRubric() {
+    return [
+        {
+            key: 'eligibility_fit',
+            label: 'Eligibility fit',
+            weight: 35,
+            guidance: 'Confirm that the applicant meets the program-specific target and restrictions.',
+        },
+        {
+            key: 'academic_merit',
+            label: 'Academic merit',
+            weight: 25,
+            guidance: 'Review grades using the scale and education level required by this program.',
+        },
+        {
+            key: 'financial_need',
+            label: 'Financial need',
+            weight: 20,
+            guidance: 'Review declared need and supporting income documents where applicable.',
+        },
+        {
+            key: 'document_quality',
+            label: 'Document quality',
+            weight: 20,
+            guidance: 'Check whether required documents are complete, readable, current, and valid.',
+        },
+    ];
+}
+
 function emptyScholarshipForm() {
     return {
         title: '',
@@ -704,6 +737,7 @@ function emptyScholarshipForm() {
         longitude: '',
         requirements: [],
         customRequirements: '',
+        reviewRubric: defaultReviewRubric(),
         awardAmount: '',
         minimumGwa: '',
         minimumGradeScale: '',
@@ -827,6 +861,9 @@ function fillScholarshipForm(scholarship) {
         longitude: scholarship.longitude ?? '',
         requirements: parseRequirements(scholarship.requirements),
         customRequirements: parseCustomRequirements(scholarship.requirements).join('\n'),
+        reviewRubric: Array.isArray(scholarship.review_rubric) && scholarship.review_rubric.length
+            ? scholarship.review_rubric.map((criterion) => ({ ...criterion }))
+            : defaultReviewRubric(),
         awardAmount: scholarship.award_amount ?? '',
         minimumGwa: scholarship.minimum_gwa ?? '',
         minimumGradeScale: scholarship.minimum_grade_scale ?? inferGradeScale(scholarship.minimum_gwa),
@@ -863,6 +900,27 @@ function selectCommonRequirements() {
 function clearRequirements() {
     scholarshipForm.value.requirements = [];
     scholarshipForm.value.customRequirements = '';
+}
+
+function addReviewCriterion() {
+    if (scholarshipForm.value.reviewRubric.length >= 6) {
+        return;
+    }
+
+    scholarshipForm.value.reviewRubric.push({
+        key: `criterion_${Date.now().toString(36)}`,
+        label: '',
+        weight: 10,
+        guidance: '',
+    });
+}
+
+function removeReviewCriterion(index) {
+    scholarshipForm.value.reviewRubric.splice(index, 1);
+}
+
+function resetReviewRubric() {
+    scholarshipForm.value.reviewRubric = defaultReviewRubric();
 }
 
 function inferGradeScale(value) {
@@ -1002,6 +1060,15 @@ async function saveScholarship() {
         return;
     }
 
+    if (
+        scholarshipForm.value.reviewRubric.some((criterion) => !hasText(criterion.label))
+        || rubricWeightTotal.value !== 100
+    ) {
+        activeFormSection.value = 'rubric';
+        formError.value = 'Add a label for every review criterion and make the weights total 100%.';
+        return;
+    }
+
     isSaving.value = true;
 
     const payload = new FormData();
@@ -1021,6 +1088,7 @@ async function saveScholarship() {
         latitude: scholarshipForm.value.latitude || '',
         longitude: scholarshipForm.value.longitude || '',
         requirements: allDocumentRequirements.value.join('\n'),
+        review_rubric: JSON.stringify(scholarshipForm.value.reviewRubric),
         award_amount: scholarshipForm.value.awardAmount || '',
         minimum_gwa: academicRequirementNeedsValue.value ? scholarshipForm.value.minimumGwa || '' : '',
         minimum_grade_scale: scholarshipForm.value.minimumGradeScale || '',
@@ -1944,6 +2012,93 @@ onMounted(loadFormData);
                                         No document requirements selected yet.
                                     </p>
                                 </div>
+                            </fieldset>
+
+                            <fieldset v-show="activeFormSection === 'rubric'" :class="['mt-5', sectionCardClass]">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold text-slate-700">
+                                            Provider review rubric
+                                        </p>
+                                        <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                                            Use the same criteria for every applicant. Scores support review but never make the final decision.
+                                        </p>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span :class="['rounded-md px-3 py-2 text-xs font-bold', rubricWeightTotal === 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800']">
+                                            {{ rubricWeightTotal }}% total
+                                        </span>
+                                        <button
+                                            type="button"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                            @click="resetReviewRubric"
+                                        >
+                                            Use defaults
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="scholarshipForm.reviewRubric.length >= 6"
+                                            class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                            @click="addReviewCriterion"
+                                        >
+                                            Add criterion
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 grid gap-3">
+                                    <div
+                                        v-for="(criterion, index) in scholarshipForm.reviewRubric"
+                                        :key="criterion.key"
+                                        class="grid gap-3 rounded-md border border-slate-200 bg-white p-4 lg:grid-cols-[minmax(0,1fr)_7rem_auto]"
+                                    >
+                                        <div class="min-w-0">
+                                            <label :class="labelClass" :for="`rubric-label-${criterion.key}`">
+                                                Criterion
+                                            </label>
+                                            <input
+                                                :id="`rubric-label-${criterion.key}`"
+                                                v-model="criterion.label"
+                                                type="text"
+                                                maxlength="100"
+                                                placeholder="Example: Community involvement"
+                                                :class="inputClass"
+                                            >
+                                            <textarea
+                                                v-model="criterion.guidance"
+                                                rows="2"
+                                                maxlength="300"
+                                                placeholder="Briefly explain what reviewers should check."
+                                                :class="['mt-2', inputClass]"
+                                            ></textarea>
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" :for="`rubric-weight-${criterion.key}`">
+                                                Weight %
+                                            </label>
+                                            <input
+                                                :id="`rubric-weight-${criterion.key}`"
+                                                v-model.number="criterion.weight"
+                                                type="number"
+                                                min="1"
+                                                max="100"
+                                                :class="inputClass"
+                                            >
+                                        </div>
+                                        <button
+                                            type="button"
+                                            :disabled="scholarshipForm.reviewRubric.length === 1"
+                                            class="self-start rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40 lg:mt-7"
+                                            @click="removeReviewCriterion(index)"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <p v-if="rubricWeightTotal !== 100" class="mt-3 text-xs font-semibold text-amber-800">
+                                    Adjust the weights until they total exactly 100%.
+                                </p>
                             </fieldset>
 
                         <div class="mt-5 border-t border-slate-200 pt-4">

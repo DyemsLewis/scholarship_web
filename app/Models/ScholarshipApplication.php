@@ -15,6 +15,11 @@ class ScholarshipApplication extends Model
         'document_checklist',
         'eligibility_score',
         'eligibility_breakdown',
+        'review_rubric_snapshot',
+        'rubric_scores',
+        'rubric_total_score',
+        'rubric_scored_by',
+        'rubric_scored_at',
         'notes',
         'review_notes',
         'decision_reason',
@@ -47,6 +52,10 @@ class ScholarshipApplication extends Model
             'document_checklist' => 'array',
             'eligibility_score' => 'decimal:2',
             'eligibility_breakdown' => 'array',
+            'review_rubric_snapshot' => 'array',
+            'rubric_scores' => 'array',
+            'rubric_total_score' => 'decimal:2',
+            'rubric_scored_at' => 'datetime',
             'awarded_amount' => 'decimal:2',
             'outcome_at' => 'datetime',
             'dss_score' => 'decimal:2',
@@ -79,6 +88,11 @@ class ScholarshipApplication extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function rubricScorer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rubric_scored_by');
     }
 
     public function statusHistories(): HasMany
