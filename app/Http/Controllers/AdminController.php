@@ -522,7 +522,7 @@ class AdminController extends Controller
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['pending_review', 'published', 'rejected'])],
-            'review_notes' => ['nullable', 'string', 'max:1500'],
+            'review_notes' => [Rule::requiredIf($request->input('status') === 'rejected'), 'nullable', 'string', 'max:1500'],
         ]);
 
         $previousStatus = $scholarship->status;
@@ -543,11 +543,17 @@ class AdminController extends Controller
             ],
         );
 
+        $reviewMessage = "Your scholarship {$scholarship->title} is now {$this->labelFromKey($validated['status'])}.";
+
+        if ($validated['status'] === 'rejected') {
+            $reviewMessage .= " Reason: {$validated['review_notes']}";
+        }
+
         PortalNotification::create([
             'user_id' => $scholarship->provider_id,
             'type' => 'scholarship_review',
             'title' => 'Scholarship review updated',
-            'message' => "Your scholarship {$scholarship->title} is now {$this->labelFromKey($validated['status'])}.",
+            'message' => $reviewMessage,
             'action_url' => '/provider/programs',
         ]);
 
@@ -564,7 +570,7 @@ class AdminController extends Controller
 
         $validated = $request->validate([
             'verification_status' => ['required', 'string', 'in:pending,approved,rejected'],
-            'verification_notes' => ['nullable', 'string', 'max:1500'],
+            'verification_notes' => [Rule::requiredIf($request->input('verification_status') === 'rejected'), 'nullable', 'string', 'max:1500'],
         ]);
 
         $provider->providerProfile()->updateOrCreate([
@@ -584,11 +590,17 @@ class AdminController extends Controller
             ['provider_id' => $provider->id, 'verification_status' => $validated['verification_status']],
         );
 
+        $verificationMessage = "Your provider account is now {$validated['verification_status']}.";
+
+        if ($validated['verification_status'] === 'rejected') {
+            $verificationMessage .= " Reason: {$validated['verification_notes']}";
+        }
+
         PortalNotification::create([
             'user_id' => $provider->id,
             'type' => 'provider_verification',
             'title' => 'Provider verification updated',
-            'message' => "Your provider account is now {$validated['verification_status']}.",
+            'message' => $verificationMessage,
             'action_url' => '/provider',
         ]);
 

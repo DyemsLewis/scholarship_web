@@ -517,7 +517,7 @@ class ProviderController extends Controller
                 'renewed',
                 'rejected',
             ])],
-            'decision_reason' => ['nullable', 'string', 'max:255'],
+            'decision_reason' => [Rule::requiredIf(in_array($request->input('status'), ['rejected', 'not_awarded'], true)), 'nullable', 'string', 'max:255'],
             'review_notes' => ['nullable', 'string', 'max:1500'],
             'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'outcome_notes' => ['nullable', 'string', 'max:2000'],
@@ -617,7 +617,7 @@ class ProviderController extends Controller
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['pending', 'accepted', 'rejected', 'needs_replacement'])],
-            'review_notes' => ['nullable', 'string', 'max:1000'],
+            'review_notes' => [Rule::requiredIf(in_array($request->input('status'), ['rejected', 'needs_replacement'], true)), 'nullable', 'string', 'max:1000'],
         ]);
 
         $document->update([
@@ -640,11 +640,17 @@ class ProviderController extends Controller
             ],
         );
 
+        $documentMessage = "{$document->document_name} was marked {$this->statusLabel($validated['status'])}.";
+
+        if (in_array($validated['status'], ['rejected', 'needs_replacement'], true)) {
+            $documentMessage .= " Reason: {$validated['review_notes']}";
+        }
+
         PortalNotification::create([
             'user_id' => $document->application->applicant_id,
             'type' => 'document_review',
             'title' => 'Document review updated',
-            'message' => "{$document->document_name} was marked {$this->statusLabel($validated['status'])}.",
+            'message' => $documentMessage,
             'action_url' => '/dashboard/applications',
         ]);
 
@@ -1449,6 +1455,10 @@ class ProviderController extends Controller
                     'message' => "Your application for {$programTitle} is now {$this->statusLabel($status)}.",
                 ],
             };
+
+        if (in_array($status, ['rejected', 'not_awarded'], true) && filled($decisionReason)) {
+            $payload['message'] .= " Reason: {$this->statusLabel($decisionReason)}.";
+        }
 
         return array_merge($payload, ['action_url' => $actionUrl]);
     }

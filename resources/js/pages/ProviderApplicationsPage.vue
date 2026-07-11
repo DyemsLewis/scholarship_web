@@ -591,8 +591,15 @@ onMounted(loadProviderData);
                             </div>
                         </div>
 
-                        <div v-if="applications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                            No applicant records yet. Applications submitted by users will appear here.
+                        <div v-if="applications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                            <p class="text-sm font-bold text-slate-900">No applications to review yet</p>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                                Applications will appear after an approved scholarship is published and an eligible applicant submits the application wizard.
+                            </p>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <a href="/provider/programs" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">Check programs</a>
+                                <a href="/provider/programs/create" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100">Create scholarship</a>
+                            </div>
                         </div>
 
                         <div v-else-if="rankedApplications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">

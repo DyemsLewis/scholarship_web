@@ -295,6 +295,11 @@ async function updateStatus() {
         return;
     }
 
+    if (['rejected', 'not_awarded'].includes(reviewForm.value.status) && !reviewForm.value.decisionReason) {
+        errorMessage.value = 'Select a decision reason before saving a negative decision.';
+        return;
+    }
+
     updatingId.value = application.value.id;
     statusMessage.value = '';
     errorMessage.value = '';
@@ -327,14 +332,22 @@ async function updateDocumentStatus(document) {
         return;
     }
 
+    const documentStatus = documentStatuses.value[document.id] ?? 'pending';
+    const documentNote = documentNotes.value[document.id]?.trim() ?? '';
+
+    if (['rejected', 'needs_replacement'].includes(documentStatus) && !documentNote) {
+        errorMessage.value = 'Add a document note explaining why the file was rejected or needs replacement.';
+        return;
+    }
+
     documentUpdatingId.value = document.id;
     statusMessage.value = '';
     errorMessage.value = '';
 
     try {
         const response = await window.axios.patch(`/provider/documents/${document.id}/status`, {
-            status: documentStatuses.value[document.id] ?? 'pending',
-            review_notes: documentNotes.value[document.id] ?? '',
+            status: documentStatus,
+            review_notes: documentNote,
         });
 
         applyApplication(response.data.application);
@@ -529,7 +542,9 @@ onMounted(loadApplication);
                                         </select>
                                     </div>
                                     <div>
-                                        <label :class="labelClass">Decision reason</label>
+                                        <label :class="labelClass">
+                                            Decision reason <span v-if="['rejected', 'not_awarded'].includes(reviewForm.status)" class="text-rose-600">*</span>
+                                        </label>
                                         <select v-model="reviewForm.decisionReason" :class="inputClass">
                                             <option v-for="option in decisionReasonOptions" :key="option.value" :value="option.value">
                                                 {{ option.label }}
@@ -726,8 +741,10 @@ onMounted(loadApplication);
                                                 </select>
                                             </div>
                                             <div>
-                                                <label :class="labelClass">Document note</label>
-                                                <input v-model="documentNotes[document.id]" type="text" maxlength="1000" placeholder="Optional note for applicant" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100">
+                                                <label :class="labelClass">
+                                                    Document note <span v-if="['rejected', 'needs_replacement'].includes(documentStatuses[document.id])" class="text-rose-600">*</span>
+                                                </label>
+                                                <input v-model="documentNotes[document.id]" type="text" maxlength="1000" placeholder="Explain missing, unclear, or invalid document details" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100">
                                             </div>
                                             <div class="flex gap-2">
                                                 <a :href="document.download_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-white">

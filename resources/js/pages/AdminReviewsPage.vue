@@ -12,6 +12,7 @@ const selectedStatus = ref('pending');
 const selectedApplicationFilter = ref('all');
 const selectedApplicationSort = ref('priority');
 const providerNotes = ref({});
+const scholarshipNotes = ref({});
 const hiddenProviderIds = ref([]);
 const stats = ref({
     providers: 0,
@@ -351,6 +352,9 @@ async function loadReviewData(resetHiddenProviders = true) {
         providerNotes.value = Object.fromEntries(
             providers.value.map((provider) => [provider.id, provider.verification_notes ?? '']),
         );
+        scholarshipNotes.value = Object.fromEntries(
+            scholarships.value.map((scholarship) => [scholarship.id, '']),
+        );
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load review details.';
     } finally {
@@ -363,6 +367,13 @@ async function updateScholarshipReview(scholarship, reviewStatus) {
         return;
     }
 
+    const reviewNote = scholarshipNotes.value[scholarship.id]?.trim() ?? '';
+
+    if (reviewStatus === 'rejected' && !reviewNote) {
+        errorMessage.value = 'Add a rejection reason before rejecting this scholarship.';
+        return;
+    }
+
     updatingScholarshipId.value = scholarship.id;
     errorMessage.value = '';
     statusMessage.value = '';
@@ -370,6 +381,7 @@ async function updateScholarshipReview(scholarship, reviewStatus) {
     try {
         const response = await window.axios.patch(`/admin/scholarships/${scholarship.id}/review`, {
             status: reviewStatus,
+            review_notes: reviewNote,
         });
 
         scholarships.value = scholarships.value.map((item) => (item.id === scholarship.id ? response.data.scholarship : item));
@@ -387,6 +399,13 @@ async function updateProvider(provider, verificationStatus) {
         return;
     }
 
+    const verificationNote = providerNotes.value[provider.id]?.trim() ?? '';
+
+    if (verificationStatus === 'rejected' && !verificationNote) {
+        errorMessage.value = 'Add a rejection reason before rejecting this provider.';
+        return;
+    }
+
     updatingId.value = provider.id;
     errorMessage.value = '';
     statusMessage.value = '';
@@ -394,7 +413,7 @@ async function updateProvider(provider, verificationStatus) {
     try {
         const response = await window.axios.patch(`/admin/providers/${provider.id}/verification`, {
             verification_status: verificationStatus,
-            verification_notes: providerNotes.value[provider.id] ?? '',
+            verification_notes: verificationNote,
         });
 
         providers.value = providers.value.map((item) => (item.id === provider.id ? response.data.provider : item));
@@ -484,8 +503,14 @@ onMounted(loadReviewData);
                             </div>
                         </div>
 
-                        <div v-if="filteredProviders.length === 0" class="p-6 text-sm text-slate-500">
-                            No providers for this filter. Updated providers are hidden until you refresh.
+                        <div v-if="filteredProviders.length === 0" class="p-6">
+                            <p class="text-sm font-bold text-slate-900">No provider reviews in this view</p>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                                New provider registrations appear here after they submit their organization details and verification proof.
+                            </p>
+                            <a href="/admin/accounts/create" class="mt-3 inline-flex rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100">
+                                Create an account
+                            </a>
                         </div>
 
                         <div v-else class="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-3">
@@ -560,13 +585,13 @@ onMounted(loadReviewData);
 
                                 <div class="mt-3 rounded-md border border-slate-200 bg-white p-2.5">
                                     <label class="block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
-                                        Admin note
+                                        Admin note <span class="normal-case tracking-normal text-rose-600">(required when rejecting)</span>
                                     </label>
                                     <textarea
                                         v-model="providerNotes[provider.id]"
                                         rows="1"
                                         maxlength="1500"
-                                        placeholder="Optional note for this provider."
+                                        placeholder="Explain any missing or invalid verification details."
                                         class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                                     ></textarea>
                                 </div>
@@ -618,8 +643,11 @@ onMounted(loadReviewData);
                             </div>
                         </div>
 
-                        <div v-if="scholarships.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                            No scholarship programs are waiting for review.
+                        <div v-if="scholarships.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                            <p class="text-sm font-bold text-slate-900">The program review queue is clear</p>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                                Scholarships submitted by verified providers will appear here before they become visible to applicants.
+                            </p>
                         </div>
 
                         <div v-else class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -698,6 +726,19 @@ onMounted(loadReviewData);
                                         </div>
                                     </div>
                                 </details>
+
+                                <div class="mt-3">
+                                    <label class="block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                                        Review note <span class="normal-case tracking-normal text-rose-600">(required when rejecting)</span>
+                                    </label>
+                                    <textarea
+                                        v-model="scholarshipNotes[scholarship.id]"
+                                        rows="2"
+                                        maxlength="1500"
+                                        placeholder="Explain what the provider needs to correct."
+                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
+                                    ></textarea>
+                                </div>
 
                                 <div class="mt-3 flex flex-wrap gap-2">
                                     <button
@@ -786,8 +827,11 @@ onMounted(loadReviewData);
                             </div>
                         </div>
 
-                        <div v-if="applications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                            No applications yet.
+                        <div v-if="applications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                            <p class="text-sm font-bold text-slate-900">No application activity yet</p>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                                Submitted applications will appear here for oversight after applicants choose an approved scholarship.
+                            </p>
                         </div>
 
                         <div v-else-if="prioritizedApplications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">

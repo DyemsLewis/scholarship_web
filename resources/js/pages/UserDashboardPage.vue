@@ -20,28 +20,9 @@ const profileReadiness = ref({
     missing: [],
 });
 const scholarships = ref([]);
+const applications = ref([]);
 const nextSteps = ref([]);
 const notifications = ref([]);
-const quickTools = [
-    {
-        title: 'Recommended programs',
-        text: 'Best-fit scholarships.',
-        href: '/dashboard/scholarships',
-        icon: 'fa-solid fa-wand-magic-sparkles',
-    },
-    {
-        title: 'Prepared documents',
-        text: 'Reusable files.',
-        href: '/dashboard/documents',
-        icon: 'fa-solid fa-list-check',
-    },
-    {
-        title: 'Application wizard',
-        text: 'Apply step by step.',
-        href: '/dashboard/applications',
-        icon: 'fa-solid fa-route',
-    },
-];
 
 const readinessGaugeStyle = computed(() => ({
     background: `conic-gradient(#0f172a ${Number(profileReadiness.value.percent ?? 0) * 3.6}deg, #e2e8f0 0deg)`,
@@ -60,6 +41,50 @@ const readinessMessage = computed(() => {
 const highMatchCount = computed(() => scholarships.value
     .filter((scholarship) => Number(scholarship.eligibility_match?.score ?? 0) >= 80)
     .length);
+const recommendedScholarships = computed(() => [...scholarships.value]
+    .sort((first, second) => {
+        const scoreDifference = Number(second.eligibility_match?.score ?? 0) - Number(first.eligibility_match?.score ?? 0);
+
+        if (scoreDifference !== 0) {
+            return scoreDifference;
+        }
+
+        return Number(first.has_applied) - Number(second.has_applied);
+    })
+    .slice(0, 3));
+const activeApplication = computed(() => applications.value.find((application) => ![
+    'rejected',
+    'not_awarded',
+    'disbursed',
+    'renewed',
+].includes(application.status)) ?? null);
+const activeApplicationNextAction = computed(() => {
+    const application = activeApplication.value;
+
+    if (!application) {
+        return '';
+    }
+
+    if (application.can_respond) {
+        return 'Review the provider decision and respond to the offer.';
+    }
+
+    const missingDocuments = application.document_readiness?.missing?.length ?? 0;
+
+    if (missingDocuments > 0) {
+        return `Prepare ${missingDocuments} missing document${missingDocuments === 1 ? '' : 's'} for this application.`;
+    }
+
+    if (application.status === 'submitted') {
+        return 'Your application was submitted and is waiting for provider review.';
+    }
+
+    if (application.status === 'interview') {
+        return 'Open the application and check the provider note for interview details.';
+    }
+
+    return 'Open the application to review its latest status and provider feedback.';
+});
 const urgentScholarships = computed(() => scholarships.value
     .map((scholarship) => ({ ...scholarship, days_left: deadlineDays(scholarship.deadline) }))
     .filter((scholarship) => scholarship.days_left !== null && scholarship.days_left >= 0 && scholarship.days_left <= 14)
@@ -238,6 +263,12 @@ function urgentDeadlineLabel(scholarship) {
     return `${scholarship.days_left} days left`;
 }
 
+function statusLabel(status) {
+    return String(status ?? 'submitted')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 async function loadDashboard() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -249,6 +280,7 @@ async function loadDashboard() {
         stats.value = response.data.stats ?? stats.value;
         profileReadiness.value = response.data.profile_readiness ?? profileReadiness.value;
         scholarships.value = response.data.scholarships ?? [];
+        applications.value = response.data.applications ?? [];
         nextSteps.value = response.data.next_steps ?? [];
         notifications.value = response.data.notifications ?? [];
     } catch (error) {
@@ -423,6 +455,104 @@ onMounted(loadDashboard);
                         </div>
                     </section>
 
+                    <section class="student-card p-4">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="student-section-mark">
+                                    <i class="fa-solid fa-graduation-cap text-sm"></i>
+                                </span>
+                                <div>
+                                    <p class="student-kicker">
+                                        Scholarships
+                                    </p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                        Recommended for you
+                                    </h3>
+                                </div>
+                            </div>
+                            <a href="/dashboard/scholarships" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                View all
+                            </a>
+                        </div>
+
+                        <div v-if="recommendedScholarships.length" class="mt-4 grid gap-3 lg:grid-cols-3">
+                            <article
+                                v-for="scholarship in recommendedScholarships"
+                                :key="scholarship.id"
+                                class="flex h-full min-w-0 flex-col rounded-lg border border-slate-200 bg-slate-50 p-3"
+                            >
+                                <div class="flex min-w-0 items-start gap-3">
+                                    <img
+                                        :src="scholarship.image_url || '/uploads/scholarship-default.jpg'"
+                                        :alt="scholarship.title"
+                                        class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                    >
+                                    <div class="min-w-0 flex-1">
+                                        <p class="line-clamp-2 min-h-10 text-sm font-bold leading-5 text-slate-950">
+                                            {{ scholarship.title }}
+                                        </p>
+                                        <p class="mt-1 truncate text-xs text-slate-500">
+                                            {{ scholarship.provider?.name || 'Scholarship provider' }}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-auto flex flex-wrap items-center gap-2 pt-3 text-xs font-bold">
+                                    <span class="rounded-md bg-slate-900 px-2.5 py-1 text-white">
+                                        {{ scholarship.eligibility_match?.score ?? 0 }}% match
+                                    </span>
+                                    <span class="rounded-md bg-white px-2.5 py-1 text-slate-600 ring-1 ring-slate-200">
+                                        {{ scholarship.deadline || 'Open deadline' }}
+                                    </span>
+                                </div>
+
+                                <a
+                                    :href="`/dashboard/scholarships/${scholarship.id}`"
+                                    class="mt-3 inline-flex items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 transition hover:border-slate-500"
+                                >
+                                    View scholarship
+                                    <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                                </a>
+                            </article>
+                        </div>
+
+                        <div v-else class="student-empty-state mt-4">
+                            No published scholarships are available yet. Check again after providers publish new programs.
+                        </div>
+                    </section>
+
+                    <section v-if="activeApplication" class="student-card p-4">
+                        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex min-w-0 items-start gap-3">
+                                <img
+                                    :src="activeApplication.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
+                                    :alt="activeApplication.scholarship?.title || 'Scholarship application'"
+                                    class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                >
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <p class="student-kicker">Active Application</p>
+                                        <span class="rounded-md bg-slate-900 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white">
+                                            {{ statusLabel(activeApplication.status) }}
+                                        </span>
+                                    </div>
+                                    <h3 class="mt-1 line-clamp-2 text-lg font-bold text-slate-950">
+                                        {{ activeApplication.scholarship?.title || 'Scholarship application' }}
+                                    </h3>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">
+                                        {{ activeApplicationNextAction }}
+                                    </p>
+                                </div>
+                            </div>
+                            <a
+                                :href="activeApplication.detail_url || '/dashboard/applications'"
+                                class="shrink-0 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-800 transition hover:border-slate-500"
+                            >
+                                View application
+                            </a>
+                        </div>
+                    </section>
+
                     <section v-if="urgentScholarships.length" class="student-card p-4">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex items-center gap-3">
@@ -467,62 +597,7 @@ onMounted(loadDashboard);
                         </div>
                     </section>
 
-                    <section class="grid gap-3 md:grid-cols-3">
-                        <a
-                            v-for="tool in quickTools"
-                            :key="tool.title"
-                            :href="tool.href"
-                            class="student-action-card flex items-start gap-3"
-                        >
-                            <span class="student-icon-badge">
-                                <i :class="[tool.icon, 'text-sm']"></i>
-                            </span>
-                            <span class="relative">
-                                <span class="block text-sm font-bold text-slate-950">
-                                    {{ tool.title }}
-                                </span>
-                                <span class="mt-1 block text-xs leading-5 text-slate-600">
-                                    {{ tool.text }}
-                                </span>
-                            </span>
-                        </a>
-                    </section>
-
-                    <section class="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-                        <div class="student-card p-5">
-                            <div class="flex items-center gap-3">
-                                <span class="student-section-mark">
-                                    <i class="fa-solid fa-shoe-prints text-sm"></i>
-                                </span>
-                                <div>
-                                    <p class="student-kicker">
-                                        Next
-                                    </p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                        Continue here
-                                    </h3>
-                                </div>
-                            </div>
-                            <div v-if="nextSteps.length === 0" class="student-empty-state mt-4">
-                                Nothing urgent right now.
-                            </div>
-                            <div v-else class="mt-4 grid gap-2">
-                                <div
-                                    v-for="(step, index) in nextSteps.slice(0, 4)"
-                                    :key="step"
-                                    class="flex gap-3 rounded-md bg-slate-50 p-3 ring-1 ring-slate-200/70"
-                                >
-                                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-950 text-xs font-bold text-amber-200">
-                                        {{ index + 1 }}
-                                    </span>
-                                    <p class="line-clamp-2 text-sm leading-6 text-slate-600">
-                                        {{ step }}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="student-card p-5">
+                    <section v-if="notifications.length" class="student-card p-5">
                             <div class="flex items-center gap-3">
                                 <span class="student-section-mark">
                                     <i class="fa-solid fa-bell text-sm"></i>
@@ -536,10 +611,7 @@ onMounted(loadDashboard);
                                     </h3>
                                 </div>
                             </div>
-                            <div v-if="notifications.length === 0" class="mt-5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                                No notifications yet.
-                            </div>
-                            <div v-else class="mt-5 grid gap-3">
+                            <div class="mt-5 grid gap-3">
                                 <a
                                     v-for="notification in notifications"
                                     :key="notification.id"
@@ -564,7 +636,6 @@ onMounted(loadDashboard);
                                     </p>
                                 </a>
                             </div>
-                        </div>
                     </section>
                 </div>
 
