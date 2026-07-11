@@ -34,6 +34,10 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    distanceLabel: {
+        type: String,
+        default: '',
+    },
     height: {
         type: String,
         default: '20rem',
@@ -483,12 +487,25 @@ onUnmounted(() => {
 
 <template>
     <div class="overflow-hidden rounded-md border border-slate-200 bg-white">
-        <div
-            ref="mapElement"
-            class="w-full bg-slate-100"
-            :style="{ minHeight: height }"
-            :aria-label="title"
-        ></div>
+        <div class="relative">
+            <div
+                ref="mapElement"
+                class="w-full bg-slate-100"
+                :style="{ minHeight: height }"
+                :aria-label="title"
+            ></div>
+            <div
+                v-if="distanceLabel"
+                class="pointer-events-none absolute left-3 top-3 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-xs shadow-sm"
+            >
+                <p class="font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Distance
+                </p>
+                <p class="mt-0.5 font-bold text-slate-950">
+                    {{ distanceLabel }}
+                </p>
+            </div>
+        </div>
         <p v-if="statusMessage" class="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
             {{ statusMessage }}
         </p>

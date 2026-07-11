@@ -754,6 +754,7 @@ onMounted(loadScholarship);
                         :secondary-latitude="user?.latitude"
                         :secondary-longitude="user?.longitude"
                         :secondary-marker-text="userLocationLabel"
+                        :distance-label="scholarship.distance_label ? `About ${scholarship.distance_label}` : ''"
                         :title="scholarship.location_name || scholarship.title"
                         :marker-text="scholarship.location_name || scholarship.title"
                         height="55vh"

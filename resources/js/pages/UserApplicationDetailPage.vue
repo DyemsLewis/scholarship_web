@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 
 const appElement = document.getElementById('app');
@@ -17,6 +18,7 @@ const uploadForm = ref({ documentName: '' });
 const uploadFile = ref(null);
 const fileInput = ref(null);
 const previewDocument = ref(null);
+const showMapModal = ref(false);
 const documentTermsAccepted = ref(false);
 const isResponding = ref(false);
 const responseNote = ref('');
@@ -57,6 +59,21 @@ const applicantDssNextAction = computed(() => applicantNextAction(application.va
 const timeline = computed(() => application.value?.timeline ?? []);
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
 const canRespondToOffer = computed(() => Boolean(application.value?.can_respond));
+const applicationScholarship = computed(() => application.value?.scholarship ?? null);
+const scholarshipMapAddress = computed(() => {
+    const parts = [
+        applicationScholarship.value?.location_address,
+        applicationScholarship.value?.location_name,
+    ].filter(Boolean);
+
+    return parts.length ? [...parts, 'Philippines'].join(', ') : '';
+});
+const hasMapPreview = computed(() => Boolean(
+    (applicationScholarship.value?.latitude && applicationScholarship.value?.longitude)
+    || applicationScholarship.value?.location_address
+    || applicationScholarship.value?.location_name,
+));
+const hasUserMapLocation = computed(() => hasCoordinates(user.value?.latitude, user.value?.longitude));
 
 function statusLabel(status) {
     return String(status ?? 'submitted')
@@ -176,6 +193,15 @@ function labelFromKey(value) {
     return String(value ?? '')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function hasCoordinates(latitude, longitude) {
+    return latitude !== null
+        && latitude !== undefined
+        && latitude !== ''
+        && longitude !== null
+        && longitude !== undefined
+        && longitude !== '';
 }
 
 function applicantNextAction(current) {
@@ -869,6 +895,29 @@ onMounted(loadApplication);
                             </section>
 
                             <section class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                                <p class="student-kicker">Location</p>
+                                <h3 class="mt-2 text-lg font-bold text-slate-950">
+                                    {{ application.scholarship?.location_name || 'Location not named' }}
+                                </h3>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">
+                                    {{ application.scholarship?.location_address || application.scholarship?.eligible_locations || 'No map address added yet.' }}
+                                </p>
+                                <p v-if="application.scholarship?.distance_label" class="mt-2 text-xs font-bold text-slate-700">
+                                    About {{ application.scholarship.distance_label }} from your saved location.
+                                </p>
+
+                                <button
+                                    v-if="hasMapPreview"
+                                    type="button"
+                                    class="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                                    @click="showMapModal = true"
+                                >
+                                    <i class="fa-solid fa-map-location-dot"></i>
+                                    Preview map
+                                </button>
+                            </section>
+
+                            <section class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                                 <p class="student-kicker">Eligibility</p>
                                 <div class="mt-3 flex flex-wrap items-center gap-2">
                                     <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', matchClass(application.eligibility_score)]">
@@ -933,6 +982,69 @@ onMounted(loadApplication);
                 <ApplicantFooter />
             </div>
         </section>
+
+        <div
+            v-if="showMapModal && applicationScholarship"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6"
+            @click.self="showMapModal = false"
+        >
+            <section class="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl">
+                <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
+                            Program Location
+                        </p>
+                        <h3 class="mt-1 text-xl font-bold text-slate-950">
+                            {{ applicationScholarship.location_name || applicationScholarship.title }}
+                        </h3>
+                        <p class="mt-1 text-sm leading-6 text-slate-600">
+                            {{ applicationScholarship.location_address || applicationScholarship.eligible_locations || 'No map address added yet.' }}
+                        </p>
+                        <p v-if="hasUserMapLocation && applicationScholarship.distance_label" class="mt-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
+                            Your saved location is shown too: {{ applicationScholarship.distance_label }} from this program.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                        @click="showMapModal = false"
+                    >
+                        Close
+                    </button>
+                </div>
+
+                <div class="bg-slate-100 p-4">
+                    <LeafletMapPreview
+                        :address="scholarshipMapAddress"
+                        :latitude="applicationScholarship.latitude"
+                        :longitude="applicationScholarship.longitude"
+                        :secondary-latitude="user?.latitude"
+                        :secondary-longitude="user?.longitude"
+                        :secondary-marker-text="user?.name || 'Your location'"
+                        :distance-label="applicationScholarship.distance_label ? `About ${applicationScholarship.distance_label}` : ''"
+                        :title="applicationScholarship.location_name || applicationScholarship.title"
+                        :marker-text="applicationScholarship.location_name || applicationScholarship.title"
+                        height="55vh"
+                        auto-geocode
+                    />
+                </div>
+
+                <div class="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p class="text-xs leading-5 text-slate-500">
+                        This is the location currently listed by the scholarship provider.
+                    </p>
+                    <a
+                        v-if="applicationScholarship.map_url"
+                        :href="applicationScholarship.map_url"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                    >
+                        Open Full Map
+                    </a>
+                </div>
+            </section>
+        </div>
 
         <div
             v-if="previewDocument"
