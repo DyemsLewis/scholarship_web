@@ -115,6 +115,13 @@ class ProviderController extends Controller
         $applicationsCount = ScholarshipApplication::query()
             ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id))
             ->count();
+        $reviewQueue = ScholarshipApplication::query()
+            ->with(['applicant.studentProfile', 'documents', 'scholarship'])
+            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id))
+            ->whereIn('status', ['submitted', 'under_review', 'qualified', 'shortlisted', 'interview'])
+            ->latest('submitted_at')
+            ->limit(3)
+            ->get();
 
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
@@ -124,6 +131,15 @@ class ProviderController extends Controller
                 'drafts' => $scholarships->where('status', 'draft')->count(),
             ],
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
+            'review_queue' => $reviewQueue->map(fn (ScholarshipApplication $application) => [
+                'id' => $application->id,
+                'detail_url' => route('provider.applications.show', $application, false),
+                'applicant' => $application->applicant?->name,
+                'scholarship' => $application->scholarship?->title,
+                'status' => $application->status,
+                'pending_documents' => $application->documents->where('status', 'pending')->count(),
+                'submitted_at' => $application->submitted_at?->format('M d, Y'),
+            ])->values(),
             'verification_documents' => $request->user()
                 ->providerVerificationDocuments()
                 ->latest()

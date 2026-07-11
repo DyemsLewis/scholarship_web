@@ -12,29 +12,9 @@ const stats = ref({
     drafts: 0,
 });
 const scholarships = ref([]);
+const reviewQueue = ref([]);
 const notifications = ref([]);
 
-const publishedCount = computed(() => scholarships.value.filter((scholarship) => scholarship.status === 'published').length);
-const focusItems = computed(() => [
-    {
-        label: 'Draft programs',
-        detail: stats.value.drafts > 0 ? `${stats.value.drafts} draft${stats.value.drafts === 1 ? '' : 's'} waiting.` : 'No drafts waiting.',
-        href: '/provider/programs',
-        action: stats.value.drafts > 0 ? 'Open programs' : 'Create program',
-    },
-    {
-        label: 'Applications to review',
-        detail: stats.value.applications > 0 ? `${stats.value.applications} submission${stats.value.applications === 1 ? '' : 's'}.` : 'No submissions yet.',
-        href: '/provider/applications',
-        action: 'Review queue',
-    },
-    {
-        label: 'Published programs',
-        detail: publishedCount.value > 0 ? `${publishedCount.value} live.` : 'None live yet.',
-        href: '/provider/programs',
-        action: 'Manage programs',
-    },
-]);
 const recentPrograms = computed(() => scholarships.value.slice(0, 3));
 const programHealthSignals = computed(() => {
     const draftPrograms = scholarships.value.filter((scholarship) => scholarship.status === 'draft');
@@ -143,6 +123,7 @@ async function loadProviderData() {
         user.value = response.data.user;
         stats.value = response.data.stats;
         scholarships.value = response.data.scholarships;
+        reviewQueue.value = response.data.review_queue ?? [];
         notifications.value = response.data.notifications ?? [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider dashboard.';
@@ -197,35 +178,48 @@ onMounted(loadProviderData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                            Focus Today
-                        </p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                            Needs attention
-                        </h3>
+                    <section v-if="reviewQueue.length" class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                    Application Review
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    Applications needing attention
+                                </h3>
+                            </div>
+                            <a href="/provider/applications" class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800">
+                                View review queue
+                            </a>
+                        </div>
 
                         <div class="mt-5 grid gap-3 lg:grid-cols-3">
                             <a
-                                v-for="item in focusItems"
-                                :key="item.label"
-                                :href="item.href"
-                                class="rounded-md border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white"
+                                v-for="application in reviewQueue"
+                                :key="application.id"
+                                :href="application.detail_url"
+                                class="flex h-full min-w-0 flex-col rounded-md border border-slate-200 bg-slate-50 p-4 transition hover:bg-white"
                             >
-                                <p class="text-sm font-bold text-slate-950">
-                                    {{ item.label }}
+                                <div class="flex items-start justify-between gap-3">
+                                    <p class="line-clamp-2 min-h-10 text-sm font-bold leading-5 text-slate-950">
+                                        {{ application.applicant || 'Applicant' }}
+                                    </p>
+                                    <span class="shrink-0 rounded-md bg-slate-200 px-2 py-1 text-[10px] font-bold uppercase text-slate-700">
+                                        {{ verificationLabel(application.status) }}
+                                    </span>
+                                </div>
+                                <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                                    {{ application.scholarship || 'Scholarship program' }}
                                 </p>
-                                <p class="mt-1 text-sm leading-5 text-slate-500">
-                                    {{ item.detail }}
-                                </p>
-                                <p class="mt-4 text-sm font-bold text-slate-700">
-                                    {{ item.action }}
-                                </p>
+                                <div class="mt-auto flex items-center justify-between gap-3 pt-4 text-xs font-bold text-slate-600">
+                                    <span>{{ application.pending_documents }} pending file{{ application.pending_documents === 1 ? '' : 's' }}</span>
+                                    <span>{{ application.submitted_at }}</span>
+                                </div>
                             </a>
                         </div>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                    <section v-if="notifications.length" class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -240,11 +234,7 @@ onMounted(loadProviderData);
                             </span>
                         </div>
 
-                        <div v-if="notifications.length === 0" class="mt-5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                            No provider notifications yet.
-                        </div>
-
-                        <div v-else class="mt-5 grid gap-3 md:grid-cols-2">
+                        <div class="mt-5 grid gap-3 md:grid-cols-2">
                             <a
                                 v-for="notification in notifications"
                                 :key="notification.id"
@@ -366,22 +356,6 @@ onMounted(loadProviderData);
                         </article>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Shortcuts
-                        </p>
-                        <div class="mt-4 grid gap-3 sm:grid-cols-3">
-                            <a href="/provider/programs" class="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
-                                Create or edit programs
-                            </a>
-                            <a href="/provider/applications" class="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
-                                Review applications
-                            </a>
-                            <a href="/provider/profile" class="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
-                                Check profile
-                            </a>
-                        </div>
-                    </section>
                 </div>
 
                 <ProviderFooter />

@@ -258,8 +258,10 @@ class AdminController extends Controller
             ->latest()
             ->get(['id', 'email', 'username', 'role', 'created_at']);
         $scholarships = Scholarship::query()
+            ->with('provider.providerProfile')
             ->withCount('bookmarks')
-            ->get(['id', 'title', 'provider_id', 'status', 'deadline', 'created_at', 'location_name', 'location_address', 'eligible_locations']);
+            ->latest('updated_at')
+            ->get(['id', 'title', 'provider_id', 'image_path', 'category', 'status', 'deadline', 'created_at', 'updated_at', 'location_name', 'location_address', 'eligible_locations']);
         $applications = ScholarshipApplication::query()
             ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
             ->latest('submitted_at')
@@ -361,6 +363,14 @@ class AdminController extends Controller
                 'email' => $user->email,
                 'role' => $user->role,
                 'created_at' => $user->created_at?->format('M d, Y'),
+            ])->values(),
+            'recent_scholarships' => $scholarships->take(3)->map(fn (Scholarship $scholarship) => [
+                'id' => $scholarship->id,
+                'title' => $scholarship->title,
+                'provider' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
+                'image_url' => $this->scholarshipImageUrl($scholarship),
+                'status' => $scholarship->status,
+                'updated_at' => $scholarship->updated_at?->format('M d, Y'),
             ])->values(),
             'recent_applications_list' => $applications->take(5)->map(fn (ScholarshipApplication $application) => [
                 'id' => $application->id,

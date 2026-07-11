@@ -21,27 +21,7 @@ const stats = ref({
     needs_review_applications: 0,
 });
 const users = ref([]);
-
-const focusItems = computed(() => [
-    {
-        label: 'Pending providers',
-        detail: (stats.value.pending_providers || 0) > 0 ? 'Provider accounts need review.' : 'No provider approvals waiting.',
-        href: '/admin/reviews',
-        action: 'Open reviews',
-    },
-    {
-        label: 'New signups',
-        detail: 'Review recently created accounts and confirm role details.',
-        href: '/admin/manage-users',
-        action: 'Manage users',
-    },
-    {
-        label: 'System activity',
-        detail: 'Check login, account, application, and review events.',
-        href: '/admin/logs',
-        action: 'View logs',
-    },
-]);
+const programs = ref([]);
 const recentUsers = computed(() => users.value.slice(0, 4));
 const platformSignals = computed(() => [
     {
@@ -102,6 +82,24 @@ function roleClass(role) {
     return 'bg-emerald-100 text-emerald-800';
 }
 
+function statusClass(status) {
+    if (status === 'published') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
+function statusLabel(status) {
+    return String(status ?? 'draft')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 async function loadAdminData() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -111,6 +109,7 @@ async function loadAdminData() {
 
         stats.value = response.data.stats;
         users.value = response.data.recent_users;
+        programs.value = response.data.recent_scholarships ?? [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load admin dashboard.';
     } finally {
@@ -165,34 +164,6 @@ onMounted(loadAdminData);
 
                 <div v-else class="mt-6 space-y-6">
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                            Focus Today
-                        </p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                            Admin items that may need attention
-                        </h3>
-
-                        <div class="mt-5 grid gap-3 lg:grid-cols-3">
-                            <a
-                                v-for="item in focusItems"
-                                :key="item.label"
-                                :href="item.href"
-                                class="rounded-md border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white"
-                            >
-                                <p class="text-sm font-bold text-slate-950">
-                                    {{ item.label }}
-                                </p>
-                                <p class="mt-1 text-sm leading-5 text-slate-500">
-                                    {{ item.detail }}
-                                </p>
-                                <p class="mt-4 text-sm font-bold text-slate-700">
-                                    {{ item.action }}
-                                </p>
-                            </a>
-                        </div>
-                    </section>
-
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -227,7 +198,41 @@ onMounted(loadAdminData);
                         </div>
                     </section>
 
-                    <section class="grid gap-6">
+                    <section class="grid gap-6 lg:grid-cols-2">
+                        <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                        Recent Scholarships
+                                    </p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                        Latest program activity
+                                    </h3>
+                                </div>
+                                <a href="/admin/reviews" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100">
+                                    Open reviews
+                                </a>
+                            </div>
+
+                            <div v-if="programs.length" class="mt-5 grid gap-3">
+                                <a
+                                    v-for="program in programs"
+                                    :key="program.id"
+                                    :href="`/admin/reviews#program-${program.id}`"
+                                    class="flex min-w-0 items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 transition hover:bg-white"
+                                >
+                                    <img :src="program.image_url || '/uploads/scholarship-default.jpg'" :alt="program.title" class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1 ring-1 ring-slate-200">
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block truncate text-sm font-bold text-slate-950">{{ program.title }}</span>
+                                        <span class="mt-1 block truncate text-xs text-slate-500">{{ program.provider || 'Provider' }} - {{ program.updated_at }}</span>
+                                    </span>
+                                    <span :class="['shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase', statusClass(program.status)]">
+                                        {{ statusLabel(program.status) }}
+                                    </span>
+                                </a>
+                            </div>
+                        </article>
+
                         <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
@@ -273,22 +278,6 @@ onMounted(loadAdminData);
 
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Shortcuts
-                        </p>
-                        <div class="mt-4 grid gap-3 sm:grid-cols-3">
-                            <a href="/admin/manage-users" class="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
-                                Manage users
-                            </a>
-                            <a href="/admin/reviews" class="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
-                                Provider reviews
-                            </a>
-                            <a href="/admin/logs" class="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
-                                View logs
-                            </a>
-                        </div>
-                    </section>
                 </div>
 
                 <AdminFooter />
