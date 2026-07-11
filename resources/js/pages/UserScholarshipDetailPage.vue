@@ -72,6 +72,18 @@ const hasMapPreview = computed(() => Boolean(
     || scholarship.value?.location_address
     || scholarship.value?.location_name,
 ));
+const hasUserMapLocation = computed(() => hasCoordinates(user.value?.latitude, user.value?.longitude));
+const userLocationLabel = computed(() => {
+    const parts = [
+        user.value?.address,
+        user.value?.barangay,
+        user.value?.city,
+        user.value?.province,
+        user.value?.region,
+    ].filter(Boolean);
+
+    return parts.length ? parts.join(', ') : 'Your saved profile location';
+});
 const keyFacts = computed(() => {
     const current = scholarship.value;
 
@@ -148,6 +160,14 @@ function formatAmount(amount) {
         currency: 'PHP',
         maximumFractionDigits: 2,
     }).format(Number(amount));
+}
+
+function hasCoordinates(latitude, longitude) {
+    if (latitude === null || latitude === undefined || latitude === '' || longitude === null || longitude === undefined || longitude === '') {
+        return false;
+    }
+
+    return Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
 }
 
 function inferGradeScale(value) {
@@ -710,6 +730,12 @@ onMounted(loadScholarship);
                         <p class="mt-1 text-sm leading-6 text-slate-600">
                             {{ scholarship.location_address || 'No map address added yet.' }}
                         </p>
+                        <p v-if="hasUserMapLocation && scholarship.distance_label" class="mt-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
+                            Your saved location is shown too: {{ scholarship.distance_label }} from this program.
+                        </p>
+                        <p v-else-if="!hasUserMapLocation" class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                            Add your profile map pin to compare distance here.
+                        </p>
                     </div>
                     <button
                         type="button"
@@ -725,6 +751,9 @@ onMounted(loadScholarship);
                         :address="scholarshipMapAddress"
                         :latitude="scholarship.latitude"
                         :longitude="scholarship.longitude"
+                        :secondary-latitude="user?.latitude"
+                        :secondary-longitude="user?.longitude"
+                        :secondary-marker-text="userLocationLabel"
                         :title="scholarship.location_name || scholarship.title"
                         :marker-text="scholarship.location_name || scholarship.title"
                         height="55vh"

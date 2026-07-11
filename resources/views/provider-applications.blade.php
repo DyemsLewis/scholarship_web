@@ -8,6 +8,13 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body>
-        <div id="app" data-page="providerApplications"></div>
+        <div
+            id="app"
+            data-page="providerApplications"
+            @isset($scholarship)
+                data-scholarship-id="{{ $scholarship->id }}"
+                data-scholarship-title="{{ $scholarship->title }}"
+            @endisset
+        ></div>
     </body>
 </html>

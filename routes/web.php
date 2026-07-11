@@ -87,6 +87,7 @@ Route::middleware(['auth', 'provider'])
         Route::get('/programs', [ProviderController::class, 'programs'])->name('programs');
         Route::get('/programs/create', [ProviderController::class, 'programForm'])->name('programs.create');
         Route::get('/programs/{scholarship}/edit', [ProviderController::class, 'programForm'])->name('programs.edit');
+        Route::get('/programs/{scholarship}/applications', [ProviderController::class, 'programApplications'])->whereNumber('scholarship')->name('programs.applications');
         Route::get('/applications', [ProviderController::class, 'applications'])->name('applications');
         Route::get('/profile', [ProviderController::class, 'profile'])->name('profile');
         Route::redirect('/insights', '/provider/review')->name('insights.redirect');

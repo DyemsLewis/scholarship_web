@@ -331,6 +331,13 @@ onMounted(loadProviderData);
                                         Edit
                                     </a>
 
+                                    <a
+                                        :href="`/provider/programs/${scholarship.id}/applications`"
+                                        class="min-w-24 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+                                    >
+                                        Applicants
+                                    </a>
+
                                     <button
                                         type="button"
                                         :disabled="duplicatingId === scholarship.id"

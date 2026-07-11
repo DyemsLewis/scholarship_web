@@ -22,6 +22,18 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    secondaryLatitude: {
+        type: [Number, String],
+        default: '',
+    },
+    secondaryLongitude: {
+        type: [Number, String],
+        default: '',
+    },
+    secondaryMarkerText: {
+        type: String,
+        default: '',
+    },
     height: {
         type: String,
         default: '20rem',
@@ -62,6 +74,8 @@ const mapElement = ref(null);
 const statusMessage = ref('Loading map...');
 const mapInstance = ref(null);
 const markerInstance = ref(null);
+const secondaryMarkerInstance = ref(null);
+const routeLineInstance = ref(null);
 let isMounted = false;
 
 function numberOrNull(value) {
@@ -81,8 +95,19 @@ function currentCoordinates() {
     return latitude === null || longitude === null ? null : { latitude, longitude };
 }
 
+function secondaryCoordinates() {
+    const latitude = numberOrNull(props.secondaryLatitude);
+    const longitude = numberOrNull(props.secondaryLongitude);
+
+    return latitude === null || longitude === null ? null : { latitude, longitude };
+}
+
 function markerLabel() {
     return props.markerText || props.title || props.address || 'Selected location';
+}
+
+function secondaryMarkerLabel() {
+    return props.secondaryMarkerText || 'Your saved location';
 }
 
 function philippineSearchQuery(query) {
@@ -256,6 +281,68 @@ function updateMarker(coordinates) {
     markerInstance.value.bindPopup(popupContent);
 }
 
+function updateSecondaryMarker(coordinates) {
+    const position = [coordinates.latitude, coordinates.longitude];
+
+    if (!secondaryMarkerInstance.value) {
+        secondaryMarkerInstance.value = window.L.circleMarker(position, {
+            radius: 8,
+            color: '#0f172a',
+            fillColor: '#38bdf8',
+            fillOpacity: 0.95,
+            weight: 2,
+        }).addTo(mapInstance.value);
+    } else {
+        secondaryMarkerInstance.value.setLatLng(position);
+    }
+
+    const popupContent = document.createElement('span');
+    popupContent.textContent = secondaryMarkerLabel();
+    secondaryMarkerInstance.value.bindPopup(popupContent);
+}
+
+function removeSecondaryLayers() {
+    if (secondaryMarkerInstance.value) {
+        secondaryMarkerInstance.value.remove();
+        secondaryMarkerInstance.value = null;
+    }
+
+    if (routeLineInstance.value) {
+        routeLineInstance.value.remove();
+        routeLineInstance.value = null;
+    }
+}
+
+function updateRouteLine(primaryCoordinates, userCoordinates) {
+    if (!userCoordinates || props.picker) {
+        removeSecondaryLayers();
+        return;
+    }
+
+    updateSecondaryMarker(userCoordinates);
+
+    const routePoints = [
+        [primaryCoordinates.latitude, primaryCoordinates.longitude],
+        [userCoordinates.latitude, userCoordinates.longitude],
+    ];
+
+    if (!routeLineInstance.value) {
+        routeLineInstance.value = window.L.polyline(routePoints, {
+            color: '#0f172a',
+            dashArray: '6 6',
+            opacity: 0.7,
+            weight: 3,
+        }).addTo(mapInstance.value);
+    } else {
+        routeLineInstance.value.setLatLngs(routePoints);
+    }
+
+    mapInstance.value.fitBounds(window.L.latLngBounds(routePoints), {
+        padding: [36, 36],
+        maxZoom: 14,
+    });
+}
+
 async function renderMap(coordinates = currentCoordinates()) {
     if (!isMounted || !mapElement.value) {
         return;
@@ -280,6 +367,7 @@ async function renderMap(coordinates = currentCoordinates()) {
     if (!coordinates) {
         const fallback = defaultCoordinates();
         mapInstance.value.setView([fallback.latitude, fallback.longitude], props.defaultZoom);
+        removeSecondaryLayers();
         statusMessage.value = props.picker
             ? 'Click the map to set a pin, or search an address first.'
             : props.address ? 'Use address search to preview this location.' : 'Add an address to preview the map.';
@@ -294,6 +382,7 @@ async function renderMap(coordinates = currentCoordinates()) {
     const position = [coordinates.latitude, coordinates.longitude];
     mapInstance.value.setView(position, 15);
     updateMarker(coordinates);
+    updateRouteLine(coordinates, secondaryCoordinates());
     statusMessage.value = props.picker ? 'Pin set. You can drag it to adjust the location.' : '';
 
     setTimeout(() => {
@@ -345,7 +434,7 @@ async function previewAddress() {
 }
 
 watch(
-    () => [props.latitude, props.longitude],
+    () => [props.latitude, props.longitude, props.secondaryLatitude, props.secondaryLongitude],
     () => {
         renderMap();
     },
@@ -385,6 +474,7 @@ onUnmounted(() => {
     isMounted = false;
     mapInstance.value?.off('click', handleMapClick);
     markerInstance.value?.off('dragend', handleMarkerDragEnd);
+    removeSecondaryLayers();
     mapInstance.value?.remove();
     mapInstance.value = null;
     markerInstance.value = null;

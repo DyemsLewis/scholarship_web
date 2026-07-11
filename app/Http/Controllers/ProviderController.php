@@ -67,6 +67,20 @@ class ProviderController extends Controller
         return view('provider-applications');
     }
 
+    public function programApplications(Request $request, Scholarship $scholarship): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isProvider(), 403);
+        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+
+        return view('provider-applications', [
+            'scholarship' => $scholarship,
+        ]);
+    }
+
     public function applicationDetail(Request $request, ScholarshipApplication $application): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -428,14 +442,21 @@ class ProviderController extends Controller
     {
         abort_unless($request->user()?->isProvider(), 403);
 
+        $selectedScholarship = $this->requestedProviderScholarship($request);
         $scholarships = Scholarship::query()
             ->where('provider_id', $request->user()->id)
             ->withCount('bookmarks')
             ->latest()
             ->get();
-        $applications = ScholarshipApplication::query()
+        $applicationsQuery = ScholarshipApplication::query()
             ->with(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship'])
-            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id))
+            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id));
+
+        if ($selectedScholarship) {
+            $applicationsQuery->where('scholarship_id', $selectedScholarship->id);
+        }
+
+        $applications = $applicationsQuery
             ->latest('submitted_at')
             ->get();
         $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
@@ -460,6 +481,9 @@ class ProviderController extends Controller
                 'pending_documents' => $applications->flatMap(fn (ScholarshipApplication $application) => $application->documents)->where('status', 'pending')->count(),
             ],
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
+            'selected_scholarship' => $selectedScholarship
+                ? $this->scholarshipPayload($selectedScholarship)
+                : null,
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
             'status_counts' => [
                 'submitted' => $statusCounts['submitted'] ?? 0,
@@ -684,15 +708,24 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
 
         $provider = $request->user();
+        $selectedScholarship = $this->requestedProviderScholarship($request);
+        $filename = $selectedScholarship
+            ? "provider-applications-program-{$selectedScholarship->id}.csv"
+            : 'provider-applications.csv';
 
-        return response()->streamDownload(function () use ($provider) {
+        return response()->streamDownload(function () use ($provider, $selectedScholarship) {
             $handle = fopen('php://output', 'w');
             fputcsv($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'Applicant Response', 'Responded At', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Outcome Date', 'Outcome Notes', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Response Note', 'Review Notes']);
 
-            ScholarshipApplication::query()
+            $query = ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship'])
-                ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $provider->id))
-                ->orderBy('id')
+                ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $provider->id));
+
+            if ($selectedScholarship) {
+                $query->where('scholarship_id', $selectedScholarship->id);
+            }
+
+            $query->orderBy('id')
                 ->chunk(200, function ($applications) use ($handle) {
                     foreach ($applications as $application) {
                         app(DecisionSupportService::class)->syncApplication($application);
@@ -726,7 +759,7 @@ class ProviderController extends Controller
                 });
 
             fclose($handle);
-        }, 'provider-applications.csv', ['Content-Type' => 'text/csv']);
+        }, $filename, ['Content-Type' => 'text/csv']);
     }
 
     public function scholarships(Request $request): JsonResponse
@@ -1256,6 +1289,20 @@ class ProviderController extends Controller
         }
 
         return $candidate;
+    }
+
+    private function requestedProviderScholarship(Request $request): ?Scholarship
+    {
+        $scholarshipId = $request->integer('scholarship_id');
+
+        if (! $scholarshipId) {
+            return null;
+        }
+
+        return Scholarship::query()
+            ->where('provider_id', $request->user()->id)
+            ->withCount('bookmarks')
+            ->findOrFail($scholarshipId);
     }
 
     private function scholarshipImageUrl(Scholarship $scholarship): string

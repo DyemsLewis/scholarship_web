@@ -3,6 +3,9 @@ import { computed, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 
+const appElement = document.getElementById('app');
+const initialScholarshipId = appElement?.dataset.scholarshipId ?? new URLSearchParams(window.location.search).get('scholarship_id') ?? '';
+const initialScholarshipTitle = appElement?.dataset.scholarshipTitle ?? '';
 const isLoading = ref(true);
 const updatingId = ref(null);
 const errorMessage = ref('');
@@ -10,6 +13,10 @@ const statusMessage = ref('');
 const user = ref(null);
 const scholarships = ref([]);
 const applications = ref([]);
+const selectedScholarshipContext = ref(initialScholarshipId ? {
+    id: Number(initialScholarshipId),
+    title: initialScholarshipTitle,
+} : null);
 const reviewNotes = ref({});
 const decisionReasons = ref({});
 const awardedAmounts = ref({});
@@ -21,6 +28,22 @@ const documentUpdatingId = ref(null);
 const selectedQueueFilter = ref('all');
 const selectedQueueSort = ref('priority');
 
+const selectedScholarshipId = computed(() => selectedScholarshipContext.value?.id || initialScholarshipId);
+const hasProgramContext = computed(() => Boolean(selectedScholarshipId.value));
+const exportApplicationsUrl = computed(() => {
+    if (!hasProgramContext.value) {
+        return '/provider/export/applications';
+    }
+
+    return `/provider/export/applications?scholarship_id=${encodeURIComponent(selectedScholarshipId.value)}`;
+});
+const pageKicker = computed(() => (hasProgramContext.value ? 'Program Applicants' : 'Application Review'));
+const pageTitle = computed(() => (hasProgramContext.value
+    ? `Applicants for ${selectedScholarshipContext.value?.title || 'this program'}`
+    : 'Applicant activity queue'));
+const pageDescription = computed(() => (hasProgramContext.value
+    ? 'Review only the applicants who submitted for this scholarship program.'
+    : 'Review submitted applications, document status, and DSS guidance for your programs.'));
 const reviewFilterOptions = computed(() => [
     { value: 'all', label: 'All', count: applications.value.length },
     {
@@ -384,11 +407,14 @@ async function loadProviderData() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/provider/applications/data');
+        const response = await window.axios.get('/provider/applications/data', {
+            params: hasProgramContext.value ? { scholarship_id: selectedScholarshipId.value } : {},
+        });
 
         user.value = response.data.user;
         scholarships.value = response.data.scholarships;
         applications.value = response.data.applications;
+        selectedScholarshipContext.value = response.data.selected_scholarship ?? selectedScholarshipContext.value;
         reviewNotes.value = Object.fromEntries(
             applications.value.map((application) => [application.id, application.review_notes ?? '']),
         );
@@ -481,14 +507,28 @@ onMounted(loadProviderData);
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Application Review
+                                {{ pageKicker }}
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Applicant activity queue
+                                {{ pageTitle }}
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Review submitted applications, document status, and DSS guidance for your programs.
+                                {{ pageDescription }}
                             </p>
+                        </div>
+                        <div v-if="hasProgramContext" class="flex flex-wrap gap-2">
+                            <a
+                                href="/provider/applications"
+                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                            >
+                                All applications
+                            </a>
+                            <a
+                                href="/provider/programs"
+                                class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                            >
+                                Programs
+                            </a>
                         </div>
                     </div>
                 </header>
@@ -520,11 +560,11 @@ onMounted(loadProviderData);
                             Review Queue
                         </p>
                         <h3 class="mt-2 text-xl font-bold text-slate-950">
-                            Submitted applications
+                            {{ hasProgramContext ? 'Submitted applicants' : 'Submitted applications' }}
                         </h3>
                         <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <a
-                                href="/provider/export/applications"
+                                :href="exportApplicationsUrl"
                                 class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                             >
                                 Export CSV
@@ -594,7 +634,9 @@ onMounted(loadProviderData);
                         <div v-if="applications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
                             <p class="text-sm font-bold text-slate-900">No applications to review yet</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
-                                Applications will appear after an approved scholarship is published and an eligible applicant submits the application wizard.
+                                {{ hasProgramContext
+                                    ? 'Applicants for this program will appear here after eligible students submit the application wizard.'
+                                    : 'Applications will appear after an approved scholarship is published and an eligible applicant submits the application wizard.' }}
                             </p>
                             <div class="mt-4 flex flex-wrap gap-2">
                                 <a href="/provider/programs" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">Check programs</a>
