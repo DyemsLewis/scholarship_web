@@ -153,8 +153,26 @@ class DecisionSupportService
 
     public function statusProgress(ScholarshipApplication $application): array
     {
+        $application->loadMissing('statusHistories');
+
         $status = $application->status ?: 'submitted';
-        $flow = [
+        $examStatuses = ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed'];
+        $usesExamFlow = in_array($status, $examStatuses, true)
+            || $application->statusHistories->contains(
+                fn ($history): bool => in_array($history->to_status, $examStatuses, true)
+            );
+        $flow = $usesExamFlow ? [
+            ['key' => 'submitted', 'label' => 'Submitted'],
+            ['key' => 'under_review', 'label' => 'Under review'],
+            ['key' => 'exam_qualified', 'label' => 'Qualified for exam'],
+            ['key' => 'exam_scheduled', 'label' => 'Exam scheduled'],
+            ['key' => 'exam_taken', 'label' => 'Exam taken'],
+            ['key' => 'exam_result', 'label' => 'Exam result'],
+            ['key' => 'approved', 'label' => 'Approved'],
+            ['key' => 'awarded', 'label' => 'Awarded'],
+            ['key' => 'distribution_scheduled', 'label' => 'Distribution scheduled'],
+            ['key' => 'disbursed', 'label' => 'Distributed'],
+        ] : [
             ['key' => 'submitted', 'label' => 'Submitted'],
             ['key' => 'under_review', 'label' => 'Under review'],
             ['key' => 'qualified', 'label' => 'Qualified'],
@@ -162,18 +180,36 @@ class DecisionSupportService
             ['key' => 'interview', 'label' => 'Interview'],
             ['key' => 'approved', 'label' => 'Approved'],
             ['key' => 'awarded', 'label' => 'Awarded'],
+            ['key' => 'distribution_scheduled', 'label' => 'Distribution scheduled'],
+            ['key' => 'disbursed', 'label' => 'Distributed'],
         ];
-        $stageIndex = match ($status) {
-            'under_review' => 1,
-            'qualified' => 2,
-            'shortlisted' => 3,
-            'interview' => 4,
-            'approved' => 5,
-            'awarded', 'disbursed', 'renewed', 'not_awarded' => 6,
-            'rejected' => 1,
-            default => 0,
-        };
-        $isClosedWithoutAward = in_array($status, ['rejected', 'not_awarded'], true);
+        $stageIndex = $usesExamFlow
+            ? match ($status) {
+                'under_review' => 1,
+                'qualified', 'shortlisted', 'exam_qualified' => 2,
+                'interview', 'exam_scheduled' => 3,
+                'exam_taken' => 4,
+                'exam_passed', 'exam_failed' => 5,
+                'approved' => 6,
+                'awarded', 'not_awarded' => 7,
+                'distribution_scheduled' => 8,
+                'disbursed', 'renewed' => 9,
+                'rejected' => 1,
+                default => 0,
+            }
+            : match ($status) {
+                'under_review' => 1,
+                'qualified' => 2,
+                'shortlisted' => 3,
+                'interview' => 4,
+                'approved' => 5,
+                'awarded', 'not_awarded' => 6,
+                'distribution_scheduled' => 7,
+                'disbursed', 'renewed' => 8,
+                'rejected' => 1,
+                default => 0,
+            };
+        $isClosedWithoutAward = in_array($status, ['rejected', 'not_awarded', 'exam_failed'], true);
         $steps = collect($flow)
             ->map(function (array $step, int $index) use ($stageIndex, $isClosedWithoutAward): array {
                 return [
@@ -440,13 +476,17 @@ class DecisionSupportService
         }
 
         return match ($application->status) {
-            'disbursed', 'renewed', 'awarded' => 100,
+            'disbursed', 'renewed', 'distribution_scheduled', 'awarded' => 100,
             'approved' => 100,
+            'exam_passed' => 97,
             'interview' => 95,
             'shortlisted' => 92,
             'qualified' => 90,
+            'exam_taken' => 88,
+            'exam_scheduled' => 84,
+            'exam_qualified' => 80,
             'under_review' => 75,
-            'rejected', 'not_awarded' => 10,
+            'rejected', 'not_awarded', 'exam_failed' => 10,
             default => 60,
         };
     }
@@ -495,11 +535,11 @@ class DecisionSupportService
 
     private function explanationHeadline(string $recommendation, string $status): string
     {
-        if (in_array($status, ['awarded', 'disbursed', 'renewed'], true)) {
+        if (in_array($status, ['awarded', 'distribution_scheduled', 'disbursed', 'renewed'], true)) {
             return 'Award outcome is already recorded.';
         }
 
-        if (in_array($status, ['rejected', 'not_awarded'], true)) {
+        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed'], true)) {
             return 'Application is closed; review notes explain the final decision.';
         }
 
@@ -515,12 +555,32 @@ class DecisionSupportService
 
     private function recommendedNextAction(ScholarshipApplication $application, array $score, array $missingUploads, array $missingAccepted): string
     {
+        if ($application->status === 'distribution_scheduled') {
+            return 'Prepare the reward for the scheduled distribution date and keep instructions current.';
+        }
+
         if (in_array($application->status, ['awarded', 'disbursed', 'renewed'], true)) {
             return 'Keep outcome details updated for renewal or reporting.';
         }
 
-        if (in_array($application->status, ['rejected', 'not_awarded'], true)) {
+        if (in_array($application->status, ['rejected', 'not_awarded', 'exam_failed'], true)) {
             return 'No action is required unless the provider reopens the application.';
+        }
+
+        if ($application->status === 'exam_qualified') {
+            return 'Provider should schedule the scholarship exam or share exam instructions.';
+        }
+
+        if ($application->status === 'exam_scheduled') {
+            return 'Wait for the applicant to complete the scheduled scholarship exam.';
+        }
+
+        if ($application->status === 'exam_taken') {
+            return 'Provider should record whether the applicant passed or failed the exam.';
+        }
+
+        if ($application->status === 'exam_passed') {
+            return 'Provider can move this applicant to final award review.';
         }
 
         if ($missingUploads !== []) {
@@ -545,9 +605,9 @@ class DecisionSupportService
     private function statusTone(string $status): string
     {
         return match ($status) {
-            'approved', 'awarded', 'disbursed', 'renewed' => 'success',
-            'rejected', 'not_awarded' => 'danger',
-            'under_review', 'qualified', 'shortlisted', 'interview' => 'info',
+            'approved', 'awarded', 'disbursed', 'renewed', 'exam_passed' => 'success',
+            'rejected', 'not_awarded', 'exam_failed' => 'danger',
+            'under_review', 'qualified', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled' => 'info',
             default => 'warning',
         };
     }
@@ -560,8 +620,14 @@ class DecisionSupportService
             'qualified' => 'Application is qualified; wait for shortlist or approval.',
             'shortlisted' => 'Applicant may be contacted for the next screening step.',
             'interview' => 'Applicant should complete the interview or follow-up requirement.',
-            'approved' => 'Waiting for award or release details.',
-            'awarded' => 'Award is recorded; wait for release or renewal updates.',
+            'exam_qualified' => 'Initial screening is complete; wait for the exam schedule or instructions.',
+            'exam_scheduled' => 'Take the scholarship exam as instructed by the provider.',
+            'exam_taken' => 'Exam is recorded as taken; wait for the provider to post the result.',
+            'exam_passed' => 'Exam passed; wait for final provider award review.',
+            'exam_failed' => 'Application is closed after the exam result; check review notes for context.',
+            'approved' => 'Provider can now schedule reward distribution.',
+            'awarded' => 'Award is recorded; provider should set the distribution schedule.',
+            'distribution_scheduled' => 'Reward distribution is scheduled; follow the provider instructions.',
             'disbursed' => 'Scholarship support has been released.',
             'renewed' => 'Scholarship renewal has been recorded.',
             'rejected', 'not_awarded' => 'Application is closed; check review notes for context.',
@@ -571,7 +637,20 @@ class DecisionSupportService
 
     private function statusLabel(string $status): string
     {
-        return str($status)->replace('_', ' ')->title()->toString();
+        return match ($status) {
+            'exam_qualified' => 'Qualified for exam',
+            'exam_scheduled' => 'Exam scheduled',
+            'exam_taken' => 'Exam taken',
+            'exam_passed' => 'Passed exam',
+            'exam_failed' => 'Failed exam',
+            'distribution_scheduled' => 'Distribution scheduled',
+            'disbursed' => 'Distributed',
+            'for_exam' => 'Meets exam eligibility',
+            'exam_completed' => 'Exam completed',
+            'passed_exam' => 'Passed exam',
+            'failed_exam' => 'Failed exam',
+            default => str($status)->replace('_', ' ')->title()->toString(),
+        };
     }
 
     private function containsRequirement(array $documents, string $requirement): bool

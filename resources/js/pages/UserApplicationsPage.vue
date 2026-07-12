@@ -49,7 +49,7 @@ const applicationGuideItems = [
         icon: 'fa-solid fa-folder-tree',
     },
     {
-        title: 'Track response',
+        title: 'Track progress',
         text: 'Follow review status.',
         icon: 'fa-solid fa-timeline',
     },
@@ -122,24 +122,38 @@ const selectedDocumentReadiness = computed(() => selectedScholarship.value?.prep
 const selectedApplicationMode = computed(() => applicationModeLabel(selectedScholarship.value?.application_mode));
 const selectedSlotsLabel = computed(() => selectedScholarship.value?.slots_available ?? 'Not listed');
 const readyApplicationCount = computed(() => applications.value.filter((application) => Number(application.document_readiness?.accepted_percent ?? application.document_readiness?.uploaded_percent ?? 0) >= 100).length);
-const activeApplicationCount = computed(() => applications.value.filter((application) => ['submitted', 'under_review', 'qualified'].includes(application.status ?? 'submitted')).length);
+const activeApplicationCount = computed(() => applications.value.filter((application) => [
+    'submitted',
+    'under_review',
+    'qualified',
+    'exam_qualified',
+    'exam_scheduled',
+    'exam_taken',
+    'exam_passed',
+].includes(application.status ?? 'submitted')).length);
 const applicationQueue = computed(() => [...applications.value].sort((first, second) => {
     const statusRank = {
+        exam_passed: 9,
+        exam_taken: 8,
+        exam_scheduled: 7,
         interview: 7,
         shortlisted: 6,
+        exam_qualified: 6,
         under_review: 5,
         qualified: 4,
         submitted: 3,
         approved: 2,
         awarded: 1,
+        distribution_scheduled: 2,
         disbursed: 1,
         renewed: 1,
+        exam_failed: 0,
         rejected: 0,
         not_awarded: 0,
     };
 
-    const firstRank = (statusRank[first.status ?? 'submitted'] ?? 0) + (first.can_respond ? 20 : 0);
-    const secondRank = (statusRank[second.status ?? 'submitted'] ?? 0) + (second.can_respond ? 20 : 0);
+    const firstRank = statusRank[first.status ?? 'submitted'] ?? 0;
+    const secondRank = statusRank[second.status ?? 'submitted'] ?? 0;
 
     return secondRank - firstRank;
 }));
@@ -265,34 +279,36 @@ function formatAmount(amount) {
 }
 
 function statusLabel(status) {
+    const labels = {
+        exam_qualified: 'Qualified for exam',
+        exam_scheduled: 'Exam scheduled',
+        exam_taken: 'Exam taken',
+        exam_passed: 'Passed exam',
+        exam_failed: 'Failed exam',
+        distribution_scheduled: 'Distribution scheduled',
+        disbursed: 'Distributed',
+    };
+
+    if (labels[status]) {
+        return labels[status];
+    }
+
     return String(status ?? 'submitted')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function statusClass(status) {
-    if (['approved', 'awarded', 'disbursed', 'renewed'].includes(status)) {
+    if (['approved', 'awarded', 'disbursed', 'renewed', 'exam_passed'].includes(status)) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded'].includes(status)) {
+    if (['rejected', 'not_awarded', 'exam_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (['under_review', 'shortlisted', 'interview'].includes(status)) {
+    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled'].includes(status)) {
         return 'bg-slate-100 text-slate-700';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
-function responseClass(status) {
-    if (status === 'accepted') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'declined') {
-        return 'bg-rose-100 text-rose-800';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -1165,7 +1181,7 @@ watch(selectedScholarship, (scholarship) => {
 
                                     <div v-if="selectedContractSections.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                            Provider contract terms
+                                            Provider-managed contract information
                                         </p>
                                         <div class="mt-3 grid gap-3">
                                             <div
@@ -1182,7 +1198,7 @@ watch(selectedScholarship, (scholarship) => {
                                             </div>
                                         </div>
                                         <p class="mt-3 text-xs leading-5 text-slate-500">
-                                            Submitting records your acceptance of these provider terms with this application.
+                                            These terms are shown for transparency only. Any required signing, acceptance, notarization, or return-service agreement is handled directly by the provider outside this platform.
                                         </p>
                                     </div>
 
@@ -1301,16 +1317,10 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ statusLabel(application.status) }}
                                             </span>
                                             <span
-                                                v-if="application.can_respond"
-                                                class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
+                                                v-if="application.distribution_scheduled_for"
+                                                class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase text-slate-700"
                                             >
-                                                Response needed
-                                            </span>
-                                            <span
-                                                v-else-if="application.student_response_status"
-                                                :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', responseClass(application.student_response_status)]"
-                                            >
-                                                {{ application.student_response_label || statusLabel(application.student_response_status) }}
+                                                Distribution {{ application.distribution_scheduled_for }}
                                             </span>
                                         </div>
                                     </div>
@@ -1348,7 +1358,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ application.status_progress.next_action }}
                                             </p>
                                         </div>
-                                        <div class="mt-3 grid gap-2 sm:grid-cols-5">
+                                        <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                                             <div
                                                 v-for="step in application.status_progress.steps"
                                                 :key="step.key"

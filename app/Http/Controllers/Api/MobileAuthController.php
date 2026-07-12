@@ -822,6 +822,8 @@ class MobileAuthController extends Controller
             'awarded_amount' => $application->awarded_amount,
             'outcome_notes' => $application->outcome_notes,
             'outcome_at' => $application->outcome_at?->format('M d, Y'),
+            'distribution_scheduled_for' => $application->distribution_scheduled_for?->format('M d, Y'),
+            'distribution_instructions' => $application->distribution_instructions,
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             'scholarship' => $application->scholarship

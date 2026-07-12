@@ -65,8 +65,8 @@ const activeApplicationNextAction = computed(() => {
         return '';
     }
 
-    if (application.can_respond) {
-        return 'Review the provider decision and respond to the offer.';
+    if (application.status === 'distribution_scheduled') {
+        return `Review the reward distribution instructions for ${application.distribution_scheduled_for || 'the scheduled date'}.`;
     }
 
     const missingDocuments = application.document_readiness?.missing?.length ?? 0;

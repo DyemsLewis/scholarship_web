@@ -72,6 +72,36 @@ class DatabaseSeeder extends Seeder
             'verified_by' => $admin->id,
         ]);
 
+        $chedProvider = User::query()->updateOrCreate([
+            'email' => env('CHED_PROVIDER_EMAIL', 'ched.provider@scholarship.test'),
+        ], [
+            'username' => env('CHED_PROVIDER_USERNAME', 'chedprovider'),
+            'role' => 'provider',
+            'password' => env('CHED_PROVIDER_PASSWORD', $password),
+            'terms_accepted_at' => now(),
+            'privacy_accepted_at' => now(),
+            'terms_version' => Terms::VERSION,
+        ]);
+        $chedProvider->forceFill(['email_verified_at' => now()])->save();
+
+        $chedProvider->providerProfile()->updateOrCreate([
+            'user_id' => $chedProvider->id,
+        ], [
+            'first_name' => 'CHED',
+            'last_name' => 'Central Office',
+            'middle_initial' => null,
+            'contact_number' => '(02) 8441 1220',
+            'provider_name' => 'Commission on Higher Education (CHED)',
+            'provider_type' => 'government',
+            'provider_website' => 'https://ched.gov.ph/',
+            'provider_address' => 'Higher Education Development Center Building, C.P. Garcia Avenue, UP Campus, Diliman, Quezon City',
+            'provider_description' => 'CHED promotes equitable access to quality higher education and administers national and regional student financial assistance programs.',
+            'verification_status' => 'approved',
+            'verification_notes' => 'Seeded CHED provider profile for local scholarship testing.',
+            'verified_at' => now(),
+            'verified_by' => $admin->id,
+        ]);
+
         $student = User::query()->updateOrCreate([
             'email' => env('STUDENT_EMAIL', 'student@scholarship.test'),
         ], [
@@ -189,6 +219,7 @@ class DatabaseSeeder extends Seeder
         ];
         $dostPrograms = [
             'DOST-SEI RA 7687 Undergraduate Scholarship' => [
+                'image_path' => '/images/programs/dost-logo-card.jpg',
                 'description' => 'A DOST-SEI undergraduate scholarship for poor, talented, and deserving Filipino students who will pursue priority science, mathematics, engineering, and other S&T bachelor degree programs.',
                 'eligibility' => 'Natural-born Filipino citizen; Grade 12 STEM student or qualified upper 5% non-STEM/high school graduate; family socio-economic status within DOST-SEI RA 7687 indicators; resident of the municipality for at least four years when required; of good moral character and good health; no college or post-high-school vocational units; must qualify through the DOST-SEI Undergraduate Scholarship Examination.',
                 'eligible_education_levels' => 'senior_high_school',
@@ -214,6 +245,7 @@ class DatabaseSeeder extends Seeder
                 'return_service_contract' => $undergraduateReturnService,
             ],
             'DOST-SEI Merit Undergraduate Scholarship' => [
+                'image_path' => '/images/programs/dost-logo-card.jpg',
                 'description' => 'A DOST-SEI undergraduate scholarship for students with high aptitude in science and mathematics who are willing to pursue careers in science and technology through priority S&T degree programs.',
                 'eligibility' => 'Natural-born Filipino citizen; Grade 12 STEM student or qualified upper 5% non-STEM/high school graduate; of good moral character and good health; no college or post-high-school vocational units; must qualify through the DOST-SEI Undergraduate Scholarship Examination.',
                 'eligible_education_levels' => 'senior_high_school',
@@ -235,6 +267,7 @@ class DatabaseSeeder extends Seeder
                 'return_service_contract' => $undergraduateReturnService,
             ],
             'DOST-SEI Junior Level Science Scholarship (JLSS)' => [
+                'image_path' => '/images/programs/dost-logo-card.jpg',
                 'description' => 'A DOST-SEI scholarship for regular college students entering the third year of a priority S&T course, including JLSS components under Merit, RA 7687, and RA 10612.',
                 'eligibility' => 'Natural-born Filipino citizen; regular second-year college student and incoming third-year student in a DOST-SEI priority S&T course; general weighted average of at least 83% or equivalent; no conditional or failing grades from first year through the required evaluation period; of good moral character and good health; must qualify through the JLSS examination.',
                 'eligible_education_levels' => 'college',
@@ -277,5 +310,72 @@ class DatabaseSeeder extends Seeder
                 ...$program,
             ]);
         }
+
+        $chedPriorityPrograms = implode("\n", [
+            'Science and Mathematics',
+            'Information Technology Education',
+            'Engineering and Technology',
+            'Architecture and related programs',
+            'Health Profession Education',
+            'Teacher Education',
+            'Agriculture, Forestry, and Fisheries',
+            'Business and Management',
+            'Social Sciences',
+        ]);
+        $chedRequirements = implode("\n", [
+            'Accomplished CHED online application form',
+            'PSA-issued birth certificate',
+            'Certified true copy of Grade 12 Form 138 or SF9 signed by the registrar or authorized school representative',
+            'Latest income tax return of parents or guardian, BIR certificate of tax exemption/non-filer, OFW or seafarer proof of income, or CSWD/MSWD social case study report',
+            'Proof for any claimed special equity group, when applicable',
+            'Notarized certificate of guardianship, when applicable',
+        ]);
+
+        Scholarship::query()->updateOrCreate([
+            'provider_id' => $chedProvider->id,
+            'title' => 'CHED Merit Scholarship Program (CMSP)',
+        ], [
+            'image_path' => '/images/programs/ched-logo-card.jpg',
+            'category' => 'CHED Merit Scholarship',
+            'description' => 'A competitive CHED scholarship for academically talented and deserving Filipino students entering or currently in their first year of college in an identified priority undergraduate degree program.',
+            'eligibility' => 'Filipino citizen; incoming or current first-year college student; graduate of a senior high school in the Philippines with a Grade 12 general weighted average of at least 93% or equivalent; combined annual gross income of parents or legal guardian not exceeding PHP 500,000; must enroll in an eligible CHED priority program and institution; selection is subject to ranking and available slots.',
+            'eligible_education_levels' => implode("\n", [
+                'senior_high_school',
+                'college',
+            ]),
+            'eligible_courses' => $chedPriorityPrograms,
+            'eligible_school_types' => implode("\n", [
+                'state_university',
+                'local_college',
+                'private',
+            ]),
+            'eligible_year_levels' => implode("\n", [
+                'Grade 12',
+                '1st year',
+            ]),
+            'eligible_locations' => 'Philippines',
+            'income_requirement' => 'Combined annual gross income of parents or legal guardian must not exceed PHP 500,000',
+            'location_name' => 'CHED Central Office',
+            'location_address' => 'Higher Education Development Center Building, C.P. Garcia Avenue, UP Campus, Diliman, Quezon City 1101',
+            'latitude' => 14.6536208,
+            'longitude' => 121.0581081,
+            'requirements' => $chedRequirements,
+            'review_rubric' => ReviewRubric::DEFAULT,
+            'award_amount' => 120000,
+            'minimum_gwa' => 93,
+            'minimum_grade_scale' => 'percentage',
+            'slots_available' => null,
+            'application_mode' => 'online',
+            'renewal_policy' => 'Continued assistance depends on the official CHED scholarship contract, enrollment in an approved priority degree program and institution, satisfactory academic standing, and timely submission of monitoring requirements.',
+            'return_service_contract' => null,
+            'other_contract_terms' => 'Awardees complete the official CHED Scholarship Contract through the responsible CHED Regional Office. Contract signing, verification, and any required supporting forms are handled directly by CHED outside this platform. Applicants must provide truthful information and comply with enrollment, academic monitoring, reporting, and scholarship termination rules in the signed contract.',
+            'contact_email' => 'osds@ched.gov.ph',
+            'contact_number' => '(02) 8441 1220',
+            'deadline' => null,
+            'status' => 'published',
+            'views_count' => 0,
+            'provider_terms_accepted_at' => now(),
+            'provider_terms_version' => Terms::VERSION,
+        ]);
     }
 }

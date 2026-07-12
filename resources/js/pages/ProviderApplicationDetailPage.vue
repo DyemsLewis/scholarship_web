@@ -16,17 +16,24 @@ const reviewForm = ref(emptyReviewForm());
 const documentStatuses = ref({});
 const documentNotes = ref({});
 const rubricScores = ref({});
+const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 
 const statusOptions = [
     { value: 'submitted', label: 'Submitted' },
     { value: 'under_review', label: 'Under review' },
     { value: 'qualified', label: 'Qualified' },
+    { value: 'exam_qualified', label: 'Qualified for exam' },
+    { value: 'exam_scheduled', label: 'Exam scheduled' },
+    { value: 'exam_taken', label: 'Exam taken' },
+    { value: 'exam_passed', label: 'Passed exam' },
+    { value: 'exam_failed', label: 'Failed exam' },
     { value: 'shortlisted', label: 'Shortlisted' },
     { value: 'interview', label: 'For interview' },
     { value: 'approved', label: 'Approved' },
     { value: 'awarded', label: 'Awarded' },
+    { value: 'distribution_scheduled', label: 'Distribution scheduled' },
     { value: 'not_awarded', label: 'Not awarded' },
-    { value: 'disbursed', label: 'Disbursed' },
+    { value: 'disbursed', label: 'Distributed' },
     { value: 'renewed', label: 'Renewed' },
     { value: 'rejected', label: 'Rejected' },
 ];
@@ -36,9 +43,15 @@ const decisionReasonOptions = [
     { value: 'missing_documents', label: 'Missing documents' },
     { value: 'academic_requirement_not_met', label: 'Academic requirement not met' },
     { value: 'outside_eligibility', label: 'Outside eligibility' },
+    { value: 'for_exam', label: 'Meets exam eligibility' },
+    { value: 'exam_scheduled', label: 'Exam scheduled' },
+    { value: 'exam_completed', label: 'Exam completed' },
+    { value: 'passed_exam', label: 'Passed exam' },
+    { value: 'failed_exam', label: 'Failed exam' },
     { value: 'for_interview', label: 'For interview' },
     { value: 'approved_for_award', label: 'Approved for award' },
-    { value: 'award_released', label: 'Award released' },
+    { value: 'distribution_scheduled', label: 'Distribution scheduled' },
+    { value: 'award_released', label: 'Reward distributed' },
     { value: 'renewed_support', label: 'Renewed support' },
     { value: 'funds_limited', label: 'Funds limited' },
     { value: 'not_selected', label: 'Not selected' },
@@ -52,19 +65,31 @@ const documentStatusOptions = [
 ];
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
 const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500';
+const customStatusLabels = {
+    exam_qualified: 'Qualified for exam',
+    exam_scheduled: 'Exam scheduled',
+    exam_taken: 'Exam taken',
+    exam_passed: 'Passed exam',
+    exam_failed: 'Failed exam',
+    distribution_scheduled: 'Distribution scheduled',
+    disbursed: 'Distributed',
+    for_exam: 'Meets exam eligibility',
+    exam_completed: 'Exam completed',
+    passed_exam: 'Passed exam',
+    failed_exam: 'Failed exam',
+};
 
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
 const rubricReview = computed(() => application.value?.rubric_review ?? { criteria: [], completed: 0, total_criteria: 0 });
 const timeline = computed(() => application.value?.timeline ?? []);
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
-const contractSnapshotSections = computed(() => {
-    const snapshot = application.value?.provider_contract_terms_snapshot ?? {};
+const providerContractSections = computed(() => {
     const scholarship = application.value?.scholarship ?? {};
 
     return [
-        { label: 'Return service contract', value: snapshot.return_service_contract ?? scholarship.return_service_contract },
-        { label: 'Other contract terms', value: snapshot.other_contract_terms ?? scholarship.other_contract_terms },
-        { label: 'Renewal / continuation', value: snapshot.renewal_policy ?? scholarship.renewal_policy },
+        { label: 'Return service contract', value: scholarship.return_service_contract },
+        { label: 'Other contract terms', value: scholarship.other_contract_terms },
+        { label: 'Renewal / continuation', value: scholarship.renewal_policy },
     ].filter((section) => section.value && String(section.value).trim());
 });
 
@@ -75,39 +100,33 @@ function emptyReviewForm() {
         awardedAmount: '',
         outcomeNotes: '',
         outcomeAt: '',
+        distributionScheduledFor: '',
+        distributionInstructions: '',
         reviewNotes: '',
     };
 }
 
 function statusLabel(status) {
+    if (customStatusLabels[status]) {
+        return customStatusLabels[status];
+    }
+
     return String(status ?? 'submitted')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function statusClass(status) {
-    if (['approved', 'awarded', 'disbursed', 'renewed'].includes(status)) {
+    if (['approved', 'awarded', 'disbursed', 'renewed', 'exam_passed'].includes(status)) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded'].includes(status)) {
+    if (['rejected', 'not_awarded', 'exam_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (['under_review', 'shortlisted', 'interview'].includes(status)) {
+    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled'].includes(status)) {
         return 'bg-slate-100 text-slate-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
-function responseClass(status) {
-    if (status === 'accepted') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'declined') {
-        return 'bg-rose-100 text-rose-800';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -178,6 +197,10 @@ function stepClass(state) {
 }
 
 function labelFromKey(value) {
+    if (customStatusLabels[value]) {
+        return customStatusLabels[value];
+    }
+
     return String(value ?? '')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -209,6 +232,8 @@ function applyApplication(payload) {
         awardedAmount: payload?.awarded_amount ?? '',
         outcomeNotes: payload?.outcome_notes ?? '',
         outcomeAt: payload?.outcome_at ?? '',
+        distributionScheduledFor: payload?.distribution_scheduled_for ?? '',
+        distributionInstructions: payload?.distribution_instructions ?? '',
         reviewNotes: payload?.review_notes ?? '',
     };
     documentStatuses.value = Object.fromEntries(
@@ -242,6 +267,26 @@ function quickActionNote(action) {
         return 'Applicant selected for interview or follow-up screening.';
     }
 
+    if (action === 'exam_qualified') {
+        return 'Applicant passed eligibility screening and is qualified to take the scholarship exam.';
+    }
+
+    if (action === 'exam_scheduled') {
+        return 'Scholarship exam is scheduled. Check provider instructions for date, venue, or online exam details.';
+    }
+
+    if (action === 'exam_taken') {
+        return 'Scholarship exam was marked as taken.';
+    }
+
+    if (action === 'exam_passed') {
+        return 'Applicant passed the scholarship exam and may proceed to final award review.';
+    }
+
+    if (action === 'exam_failed') {
+        return 'Applicant did not pass the scholarship exam.';
+    }
+
     if (action === 'approved') {
         return 'Application approved after provider review.';
     }
@@ -259,6 +304,11 @@ async function applyQuickAction(action) {
         missing_documents: { status: 'under_review', reason: 'missing_documents' },
         shortlisted: { status: 'shortlisted', reason: 'complete_requirements' },
         interview: { status: 'interview', reason: 'for_interview' },
+        exam_qualified: { status: 'exam_qualified', reason: 'for_exam' },
+        exam_scheduled: { status: 'exam_scheduled', reason: 'exam_scheduled' },
+        exam_taken: { status: 'exam_taken', reason: 'exam_completed' },
+        exam_passed: { status: 'exam_passed', reason: 'passed_exam' },
+        exam_failed: { status: 'exam_failed', reason: 'failed_exam' },
         approved: { status: 'approved', reason: 'approved_for_award' },
         rejected: { status: 'rejected', reason: 'not_selected' },
     };
@@ -295,7 +345,7 @@ async function updateStatus() {
         return;
     }
 
-    if (['rejected', 'not_awarded'].includes(reviewForm.value.status) && !reviewForm.value.decisionReason) {
+    if (['rejected', 'not_awarded', 'exam_failed'].includes(reviewForm.value.status) && !reviewForm.value.decisionReason) {
         errorMessage.value = 'Select a decision reason before saving a negative decision.';
         return;
     }
@@ -315,6 +365,8 @@ async function updateStatus() {
             awarded_amount: reviewForm.value.awardedAmount,
             outcome_notes: reviewForm.value.outcomeNotes,
             outcome_at: reviewForm.value.outcomeAt,
+            distribution_scheduled_for: reviewForm.value.distributionScheduledFor,
+            distribution_instructions: reviewForm.value.distributionInstructions,
             rubric_scores: completedRubricScores,
         });
 
@@ -325,6 +377,32 @@ async function updateStatus() {
     } finally {
         updatingId.value = null;
     }
+}
+
+async function scheduleDistribution() {
+    if (!reviewForm.value.distributionScheduledFor) {
+        errorMessage.value = 'Choose a reward distribution date before scheduling.';
+        return;
+    }
+
+    const dateLabel = new Date(`${reviewForm.value.distributionScheduledFor}T00:00:00`).toLocaleDateString('en-PH', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    });
+
+    reviewForm.value.status = 'distribution_scheduled';
+    reviewForm.value.decisionReason = 'distribution_scheduled';
+    reviewForm.value.reviewNotes = `Reward distribution scheduled for ${dateLabel}.`;
+    await updateStatus();
+}
+
+async function markDistributionComplete() {
+    reviewForm.value.status = 'disbursed';
+    reviewForm.value.decisionReason = 'award_released';
+    reviewForm.value.outcomeAt = new Date().toISOString().slice(0, 10);
+    reviewForm.value.reviewNotes = 'Scholarship reward marked as distributed by the provider.';
+    await updateStatus();
 }
 
 async function updateDocumentStatus(document) {
@@ -502,6 +580,46 @@ onMounted(loadApplication);
                                                 type="button"
                                                 :disabled="updatingId === application.id"
                                                 class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('exam_qualified')"
+                                            >
+                                                Qualify for exam
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('exam_scheduled')"
+                                            >
+                                                Schedule exam
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('exam_taken')"
+                                            >
+                                                Exam taken
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('exam_passed')"
+                                            >
+                                                Passed exam
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="applyQuickAction('exam_failed')"
+                                            >
+                                                Failed exam
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                                                 @click="applyQuickAction('shortlisted')"
                                             >
                                                 Shortlist
@@ -543,21 +661,13 @@ onMounted(loadApplication);
                                     </div>
                                     <div>
                                         <label :class="labelClass">
-                                            Decision reason <span v-if="['rejected', 'not_awarded'].includes(reviewForm.status)" class="text-rose-600">*</span>
+                                            Decision reason <span v-if="['rejected', 'not_awarded', 'exam_failed'].includes(reviewForm.status)" class="text-rose-600">*</span>
                                         </label>
                                         <select v-model="reviewForm.decisionReason" :class="inputClass">
                                             <option v-for="option in decisionReasonOptions" :key="option.value" :value="option.value">
                                                 {{ option.label }}
                                             </option>
                                         </select>
-                                    </div>
-                                    <div>
-                                        <label :class="labelClass">Awarded amount</label>
-                                        <input v-model="reviewForm.awardedAmount" type="number" min="0" step="0.01" placeholder="Optional" :class="inputClass">
-                                    </div>
-                                    <div>
-                                        <label :class="labelClass">Outcome date</label>
-                                        <input v-model="reviewForm.outcomeAt" type="date" :class="inputClass">
                                     </div>
                                     <div class="md:col-span-2">
                                         <label :class="labelClass">Outcome note</label>
@@ -809,60 +919,84 @@ onMounted(loadApplication);
                             </section>
 
                             <section
-                                v-if="application.requires_student_response || application.student_response_status"
+                                v-if="['approved', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed'].includes(application.status)"
                                 class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
                             >
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Applicant Response
+                                    Reward Distribution
                                 </p>
-                                <div class="mt-3">
-                                    <span
-                                        v-if="application.student_response_status"
-                                        :class="['inline-flex rounded-md px-2.5 py-1 text-xs font-bold uppercase', responseClass(application.student_response_status)]"
+                                <h3 class="mt-2 text-lg font-bold text-slate-950">
+                                    {{ application.status === 'disbursed' ? 'Reward distributed' : 'Set the release schedule' }}
+                                </h3>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">
+                                    {{ application.status === 'disbursed'
+                                        ? `Recorded ${application.outcome_at || 'recently'}.`
+                                        : 'Choose when the applicant should receive the scholarship reward. You can revise this schedule before distribution.' }}
+                                </p>
+
+                                <div v-if="application.status !== 'disbursed'" class="mt-4 grid gap-3">
+                                    <div>
+                                        <label :class="labelClass">Reward amount</label>
+                                        <input v-model="reviewForm.awardedAmount" type="number" min="0" step="0.01" placeholder="Optional" :class="inputClass">
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass">Distribution date</label>
+                                        <input v-model="reviewForm.distributionScheduledFor" type="date" :min="todayDate" :class="inputClass">
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass">Instructions</label>
+                                        <textarea v-model="reviewForm.distributionInstructions" rows="3" maxlength="2000" placeholder="Venue, release method, documents to bring, or contact instructions" :class="inputClass"></textarea>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        :disabled="updatingId === application.id"
+                                        class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                        @click="scheduleDistribution"
                                     >
-                                        {{ application.student_response_label || statusLabel(application.student_response_status) }}
-                                    </span>
-                                    <span
-                                        v-else
-                                        class="inline-flex rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
+                                        {{ application.status === 'distribution_scheduled' ? 'Update schedule' : 'Schedule distribution' }}
+                                    </button>
+                                    <button
+                                        v-if="application.status === 'distribution_scheduled'"
+                                        type="button"
+                                        :disabled="updatingId === application.id"
+                                        class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                        @click="markDistributionComplete"
                                     >
-                                        Waiting for applicant
-                                    </span>
+                                        Mark as distributed
+                                    </button>
                                 </div>
-                                <p class="mt-3 text-sm leading-6 text-slate-600">
-                                    <template v-if="application.student_response_status">
-                                        Recorded {{ application.student_responded_at || 'recently' }}.
-                                    </template>
-                                    <template v-else>
-                                        The applicant can accept or decline from their application detail page.
-                                    </template>
-                                </p>
-                                <p v-if="application.student_response_note" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
-                                    {{ application.student_response_note }}
-                                </p>
+
+                                <div v-else class="mt-4 grid gap-2 text-sm">
+                                    <p class="rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-700 ring-1 ring-slate-200">
+                                        Amount: {{ application.awarded_amount || 'Not listed' }}
+                                    </p>
+                                    <p class="rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-700 ring-1 ring-slate-200">
+                                        Scheduled: {{ application.distribution_scheduled_label || 'Not listed' }}
+                                    </p>
+                                    <p v-if="application.distribution_instructions" class="rounded-md bg-slate-50 px-3 py-2 leading-6 text-slate-600 ring-1 ring-slate-200">
+                                        {{ application.distribution_instructions }}
+                                    </p>
+                                </div>
                             </section>
 
                             <section
-                                v-if="application.provider_contract_terms_accepted_at || contractSnapshotSections.length"
+                                v-if="providerContractSections.length"
                                 class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
                             >
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Contract Acceptance
+                                    Provider-Managed Contract Terms
                                 </p>
                                 <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
                                     <p class="font-bold text-slate-950">
-                                        {{ application.provider_contract_terms_accepted_at ? 'Accepted by applicant' : 'Acceptance not recorded' }}
+                                        Handled outside the platform
                                     </p>
                                     <p class="mt-1 text-xs leading-5 text-slate-500">
-                                        {{ application.provider_contract_terms_accepted_at || 'This application was created before provider contract snapshots were tracked.' }}
-                                    </p>
-                                    <p v-if="application.provider_contract_terms_version" class="mt-1 text-xs leading-5 text-slate-500">
-                                        Snapshot {{ application.provider_contract_terms_version }}
+                                        Applicants see these terms for transparency. Any required signing, acceptance, notarization, or return-service agreement should be handled directly by the provider.
                                     </p>
                                 </div>
-                                <div v-if="contractSnapshotSections.length" class="mt-3 grid gap-2">
+                                <div class="mt-3 grid gap-2">
                                     <div
-                                        v-for="section in contractSnapshotSections"
+                                        v-for="section in providerContractSections"
                                         :key="section.label"
                                         class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm"
                                     >

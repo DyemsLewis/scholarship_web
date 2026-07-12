@@ -2683,9 +2683,15 @@ class _ApplicationCard extends StatelessWidget {
     final status = stringValue(application['status'], fallback: 'submitted');
     final hasOutcome =
         stringValue(application['awarded_amount']).isNotEmpty ||
-        stringValue(application['outcome_notes']).isNotEmpty ||
-        stringValue(application['outcome_at']).isNotEmpty ||
-        ['awarded', 'not_awarded', 'disbursed', 'renewed'].contains(status);
+        stringValue(application['distribution_scheduled_for']).isNotEmpty ||
+        stringValue(application['distribution_instructions']).isNotEmpty ||
+        [
+          'approved',
+          'awarded',
+          'distribution_scheduled',
+          'disbursed',
+          'renewed',
+        ].contains(status);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
@@ -2817,7 +2823,7 @@ class _ApplicationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Outcome details',
+                      'Reward distribution',
                       style: TextStyle(
                         color: Color(0xFF065F46),
                         fontWeight: FontWeight.w900,
@@ -2838,8 +2844,8 @@ class _ApplicationCard extends StatelessWidget {
                         _InfoChip(
                           icon: Icons.event_available_outlined,
                           label: stringValue(
-                            application['outcome_at'],
-                            fallback: 'Date not listed',
+                            application['distribution_scheduled_for'],
+                            fallback: 'Provider will set the date',
                           ),
                         ),
                         _InfoChip(
@@ -2848,11 +2854,13 @@ class _ApplicationCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (stringValue(application['outcome_notes']).isNotEmpty)
+                    if (stringValue(
+                      application['distribution_instructions'],
+                    ).isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          stringValue(application['outcome_notes']),
+                          stringValue(application['distribution_instructions']),
                           style: const TextStyle(color: Color(0xFF166534)),
                         ),
                       ),
@@ -3607,7 +3615,12 @@ class _StatusPill extends StatelessWidget {
       'renewed',
     ].contains(raw);
     final isClosed = ['rejected', 'not_awarded'].contains(raw);
-    final isReview = ['under_review', 'shortlisted', 'interview'].contains(raw);
+    final isReview = [
+      'under_review',
+      'shortlisted',
+      'interview',
+      'distribution_scheduled',
+    ].contains(raw);
     final background = isPositive
         ? const Color(0xFFDCFCE7)
         : isClosed
@@ -4065,7 +4078,13 @@ int intValue(Object? value) {
 }
 
 String labelFromKey(Object? value) {
-  final text = stringValue(value, fallback: 'pending').replaceAll('_', ' ');
+  final key = stringValue(value, fallback: 'pending');
+
+  if (key == 'disbursed') {
+    return 'Distributed';
+  }
+
+  final text = key.replaceAll('_', ' ');
   return text
       .split(' ')
       .where((part) => part.isNotEmpty)
@@ -4117,8 +4136,11 @@ String statusDescription(Object? value) {
     'interview' =>
       'The provider may contact you for interview or follow-up requirements.',
     'approved' => 'Your application was approved by the provider.',
-    'awarded' => 'The provider recorded an award outcome for this application.',
-    'disbursed' => 'Award release or disbursement has been recorded.',
+    'awarded' =>
+      'The provider recorded your award and will set the reward distribution schedule.',
+    'distribution_scheduled' =>
+      'The provider scheduled your reward distribution. Review the date and instructions.',
+    'disbursed' => 'The provider marked the scholarship reward as distributed.',
     'renewed' => 'This scholarship support was renewed.',
     'rejected' => 'The application was closed and not approved.',
     'not_awarded' => 'The application completed review but was not awarded.',

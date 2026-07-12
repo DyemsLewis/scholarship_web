@@ -512,6 +512,8 @@ class AdminController extends Controller
                 'eligibility_score' => $application->eligibility_score,
                 'decision_reason' => $application->decision_reason,
                 'awarded_amount' => $application->awarded_amount,
+                'distribution_scheduled_for' => $application->distribution_scheduled_for?->format('M d, Y'),
+                'distribution_instructions' => $application->distribution_instructions,
                 'outcome_notes' => $application->outcome_notes,
                 'outcome_at' => $application->outcome_at?->format('M d, Y'),
                 'documents_uploaded' => $application->documents->count(),
@@ -1056,7 +1058,7 @@ class AdminController extends Controller
 
         return response()->streamDownload(function () {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['ID', 'Scholarship', 'Provider', 'Applicant', 'Email', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Outcome Date', 'Outcome Notes', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Pending Documents', 'Applicant Notes', 'Review Notes']);
+            fputcsv($handle, ['ID', 'Scholarship', 'Provider', 'Applicant', 'Email', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Distribution Date', 'Distribution Instructions', 'Outcome Date', 'Outcome Notes', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Pending Documents', 'Applicant Notes', 'Review Notes']);
 
             ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
@@ -1076,6 +1078,8 @@ class AdminController extends Controller
                             $application->eligibility_score,
                             $application->decision_reason,
                             $application->awarded_amount,
+                            $application->distribution_scheduled_for?->format('Y-m-d'),
+                            $application->distribution_instructions,
                             $application->outcome_at?->format('Y-m-d'),
                             $application->outcome_notes,
                             $application->submitted_at?->format('Y-m-d H:i:s'),

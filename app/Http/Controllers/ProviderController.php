@@ -19,6 +19,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class ProviderController extends Controller
@@ -489,6 +490,11 @@ class ProviderController extends Controller
                 'submitted' => $statusCounts['submitted'] ?? 0,
                 'under_review' => $statusCounts['under_review'] ?? 0,
                 'qualified' => $statusCounts['qualified'] ?? 0,
+                'exam_qualified' => $statusCounts['exam_qualified'] ?? 0,
+                'exam_scheduled' => $statusCounts['exam_scheduled'] ?? 0,
+                'exam_taken' => $statusCounts['exam_taken'] ?? 0,
+                'exam_passed' => $statusCounts['exam_passed'] ?? 0,
+                'exam_failed' => $statusCounts['exam_failed'] ?? 0,
                 'approved' => $statusCounts['approved'] ?? 0,
                 'rejected' => $statusCounts['rejected'] ?? 0,
             ],
@@ -550,18 +556,28 @@ class ProviderController extends Controller
                 'qualified',
                 'shortlisted',
                 'interview',
+                'exam_qualified',
+                'exam_scheduled',
+                'exam_taken',
+                'exam_passed',
+                'exam_failed',
                 'approved',
                 'awarded',
+                'distribution_scheduled',
                 'not_awarded',
                 'disbursed',
                 'renewed',
                 'rejected',
             ])],
-            'decision_reason' => [Rule::requiredIf(in_array($request->input('status'), ['rejected', 'not_awarded'], true)), 'nullable', 'string', 'max:255'],
+            'decision_reason' => [Rule::requiredIf(in_array($request->input('status'), ['rejected', 'not_awarded', 'exam_failed'], true)), 'nullable', 'string', 'max:255'],
             'review_notes' => ['nullable', 'string', 'max:1500'],
             'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'outcome_notes' => ['nullable', 'string', 'max:2000'],
             'outcome_at' => ['nullable', 'date'],
+            'distribution_scheduled_for' => $request->input('status') === 'distribution_scheduled'
+                ? ['required', 'date', 'after_or_equal:today']
+                : ['nullable', 'date'],
+            'distribution_instructions' => ['nullable', 'string', 'max:2000'],
             'rubric_scores' => ['sometimes', 'array'],
             'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
         ]);
@@ -577,7 +593,37 @@ class ProviderController extends Controller
         $outcomeNotes = array_key_exists('outcome_notes', $validated)
             ? $validated['outcome_notes']
             : $application->outcome_notes;
-        $outcomeAt = $validated['outcome_at'] ?? ($isOutcomeStatus ? ($application->outcome_at ?? now()) : $application->outcome_at);
+        $distributionScheduledFor = array_key_exists('distribution_scheduled_for', $validated)
+            ? $validated['distribution_scheduled_for']
+            : $application->distribution_scheduled_for?->toDateString();
+        $distributionInstructions = array_key_exists('distribution_instructions', $validated)
+            ? $validated['distribution_instructions']
+            : $application->distribution_instructions;
+
+        if ($validated['status'] === 'distribution_scheduled'
+            && ! in_array($previousStatus, ['approved', 'awarded', 'distribution_scheduled'], true)) {
+            throw ValidationException::withMessages([
+                'status' => 'Approve or award the application before scheduling reward distribution.',
+            ]);
+        }
+
+        if ($validated['status'] === 'disbursed') {
+            if ($previousStatus !== 'distribution_scheduled' || blank($distributionScheduledFor)) {
+                throw ValidationException::withMessages([
+                    'status' => 'Schedule reward distribution before marking it as distributed.',
+                ]);
+            }
+
+            if ($distributionScheduledFor > now()->toDateString()) {
+                throw ValidationException::withMessages([
+                    'status' => 'Reward distribution cannot be marked complete before its scheduled date.',
+                ]);
+            }
+        }
+
+        $outcomeAt = array_key_exists('outcome_at', $validated)
+            ? $validated['outcome_at']
+            : ($isOutcomeStatus && $previousStatus !== $validated['status'] ? now() : $application->outcome_at);
         $rubric = $application->review_rubric_snapshot
             ?: ($application->scholarship?->review_rubric ?? []);
         $rubricResult = array_key_exists('rubric_scores', $validated)
@@ -587,7 +633,9 @@ class ProviderController extends Controller
             || $this->comparableScholarshipValue($application->decision_reason) !== $this->comparableScholarshipValue($decisionReason)
             || $this->comparableScholarshipValue($application->awarded_amount) !== $this->comparableScholarshipValue($validated['awarded_amount'] ?? $application->awarded_amount)
             || $this->comparableScholarshipValue($application->outcome_notes) !== $this->comparableScholarshipValue($outcomeNotes)
-            || $this->comparableScholarshipValue($application->outcome_at) !== $this->comparableScholarshipValue($outcomeAt);
+            || $this->comparableScholarshipValue($application->outcome_at) !== $this->comparableScholarshipValue($outcomeAt)
+            || $this->comparableScholarshipValue($application->distribution_scheduled_for) !== $this->comparableScholarshipValue($distributionScheduledFor)
+            || $this->comparableScholarshipValue($application->distribution_instructions) !== $this->comparableScholarshipValue($distributionInstructions);
         $reviewNoteChanged = $this->comparableScholarshipValue($application->review_notes)
             !== $this->comparableScholarshipValue($reviewNotes);
 
@@ -598,6 +646,8 @@ class ProviderController extends Controller
             'awarded_amount' => array_key_exists('awarded_amount', $validated) ? $validated['awarded_amount'] : $application->awarded_amount,
             'outcome_notes' => $outcomeNotes,
             'outcome_at' => $outcomeAt,
+            'distribution_scheduled_for' => $distributionScheduledFor,
+            'distribution_instructions' => $distributionInstructions,
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
             'rubric_scores' => $rubricResult ? $rubricResult['scores'] : $application->rubric_scores,
@@ -628,6 +678,7 @@ class ProviderController extends Controller
                 'application_id' => $application->id,
                 'status' => $validated['status'],
                 'decision_reason' => $validated['decision_reason'] ?? null,
+                'distribution_scheduled_for' => $distributionScheduledFor,
                 'rubric_total_score' => $rubricResult['total_score'] ?? null,
             ],
         );
@@ -715,7 +766,7 @@ class ProviderController extends Controller
 
         return response()->streamDownload(function () use ($provider, $selectedScholarship) {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'Applicant Response', 'Responded At', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Outcome Date', 'Outcome Notes', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Response Note', 'Review Notes']);
+            fputcsv($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Distribution Date', 'Distribution Instructions', 'Outcome Date', 'Outcome Notes', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Review Notes']);
 
             $query = ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship'])
@@ -738,13 +789,13 @@ class ProviderController extends Controller
                             $application->applicant?->email,
                             $application->applicant?->contact_number,
                             $application->status,
-                            $this->studentResponseLabel($application->student_response_status),
-                            $application->student_responded_at?->format('Y-m-d H:i:s'),
                             $application->dss_score,
                             $application->dss_recommendation,
                             $application->eligibility_score,
                             $application->decision_reason,
                             $application->awarded_amount,
+                            $application->distribution_scheduled_for?->format('Y-m-d'),
+                            $application->distribution_instructions,
                             $application->outcome_at?->format('Y-m-d'),
                             $application->outcome_notes,
                             $readiness['percent'],
@@ -752,7 +803,6 @@ class ProviderController extends Controller
                             implode('; ', $application->document_checklist ?? []),
                             $application->documents->count().' uploaded',
                             $application->notes,
-                            $application->student_response_note,
                             $application->review_notes,
                         ]);
                     }
@@ -1130,20 +1180,14 @@ class ProviderController extends Controller
             'awarded_amount' => $application->awarded_amount,
             'outcome_notes' => $application->outcome_notes,
             'outcome_at' => $application->outcome_at?->format('Y-m-d'),
+            'distribution_scheduled_for' => $application->distribution_scheduled_for?->format('Y-m-d'),
+            'distribution_scheduled_label' => $application->distribution_scheduled_for?->format('M d, Y'),
+            'distribution_instructions' => $application->distribution_instructions,
             'reviewed_at' => $application->reviewed_at?->format('M d, Y h:i A'),
-            'student_response_status' => $application->student_response_status,
-            'student_response_label' => $this->studentResponseLabel($application->student_response_status),
-            'student_responded_at' => $application->student_responded_at?->format('M d, Y h:i A'),
-            'student_response_note' => $application->student_response_note,
-            'requires_student_response' => in_array($application->status, ['approved', 'awarded'], true),
-            'can_receive_student_response' => in_array($application->status, ['approved', 'awarded'], true)
-                && blank($application->student_response_status),
+            'requires_student_response' => false,
+            'can_receive_student_response' => false,
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
-            'provider_contract_terms_snapshot' => $application->provider_contract_terms_snapshot ?? [],
-            'provider_contract_terms_accepted_at' => $application->provider_contract_terms_accepted_at?->format('M d, Y h:i A'),
-            'provider_contract_terms_version' => $application->provider_contract_terms_version,
-            'provider_contract_acceptance_ip' => $application->provider_contract_acceptance_ip,
             'applicant' => [
                 'name' => $application->applicant?->name,
                 'email' => $application->applicant?->email,
@@ -1438,6 +1482,7 @@ class ProviderController extends Controller
     ): array {
         $programTitle = $application->scholarship?->title ?: 'this scholarship';
         $actionUrl = route('dashboard.applications.show', $application, false);
+        $distributionDate = $application->distribution_scheduled_for?->format('M d, Y');
 
         if ($status === 'under_review' && $decisionReason === 'missing_documents') {
             return [
@@ -1453,7 +1498,7 @@ class ProviderController extends Controller
                 'awarded' => [
                     'type' => 'application_outcome',
                     'title' => 'Award recorded',
-                    'message' => "Your application for {$programTitle} has been awarded. Open the record to confirm whether you will proceed.",
+                    'message' => "Your application for {$programTitle} has been awarded. The provider will publish the reward distribution schedule.",
                 ],
                 'not_awarded' => [
                     'type' => 'application_outcome',
@@ -1462,8 +1507,8 @@ class ProviderController extends Controller
                 ],
                 'disbursed' => [
                     'type' => 'application_outcome',
-                    'title' => 'Scholarship support released',
-                    'message' => "Scholarship support for {$programTitle} has been marked as disbursed.",
+                    'title' => 'Scholarship reward distributed',
+                    'message' => "The scholarship reward for {$programTitle} has been marked as distributed.",
                 ],
                 'renewed' => [
                     'type' => 'application_outcome',
@@ -1502,10 +1547,40 @@ class ProviderController extends Controller
                     'title' => 'Interview or follow-up needed',
                     'message' => "Your application for {$programTitle} was moved to interview or follow-up screening.",
                 ],
+                'exam_qualified' => [
+                    'type' => 'application_status',
+                    'title' => 'Qualified for exam',
+                    'message' => "Your application for {$programTitle} passed initial screening and is qualified for the scholarship exam.",
+                ],
+                'exam_scheduled' => [
+                    'type' => 'application_status',
+                    'title' => 'Scholarship exam scheduled',
+                    'message' => "Your scholarship exam for {$programTitle} has been scheduled. Check provider notes for instructions.",
+                ],
+                'exam_taken' => [
+                    'type' => 'application_status',
+                    'title' => 'Exam marked taken',
+                    'message' => "Your scholarship exam for {$programTitle} was marked as taken.",
+                ],
+                'exam_passed' => [
+                    'type' => 'application_status',
+                    'title' => 'Exam passed',
+                    'message' => "You passed the scholarship exam for {$programTitle}. Your application will proceed to final review.",
+                ],
+                'exam_failed' => [
+                    'type' => 'application_status',
+                    'title' => 'Exam not passed',
+                    'message' => "Your application for {$programTitle} did not pass the scholarship exam. Review the provider note for details.",
+                ],
                 'approved' => [
                     'type' => 'application_status',
                     'title' => 'Application approved',
-                    'message' => "Your application for {$programTitle} has been approved. Open the record to accept or decline the offer.",
+                    'message' => "Your application for {$programTitle} has been approved. The provider will post reward distribution details when they are ready.",
+                ],
+                'distribution_scheduled' => [
+                    'type' => 'application_outcome',
+                    'title' => 'Reward distribution scheduled',
+                    'message' => "Your scholarship reward for {$programTitle} is scheduled for {$distributionDate}. Open the application to review provider instructions.",
                 ],
                 'rejected' => [
                     'type' => 'application_status',
@@ -1519,7 +1594,7 @@ class ProviderController extends Controller
                 ],
             };
 
-        if (in_array($status, ['rejected', 'not_awarded'], true) && filled($decisionReason)) {
+        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed'], true) && filled($decisionReason)) {
             $payload['message'] .= " Reason: {$this->statusLabel($decisionReason)}.";
         }
 
@@ -1528,15 +1603,18 @@ class ProviderController extends Controller
 
     private function statusLabel(string $status): string
     {
-        return str($status)->replace('_', ' ')->title()->toString();
-    }
-
-    private function studentResponseLabel(?string $status): ?string
-    {
         return match ($status) {
-            'accepted' => 'Accepted by applicant',
-            'declined' => 'Declined by applicant',
-            default => null,
+            'exam_qualified' => 'Qualified for exam',
+            'exam_scheduled' => 'Exam scheduled',
+            'exam_taken' => 'Exam taken',
+            'exam_passed' => 'Passed exam',
+            'exam_failed' => 'Failed exam',
+            'for_exam' => 'Meets exam eligibility',
+            'exam_completed' => 'Exam completed',
+            'passed_exam' => 'Passed exam',
+            'failed_exam' => 'Failed exam',
+            default => str($status)->replace('_', ' ')->title()->toString(),
         };
     }
+
 }

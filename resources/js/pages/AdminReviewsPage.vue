@@ -103,7 +103,7 @@ function statusClass(status) {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (['under_review', 'shortlisted', 'interview', 'pending_review'].includes(status)) {
+    if (['under_review', 'shortlisted', 'interview', 'pending_review', 'distribution_scheduled'].includes(status)) {
         return 'bg-slate-100 text-slate-700';
     }
 
@@ -190,7 +190,7 @@ function applicationReviewScore(application) {
         score += 10;
     }
 
-    if (['approved', 'awarded', 'not_awarded', 'disbursed', 'renewed', 'rejected'].includes(status)) {
+    if (['approved', 'awarded', 'distribution_scheduled', 'not_awarded', 'disbursed', 'renewed', 'rejected'].includes(status)) {
         score -= 20;
     }
 
@@ -861,8 +861,10 @@ onMounted(loadReviewData);
                                         <p v-if="application.decision_reason" class="mt-1 truncate text-xs text-slate-500">
                                             Reason: {{ statusLabel(application.decision_reason) }}
                                         </p>
-                                        <p v-if="application.awarded_amount || application.outcome_at" class="mt-1 truncate text-xs font-semibold text-emerald-700">
-                                            Outcome: {{ application.awarded_amount || 'Amount not listed' }} <span v-if="application.outcome_at">on {{ application.outcome_at }}</span>
+                                        <p v-if="application.awarded_amount || application.distribution_scheduled_for || application.outcome_at" class="mt-1 truncate text-xs font-semibold text-emerald-700">
+                                            Reward: {{ application.awarded_amount || 'Amount not listed' }}
+                                            <span v-if="application.distribution_scheduled_for">scheduled {{ application.distribution_scheduled_for }}</span>
+                                            <span v-else-if="application.outcome_at">recorded {{ application.outcome_at }}</span>
                                         </p>
                                         <p class="mt-2 inline-flex w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
                                             Suitability: {{ application.dss_score ?? 0 }}% - {{ application.dss_breakdown?.label || statusLabel(application.dss_recommendation || 'needs_review') }}

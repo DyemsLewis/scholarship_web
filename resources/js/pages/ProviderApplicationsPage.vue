@@ -95,12 +95,18 @@ const statusOptions = [
     { value: 'submitted', label: 'Submitted' },
     { value: 'under_review', label: 'Under review' },
     { value: 'qualified', label: 'Qualified' },
+    { value: 'exam_qualified', label: 'Qualified for exam' },
+    { value: 'exam_scheduled', label: 'Exam scheduled' },
+    { value: 'exam_taken', label: 'Exam taken' },
+    { value: 'exam_passed', label: 'Passed exam' },
+    { value: 'exam_failed', label: 'Failed exam' },
     { value: 'shortlisted', label: 'Shortlisted' },
     { value: 'interview', label: 'For interview' },
     { value: 'approved', label: 'Approved' },
     { value: 'awarded', label: 'Awarded' },
+    { value: 'distribution_scheduled', label: 'Distribution scheduled' },
     { value: 'not_awarded', label: 'Not awarded' },
-    { value: 'disbursed', label: 'Disbursed' },
+    { value: 'disbursed', label: 'Distributed' },
     { value: 'renewed', label: 'Renewed' },
     { value: 'rejected', label: 'Rejected' },
 ];
@@ -110,9 +116,14 @@ const decisionReasonOptions = [
     { value: 'missing_documents', label: 'Missing documents' },
     { value: 'academic_requirement_not_met', label: 'Academic requirement not met' },
     { value: 'outside_eligibility', label: 'Outside eligibility' },
+    { value: 'for_exam', label: 'Meets exam eligibility' },
+    { value: 'exam_scheduled', label: 'Exam scheduled' },
+    { value: 'exam_completed', label: 'Exam completed' },
+    { value: 'passed_exam', label: 'Passed exam' },
+    { value: 'failed_exam', label: 'Failed exam' },
     { value: 'for_interview', label: 'For interview' },
     { value: 'approved_for_award', label: 'Approved for award' },
-    { value: 'award_released', label: 'Award released' },
+    { value: 'award_released', label: 'Reward distributed' },
     { value: 'renewed_support', label: 'Renewed support' },
     { value: 'funds_limited', label: 'Funds limited' },
     { value: 'not_selected', label: 'Not selected' },
@@ -124,35 +135,40 @@ const documentStatusOptions = [
     { value: 'needs_replacement', label: 'Needs replacement' },
     { value: 'rejected', label: 'Rejected' },
 ];
+const customStatusLabels = {
+    exam_qualified: 'Qualified for exam',
+    exam_scheduled: 'Exam scheduled',
+    exam_taken: 'Exam taken',
+    exam_passed: 'Passed exam',
+    exam_failed: 'Failed exam',
+    distribution_scheduled: 'Distribution scheduled',
+    disbursed: 'Distributed',
+    for_exam: 'Meets exam eligibility',
+    exam_completed: 'Exam completed',
+    passed_exam: 'Passed exam',
+    failed_exam: 'Failed exam',
+};
 function statusLabel(status) {
+    if (customStatusLabels[status]) {
+        return customStatusLabels[status];
+    }
+
     return String(status ?? 'submitted')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function statusClass(status) {
-    if (['approved', 'awarded', 'disbursed', 'renewed'].includes(status)) {
+    if (['approved', 'awarded', 'disbursed', 'renewed', 'exam_passed'].includes(status)) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded'].includes(status)) {
+    if (['rejected', 'not_awarded', 'exam_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (['under_review', 'shortlisted', 'interview'].includes(status)) {
+    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled'].includes(status)) {
         return 'bg-slate-100 text-slate-700';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
-function responseClass(status) {
-    if (status === 'accepted') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'declined') {
-        return 'bg-rose-100 text-rose-800';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -236,6 +252,14 @@ function reviewPriorityScore(application) {
         score += 16;
     }
 
+    if (['exam_qualified', 'exam_scheduled', 'exam_taken'].includes(status)) {
+        score += 14;
+    }
+
+    if (status === 'exam_passed') {
+        score += 10;
+    }
+
     if (issues > 0) {
         score += Math.min(35, issues * 12);
     }
@@ -256,7 +280,7 @@ function reviewPriorityScore(application) {
         score += 10;
     }
 
-    if (application.can_receive_student_response) {
+    if (['approved', 'awarded'].includes(status) && !application.distribution_scheduled_for) {
         score += 18;
     }
 
@@ -264,7 +288,7 @@ function reviewPriorityScore(application) {
         score += 5;
     }
 
-    if (['approved', 'awarded', 'not_awarded', 'disbursed', 'renewed', 'rejected'].includes(status) && !application.can_receive_student_response) {
+    if (['not_awarded', 'disbursed', 'renewed', 'rejected', 'exam_failed'].includes(status)) {
         score -= 25;
     }
 
@@ -310,6 +334,18 @@ function reviewReasons(application) {
         reasons.push('Awaiting provider decision');
     }
 
+    const examReason = {
+        exam_qualified: 'Ready for exam schedule',
+        exam_scheduled: 'Exam scheduled',
+        exam_taken: 'Awaiting exam result',
+        exam_passed: 'Ready for final award review',
+        exam_failed: 'Closed after exam result',
+    }[application.status ?? 'submitted'];
+
+    if (examReason) {
+        reasons.push(examReason);
+    }
+
     if (issues > 0) {
         reasons.push(`${issues} document ${issues === 1 ? 'issue' : 'issues'}`);
     } else if (readiness < 100) {
@@ -324,10 +360,10 @@ function reviewReasons(application) {
         reasons.push('DSS asks for manual review');
     }
 
-    if (application.can_receive_student_response) {
-        reasons.push('Waiting for applicant response');
-    } else if (application.student_response_label) {
-        reasons.push(application.student_response_label);
+    if (['approved', 'awarded'].includes(application.status) && !application.distribution_scheduled_for) {
+        reasons.push('Reward schedule needed');
+    } else if (application.distribution_scheduled_label) {
+        reasons.push(`Distribution ${application.distribution_scheduled_label}`);
     }
 
     if (reasons.length === 0) {
@@ -357,6 +393,26 @@ function quickActionNote(application, action) {
         return 'Applicant selected for interview or follow-up screening.';
     }
 
+    if (action === 'exam_qualified') {
+        return 'Applicant passed eligibility screening and is qualified to take the scholarship exam.';
+    }
+
+    if (action === 'exam_scheduled') {
+        return 'Scholarship exam is scheduled. Check provider instructions for date, venue, or online exam details.';
+    }
+
+    if (action === 'exam_taken') {
+        return 'Scholarship exam was marked as taken.';
+    }
+
+    if (action === 'exam_passed') {
+        return 'Applicant passed the scholarship exam and may proceed to final award review.';
+    }
+
+    if (action === 'exam_failed') {
+        return 'Applicant did not pass the scholarship exam.';
+    }
+
     if (action === 'approved') {
         return 'Application approved after provider review.';
     }
@@ -374,6 +430,11 @@ async function applyQuickAction(application, action) {
         missing_documents: { status: 'under_review', reason: 'missing_documents' },
         shortlisted: { status: 'shortlisted', reason: 'complete_requirements' },
         interview: { status: 'interview', reason: 'for_interview' },
+        exam_qualified: { status: 'exam_qualified', reason: 'for_exam' },
+        exam_scheduled: { status: 'exam_scheduled', reason: 'exam_scheduled' },
+        exam_taken: { status: 'exam_taken', reason: 'exam_completed' },
+        exam_passed: { status: 'exam_passed', reason: 'passed_exam' },
+        exam_failed: { status: 'exam_failed', reason: 'failed_exam' },
         approved: { status: 'approved', reason: 'approved_for_award' },
         rejected: { status: 'rejected', reason: 'not_selected' },
     };
@@ -389,6 +450,10 @@ async function applyQuickAction(application, action) {
 }
 
 function labelFromKey(value) {
+    if (customStatusLabels[value]) {
+        return customStatusLabels[value];
+    }
+
     return String(value ?? '')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -674,16 +739,10 @@ onMounted(loadProviderData);
                                             {{ statusLabel(application.status) }}
                                         </span>
                                         <span
-                                            v-if="application.can_receive_student_response"
-                                            class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
+                                            v-if="application.distribution_scheduled_label"
+                                            class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase text-slate-700"
                                         >
-                                            Awaiting response
-                                        </span>
-                                        <span
-                                            v-else-if="application.student_response_status"
-                                            :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', responseClass(application.student_response_status)]"
-                                        >
-                                            {{ application.student_response_label || statusLabel(application.student_response_status) }}
+                                            {{ application.distribution_scheduled_label }}
                                         </span>
                                         <a
                                             :href="application.detail_url || `/provider/applications/${application.id}`"
@@ -739,23 +798,6 @@ onMounted(loadProviderData);
                                     </div>
                                 </div>
 
-                                <div
-                                    v-if="application.provider_contract_terms_accepted_at"
-                                    class="mt-3 rounded-md border border-slate-200 bg-white p-3 text-sm"
-                                >
-                                    <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                        <p class="font-semibold text-slate-500">
-                                            Contract acceptance
-                                        </p>
-                                        <span class="w-fit rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-                                            Recorded {{ application.provider_contract_terms_accepted_at }}
-                                        </span>
-                                    </div>
-                                    <p class="mt-2 text-xs leading-5 text-slate-500">
-                                        Snapshot {{ application.provider_contract_terms_version || 'current' }}
-                                    </p>
-                                </div>
-
                                 <div class="mt-4 rounded-md border border-slate-200 bg-white p-3">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                                         Quick review actions
@@ -776,6 +818,46 @@ onMounted(loadProviderData);
                                             @click="applyQuickAction(application, 'missing_documents')"
                                         >
                                             Request documents
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'exam_qualified')"
+                                        >
+                                            Qualify for exam
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'exam_scheduled')"
+                                        >
+                                            Schedule exam
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'exam_taken')"
+                                        >
+                                            Exam taken
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'exam_passed')"
+                                        >
+                                            Passed exam
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="updatingId === application.id"
+                                            class="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="applyQuickAction(application, 'exam_failed')"
+                                        >
+                                            Failed exam
                                         </button>
                                         <button
                                             type="button"

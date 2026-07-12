@@ -35,6 +35,8 @@ class DemoReadinessWorkflowTest extends TestCase
             ->postJson('/provider/scholarships', [
                 'title' => 'Core Workflow Scholarship',
                 'description' => 'A scholarship used to verify the complete role workflow.',
+                'return_service_contract' => 'Provider will handle any return service agreement after awarding.',
+                'other_contract_terms' => 'Provider may require separate contract signing after final selection.',
                 'deadline' => now()->addMonth()->toDateString(),
                 'status' => 'pending_review',
                 'terms_accepted' => true,
@@ -66,6 +68,22 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertJsonPath('application.status', 'submitted');
 
         $applicationId = $applicationResponse->json('application.id');
+        $applicationPayload = $applicationResponse->json('application');
+
+        $this->assertArrayNotHasKey('provider_contract_terms_accepted_at', $applicationPayload);
+        $this->assertArrayNotHasKey('provider_contract_terms_snapshot', $applicationPayload);
+        $this->assertDatabaseHas('scholarship_applications', [
+            'id' => $applicationId,
+            'provider_contract_terms_accepted_at' => null,
+            'provider_contract_terms_snapshot' => null,
+            'provider_contract_terms_version' => null,
+            'provider_contract_acceptance_ip' => null,
+        ]);
+        $this->assertDatabaseHas('application_status_histories', [
+            'scholarship_application_id' => $applicationId,
+            'to_status' => 'submitted',
+            'review_notes' => 'Application submitted by applicant.',
+        ]);
 
         $this->actingAs($provider)
             ->getJson('/provider/profile/data')

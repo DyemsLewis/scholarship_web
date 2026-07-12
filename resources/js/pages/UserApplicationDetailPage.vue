@@ -20,9 +20,6 @@ const fileInput = ref(null);
 const previewDocument = ref(null);
 const showMapModal = ref(false);
 const documentTermsAccepted = ref(false);
-const isResponding = ref(false);
-const responseNote = ref('');
-const responseTermsAccepted = ref(false);
 
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
 const uploadedDocumentNames = computed(() => new Set((application.value?.documents ?? []).map((document) => document.document_name)));
@@ -58,7 +55,6 @@ const dssDecisionNotice = computed(() => application.value?.dss_breakdown?.decis
 const applicantDssNextAction = computed(() => applicantNextAction(application.value));
 const timeline = computed(() => application.value?.timeline ?? []);
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
-const canRespondToOffer = computed(() => Boolean(application.value?.can_respond));
 const applicationScholarship = computed(() => application.value?.scholarship ?? null);
 const scholarshipMapAddress = computed(() => {
     const parts = [
@@ -76,34 +72,36 @@ const hasMapPreview = computed(() => Boolean(
 const hasUserMapLocation = computed(() => hasCoordinates(user.value?.latitude, user.value?.longitude));
 
 function statusLabel(status) {
+    const labels = {
+        exam_qualified: 'Qualified for exam',
+        exam_scheduled: 'Exam scheduled',
+        exam_taken: 'Exam taken',
+        exam_passed: 'Passed exam',
+        exam_failed: 'Failed exam',
+        distribution_scheduled: 'Distribution scheduled',
+        disbursed: 'Distributed',
+    };
+
+    if (labels[status]) {
+        return labels[status];
+    }
+
     return String(status ?? 'submitted')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function statusClass(status) {
-    if (['approved', 'awarded', 'disbursed', 'renewed'].includes(status)) {
+    if (['approved', 'awarded', 'disbursed', 'renewed', 'exam_passed'].includes(status)) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded'].includes(status)) {
+    if (['rejected', 'not_awarded', 'exam_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (['under_review', 'shortlisted', 'interview'].includes(status)) {
+    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled'].includes(status)) {
         return 'bg-slate-100 text-slate-700';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
-function responseClass(status) {
-    if (status === 'accepted') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'declined') {
-        return 'bg-rose-100 text-rose-800';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -190,6 +188,18 @@ function stepClass(state) {
 }
 
 function labelFromKey(value) {
+    const labels = {
+        for_exam: 'Meets exam eligibility',
+        exam_scheduled: 'Exam scheduled',
+        exam_completed: 'Exam completed',
+        passed_exam: 'Passed exam',
+        failed_exam: 'Failed exam',
+    };
+
+    if (labels[value]) {
+        return labels[value];
+    }
+
     return String(value ?? '')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -213,8 +223,28 @@ function applicantNextAction(current) {
         return 'Your award is recorded. Watch for release or renewal updates.';
     }
 
-    if (['rejected', 'not_awarded'].includes(current.status)) {
+    if (current.status === 'distribution_scheduled') {
+        return `Your reward distribution is scheduled for ${current.distribution_scheduled_for || 'the provider date'}. Review the instructions below.`;
+    }
+
+    if (['rejected', 'not_awarded', 'exam_failed'].includes(current.status)) {
         return 'This application is closed. Check review notes for the provider decision.';
+    }
+
+    if (current.status === 'exam_qualified') {
+        return 'You passed initial screening. Wait for the provider to send the exam schedule or instructions.';
+    }
+
+    if (current.status === 'exam_scheduled') {
+        return 'Take the scholarship exam as instructed by the provider.';
+    }
+
+    if (current.status === 'exam_taken') {
+        return 'Your exam is recorded as taken. Wait for the provider to post the result.';
+    }
+
+    if (current.status === 'exam_passed') {
+        return 'You passed the scholarship exam. Wait for final provider award review.';
     }
 
     const missing = current.document_readiness?.missing ?? [];
@@ -373,38 +403,6 @@ async function deleteDocument(document) {
     }
 }
 
-async function submitOfferResponse(response) {
-    if (!application.value || !canRespondToOffer.value) {
-        return;
-    }
-
-    if (response === 'accepted' && !responseTermsAccepted.value) {
-        errorMessage.value = 'Please accept the scholarship response terms before accepting the offer.';
-        return;
-    }
-
-    isResponding.value = true;
-    errorMessage.value = '';
-    statusMessage.value = '';
-
-    try {
-        const result = await window.axios.patch(`/dashboard/applications/${application.value.id}/response`, {
-            response,
-            note: responseNote.value,
-            terms_accepted: response === 'accepted' ? '1' : '',
-        });
-
-        application.value = result.data.application;
-        responseNote.value = '';
-        responseTermsAccepted.value = false;
-        statusMessage.value = result.data.message ?? 'Scholarship response saved.';
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to save scholarship response.';
-    } finally {
-        isResponding.value = false;
-    }
-}
-
 async function logout() {
     await window.axios.post('/logout');
     window.location.href = '/';
@@ -510,7 +508,7 @@ onMounted(loadApplication);
                                 <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
                                     <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${application.status_progress.percent}%` }"></div>
                                 </div>
-                                <div class="mt-3 grid gap-2 sm:grid-cols-5">
+                                <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                                     <div
                                         v-for="step in application.status_progress.steps"
                                         :key="step.key"
@@ -808,70 +806,6 @@ onMounted(loadApplication);
                         </div>
 
                         <aside class="space-y-4">
-                            <section
-                                v-if="application.requires_student_response || application.student_response_status"
-                                class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-                            >
-                                <p class="student-kicker">Scholarship Response</p>
-
-                                <div v-if="application.student_response_status" class="mt-3">
-                                    <span :class="['inline-flex rounded-md px-2.5 py-1 text-xs font-bold uppercase', responseClass(application.student_response_status)]">
-                                        {{ application.student_response_label || statusLabel(application.student_response_status) }}
-                                    </span>
-                                    <p class="mt-3 text-sm leading-6 text-slate-600">
-                                        Response recorded {{ application.student_responded_at || 'recently' }}.
-                                    </p>
-                                    <p v-if="application.student_response_note" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
-                                        {{ application.student_response_note }}
-                                    </p>
-                                </div>
-
-                                <div v-else-if="canRespondToOffer" class="mt-3 space-y-3">
-                                    <h3 class="text-lg font-bold text-slate-950">
-                                        Confirm your decision
-                                    </h3>
-                                    <p class="text-sm leading-6 text-slate-600">
-                                        The provider marked this application as {{ statusLabel(application.status).toLowerCase() }}. Accept if you want to continue with the next steps, or decline if you will not proceed.
-                                    </p>
-
-                                    <textarea
-                                        v-model="responseNote"
-                                        rows="3"
-                                        maxlength="1000"
-                                        placeholder="Optional note to the provider"
-                                        class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-3 focus:ring-slate-100"
-                                    ></textarea>
-
-                                    <TermsAgreement
-                                        v-model="responseTermsAccepted"
-                                        context="acceptance"
-                                    />
-
-                                    <div class="grid gap-2">
-                                        <button
-                                            type="button"
-                                            :disabled="isResponding || !responseTermsAccepted"
-                                            class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                                            @click="submitOfferResponse('accepted')"
-                                        >
-                                            {{ isResponding ? 'Saving...' : 'Accept offer' }}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            :disabled="isResponding"
-                                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                            @click="submitOfferResponse('declined')"
-                                        >
-                                            Decline offer
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <p v-else class="mt-3 text-sm leading-6 text-slate-600">
-                                    No response is needed yet.
-                                </p>
-                            </section>
-
                             <section class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                                 <p class="student-kicker">Application</p>
                                 <div class="mt-3 grid gap-3 text-sm">
@@ -956,23 +890,29 @@ onMounted(loadApplication);
                             </section>
 
                             <section
-                                v-if="application.awarded_amount || application.outcome_notes || application.outcome_at || ['awarded', 'not_awarded', 'disbursed', 'renewed'].includes(application.status)"
+                                v-if="application.awarded_amount || application.distribution_scheduled_for || application.distribution_instructions || ['approved', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed'].includes(application.status)"
                                 class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
                             >
-                                <p class="student-kicker">Outcome</p>
+                                <p class="student-kicker">Reward Distribution</p>
+                                <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                    {{ application.status === 'disbursed' ? 'Reward distributed' : 'Provider-managed schedule' }}
+                                </h3>
                                 <div class="mt-3 grid gap-2 text-sm">
                                     <p class="rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-700 ring-1 ring-slate-200">
                                         Amount: {{ application.awarded_amount || 'Not listed' }}
                                     </p>
                                     <p class="rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-700 ring-1 ring-slate-200">
-                                        Date: {{ application.outcome_at || 'Not listed' }}
+                                        Scheduled date: {{ application.distribution_scheduled_for || 'Provider will set this later' }}
                                     </p>
                                     <p class="rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-700 ring-1 ring-slate-200">
                                         Status: {{ statusLabel(application.status) }}
                                     </p>
                                 </div>
-                                <p v-if="application.outcome_notes" class="mt-3 text-sm leading-6 text-slate-600">
-                                    {{ application.outcome_notes }}
+                                <p v-if="application.distribution_instructions" class="mt-3 whitespace-pre-line rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+                                    {{ application.distribution_instructions }}
+                                </p>
+                                <p v-else class="mt-3 text-sm leading-6 text-slate-500">
+                                    The provider will add release instructions when the schedule is ready. No in-platform acceptance is required.
                                 </p>
                             </section>
                         </aside>
