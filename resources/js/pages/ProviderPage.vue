@@ -25,6 +25,7 @@ const programHealthSignals = computed(() => {
     return [
         {
             label: 'Draft completion',
+            icon: 'fa-solid fa-pen-ruler',
             tone: draftPrograms.length ? 'warn' : 'good',
             detail: draftPrograms.length ? `${draftPrograms.length} draft${draftPrograms.length === 1 ? '' : 's'} waiting.` : 'Clear.',
             href: '/provider/programs',
@@ -32,6 +33,7 @@ const programHealthSignals = computed(() => {
         },
         {
             label: 'Document quality',
+            icon: 'fa-solid fa-list-check',
             tone: missingDocuments.length ? 'warn' : 'good',
             detail: missingDocuments.length ? `${missingDocuments.length} missing docs.` : 'Clear.',
             href: '/provider/programs',
@@ -39,6 +41,7 @@ const programHealthSignals = computed(() => {
         },
         {
             label: 'Location coverage',
+            icon: 'fa-solid fa-location-dot',
             tone: missingLocations.length ? 'info' : 'good',
             detail: missingLocations.length ? `${missingLocations.length} need map pins.` : 'Clear.',
             href: '/provider/programs',
@@ -46,6 +49,7 @@ const programHealthSignals = computed(() => {
         },
         {
             label: 'Deadline risk',
+            icon: 'fa-solid fa-calendar-day',
             tone: expiredPublished.length ? 'warn' : 'good',
             detail: expiredPublished.length ? `${expiredPublished.length} expired.` : 'Clear.',
             href: '/provider/programs',
@@ -73,14 +77,14 @@ function deadlineDays(value) {
 
 function signalClass(tone) {
     if (tone === 'good') {
-        return 'border-emerald-100 bg-emerald-50 text-emerald-800';
+        return 'bg-slate-100 text-slate-600';
     }
 
     if (tone === 'warn') {
-        return 'border-amber-100 bg-amber-50 text-amber-900';
+        return 'bg-amber-100 text-amber-800';
     }
 
-    return 'border-slate-200 bg-slate-50 text-slate-700';
+    return 'bg-slate-200 text-slate-700';
 }
 
 function verificationLabel(status) {
@@ -153,18 +157,18 @@ onMounted(loadProviderData);
                                 Provider Dashboard
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Quick overview
+                                Program workspace
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                See the provider tasks that need attention before students apply.
+                                Manage scholarship programs and applicant reviews from one focused view.
                             </p>
                         </div>
 
                         <a
-                            href="/provider/profile"
+                            href="/provider/programs"
                             class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                         >
-                            View profile
+                            Manage programs
                         </a>
                     </div>
                 </header>
@@ -178,7 +182,32 @@ onMounted(loadProviderData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <section v-if="reviewQueue.length" class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                    <section class="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex min-w-0 items-center gap-3">
+                            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-slate-950 text-amber-200">
+                                <i class="fa-solid fa-building-columns text-sm"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h3 class="truncate text-lg font-bold text-slate-950">
+                                        {{ user?.provider_name || user?.name || 'Provider account' }}
+                                    </h3>
+                                    <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', verificationClass(user?.verification_status)]">
+                                        {{ verificationLabel(user?.verification_status) }}
+                                    </span>
+                                </div>
+                                <p class="mt-1 text-sm text-slate-500">
+                                    {{ user?.can_post_scholarships ? 'Verified and ready to publish programs.' : 'Admin approval is required before publishing.' }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex shrink-0 gap-2">
+                            <a href="/provider/profile" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Profile</a>
+                            <a v-if="user?.can_post_scholarships" href="/provider/programs/create" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">New program</a>
+                        </div>
+                    </section>
+
+                    <section v-if="reviewQueue.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -193,12 +222,12 @@ onMounted(loadProviderData);
                             </a>
                         </div>
 
-                        <div class="mt-5 grid gap-3 lg:grid-cols-3">
+                        <div class="mt-4 grid gap-3 lg:grid-cols-3">
                             <a
                                 v-for="application in reviewQueue"
                                 :key="application.id"
                                 :href="application.detail_url"
-                                class="flex h-full min-w-0 flex-col rounded-md border border-slate-200 bg-slate-50 p-4 transition hover:bg-white"
+                                class="flex h-full min-w-0 flex-col rounded-md border border-slate-200 bg-slate-50 p-3.5 transition hover:border-slate-300 hover:bg-white"
                             >
                                 <div class="flex items-start justify-between gap-3">
                                     <p class="line-clamp-2 min-h-10 text-sm font-bold leading-5 text-slate-950">
@@ -219,13 +248,13 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <section v-if="notifications.length" class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <section v-if="notifications.length" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Notifications
                                 </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                <h3 class="mt-1 text-lg font-bold text-slate-950">
                                     Recent provider updates
                                 </h3>
                             </div>
@@ -234,12 +263,12 @@ onMounted(loadProviderData);
                             </span>
                         </div>
 
-                        <div class="mt-5 grid gap-3 md:grid-cols-2">
+                        <div class="divide-y divide-slate-200">
                             <a
-                                v-for="notification in notifications"
+                                v-for="notification in notifications.slice(0, 4)"
                                 :key="notification.id"
                                 :href="notification.action_url || '/provider/applications'"
-                                class="rounded-md border border-slate-200 bg-slate-50 p-4 transition hover:bg-white"
+                                class="block px-5 py-3.5 transition hover:bg-slate-50"
                             >
                                 <div class="flex items-start justify-between gap-3">
                                     <p class="font-bold text-slate-950">
@@ -252,7 +281,7 @@ onMounted(loadProviderData);
                                         New
                                     </span>
                                 </div>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">
+                                <p class="mt-1 line-clamp-2 text-sm leading-5 text-slate-600">
                                     {{ notification.message }}
                                 </p>
                                 <p class="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
@@ -262,63 +291,46 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="border-b border-slate-200 px-5 py-4">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Program Health Signals
+                                    Program Health
                                 </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Program checks
+                                <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                    Checks before publishing
                                 </h3>
                             </div>
                         </div>
 
-                        <div class="mt-5 grid gap-3 lg:grid-cols-4">
+                        <div class="divide-y divide-slate-200">
                             <a
                                 v-for="signal in programHealthSignals"
                                 :key="signal.label"
                                 :href="signal.href"
-                                :class="['rounded-lg border p-4 transition hover:bg-white', signalClass(signal.tone)]"
+                                class="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50"
                             >
-                                <p class="text-sm font-bold">
-                                    {{ signal.label }}
-                                </p>
-                                <p class="mt-2 text-sm leading-5 opacity-85">
-                                    {{ signal.detail }}
-                                </p>
-                                <p class="mt-4 text-sm font-bold">
-                                    {{ signal.action }}
-                                </p>
+                                <span :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-md', signalClass(signal.tone)]">
+                                    <i :class="[signal.icon, 'text-xs']"></i>
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-sm font-bold text-slate-950">{{ signal.label }}</span>
+                                    <span class="mt-0.5 block text-sm text-slate-500">{{ signal.detail }}</span>
+                                </span>
+                                <span class="hidden text-xs font-bold text-slate-500 sm:block">{{ signal.action }}</span>
+                                <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 transition group-hover:text-slate-600"></i>
                             </a>
                         </div>
                     </section>
 
-                    <section class="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-                        <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                Provider Status
-                            </p>
-                            <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                {{ user?.provider_name || user?.name || 'Provider account' }}
-                            </h3>
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', verificationClass(user?.verification_status)]">
-                                    {{ verificationLabel(user?.verification_status) }}
-                                </span>
-                            </div>
-                            <p class="mt-4 text-sm leading-5 text-slate-600">
-                                {{ user?.can_post_scholarships ? 'Can publish programs.' : 'Needs admin approval before publishing.' }}
-                            </p>
-                        </article>
-
-                        <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <section>
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                         Recent Programs
                                     </p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
                                         Latest scholarship records
                                     </h3>
                                 </div>
@@ -330,11 +342,12 @@ onMounted(loadProviderData);
                                 </a>
                             </div>
 
-                            <div class="mt-5 grid gap-3">
-                                <div
+                            <div v-if="recentPrograms.length" class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
+                                <a
                                     v-for="program in recentPrograms"
                                     :key="program.id"
-                                    class="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                                    :href="`/provider/programs/${program.id}/edit`"
+                                    class="flex flex-col gap-2 bg-white p-3 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
                                 >
                                     <div class="min-w-0">
                                         <p class="truncate text-sm font-bold text-slate-950">
@@ -345,13 +358,13 @@ onMounted(loadProviderData);
                                         </p>
                                     </div>
                                     <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(program.status)]">
-                                        {{ program.status }}
+                                        {{ verificationLabel(program.status) }}
                                     </span>
-                                </div>
+                                </a>
 
-                                <div v-if="recentPrograms.length === 0" class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                                    No programs yet.
-                                </div>
+                            </div>
+                            <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                                No programs yet. Create the first scholarship when your provider account is approved.
                             </div>
                         </article>
                     </section>

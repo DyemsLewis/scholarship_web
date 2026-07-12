@@ -5,6 +5,7 @@ import AdminPage from './pages/AdminPage.vue';
 import AdminLogsPage from './pages/AdminLogsPage.vue';
 import AdminAnalyticsPage from './pages/AdminAnalyticsPage.vue';
 import AdminProfilePage from './pages/AdminProfilePage.vue';
+import AdminProgramReviewPage from './pages/AdminProgramReviewPage.vue';
 import AdminReviewsPage from './pages/AdminReviewsPage.vue';
 import AdminUsersPage from './pages/AdminUsersPage.vue';
 import AccountSetupPage from './pages/AccountSetupPage.vue';
@@ -50,6 +51,7 @@ const pages = {
     adminAnalytics: AdminAnalyticsPage,
     adminLogs: AdminLogsPage,
     adminProfile: AdminProfilePage,
+    adminProgramReview: AdminProgramReviewPage,
     adminReviews: AdminReviewsPage,
     adminUsers: AdminUsersPage,
     dashboard: UserDashboardPage,

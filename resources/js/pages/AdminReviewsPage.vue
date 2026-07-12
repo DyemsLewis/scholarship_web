@@ -5,15 +5,19 @@ import AdminSidebar from '../components/AdminSidebar.vue';
 
 const isLoading = ref(true);
 const updatingId = ref(null);
-const updatingScholarshipId = ref(null);
 const errorMessage = ref('');
 const statusMessage = ref('');
 const selectedStatus = ref('pending');
 const selectedApplicationFilter = ref('all');
 const selectedApplicationSort = ref('priority');
 const providerNotes = ref({});
-const scholarshipNotes = ref({});
 const hiddenProviderIds = ref([]);
+const applicationModeOptions = [
+    { value: 'online', label: 'Online submission' },
+    { value: 'onsite', label: 'On-site submission' },
+    { value: 'hybrid', label: 'Online and on-site' },
+    { value: 'provider_review', label: 'Provider review only' },
+];
 const stats = ref({
     providers: 0,
     pending_providers: 0,
@@ -148,11 +152,6 @@ function academicRequirementLabel(scholarship) {
         : `Min average ${scholarship.minimum_gwa}%`;
 }
 
-function rubricWeightTotal(scholarship) {
-    return (scholarship?.review_rubric ?? [])
-        .reduce((total, criterion) => total + Number(criterion.weight || 0), 0);
-}
-
 function applicationDocumentIssueCount(application) {
     if (application.documents?.length) {
         return application.documents.filter((document) => ['pending', 'needs_replacement', 'rejected'].includes(document.status ?? 'pending')).length;
@@ -272,6 +271,85 @@ function documentTypeLabel(type) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function formatAmount(amount) {
+    if (amount === null || amount === undefined || amount === '') {
+        return 'Amount not set';
+    }
+
+    return new Intl.NumberFormat('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+        maximumFractionDigits: 2,
+    }).format(Number(amount));
+}
+
+function splitItems(value) {
+    if (!value) {
+        return [];
+    }
+
+    return String(value)
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+function applicationModeLabel(value) {
+    return applicationModeOptions.find((option) => option.value === value)?.label ?? statusLabel(value || 'not_listed');
+}
+
+function reviewProgramUrl(scholarship) {
+    return `/admin/scholarships/${scholarship.id}/review`;
+}
+
+function scholarshipRequirementLabel(scholarship) {
+    const requirements = splitItems(scholarship.requirements);
+
+    return requirements.length ? `${requirements.length} listed` : 'No list yet';
+}
+
+function scholarshipSummaryFacts(scholarship) {
+    return [
+        {
+            label: 'Award',
+            value: formatAmount(scholarship.award_amount),
+        },
+        {
+            label: 'Deadline',
+            value: scholarship.deadline || 'Not set',
+        },
+        {
+            label: 'Academic',
+            value: academicRequirementLabel(scholarship),
+        },
+        {
+            label: 'Documents',
+            value: scholarshipRequirementLabel(scholarship),
+        },
+    ];
+}
+
+function scholarshipReviewFlags(scholarship) {
+    const flags = [
+        applicationModeLabel(scholarship.application_mode),
+        scholarship.review_rubric?.length ? `${scholarship.review_rubric.length} rubric criteria` : 'No rubric listed',
+    ];
+
+    if (scholarship.return_service_contract) {
+        flags.push('Return service');
+    }
+
+    if (scholarship.other_contract_terms) {
+        flags.push('Other contract terms');
+    }
+
+    if (scholarship.location_name || scholarship.location_address || scholarship.eligible_locations) {
+        flags.push('Location details');
+    }
+
+    return flags.slice(0, 4);
+}
+
 function providerActionOptions(provider) {
     const status = provider.verification_status ?? 'pending';
     const actions = [];
@@ -303,37 +381,6 @@ function providerActionOptions(provider) {
     return actions;
 }
 
-function scholarshipActionOptions(scholarship) {
-    const status = scholarship.status ?? 'pending_review';
-    const actions = [];
-
-    if (status !== 'published') {
-        actions.push({
-            status: 'published',
-            label: 'Approve program',
-            className: 'bg-emerald-700 text-white hover:bg-emerald-800',
-        });
-    }
-
-    if (status !== 'rejected') {
-        actions.push({
-            status: 'rejected',
-            label: 'Reject',
-            className: 'bg-rose-700 text-white hover:bg-rose-800',
-        });
-    }
-
-    if (status !== 'pending_review') {
-        actions.push({
-            status: 'pending_review',
-            label: 'Move to review',
-            className: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100',
-        });
-    }
-
-    return actions;
-}
-
 async function loadReviewData(resetHiddenProviders = true) {
     isLoading.value = true;
     errorMessage.value = '';
@@ -352,45 +399,10 @@ async function loadReviewData(resetHiddenProviders = true) {
         providerNotes.value = Object.fromEntries(
             providers.value.map((provider) => [provider.id, provider.verification_notes ?? '']),
         );
-        scholarshipNotes.value = Object.fromEntries(
-            scholarships.value.map((scholarship) => [scholarship.id, '']),
-        );
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load review details.';
     } finally {
         isLoading.value = false;
-    }
-}
-
-async function updateScholarshipReview(scholarship, reviewStatus) {
-    if ((scholarship.status ?? 'pending_review') === reviewStatus) {
-        return;
-    }
-
-    const reviewNote = scholarshipNotes.value[scholarship.id]?.trim() ?? '';
-
-    if (reviewStatus === 'rejected' && !reviewNote) {
-        errorMessage.value = 'Add a rejection reason before rejecting this scholarship.';
-        return;
-    }
-
-    updatingScholarshipId.value = scholarship.id;
-    errorMessage.value = '';
-    statusMessage.value = '';
-
-    try {
-        const response = await window.axios.patch(`/admin/scholarships/${scholarship.id}/review`, {
-            status: reviewStatus,
-            review_notes: reviewNote,
-        });
-
-        scholarships.value = scholarships.value.map((item) => (item.id === scholarship.id ? response.data.scholarship : item));
-        statusMessage.value = response.data.message ?? `Program marked as ${statusLabel(reviewStatus)}.`;
-        await loadReviewData(false);
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update scholarship review.';
-    } finally {
-        updatingScholarshipId.value = null;
     }
 }
 
@@ -655,7 +667,7 @@ onMounted(loadReviewData);
                                 v-for="scholarship in scholarships"
                                 :id="`program-${scholarship.id}`"
                                 :key="scholarship.id"
-                                class="rounded-md border border-slate-200 bg-slate-50 p-3"
+                                class="flex h-full flex-col rounded-md border border-slate-200 bg-slate-50 p-3"
                             >
                                 <div class="flex items-start gap-3">
                                     <img
@@ -677,83 +689,41 @@ onMounted(loadReviewData);
                                                 {{ statusLabel(scholarship.status) }}
                                             </span>
                                         </div>
-                                        <p class="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">
-                                            {{ scholarship.description || 'No description provided.' }}
-                                        </p>
-                                        <p
-                                            v-if="scholarship.return_service_contract"
-                                            class="mt-2 rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
-                                        >
-                                            Return service contract listed
-                                        </p>
-                                        <p
-                                            v-if="scholarship.other_contract_terms"
-                                            class="mt-2 rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
-                                        >
-                                            Other contract terms listed
-                                        </p>
                                     </div>
                                 </div>
+
+                                <p class="mt-3 line-clamp-2 min-h-10 text-xs leading-5 text-slate-600">
+                                    {{ scholarship.description || 'No description provided.' }}
+                                </p>
 
                                 <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-                                    <div class="rounded-md bg-white p-2">
-                                        <p class="font-semibold text-slate-500">Deadline</p>
-                                        <p class="mt-1 truncate font-bold text-slate-950">{{ scholarship.deadline || 'Not set' }}</p>
-                                    </div>
-                                    <div class="rounded-md bg-white p-2">
-                                        <p class="font-semibold text-slate-500">Academic requirement</p>
-                                        <p class="mt-1 truncate font-bold text-slate-950">{{ academicRequirementLabel(scholarship) }}</p>
-                                    </div>
-                                </div>
-
-                                <details v-if="scholarship.review_rubric?.length" class="mt-3 rounded-md border border-slate-200 bg-white p-2.5 text-xs">
-                                    <summary class="cursor-pointer font-bold text-slate-700">
-                                        Review rubric: {{ scholarship.review_rubric.length }} criteria, {{ rubricWeightTotal(scholarship) }}%
-                                    </summary>
-                                    <div class="mt-2 grid gap-1.5">
-                                        <div
-                                            v-for="criterion in scholarship.review_rubric"
-                                            :key="criterion.key"
-                                            class="flex items-start justify-between gap-3 rounded bg-slate-50 px-2.5 py-2"
-                                        >
-                                            <div class="min-w-0">
-                                                <p class="font-bold text-slate-800">{{ criterion.label }}</p>
-                                                <p v-if="criterion.guidance" class="mt-0.5 line-clamp-2 leading-5 text-slate-500">
-                                                    {{ criterion.guidance }}
-                                                </p>
-                                            </div>
-                                            <span class="shrink-0 font-bold text-slate-700">{{ criterion.weight }}%</span>
-                                        </div>
-                                    </div>
-                                </details>
-
-                                <div class="mt-3">
-                                    <label class="block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
-                                        Review note <span class="normal-case tracking-normal text-rose-600">(required when rejecting)</span>
-                                    </label>
-                                    <textarea
-                                        v-model="scholarshipNotes[scholarship.id]"
-                                        rows="2"
-                                        maxlength="1500"
-                                        placeholder="Explain what the provider needs to correct."
-                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
-                                    ></textarea>
-                                </div>
-
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <button
-                                        v-for="action in scholarshipActionOptions(scholarship)"
-                                        :key="action.status"
-                                        type="button"
-                                        :disabled="updatingScholarshipId === scholarship.id"
-                                        :class="[
-                                            'rounded-md px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-70',
-                                            action.className,
-                                        ]"
-                                        @click="updateScholarshipReview(scholarship, action.status)"
+                                    <div
+                                        v-for="fact in scholarshipSummaryFacts(scholarship)"
+                                        :key="fact.label"
+                                        class="rounded-md bg-white p-2"
                                     >
-                                        {{ updatingScholarshipId === scholarship.id ? 'Saving...' : action.label }}
-                                    </button>
+                                        <p class="font-semibold text-slate-500">{{ fact.label }}</p>
+                                        <p class="mt-1 truncate font-bold text-slate-950">{{ fact.value }}</p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-3 flex min-h-16 flex-wrap content-start gap-2">
+                                    <span
+                                        v-for="flag in scholarshipReviewFlags(scholarship)"
+                                        :key="flag"
+                                        class="h-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200"
+                                    >
+                                        {{ flag }}
+                                    </span>
+                                </div>
+
+                                <div class="mt-auto pt-3">
+                                    <a
+                                        :href="reviewProgramUrl(scholarship)"
+                                        class="inline-flex w-full justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                    >
+                                        View details
+                                    </a>
                                 </div>
                             </article>
                         </div>

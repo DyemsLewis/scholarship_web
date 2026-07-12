@@ -79,7 +79,7 @@ function deadlineBadgeClass(program) {
 }
 
 function reviewProgramUrl(program) {
-    return `/admin/reviews#program-${program.id}`;
+    return `/admin/scholarships/${program.id}/review`;
 }
 
 async function loadAnalytics() {

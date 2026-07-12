@@ -57,6 +57,8 @@ Route::middleware(['auth', 'admin'])
         Route::get('/accounts/{user}/edit', [AdminController::class, 'accountForm'])->name('accounts.edit');
         Route::get('/profile', [AdminController::class, 'profile'])->name('profile');
         Route::get('/reviews', [AdminController::class, 'reviews'])->name('reviews');
+        Route::get('/scholarships/{scholarship}/review', [AdminController::class, 'scholarshipReview'])->name('scholarships.review.show');
+        Route::get('/scholarships/{scholarship}/review/data', [AdminController::class, 'scholarshipReviewData'])->name('scholarships.review.data');
         Route::get('/logs', [AdminController::class, 'logs'])->name('logs');
         Route::get('/platform-analytics', [AdminController::class, 'platformAnalytics'])->name('platform-analytics');
         Route::get('/users', [AdminController::class, 'users'])->name('users');

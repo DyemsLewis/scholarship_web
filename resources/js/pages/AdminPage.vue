@@ -26,6 +26,7 @@ const recentUsers = computed(() => users.value.slice(0, 4));
 const platformSignals = computed(() => [
     {
         label: 'Provider approval queue',
+        icon: 'fa-solid fa-building-circle-check',
         tone: (stats.value.pending_providers || 0) > 0 ? 'warn' : 'good',
         detail: (stats.value.pending_providers || 0) > 0
             ? `${stats.value.pending_providers} provider account${stats.value.pending_providers === 1 ? '' : 's'} waiting for verification.`
@@ -35,6 +36,7 @@ const platformSignals = computed(() => [
     },
     {
         label: 'Document review backlog',
+        icon: 'fa-solid fa-file-circle-check',
         tone: (stats.value.documents_pending_review || 0) > 0 || (stats.value.documents_needing_replacement || 0) > 0 ? 'warn' : 'good',
         detail: `${stats.value.documents_pending_review || 0} pending review, ${stats.value.documents_needing_replacement || 0} needing replacement.`,
         href: '/admin/reviews',
@@ -42,6 +44,7 @@ const platformSignals = computed(() => [
     },
     {
         label: 'Deadline monitoring',
+        icon: 'fa-solid fa-calendar-day',
         tone: (stats.value.expired_published || 0) > 0 || (stats.value.upcoming_deadlines || 0) > 0 ? 'warn' : 'good',
         detail: `${stats.value.upcoming_deadlines || 0} upcoming deadline${(stats.value.upcoming_deadlines || 0) === 1 ? '' : 's'}, ${stats.value.expired_published || 0} expired published program${(stats.value.expired_published || 0) === 1 ? '' : 's'}.`,
         href: '/admin/platform-analytics',
@@ -49,6 +52,7 @@ const platformSignals = computed(() => [
     },
     {
         label: 'DSS review load',
+        icon: 'fa-solid fa-scale-balanced',
         tone: (stats.value.needs_review_applications || 0) > 0 ? 'info' : 'good',
         detail: (stats.value.needs_review_applications || 0) > 0
             ? `${stats.value.needs_review_applications} application${stats.value.needs_review_applications === 1 ? '' : 's'} need closer review.`
@@ -60,14 +64,14 @@ const platformSignals = computed(() => [
 
 function signalClass(tone) {
     if (tone === 'good') {
-        return 'border-emerald-100 bg-emerald-50 text-emerald-800';
+        return 'bg-slate-100 text-slate-600';
     }
 
     if (tone === 'warn') {
-        return 'border-amber-100 bg-amber-50 text-amber-900';
+        return 'bg-amber-100 text-amber-800';
     }
 
-    return 'border-slate-200 bg-slate-50 text-slate-700';
+    return 'bg-slate-200 text-slate-700';
 }
 
 function roleClass(role) {
@@ -138,10 +142,10 @@ onMounted(loadAdminData);
                                 Admin Dashboard
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Quick overview
+                                Administration overview
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                A lighter dashboard for important admin actions and recent account activity.
+                                Review platform concerns and recent activity without leaving the dashboard.
                             </p>
                         </div>
 
@@ -163,49 +167,47 @@ onMounted(loadAdminData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Platform Risk Signals
+                                    Review Workspace
                                 </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Data checks that need admin attention
+                                <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                    Items that may need attention
                                 </h3>
                             </div>
-                            <p class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                                Reviews, documents, deadlines, DSS
-                            </p>
+                            <a href="/admin/reviews" class="text-sm font-bold text-slate-700 transition hover:text-slate-950">Open all reviews</a>
                         </div>
 
-                        <div class="mt-5 grid gap-3 lg:grid-cols-4">
+                        <div class="divide-y divide-slate-200">
                             <a
                                 v-for="signal in platformSignals"
                                 :key="signal.label"
                                 :href="signal.href"
-                                :class="['rounded-lg border p-4 transition hover:bg-white', signalClass(signal.tone)]"
+                                class="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50"
                             >
-                                <p class="text-sm font-bold">
-                                    {{ signal.label }}
-                                </p>
-                                <p class="mt-2 min-h-12 text-sm leading-6 opacity-85">
-                                    {{ signal.detail }}
-                                </p>
-                                <p class="mt-4 text-sm font-bold">
-                                    {{ signal.action }}
-                                </p>
+                                <span :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-md', signalClass(signal.tone)]">
+                                    <i :class="[signal.icon, 'text-xs']"></i>
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-sm font-bold text-slate-950">{{ signal.label }}</span>
+                                    <span class="mt-0.5 block text-sm leading-5 text-slate-500">{{ signal.detail }}</span>
+                                </span>
+                                <span class="hidden shrink-0 text-xs font-bold text-slate-500 sm:block">{{ signal.action }}</span>
+                                <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 transition group-hover:text-slate-600"></i>
                             </a>
                         </div>
                     </section>
 
-                    <section class="grid gap-6 lg:grid-cols-2">
-                        <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <div class="flex items-start justify-between gap-3">
+                    <section class="grid gap-4 lg:grid-cols-2">
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <div class="flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                         Recent Scholarships
                                     </p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
                                         Latest program activity
                                     </h3>
                                 </div>
@@ -214,12 +216,12 @@ onMounted(loadAdminData);
                                 </a>
                             </div>
 
-                            <div v-if="programs.length" class="mt-5 grid gap-3">
+                            <div v-if="programs.length" class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
                                 <a
                                     v-for="program in programs"
                                     :key="program.id"
-                                    :href="`/admin/reviews#program-${program.id}`"
-                                    class="flex min-w-0 items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 transition hover:bg-white"
+                                    :href="`/admin/scholarships/${program.id}/review`"
+                                    class="flex min-w-0 items-center gap-3 bg-white p-3 transition hover:bg-slate-50"
                                 >
                                     <img :src="program.image_url || '/uploads/scholarship-default.jpg'" :alt="program.title" class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1 ring-1 ring-slate-200">
                                     <span class="min-w-0 flex-1">
@@ -233,13 +235,13 @@ onMounted(loadAdminData);
                             </div>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <div class="flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                         Recent Accounts
                                     </p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
                                         Latest registrations
                                     </h3>
                                 </div>
@@ -251,11 +253,11 @@ onMounted(loadAdminData);
                                 </a>
                             </div>
 
-                            <div class="mt-5 grid gap-3">
+                            <div class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
                                 <div
                                     v-for="user in recentUsers"
                                     :key="user.id"
-                                    class="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                                    class="flex flex-col gap-2 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
                                 >
                                     <div class="min-w-0">
                                         <p class="truncate text-sm font-bold text-slate-950">

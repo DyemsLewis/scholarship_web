@@ -79,6 +79,19 @@ class AdminController extends Controller
         return view('admin-reviews');
     }
 
+    public function scholarshipReview(Request $request, Scholarship $scholarship): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isAdmin(), 403);
+
+        return view('admin-program-review', [
+            'scholarship' => $scholarship,
+        ]);
+    }
+
     public function logs(Request $request): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -525,6 +538,18 @@ class AdminController extends Controller
                 'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             ])->values(),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipReviewPayload($scholarship))->values(),
+        ]);
+    }
+
+    public function scholarshipReviewData(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $scholarship->loadMissing('provider.providerProfile');
+        $scholarship->loadCount('bookmarks');
+
+        return response()->json([
+            'scholarship' => $this->scholarshipReviewPayload($scholarship),
         ]);
     }
 
@@ -1129,12 +1154,17 @@ class AdminController extends Controller
     {
         return [
             'id' => $scholarship->id,
+            'provider_id' => $scholarship->provider_id,
             'title' => $scholarship->title,
             'category' => $scholarship->category,
             'description' => $scholarship->description,
             'eligibility' => $scholarship->eligibility,
-            'provider' => $scholarship->provider?->name,
+            'provider' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
             'provider_email' => $scholarship->provider?->email,
+            'provider_type' => $scholarship->provider?->provider_type,
+            'provider_website' => $scholarship->provider?->provider_website,
+            'provider_address' => $scholarship->provider?->provider_address,
+            'provider_verification_status' => $scholarship->provider?->providerProfile?->verification_status,
             'status' => $scholarship->status,
             'image_url' => $this->scholarshipImageUrl($scholarship),
             'award_amount' => $scholarship->award_amount,
@@ -1144,11 +1174,27 @@ class AdminController extends Controller
             'deadline' => $scholarship->deadline?->format('M d, Y'),
             'requirements' => $scholarship->requirements,
             'review_rubric' => $scholarship->review_rubric ?? [],
+            'eligible_courses' => $scholarship->eligible_courses,
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,
             'eligible_education_levels' => $scholarship->eligible_education_levels,
+            'eligible_school_types' => $scholarship->eligible_school_types,
+            'eligible_year_levels' => $scholarship->eligible_year_levels,
             'eligible_locations' => $scholarship->eligible_locations,
+            'income_requirement' => $scholarship->income_requirement,
+            'location_name' => $scholarship->location_name,
+            'location_address' => $scholarship->location_address,
+            'latitude' => $scholarship->latitude,
+            'longitude' => $scholarship->longitude,
+            'map_url' => $this->mapUrl($scholarship),
+            'slots_available' => $scholarship->slots_available,
+            'application_mode' => $scholarship->application_mode,
+            'renewal_policy' => $scholarship->renewal_policy,
+            'contact_email' => $scholarship->contact_email,
+            'contact_number' => $scholarship->contact_number,
             'bookmarks_count' => $scholarship->bookmarks_count ?? 0,
+            'views_count' => $scholarship->views_count,
+            'created_at' => $scholarship->created_at?->format('M d, Y h:i A'),
             'updated_at' => $scholarship->updated_at?->format('M d, Y h:i A'),
         ];
     }
@@ -1160,6 +1206,19 @@ class AdminController extends Controller
         }
 
         return asset('uploads/scholarship-default.jpg');
+    }
+
+    private function mapUrl(Scholarship $scholarship): ?string
+    {
+        if ($scholarship->latitude !== null && $scholarship->longitude !== null) {
+            return "https://www.openstreetmap.org/?mlat={$scholarship->latitude}&mlon={$scholarship->longitude}#map=15/{$scholarship->latitude}/{$scholarship->longitude}";
+        }
+
+        $query = $scholarship->location_address ?: $scholarship->location_name;
+
+        return filled($query)
+            ? 'https://www.openstreetmap.org/search?query='.rawurlencode($query)
+            : null;
     }
 
     private function documentPayload(ApplicationDocument $document): array
