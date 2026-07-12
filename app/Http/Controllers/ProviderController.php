@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\ApplicationDocument;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
+use App\Models\ProviderAssessment;
 use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
@@ -44,6 +45,17 @@ class ProviderController extends Controller
         abort_unless($request->user()->isProvider(), 403);
 
         return view('provider-programs');
+    }
+
+    public function exams(Request $request): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isProvider(), 403);
+
+        return view('provider-exams');
     }
 
     public function programForm(Request $request): View|RedirectResponse
@@ -524,6 +536,54 @@ class ProviderController extends Controller
                     'days_left' => $scholarship->deadline ? now()->startOfDay()->diffInDays($scholarship->deadline->startOfDay(), false) : null,
                 ];
             })->values(),
+        ]);
+    }
+
+    public function examsData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $assessments = ProviderAssessment::query()
+            ->where('provider_id', $request->user()->id)
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'user' => $request->user()->loadMissing(['providerProfile'])->publicPayload(),
+            'assessments' => $assessments->map(fn (ProviderAssessment $assessment) => $this->assessmentPayload($assessment))->values(),
+        ]);
+    }
+
+    public function updateExam(Request $request, ProviderAssessment $assessment): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($assessment->provider_id === $request->user()->id, 403);
+
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'assessment_type' => ['required', Rule::in(['qualifying_exam', 'screening_assessment'])],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'duration_minutes' => ['nullable', 'integer', 'between:15,480'],
+            'passing_score' => ['nullable', 'numeric', 'between:0,100'],
+            'delivery_mode' => ['required', Rule::in(['provider_managed', 'onsite', 'online', 'hybrid'])],
+            'venue' => ['nullable', 'string', 'max:500'],
+            'instructions' => ['nullable', 'string', 'max:3000'],
+            'status' => ['required', Rule::in(['active', 'inactive'])],
+        ]);
+
+        $assessment->update($validated);
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_assessment_updated',
+            "{$request->user()->name} updated {$assessment->title}.",
+            $request,
+            ['assessment_id' => $assessment->id],
+        );
+
+        return response()->json([
+            'message' => 'Assessment details updated.',
+            'assessment' => $this->assessmentPayload($assessment->fresh()),
         ]);
     }
 
@@ -1154,6 +1214,7 @@ class ProviderController extends Controller
         $readiness = $this->documentReadiness($application);
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
+        $application->scholarship?->loadMissing('providerAssessment');
 
         return [
             'id' => $application->id,
@@ -1219,6 +1280,9 @@ class ProviderController extends Controller
             ],
             'scholarship' => $application->scholarship
                 ? $this->scholarshipPayload($application->scholarship)
+                : null,
+            'exam' => $application->scholarship?->providerAssessment
+                ? $this->assessmentPayload($application->scholarship->providerAssessment)
                 : null,
         ];
     }
@@ -1313,6 +1377,27 @@ class ProviderController extends Controller
             'views_count' => $scholarship->views_count,
             'created_at' => $scholarship->created_at?->format('M d, Y'),
             'updated_at' => $scholarship->updated_at?->format('M d, Y'),
+        ];
+    }
+
+    private function assessmentPayload(ProviderAssessment $assessment): array
+    {
+        return [
+            'id' => $assessment->id,
+            'title' => $assessment->title,
+            'assessment_type' => $assessment->assessment_type,
+            'image_path' => $assessment->image_path,
+            'image_url' => filled($assessment->image_path)
+                ? asset(ltrim($assessment->image_path, '/'))
+                : asset('uploads/scholarship-default.jpg'),
+            'description' => $assessment->description,
+            'duration_minutes' => $assessment->duration_minutes,
+            'passing_score' => $assessment->passing_score,
+            'delivery_mode' => $assessment->delivery_mode,
+            'venue' => $assessment->venue,
+            'instructions' => $assessment->instructions,
+            'status' => $assessment->status,
+            'updated_at' => $assessment->updated_at?->format('M d, Y h:i A'),
         ];
     }
 
@@ -1521,78 +1606,78 @@ class ProviderController extends Controller
                     'message' => "Your application for {$programTitle} is now {$this->statusLabel($status)}.",
                 ],
             }
-            : match ($status) {
-                'submitted' => [
-                    'type' => 'application_status',
-                    'title' => 'Application returned to submitted',
-                    'message' => "Your application for {$programTitle} was returned to submitted status.",
-                ],
-                'under_review' => [
-                    'type' => 'application_status',
-                    'title' => 'Application review started',
-                    'message' => "Your application for {$programTitle} is now under provider review.",
-                ],
-                'qualified' => [
-                    'type' => 'application_status',
-                    'title' => 'Application qualified',
-                    'message' => "Your application for {$programTitle} has been marked qualified for provider review.",
-                ],
-                'shortlisted' => [
-                    'type' => 'application_status',
-                    'title' => 'Application shortlisted',
-                    'message' => "Your application for {$programTitle} has been shortlisted for the next review step.",
-                ],
-                'interview' => [
-                    'type' => 'application_status',
-                    'title' => 'Interview or follow-up needed',
-                    'message' => "Your application for {$programTitle} was moved to interview or follow-up screening.",
-                ],
-                'exam_qualified' => [
-                    'type' => 'application_status',
-                    'title' => 'Qualified for exam',
-                    'message' => "Your application for {$programTitle} passed initial screening and is qualified for the scholarship exam.",
-                ],
-                'exam_scheduled' => [
-                    'type' => 'application_status',
-                    'title' => 'Scholarship exam scheduled',
-                    'message' => "Your scholarship exam for {$programTitle} has been scheduled. Check provider notes for instructions.",
-                ],
-                'exam_taken' => [
-                    'type' => 'application_status',
-                    'title' => 'Exam marked taken',
-                    'message' => "Your scholarship exam for {$programTitle} was marked as taken.",
-                ],
-                'exam_passed' => [
-                    'type' => 'application_status',
-                    'title' => 'Exam passed',
-                    'message' => "You passed the scholarship exam for {$programTitle}. Your application will proceed to final review.",
-                ],
-                'exam_failed' => [
-                    'type' => 'application_status',
-                    'title' => 'Exam not passed',
-                    'message' => "Your application for {$programTitle} did not pass the scholarship exam. Review the provider note for details.",
-                ],
-                'approved' => [
-                    'type' => 'application_status',
-                    'title' => 'Application approved',
-                    'message' => "Your application for {$programTitle} has been approved. The provider will post reward distribution details when they are ready.",
-                ],
-                'distribution_scheduled' => [
-                    'type' => 'application_outcome',
-                    'title' => 'Reward distribution scheduled',
-                    'message' => "Your scholarship reward for {$programTitle} is scheduled for {$distributionDate}. Open the application to review provider instructions.",
-                ],
-                'rejected' => [
-                    'type' => 'application_status',
-                    'title' => 'Application not selected',
-                    'message' => "Your application for {$programTitle} was not selected. Review the provider note for details.",
-                ],
-                default => [
-                    'type' => 'application_status',
-                    'title' => 'Application status updated',
-                    'message' => "Your application for {$programTitle} is now {$this->statusLabel($status)}.",
-                ],
-            };
+        : match ($status) {
+            'submitted' => [
+                'type' => 'application_status',
+                'title' => 'Application returned to submitted',
+                'message' => "Your application for {$programTitle} was returned to submitted status.",
+            ],
+            'under_review' => [
+                'type' => 'application_status',
+                'title' => 'Application review started',
+                'message' => "Your application for {$programTitle} is now under provider review.",
+            ],
+            'qualified' => [
+                'type' => 'application_status',
+                'title' => 'Application qualified',
+                'message' => "Your application for {$programTitle} has been marked qualified for provider review.",
+            ],
+            'shortlisted' => [
+                'type' => 'application_status',
+                'title' => 'Application shortlisted',
+                'message' => "Your application for {$programTitle} has been shortlisted for the next review step.",
+            ],
+            'interview' => [
+                'type' => 'application_status',
+                'title' => 'Interview or follow-up needed',
+                'message' => "Your application for {$programTitle} was moved to interview or follow-up screening.",
+            ],
+            'exam_qualified' => [
+                'type' => 'application_status',
+                'title' => 'Qualified for exam',
+                'message' => "Your application for {$programTitle} passed initial screening and is qualified for the scholarship exam.",
+            ],
+            'exam_scheduled' => [
+                'type' => 'application_status',
+                'title' => 'Scholarship exam scheduled',
+                'message' => "Your scholarship exam for {$programTitle} has been scheduled. Check provider notes for instructions.",
+            ],
+            'exam_taken' => [
+                'type' => 'application_status',
+                'title' => 'Exam marked taken',
+                'message' => "Your scholarship exam for {$programTitle} was marked as taken.",
+            ],
+            'exam_passed' => [
+                'type' => 'application_status',
+                'title' => 'Exam passed',
+                'message' => "You passed the scholarship exam for {$programTitle}. Your application will proceed to final review.",
+            ],
+            'exam_failed' => [
+                'type' => 'application_status',
+                'title' => 'Exam not passed',
+                'message' => "Your application for {$programTitle} did not pass the scholarship exam. Review the provider note for details.",
+            ],
+            'approved' => [
+                'type' => 'application_status',
+                'title' => 'Application approved',
+                'message' => "Your application for {$programTitle} has been approved. The provider will post reward distribution details when they are ready.",
+            ],
+            'distribution_scheduled' => [
+                'type' => 'application_outcome',
+                'title' => 'Reward distribution scheduled',
+                'message' => "Your scholarship reward for {$programTitle} is scheduled for {$distributionDate}. Open the application to review provider instructions.",
+            ],
+            'rejected' => [
+                'type' => 'application_status',
+                'title' => 'Application not selected',
+                'message' => "Your application for {$programTitle} was not selected. Review the provider note for details.",
+            ],
+            default => [
+                'type' => 'application_status',
+                'title' => 'Application status updated',
+                'message' => "Your application for {$programTitle} is now {$this->statusLabel($status)}.",
+            ],
+        };
 
         if (in_array($status, ['rejected', 'not_awarded', 'exam_failed'], true) && filled($decisionReason)) {
             $payload['message'] .= " Reason: {$this->statusLabel($decisionReason)}.";
@@ -1616,5 +1701,4 @@ class ProviderController extends Controller
             default => str($status)->replace('_', ' ')->title()->toString(),
         };
     }
-
 }

@@ -522,6 +522,29 @@ onMounted(loadApplication);
                                 </p>
                             </section>
 
+                            <section v-if="application.exam" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="grid sm:grid-cols-[9rem_minmax(0,1fr)]">
+                                    <div class="flex h-36 items-center justify-center border-b border-slate-200 bg-slate-50 p-4 sm:border-b-0 sm:border-r">
+                                        <img :src="application.exam.image_url" :alt="application.exam.title" class="h-full w-full object-contain">
+                                    </div>
+                                    <div class="p-4">
+                                        <p class="student-kicker">Assessment</p>
+                                        <h3 class="mt-1 text-lg font-bold text-slate-950">{{ application.exam.title }}</h3>
+                                        <p v-if="application.exam.description" class="mt-2 text-sm leading-6 text-slate-600">{{ application.exam.description }}</p>
+                                        <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-700">
+                                            <span class="rounded-md bg-slate-100 px-2.5 py-1">{{ labelFromKey(application.exam.assessment_type) }}</span>
+                                            <span v-if="application.exam.duration_minutes" class="rounded-md bg-slate-100 px-2.5 py-1">{{ application.exam.duration_minutes }} minutes</span>
+                                            <span v-if="application.exam.passing_score !== null" class="rounded-md bg-slate-100 px-2.5 py-1">{{ Number(application.exam.passing_score) }}% passing score</span>
+                                            <span class="rounded-md bg-slate-100 px-2.5 py-1">{{ labelFromKey(application.exam.delivery_mode) }}</span>
+                                        </div>
+                                        <div v-if="application.exam.venue || application.exam.instructions" class="mt-3 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-600">
+                                            <p v-if="application.exam.venue"><span class="font-bold text-slate-800">Venue:</span> {{ application.exam.venue }}</p>
+                                            <p v-if="application.exam.instructions" class="mt-1">{{ application.exam.instructions }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
                             <section class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                     <div>

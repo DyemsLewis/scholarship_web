@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\ApplicationDocument;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
+use App\Models\ProviderAssessment;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
@@ -819,6 +820,12 @@ class ApplicantDashboardController extends Controller
     {
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
+        $application->scholarship?->loadMissing('providerAssessment');
+        $examStatuses = ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed'];
+        $assessment = in_array($application->status, $examStatuses, true)
+            && $application->scholarship?->providerAssessment?->status === 'active'
+                ? $application->scholarship->providerAssessment
+                : null;
 
         return [
             'id' => $application->id,
@@ -849,6 +856,24 @@ class ApplicantDashboardController extends Controller
             'scholarship' => $application->scholarship
                 ? $this->scholarshipPayload($application->scholarship, $application->applicant)
                 : null,
+            'exam' => $assessment ? $this->assessmentPayload($assessment) : null,
+        ];
+    }
+
+    private function assessmentPayload(ProviderAssessment $assessment): array
+    {
+        return [
+            'title' => $assessment->title,
+            'assessment_type' => $assessment->assessment_type,
+            'image_url' => filled($assessment->image_path)
+                ? asset(ltrim($assessment->image_path, '/'))
+                : asset('uploads/scholarship-default.jpg'),
+            'description' => $assessment->description,
+            'duration_minutes' => $assessment->duration_minutes,
+            'passing_score' => $assessment->passing_score,
+            'delivery_mode' => $assessment->delivery_mode,
+            'venue' => $assessment->venue,
+            'instructions' => $assessment->instructions,
         ];
     }
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ProviderAssessment;
 use App\Models\Scholarship;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -45,5 +46,11 @@ class ProgramCatalogSeedTest extends TestCase
         $this->assertSame('CHED Central Office', $chedProgram->location_name);
         $this->assertSame('93.00', $chedProgram->minimum_gwa);
         $this->assertStringContainsString('PHP 500,000', $chedProgram->income_requirement);
+
+        $assessments = ProviderAssessment::query()->with('provider')->get();
+
+        $this->assertCount(2, $assessments);
+        $this->assertSame('/images/programs/dost-logo-card.jpg', $assessments->firstWhere('provider_id', $dostPrograms->first()->provider_id)?->image_path);
+        $this->assertSame('/images/programs/ched-logo-card.jpg', $assessments->firstWhere('provider_id', $chedProvider->id)?->image_path);
     }
 }

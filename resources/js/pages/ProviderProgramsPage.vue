@@ -1,8 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -11,6 +13,12 @@ const user = ref(null);
 const scholarships = ref([]);
 const selectedMapScholarship = ref(null);
 const duplicatingId = ref(null);
+const {
+    confirmation,
+    requestConfirmation,
+    confirmConfirmation,
+    cancelConfirmation,
+} = useConfirmationDialog();
 
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 const selectedMapAddress = computed(() => {
@@ -138,6 +146,16 @@ async function loadProviderData() {
 }
 
 async function duplicateProgram(scholarship) {
+    const confirmed = await requestConfirmation({
+        title: 'Duplicate this program?',
+        message: `A new draft copy of ${scholarship.title} will be added to your program list.`,
+        confirmLabel: 'Duplicate program',
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
     duplicatingId.value = scholarship.id;
     errorMessage.value = '';
     statusMessage.value = '';
@@ -165,6 +183,12 @@ onMounted(loadProviderData);
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
+
+        <ConfirmationDialog
+            v-bind="confirmation"
+            @confirm="confirmConfirmation"
+            @cancel="cancelConfirmation"
+        />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">

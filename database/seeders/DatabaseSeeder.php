@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\ProviderAssessment;
 use App\Models\Scholarship;
 use App\Models\User;
 use App\Support\ReviewRubric;
@@ -376,6 +377,36 @@ class DatabaseSeeder extends Seeder
             'views_count' => 0,
             'provider_terms_accepted_at' => now(),
             'provider_terms_version' => Terms::VERSION,
+        ]);
+
+        ProviderAssessment::query()->updateOrCreate([
+            'provider_id' => $provider->id,
+        ], [
+            'title' => 'DOST-SEI Scholarship Qualifying Examination',
+            'assessment_type' => 'qualifying_exam',
+            'image_path' => '/images/programs/dost-logo-card.jpg',
+            'description' => 'Provider-managed qualifying examination for screened DOST-SEI scholarship applicants.',
+            'duration_minutes' => 120,
+            'passing_score' => 75,
+            'delivery_mode' => 'onsite',
+            'venue' => 'Assigned DOST-SEI testing center',
+            'instructions' => 'Only applicants who pass eligibility and document screening should be scheduled. Share the confirmed date, testing center, permitted materials, and identification requirements in the applicant review note.',
+            'status' => 'active',
+        ]);
+
+        ProviderAssessment::query()->updateOrCreate([
+            'provider_id' => $chedProvider->id,
+        ], [
+            'title' => 'CHED Merit Eligibility Screening Assessment',
+            'assessment_type' => 'screening_assessment',
+            'image_path' => '/images/programs/ched-logo-card.jpg',
+            'description' => 'Optional provider-managed screening assessment for CHED Merit applicants. This is not presented as a national CHED examination.',
+            'duration_minutes' => 60,
+            'passing_score' => 70,
+            'delivery_mode' => 'provider_managed',
+            'venue' => 'CHED Regional Office or provider-approved online session',
+            'instructions' => 'Use only when the responsible CHED office requires an additional screening activity. Applicants should first pass academic, income, program, and document checks before receiving a schedule.',
+            'status' => 'active',
         ]);
     }
 }

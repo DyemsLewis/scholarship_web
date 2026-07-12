@@ -1,7 +1,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const appElement = document.getElementById('app');
 const initialScholarshipId = appElement?.dataset.scholarshipId ?? new URLSearchParams(window.location.search).get('scholarship_id') ?? '';
@@ -27,6 +29,12 @@ const documentNotes = ref({});
 const documentUpdatingId = ref(null);
 const selectedQueueFilter = ref('all');
 const selectedQueueSort = ref('priority');
+const {
+    confirmation,
+    requestConfirmation,
+    confirmConfirmation,
+    cancelConfirmation,
+} = useConfirmationDialog();
 
 const selectedScholarshipId = computed(() => selectedScholarshipContext.value?.id || initialScholarshipId);
 const hasProgramContext = computed(() => Boolean(selectedScholarshipId.value));
@@ -424,6 +432,35 @@ function quickActionNote(application, action) {
     return '';
 }
 
+function statusConfirmation(application, status) {
+    const applicantName = application.applicant?.name || 'This applicant';
+    const negative = ['exam_failed', 'not_awarded', 'rejected'].includes(status);
+    const labels = {
+        exam_qualified: 'Qualify for exam',
+        exam_scheduled: 'Schedule exam',
+        exam_passed: 'Record exam pass',
+        exam_failed: 'Record exam failure',
+        approved: 'Approve application',
+        awarded: 'Record award',
+        distribution_scheduled: 'Schedule distribution',
+        disbursed: 'Mark distributed',
+        renewed: 'Confirm renewal',
+        not_awarded: 'Record not awarded',
+        rejected: 'Reject application',
+    };
+
+    if (!labels[status]) {
+        return null;
+    }
+
+    return {
+        title: `${labels[status]}?`,
+        message: `${applicantName} will receive the updated status${negative ? ', decision reason,' : ''} and provider note.`,
+        confirmLabel: labels[status],
+        tone: negative ? 'danger' : 'warning',
+    };
+}
+
 async function applyQuickAction(application, action) {
     const map = {
         under_review: { status: 'under_review', reason: '' },
@@ -510,6 +547,14 @@ async function loadProviderData() {
 }
 
 async function updateStatus(application, status) {
+    if (status !== application.status) {
+        const confirmationOptions = statusConfirmation(application, status);
+
+        if (confirmationOptions && !await requestConfirmation(confirmationOptions)) {
+            return;
+        }
+    }
+
     updatingId.value = application.id;
     statusMessage.value = '';
     errorMessage.value = '';
@@ -534,6 +579,21 @@ async function updateStatus(application, status) {
 }
 
 async function updateDocumentStatus(application, document) {
+    const nextStatus = documentStatuses.value[document.id] ?? 'pending';
+
+    if (nextStatus !== document.status && ['rejected', 'needs_replacement'].includes(nextStatus)) {
+        const confirmed = await requestConfirmation({
+            title: nextStatus === 'rejected' ? 'Reject this document?' : 'Request a replacement?',
+            message: `${application.applicant?.name || 'The applicant'} will see this document decision and provider note.`,
+            confirmLabel: nextStatus === 'rejected' ? 'Reject document' : 'Request replacement',
+            tone: nextStatus === 'rejected' ? 'danger' : 'warning',
+        });
+
+        if (!confirmed) {
+            return;
+        }
+    }
+
     documentUpdatingId.value = document.id;
     statusMessage.value = '';
     errorMessage.value = '';
@@ -565,6 +625,12 @@ onMounted(loadProviderData);
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
+
+        <ConfirmationDialog
+            v-bind="confirmation"
+            @confirm="confirmConfirmation"
+            @cancel="cancelConfirmation"
+        />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">

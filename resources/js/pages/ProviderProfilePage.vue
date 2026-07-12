@@ -1,8 +1,10 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -16,6 +18,12 @@ const verificationDocumentFile = ref(null);
 const verificationDocumentTermsAccepted = ref(false);
 const isUploadingDocument = ref(false);
 const deletingDocumentId = ref(null);
+const {
+    confirmation,
+    requestConfirmation,
+    confirmConfirmation,
+    cancelConfirmation,
+} = useConfirmationDialog();
 const form = reactive({
     first_name: '',
     last_name: '',
@@ -165,6 +173,17 @@ async function uploadVerificationDocument() {
 }
 
 async function deleteVerificationDocument(document) {
+    const confirmed = await requestConfirmation({
+        title: 'Remove verification document?',
+        message: `${document.original_name || document.document_type || 'This file'} will be permanently removed from the provider verification record.`,
+        confirmLabel: 'Remove document',
+        tone: 'danger',
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
     deletingDocumentId.value = document.id;
     errorMessage.value = '';
     statusMessage.value = '';
@@ -211,6 +230,12 @@ onMounted(loadProviderProfile);
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
+
+        <ConfirmationDialog
+            v-bind="confirmation"
+            @confirm="confirmConfirmation"
+            @cancel="cancelConfirmation"
+        />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-5xl">

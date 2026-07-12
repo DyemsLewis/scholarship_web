@@ -1,7 +1,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
@@ -17,6 +19,12 @@ const documentStatuses = ref({});
 const documentNotes = ref({});
 const rubricScores = ref({});
 const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+const {
+    confirmation,
+    requestConfirmation,
+    confirmConfirmation,
+    cancelConfirmation,
+} = useConfirmationDialog();
 
 const statusOptions = [
     { value: 'submitted', label: 'Submitted' },
@@ -298,6 +306,72 @@ function quickActionNote(action) {
     return '';
 }
 
+function statusConfirmation(status) {
+    const applicantName = application.value?.applicant?.name || 'This applicant';
+    const confirmations = {
+        exam_qualified: {
+            title: 'Qualify applicant for the exam?',
+            message: `${applicantName} will see the assessment details and receive a status notification.`,
+            confirmLabel: 'Qualify for exam',
+        },
+        exam_scheduled: {
+            title: 'Confirm exam schedule?',
+            message: `${applicantName} will be notified that the exam is scheduled. Make sure the review note contains the date and access details.`,
+            confirmLabel: 'Schedule exam',
+        },
+        exam_passed: {
+            title: 'Record a passing exam result?',
+            message: `${applicantName} will be notified and moved to final award review.`,
+            confirmLabel: 'Record pass',
+        },
+        exam_failed: {
+            title: 'Record a failed exam result?',
+            message: `${applicantName} will receive this negative decision and its reason.`,
+            confirmLabel: 'Record failure',
+            tone: 'danger',
+        },
+        approved: {
+            title: 'Approve this application?',
+            message: `${applicantName} will be notified that the provider approved the application.`,
+            confirmLabel: 'Approve application',
+        },
+        awarded: {
+            title: 'Record this scholarship award?',
+            message: `${applicantName} will see the award outcome and amount entered in this review.`,
+            confirmLabel: 'Record award',
+        },
+        distribution_scheduled: {
+            title: 'Schedule reward distribution?',
+            message: `${applicantName} will be notified of the distribution date and instructions.`,
+            confirmLabel: 'Schedule distribution',
+        },
+        disbursed: {
+            title: 'Mark the reward as distributed?',
+            message: 'This records that the provider has released the scholarship reward to the applicant.',
+            confirmLabel: 'Mark distributed',
+        },
+        renewed: {
+            title: 'Confirm scholarship renewal?',
+            message: `${applicantName} will be notified that scholarship support was renewed.`,
+            confirmLabel: 'Confirm renewal',
+        },
+        not_awarded: {
+            title: 'Record a not-awarded outcome?',
+            message: `${applicantName} will receive this final outcome and its reason.`,
+            confirmLabel: 'Record outcome',
+            tone: 'danger',
+        },
+        rejected: {
+            title: 'Reject this application?',
+            message: `${applicantName} will receive the rejection status, reason, and provider note.`,
+            confirmLabel: 'Reject application',
+            tone: 'danger',
+        },
+    };
+
+    return confirmations[status] ?? null;
+}
+
 async function applyQuickAction(action) {
     const map = {
         under_review: { status: 'under_review', reason: '' },
@@ -348,6 +422,14 @@ async function updateStatus() {
     if (['rejected', 'not_awarded', 'exam_failed'].includes(reviewForm.value.status) && !reviewForm.value.decisionReason) {
         errorMessage.value = 'Select a decision reason before saving a negative decision.';
         return;
+    }
+
+    if (reviewForm.value.status !== application.value.status) {
+        const confirmationOptions = statusConfirmation(reviewForm.value.status);
+
+        if (confirmationOptions && !await requestConfirmation(confirmationOptions)) {
+            return;
+        }
     }
 
     updatingId.value = application.value.id;
@@ -418,6 +500,19 @@ async function updateDocumentStatus(document) {
         return;
     }
 
+    if (documentStatus !== document.status && ['rejected', 'needs_replacement'].includes(documentStatus)) {
+        const confirmed = await requestConfirmation({
+            title: documentStatus === 'rejected' ? 'Reject this document?' : 'Request a replacement?',
+            message: `${application.value.applicant?.name || 'The applicant'} will see the document status and review note.`,
+            confirmLabel: documentStatus === 'rejected' ? 'Reject document' : 'Request replacement',
+            tone: documentStatus === 'rejected' ? 'danger' : 'warning',
+        });
+
+        if (!confirmed) {
+            return;
+        }
+    }
+
     documentUpdatingId.value = document.id;
     statusMessage.value = '';
     errorMessage.value = '';
@@ -448,6 +543,12 @@ onMounted(loadApplication);
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
+
+        <ConfirmationDialog
+            v-bind="confirmation"
+            @confirm="confirmConfirmation"
+            @cancel="cancelConfirmation"
+        />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
@@ -534,6 +635,28 @@ onMounted(loadApplication);
 
                     <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
                         <div class="space-y-5">
+                            <section v-if="application.exam" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="grid sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center">
+                                    <div class="flex h-36 items-center justify-center border-b border-slate-200 bg-slate-50 p-4 sm:border-b-0 sm:border-r">
+                                        <img :src="application.exam.image_url" :alt="application.exam.title" class="h-full w-full object-contain">
+                                    </div>
+                                    <div class="p-4">
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Assigned assessment</p>
+                                        <h3 class="mt-1 text-lg font-bold text-slate-950">{{ application.exam.title }}</h3>
+                                        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-600">
+                                            <span>{{ labelFromKey(application.exam.assessment_type) }}</span>
+                                            <span v-if="application.exam.duration_minutes">{{ application.exam.duration_minutes }} minutes</span>
+                                            <span v-if="application.exam.passing_score !== null">{{ Number(application.exam.passing_score) }}% passing score</span>
+                                            <span>{{ labelFromKey(application.exam.delivery_mode) }}</span>
+                                        </div>
+                                    </div>
+                                    <a href="/provider/exams" class="m-4 inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
+                                        <i class="fa-solid fa-gear"></i>
+                                        Manage
+                                    </a>
+                                </div>
+                            </section>
+
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                     <div>

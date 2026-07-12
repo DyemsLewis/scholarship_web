@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Scholarship extends Model
 {
@@ -73,6 +74,11 @@ class Scholarship extends Model
     public function bookmarks(): HasMany
     {
         return $this->hasMany(ScholarshipBookmark::class);
+    }
+
+    public function providerAssessment(): HasOne
+    {
+        return $this->hasOne(ProviderAssessment::class, 'provider_id', 'provider_id');
     }
 
     public function scopeAcceptingApplications(Builder $query): Builder

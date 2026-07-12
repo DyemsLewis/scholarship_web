@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const scholarshipId = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit$/)?.[1] ?? null;
 const isEditMode = computed(() => Boolean(scholarshipId));
@@ -21,6 +23,12 @@ const imagePreviewUrl = ref('');
 const providerLocationMessage = ref('');
 const providerAddressLookupTrigger = ref(0);
 const activeFormSection = ref('basics');
+const {
+    confirmation,
+    requestConfirmation,
+    confirmConfirmation,
+    cancelConfirmation,
+} = useConfirmationDialog();
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full min-w-0 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
@@ -1069,6 +1077,29 @@ async function saveScholarship() {
         return;
     }
 
+    const importantSave = {
+        pending_review: {
+            title: 'Submit this program for review?',
+            message: 'The program will be sent to the administrator for approval before applicants can see it.',
+            confirmLabel: 'Submit for review',
+        },
+        closed: {
+            title: 'Close this program?',
+            message: 'Applicants will no longer be able to submit new applications for this program.',
+            confirmLabel: 'Close program',
+            tone: 'danger',
+        },
+        published: isEditMode.value ? {
+            title: 'Save changes to this published program?',
+            message: 'Material changes may return the program to administrator review before it is published again.',
+            confirmLabel: 'Save changes',
+        } : null,
+    }[scholarshipForm.value.status];
+
+    if (importantSave && !await requestConfirmation(importantSave)) {
+        return;
+    }
+
     isSaving.value = true;
 
     const payload = new FormData();
@@ -1147,6 +1178,12 @@ onMounted(loadFormData);
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar @logout="logout" />
+
+        <ConfirmationDialog
+            v-bind="confirmation"
+            @confirm="confirmConfirmation"
+            @cancel="cancelConfirmation"
+        />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-6xl">

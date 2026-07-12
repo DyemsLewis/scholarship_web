@@ -14,6 +14,7 @@ import LandingPage from './pages/LandingPage.vue';
 import LoginPage from './pages/LoginPage.vue';
 import ProviderApplicationDetailPage from './pages/ProviderApplicationDetailPage.vue';
 import ProviderApplicationsPage from './pages/ProviderApplicationsPage.vue';
+import ProviderExamsPage from './pages/ProviderExamsPage.vue';
 import ProviderInsightsPage from './pages/ProviderInsightsPage.vue';
 import ProviderPage from './pages/ProviderPage.vue';
 import ProviderProgramFormPage from './pages/ProviderProgramFormPage.vue';
@@ -67,6 +68,7 @@ const pages = {
     provider: ProviderPage,
     providerApplicationDetail: ProviderApplicationDetailPage,
     providerApplications: ProviderApplicationsPage,
+    providerExams: ProviderExamsPage,
     providerInsights: ProviderInsightsPage,
     providerProgramForm: ProviderProgramFormPage,
     providerProfile: ProviderProfilePage,

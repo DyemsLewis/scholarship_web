@@ -96,6 +96,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(ProviderVerificationDocument::class, 'provider_id');
     }
 
+    public function providerAssessments(): HasMany
+    {
+        return $this->hasMany(ProviderAssessment::class, 'provider_id');
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
