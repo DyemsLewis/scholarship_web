@@ -198,11 +198,11 @@ onMounted(loadAdminData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)]">
         <AdminSidebar active="users" @logout="logout" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <div class="mx-auto w-full min-w-0 max-w-7xl">
                 <header class="admin-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -234,7 +234,7 @@ onMounted(loadAdminData);
                     </div>
                 </header>
 
-                <div class="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                     <div class="flex flex-col gap-4 border-b border-slate-200 p-4">
                         <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                             <div>
@@ -302,15 +302,21 @@ onMounted(loadAdminData);
                         </p>
                     </div>
 
-                    <div v-else class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                    <div v-else class="max-w-full overflow-x-auto">
+                        <table class="w-full min-w-[58rem] table-fixed divide-y divide-slate-200 text-left text-sm xl:min-w-full">
+                            <colgroup>
+                                <col class="w-[16rem]">
+                                <col class="w-[9rem]">
+                                <col class="w-[8rem]">
+                                <col class="w-[7rem]">
+                                <col class="w-[10rem]">
+                                <col class="w-[8rem]">
+                                <col class="w-[13rem]">
+                            </colgroup>
                             <thead class="bg-slate-50 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
                                 <tr>
                                     <th class="px-4 py-3">
-                                        Name
-                                    </th>
-                                    <th class="px-4 py-3">
-                                        Email
+                                        Account
                                     </th>
                                     <th class="px-4 py-3">
                                         Username
@@ -338,22 +344,28 @@ onMounted(loadAdminData);
                                     :key="user.id"
                                     class="hover:bg-slate-50"
                                 >
-                                    <td class="px-4 py-3 font-semibold text-slate-950">
-                                        {{ user.name }}
+                                    <td class="px-4 py-3 align-top">
+                                        <p :title="user.name" class="truncate font-semibold text-slate-950">
+                                            {{ user.name }}
+                                        </p>
+                                        <p :title="user.email" class="mt-1 truncate text-xs text-slate-500">
+                                            {{ user.email }}
+                                        </p>
                                     </td>
-                                    <td class="px-4 py-3 text-slate-600">
-                                        {{ user.email }}
+                                    <td class="px-4 py-3 align-top text-slate-600">
+                                        <p :title="user.username || '-'" class="truncate">
+                                            {{ user.username || '-' }}
+                                        </p>
                                     </td>
-                                    <td class="px-4 py-3 text-slate-600">
-                                        {{ user.username || '-' }}
+                                    <td class="px-4 py-3 align-top text-slate-600">
+                                        <p :title="user.contact_number || '-'" class="truncate">
+                                            {{ user.contact_number || '-' }}
+                                        </p>
                                     </td>
-                                    <td class="px-4 py-3 text-slate-600">
-                                        {{ user.contact_number || '-' }}
-                                    </td>
-                                    <td class="px-4 py-3">
+                                    <td class="px-4 py-3 align-top">
                                         <span
                                             :class="[
-                                                'rounded-md px-2 py-1 text-xs font-bold',
+                                                'inline-flex whitespace-nowrap rounded-md px-2 py-1 text-xs font-bold',
                                                 user.role === 'admin'
                                                     ? 'bg-amber-100 text-amber-800'
                                                     : user.role === 'provider'
@@ -364,11 +376,11 @@ onMounted(loadAdminData);
                                             {{ roleLabel(user.role) }}
                                         </span>
                                     </td>
-                                    <td class="px-4 py-3">
+                                    <td class="px-4 py-3 align-top">
                                         <div class="flex flex-wrap gap-1.5">
                                             <span
                                                 :class="[
-                                                    'rounded-md px-2 py-1 text-xs font-bold',
+                                                    'whitespace-nowrap rounded-md px-2 py-1 text-xs font-bold',
                                                     user.account_status === 'suspended'
                                                         ? 'bg-rose-100 text-rose-800'
                                                         : 'bg-emerald-100 text-emerald-800'
@@ -378,17 +390,17 @@ onMounted(loadAdminData);
                                             </span>
                                             <span
                                                 v-if="user.must_reset_password"
-                                                class="rounded-md bg-slate-900 px-2 py-1 text-xs font-bold text-white"
+                                                class="whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs font-bold text-white"
                                             >
                                                 Reset required
                                             </span>
                                         </div>
                                     </td>
-                                    <td class="px-4 py-3 text-slate-600">
+                                    <td class="px-4 py-3 align-top text-slate-600">
                                         {{ user.created_at }}
                                     </td>
-                                    <td class="px-4 py-3 text-right">
-                                        <div class="flex min-w-[19rem] flex-wrap justify-end gap-1.5">
+                                    <td class="px-4 py-3 text-right align-top">
+                                        <div class="flex flex-wrap justify-end gap-1.5">
                                             <button
                                                 type="button"
                                                 class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -409,7 +421,7 @@ onMounted(loadAdminData);
                                                 :disabled="Boolean(activeAction)"
                                                 @click="forcePasswordReset(user)"
                                             >
-                                                {{ isActionLoading(user, 'force-reset') ? 'Resetting...' : 'Force reset' }}
+                                                {{ isActionLoading(user, 'force-reset') ? 'Resetting...' : 'Reset' }}
                                             </button>
 
                                             <button
@@ -419,7 +431,7 @@ onMounted(loadAdminData);
                                                 :disabled="Boolean(activeAction)"
                                                 @click="verifyEmail(user)"
                                             >
-                                                {{ isActionLoading(user, 'verify-email') ? 'Verifying...' : 'Verify email' }}
+                                                {{ isActionLoading(user, 'verify-email') ? 'Verifying...' : 'Verify' }}
                                             </button>
 
                                             <button
@@ -429,7 +441,7 @@ onMounted(loadAdminData);
                                                 :disabled="Boolean(activeAction)"
                                                 @click="resendVerificationEmail(user)"
                                             >
-                                                {{ isActionLoading(user, 'resend-verification') ? 'Sending...' : 'Resend email' }}
+                                                {{ isActionLoading(user, 'resend-verification') ? 'Sending...' : 'Resend' }}
                                             </button>
 
                                             <a

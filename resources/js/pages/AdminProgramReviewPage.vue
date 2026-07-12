@@ -82,14 +82,93 @@ const reviewFacts = computed(() => {
         },
     ];
 });
-const eligibilityFields = computed(() => [
-    { label: 'Education level', value: listLabel(scholarship.value?.eligible_education_levels) },
-    { label: 'School type', value: listLabel(scholarship.value?.eligible_school_types) },
-    { label: 'Track, strand, course, or program', value: scholarship.value?.eligible_courses || 'Any' },
-    { label: 'Grade or year level', value: scholarship.value?.eligible_year_levels || 'Any' },
-    { label: 'Income rule', value: scholarship.value?.income_requirement || 'Any' },
-    { label: 'Location coverage', value: scholarship.value?.eligible_locations || scholarship.value?.location_name || 'Any' },
+const learnerTargetGroups = computed(() => [
+    {
+        label: 'Education levels',
+        description: 'Learner stages allowed to apply.',
+        items: optionItems(scholarship.value?.eligible_education_levels),
+        empty: 'Any education level',
+    },
+    {
+        label: 'School types',
+        description: 'Public, private, ALS, TVET, or other school category.',
+        items: optionItems(scholarship.value?.eligible_school_types),
+        empty: 'Any school type',
+    },
+    {
+        label: 'Track, strand, course, or program',
+        description: 'Program-specific path restrictions.',
+        items: optionItems(scholarship.value?.eligible_courses),
+        empty: 'Any course, track, or strand',
+    },
+    {
+        label: 'Grade or year levels',
+        description: 'Current grade, year, or training level.',
+        items: optionItems(scholarship.value?.eligible_year_levels),
+        empty: 'Any grade or year level',
+    },
 ]);
+const eligibilityGateCards = computed(() => {
+    const current = scholarship.value ?? {};
+
+    return [
+        {
+            label: 'Academic gate',
+            value: academicRequirementLabel(current),
+            detail: hasText(current.minimum_gwa)
+                ? `Grade scale: ${labelFromKey(current.minimum_grade_scale || inferGradeScale(current.minimum_gwa))}`
+                : 'No grade-based cutoff will be enforced from this program setup.',
+            tone: hasText(current.minimum_gwa) ? 'good' : 'neutral',
+        },
+        {
+            label: 'Income rule',
+            value: current.income_requirement || 'Any income bracket',
+            detail: hasText(current.income_requirement)
+                ? 'Household income is part of the eligibility screen.'
+                : 'Income will not restrict applicant matching.',
+            tone: hasText(current.income_requirement) ? 'good' : 'neutral',
+        },
+        {
+            label: 'Location rule',
+            value: current.eligible_locations || current.location_name || 'Any location',
+            detail: hasText(current.eligible_locations || current.location_name)
+                ? 'Applicant location or program campus is part of the rule set.'
+                : 'No location restriction is listed.',
+            tone: hasText(current.eligible_locations || current.location_name) ? 'good' : 'neutral',
+        },
+    ];
+});
+const eligibilityReviewChecks = computed(() => {
+    const current = scholarship.value ?? {};
+    const targetCount = learnerTargetGroups.value.filter((group) => group.items.length > 0).length;
+
+    return [
+        {
+            label: 'Academic minimum',
+            status: hasText(current.minimum_gwa) ? 'Listed' : 'Open',
+            detail: hasText(current.minimum_gwa) ? academicRequirementLabel(current) : 'No minimum grade rule listed.',
+            tone: hasText(current.minimum_gwa) ? 'good' : 'neutral',
+        },
+        {
+            label: 'Targeting fields',
+            status: targetCount ? `${targetCount} set` : 'Open to all',
+            detail: targetCount ? 'Learner audience is scoped.' : 'No learner audience filters are set.',
+            tone: targetCount ? 'good' : 'neutral',
+        },
+        {
+            label: 'Financial rule',
+            status: hasText(current.income_requirement) ? 'Listed' : 'Open',
+            detail: hasText(current.income_requirement) ? current.income_requirement : 'No income restriction listed.',
+            tone: hasText(current.income_requirement) ? 'good' : 'neutral',
+        },
+        {
+            label: 'Provider notes',
+            status: hasText(current.eligibility) ? 'Provided' : 'Missing',
+            detail: hasText(current.eligibility) ? 'Eligibility notes are available below.' : 'Ask for notes if the rules need context.',
+            tone: hasText(current.eligibility) ? 'good' : 'warn',
+        },
+    ];
+});
 const workflowFields = computed(() => [
     { label: 'Application mode', value: applicationModeLabel(scholarship.value?.application_mode) },
     { label: 'Available slots', value: scholarship.value?.slots_available ?? 'Not listed' },
@@ -141,14 +220,32 @@ function labelFromKey(value) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function listLabel(value) {
-    const items = splitItems(value).map(labelFromKey);
-
-    return items.length ? items.join(', ') : 'Any';
+function optionItems(value) {
+    return splitItems(value).map(labelFromKey);
 }
 
 function applicationModeLabel(value) {
     return applicationModeOptions.find((option) => option.value === value)?.label ?? labelFromKey(value || 'not_listed');
+}
+
+function gateCardClass(tone) {
+    if (tone === 'good') {
+        return 'border-emerald-200 bg-emerald-50';
+    }
+
+    return 'border-slate-200 bg-slate-50';
+}
+
+function reviewCheckClass(tone) {
+    if (tone === 'good') {
+        return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+    }
+
+    if (tone === 'warn') {
+        return 'border-amber-200 bg-amber-50 text-amber-900';
+    }
+
+    return 'border-slate-200 bg-slate-50 text-slate-700';
 }
 
 function inferGradeScale(value) {
@@ -351,29 +448,93 @@ onMounted(loadScholarship);
                             </article>
 
                             <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Eligibility
-                                </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Targeting and applicant rules
-                                </h3>
+                                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                            Eligibility
+                                        </p>
+                                        <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                            Program eligibility review
+                                        </h3>
+                                        <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                            Check whether the posted rules are specific enough for applicant matching and provider review.
+                                        </p>
+                                    </div>
 
-                                <div class="mt-4 grid gap-3 md:grid-cols-2">
+                                    <div class="grid gap-2 sm:grid-cols-2 lg:w-80 lg:grid-cols-1">
+                                        <div
+                                            v-for="check in eligibilityReviewChecks"
+                                            :key="check.label"
+                                            :class="['rounded-md border p-3', reviewCheckClass(check.tone)]"
+                                        >
+                                            <div class="flex items-start justify-between gap-3">
+                                                <p class="text-xs font-bold uppercase tracking-[0.12em]">{{ check.label }}</p>
+                                                <span class="shrink-0 rounded-md bg-white/70 px-2 py-0.5 text-[10px] font-bold uppercase ring-1 ring-inset ring-current/10">
+                                                    {{ check.status }}
+                                                </span>
+                                            </div>
+                                            <p class="mt-1 text-xs leading-5">{{ check.detail }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-5 grid gap-3 lg:grid-cols-3">
                                     <div
-                                        v-for="field in eligibilityFields"
-                                        :key="field.label"
-                                        class="rounded-md border border-slate-200 bg-slate-50 p-3"
+                                        v-for="gate in eligibilityGateCards"
+                                        :key="gate.label"
+                                        :class="['rounded-md border p-4', gateCardClass(gate.tone)]"
                                     >
-                                        <p class="text-xs font-semibold text-slate-500">{{ field.label }}</p>
-                                        <p class="mt-1 whitespace-pre-line break-words text-sm font-bold leading-6 text-slate-950">
-                                            {{ field.value }}
+                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{{ gate.label }}</p>
+                                        <p class="mt-2 break-words text-lg font-bold leading-6 text-slate-950">{{ gate.value }}</p>
+                                        <p class="mt-2 text-xs leading-5 text-slate-600">{{ gate.detail }}</p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-5 grid gap-3 md:grid-cols-2">
+                                    <div
+                                        v-for="group in learnerTargetGroups"
+                                        :key="group.label"
+                                        class="rounded-md border border-slate-200 bg-slate-50 p-4"
+                                    >
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                            <div>
+                                                <p class="text-sm font-bold text-slate-950">{{ group.label }}</p>
+                                                <p class="mt-1 text-xs leading-5 text-slate-500">{{ group.description }}</p>
+                                            </div>
+                                            <span class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                                                {{ group.items.length ? `${group.items.length} set` : 'Open' }}
+                                            </span>
+                                        </div>
+
+                                        <div v-if="group.items.length" class="mt-3 flex flex-wrap gap-2">
+                                            <span
+                                                v-for="item in group.items"
+                                                :key="item"
+                                                class="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"
+                                            >
+                                                {{ item }}
+                                            </span>
+                                        </div>
+
+                                        <p v-else class="mt-3 rounded-md border border-dashed border-slate-300 bg-white p-3 text-xs font-semibold text-slate-500">
+                                            {{ group.empty }}
                                         </p>
                                     </div>
                                 </div>
 
-                                <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
-                                    <p class="text-sm font-bold text-slate-950">Eligibility notes</p>
-                                    <p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">
+                                <div class="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">Provider eligibility notes</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">
+                                                Use this narrative to catch exceptions, special qualifications, and unclear wording.
+                                            </p>
+                                        </div>
+                                        <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', scholarship.eligibility ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800']">
+                                            {{ scholarship.eligibility ? 'Provided' : 'Missing' }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-3 whitespace-pre-line text-sm leading-6 text-slate-700">
                                         {{ scholarship.eligibility || 'No eligibility notes provided.' }}
                                     </p>
                                 </div>
