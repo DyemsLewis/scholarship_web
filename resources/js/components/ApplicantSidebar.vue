@@ -34,8 +34,8 @@ function logout() {
 </script>
 
 <template>
-    <header class="sticky top-0 z-40 border-b border-white/10 bg-slate-950/95 text-white shadow-[0_12px_36px_rgba(8,20,38,0.22)] backdrop-blur">
-        <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+    <header class="sticky top-0 z-40 border-b border-white/15 bg-[#081426]/95 text-white shadow-[0_10px_30px_rgba(8,20,38,0.18)] backdrop-blur">
+        <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
             <a href="/dashboard" class="group flex items-center gap-3">
                 <span class="flex h-9 w-9 items-center justify-center rounded-md bg-amber-300 font-display text-sm font-bold text-slate-950">
                     <i class="fa-solid fa-award"></i>
@@ -55,7 +55,7 @@ function logout() {
                     :class="[
                         'rounded-md px-3 py-2 text-sm font-semibold transition lg:px-4',
                         isActive(link.href)
-                            ? 'bg-white text-slate-950 shadow-sm'
+                            ? 'bg-white/15 text-white ring-1 ring-white/10'
                             : 'text-slate-200 hover:bg-white/10 hover:text-white',
                     ]"
                 >
@@ -75,6 +75,7 @@ function logout() {
                     class="rounded-md border border-white/20 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white hover:text-slate-950"
                     @click="logout"
                 >
+                    <i class="fa-solid fa-right-from-bracket mr-2 text-xs"></i>
                     Logout
                 </button>
             </div>
@@ -97,7 +98,7 @@ function logout() {
         class="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm md:hidden"
         @click.self="closeMenu"
     >
-        <aside class="h-full w-[min(21rem,86vw)] bg-slate-950 text-white shadow-2xl">
+        <aside class="h-full w-[min(21rem,86vw)] bg-[#081426] text-white shadow-2xl">
             <div class="flex h-full flex-col gap-6 px-5 py-6">
                 <div class="flex items-start justify-between gap-4">
                     <a href="/dashboard" class="font-display text-xl font-bold text-white" @click="closeMenu">
@@ -118,7 +119,7 @@ function logout() {
                         Applicant
                     </p>
                     <h1 class="mt-4 font-display text-2xl leading-tight font-bold text-white">
-                        Student Workspace
+                        Applicant workspace
                     </h1>
                 </div>
 
@@ -130,7 +131,7 @@ function logout() {
                         :class="[
                             'rounded-md border px-4 py-3 transition hover:bg-slate-50',
                             isActive(link.href)
-                                ? 'border-white bg-white text-slate-950'
+                                ? 'border-amber-300 bg-amber-300 text-slate-950'
                                 : 'border-white/10 bg-white/5 text-slate-200 hover:text-slate-950',
                         ]"
                         @click="closeMenu"

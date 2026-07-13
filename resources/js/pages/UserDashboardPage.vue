@@ -24,9 +24,6 @@ const applications = ref([]);
 const nextSteps = ref([]);
 const notifications = ref([]);
 
-const readinessGaugeStyle = computed(() => ({
-    background: `conic-gradient(#0f172a ${Number(profileReadiness.value.percent ?? 0) * 3.6}deg, #e2e8f0 0deg)`,
-}));
 const readinessMessage = computed(() => {
     if (profileReadiness.value.complete) {
         return 'Your profile is ready for scholarship applications.';
@@ -327,44 +324,43 @@ onMounted(loadDashboard);
                     <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="grid lg:grid-cols-[minmax(0,1fr)_18rem]">
                             <div class="p-5 sm:p-6">
-                                <div class="flex flex-col gap-5 md:flex-row md:items-center">
-                                    <div
-                                        class="relative flex h-32 w-32 shrink-0 items-center justify-center rounded-full p-2"
-                                        :style="readinessGaugeStyle"
-                                    >
-                                        <div class="flex h-full w-full flex-col items-center justify-center rounded-full bg-white shadow-inner">
-                                            <span class="text-3xl font-bold text-slate-950">
-                                                {{ profileReadiness.percent }}%
-                                            </span>
-                                            <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-                                                Ready
-                                            </span>
+                                <div>
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                        <div>
+                                            <p class="student-kicker">
+                                                Scholarship Readiness
+                                            </p>
+                                            <h3 class="mt-2 text-2xl font-bold leading-tight text-slate-950">
+                                                {{ readinessMessage }}
+                                            </h3>
                                         </div>
+                                        <p class="text-3xl font-bold text-slate-950">
+                                            {{ profileReadiness.percent }}<span class="text-base text-slate-400">%</span>
+                                        </p>
                                     </div>
 
-                                    <div class="min-w-0 flex-1">
-                                        <p class="student-kicker">
-                                            Scholarship Readiness
-                                        </p>
-                                        <h3 class="mt-2 text-2xl font-bold leading-tight text-slate-950">
-                                            {{ readinessMessage }}
-                                        </h3>
-                                        <div class="mt-4 grid gap-2 sm:grid-cols-3">
-                                            <div
-                                                v-for="item in dashboardStats"
-                                                :key="item.label"
-                                                class="border-l-2 border-slate-200 pl-3"
-                                            >
-                                                <p class="text-2xl font-bold text-slate-950">
-                                                    {{ item.value ?? 0 }}
-                                                </p>
-                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
-                                                    {{ item.label }}
-                                                </p>
-                                                <p class="mt-1 text-xs text-slate-500">
-                                                    {{ item.detail }}
-                                                </p>
-                                            </div>
+                                    <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                                        <div
+                                            class="h-full rounded-full bg-amber-400 transition-all"
+                                            :style="{ width: `${profileReadiness.percent}%` }"
+                                        ></div>
+                                    </div>
+
+                                    <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                                        <div
+                                            v-for="item in dashboardStats"
+                                            :key="item.label"
+                                            class="border-l-2 border-slate-200 pl-3"
+                                        >
+                                            <p class="text-xl font-bold text-slate-950">
+                                                {{ item.value ?? 0 }}
+                                            </p>
+                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+                                                {{ item.label }}
+                                            </p>
+                                            <p class="mt-1 text-xs text-slate-500">
+                                                {{ item.detail }}
+                                            </p>
                                         </div>
                                     </div>
                                 </div>

@@ -935,7 +935,7 @@ onMounted(loadProfile);
                     Loading profile...
                 </div>
 
-                <div v-else class="mt-6 grid gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+                <div v-else class="mt-6 grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
                     <aside class="student-card h-fit p-4 lg:sticky lg:top-24">
                         <div class="rounded-lg bg-slate-950 p-4 text-white">
                             <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
@@ -972,8 +972,9 @@ onMounted(loadProfile);
                         </div>
 
                         <button
+                            v-if="missingProfileFields.length"
                             type="button"
-                            class="mt-4 w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-slate-400 hover:bg-slate-50"
+                            class="mt-4 w-full rounded-md border border-slate-200 bg-white p-3 text-left transition hover:border-slate-400 hover:bg-slate-50"
                             @click="openSection(profileRecommendedAction.section)"
                         >
                             <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
@@ -993,15 +994,15 @@ onMounted(loadProfile);
                                 :key="section.id"
                                 type="button"
                                 :class="[
-                                    'rounded-lg border px-3 py-3 text-left transition hover:border-slate-400 hover:bg-white',
+                                    'rounded-md border px-3 py-2.5 text-left transition hover:border-slate-400 hover:bg-white',
                                     activeSection === section.id ? 'border-slate-900 bg-white shadow-sm' : 'border-slate-200 bg-slate-50',
                                 ]"
                                 @click="openSection(section.id)"
                             >
-                                <span class="flex items-start gap-3">
+                                <span class="flex items-center gap-3">
                                     <span
                                         :class="[
-                                            'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+                                            'flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
                                             activeSection === section.id ? 'bg-slate-900 text-amber-200' : 'bg-white text-slate-700 ring-1 ring-slate-200',
                                         ]"
                                     >
@@ -1022,12 +1023,6 @@ onMounted(loadProfile);
                                             <span v-else class="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
                                                 Check
                                             </span>
-                                        </span>
-                                        <span class="mt-1 block text-xs leading-4 text-slate-500">
-                                            {{ section.detail }}
-                                        </span>
-                                        <span v-if="section.fields.length" class="mt-2 block h-1 overflow-hidden rounded-full bg-slate-200">
-                                            <span class="block h-full rounded-full bg-slate-900" :style="{ width: `${sectionProgress(section).percent}%` }"></span>
                                         </span>
                                     </span>
                                 </span>

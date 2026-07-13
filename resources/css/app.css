@@ -33,23 +33,25 @@
     .student-shell {
         @apply min-h-screen text-slate-900;
         background:
-            radial-gradient(circle at 8% 6%, rgba(252, 211, 77, 0.18), transparent 22%),
-            radial-gradient(circle at 94% 10%, rgba(14, 165, 233, 0.10), transparent 26%),
-            linear-gradient(90deg, rgba(8, 20, 38, 0.05) 1px, transparent 1px),
-            linear-gradient(180deg, rgba(8, 20, 38, 0.04) 1px, transparent 1px),
-            linear-gradient(180deg, #f8fafc 0%, #eef2f6 52%, #e7edf4 100%);
-        background-size: auto, auto, 3.8rem 3.8rem, 3.8rem 3.8rem, auto;
+            linear-gradient(180deg, rgba(8, 20, 38, 0.04), transparent 14rem),
+            #f8fafc;
     }
 
     .student-page {
-        @apply px-4 py-6 sm:px-6 lg:px-8;
+        @apply px-4 py-7 sm:px-6 sm:py-8 lg:px-8 lg:py-10;
     }
 
     .student-container {
         @apply mx-auto max-w-6xl;
     }
 
-    .student-hero,
+    .student-hero {
+        @apply relative flex min-h-32 flex-col justify-center overflow-hidden rounded-lg border border-slate-800 px-5 py-5 text-white shadow-[0_18px_50px_rgba(8,20,38,0.16)] sm:px-6;
+        background:
+            radial-gradient(circle at 90% -20%, rgba(252, 211, 77, 0.20), transparent 28%),
+            linear-gradient(115deg, #081426 0%, #0e1f36 68%, #122a45 100%);
+    }
+
     .provider-hero,
     .admin-hero {
         @apply relative flex min-h-28 flex-col justify-center overflow-hidden border border-white/80 bg-white/95 px-5 py-4 shadow-[0_18px_54px_rgba(8,20,38,0.10)] backdrop-blur;
@@ -61,7 +63,11 @@
             linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.92));
     }
 
-    .student-hero::before,
+    .student-hero::before {
+        content: '';
+        @apply absolute inset-x-0 bottom-0 h-1 bg-amber-300;
+    }
+
     .provider-hero::before,
     .admin-hero::before {
         content: '';
@@ -71,7 +77,7 @@
     .student-hero > *,
     .provider-hero > *,
     .admin-hero > * {
-        @apply w-full;
+        @apply relative z-10 w-full;
     }
 
     @media (min-width: 1024px) {
@@ -83,11 +89,11 @@
     }
 
     .student-hero-icon {
-        @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-amber-200 shadow-sm ring-1 ring-slate-800/10;
+        @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-amber-300 text-slate-950 shadow-sm;
     }
 
     .student-card {
-        @apply rounded-lg border border-white/80 bg-white/95 shadow-[0_14px_42px_rgba(8,20,38,0.08)] backdrop-blur;
+        @apply rounded-lg border border-slate-200 bg-white shadow-sm;
     }
 
     .student-soft-card {
@@ -95,16 +101,11 @@
     }
 
     .student-visual-card {
-        @apply relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md;
-    }
-
-    .student-visual-card::after {
-        content: '';
-        @apply pointer-events-none absolute -right-8 -top-8 h-20 w-20 rounded-full bg-amber-100/60;
+        @apply relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md;
     }
 
     .student-icon-badge {
-        @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-950 text-amber-200;
+        @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-800;
     }
 
     .student-muted-panel {
@@ -128,7 +129,7 @@
     }
 
     .student-section-mark {
-        @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-950 text-amber-200 shadow-sm;
+        @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-800;
     }
 
     .student-stat-tile {
@@ -136,11 +137,6 @@
     }
 
     .student-action-card {
-        @apply relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md;
-    }
-
-    .student-action-card::before {
-        content: '';
-        @apply absolute inset-x-0 top-0 h-1 bg-slate-900;
+        @apply relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md;
     }
 }

@@ -351,33 +351,23 @@ onMounted(loadDocuments);
                         {{ statusMessage }}
                     </p>
 
-                    <section class="grid gap-3 md:grid-cols-3">
-                        <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                            <p class="text-2xl font-bold text-slate-950">
-                                {{ preparedDocuments.length }}
-                            </p>
-                            <p class="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-                                Prepared files
-                            </p>
-                        </div>
-                        <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                            <p class="text-2xl font-bold text-slate-950">
-                                {{ reusableDocumentCount }}
-                            </p>
-                            <p class="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-                                Reusable files
-                            </p>
+                    <section class="student-card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex flex-wrap items-center gap-x-7 gap-y-3">
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Prepared files</p>
+                                <p class="mt-1 text-lg font-bold text-slate-950">{{ preparedDocuments.length }}</p>
+                            </div>
+                            <div class="border-l border-slate-200 pl-7">
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Reusable files</p>
+                                <p class="mt-1 text-lg font-bold text-slate-950">{{ reusableDocumentCount }}</p>
+                            </div>
                         </div>
                         <a
                             href="/dashboard/scholarships"
-                            class="rounded-lg border border-slate-200 bg-slate-950 p-4 text-white shadow-sm transition hover:bg-slate-800"
+                            class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                         >
-                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-200">
-                                Recommended next action
-                            </p>
-                            <p class="mt-2 text-sm font-bold">
-                                Find programs that use your prepared files
-                            </p>
+                            Find matching programs
+                            <i class="fa-solid fa-arrow-right text-xs"></i>
                         </a>
                     </section>
 
