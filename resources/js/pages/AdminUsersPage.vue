@@ -183,11 +183,6 @@ function goToPage(page) {
     loadAdminData(page);
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 watch([search, selectedRole], () => {
     clearTimeout(searchTimer);
     statusMessage.value = '';
@@ -199,7 +194,7 @@ onMounted(loadAdminData);
 
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <AdminSidebar active="users" @logout="logout" />
+        <AdminSidebar active="users" />
 
         <section class="min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto w-full min-w-0 max-w-7xl">

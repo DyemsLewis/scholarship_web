@@ -14,6 +14,7 @@ use App\Models\ScholarshipFunnelEvent;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Services\DecisionSupportService;
+use App\Services\ScholarshipEligibilityService;
 use App\Support\AcademicRequirement;
 use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +27,10 @@ use Illuminate\View\View;
 
 class ApplicantDashboardController extends Controller
 {
+    public function __construct(private readonly ScholarshipEligibilityService $eligibilityService)
+    {
+    }
+
     public function index(Request $request): View|RedirectResponse
     {
         if ($redirect = $this->ensureApplicant($request)) {
@@ -181,7 +186,6 @@ class ApplicantDashboardController extends Controller
             'stats' => $this->statsPayload($request),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))->values(),
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
-            'notifications' => $this->notificationsPayload($request),
             'next_steps' => [
                 'Review available scholarship programs.',
                 'Prepare documents listed in each scholarship requirement.',
@@ -208,7 +212,6 @@ class ApplicantDashboardController extends Controller
             'stats' => $this->statsPayload($request),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))->values(),
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
-            'notifications' => $this->notificationsPayload($request),
         ]);
     }
 
@@ -225,7 +228,6 @@ class ApplicantDashboardController extends Controller
             'user' => $this->userPayload($request),
             'stats' => $this->statsPayload($request),
             'application' => $this->applicationPayload($application),
-            'notifications' => $this->notificationsPayload($request),
         ]);
     }
 
@@ -1014,58 +1016,17 @@ class ApplicantDashboardController extends Controller
 
     private function documentReadiness(ScholarshipApplication $application): array
     {
-        $requiredDocuments = $this->documentRequirements($application->scholarship);
-        $confirmedDocuments = collect($application->document_checklist ?? [])
-            ->map(fn (string $document) => trim($document))
-            ->filter()
-            ->values();
-        $requiredCount = count($requiredDocuments);
-        $confirmedRequiredCount = collect($requiredDocuments)
-            ->filter(fn (string $document) => $confirmedDocuments->contains($document))
-            ->count();
-        $uploadedDocuments = $application->documents
-            ->map(fn (ApplicationDocument $document) => $document->document_name)
-            ->values();
-        $uploadedRequiredCount = collect($requiredDocuments)
-            ->filter(fn (string $document) => $uploadedDocuments->contains($document))
-            ->count();
-        $acceptedRequiredCount = $application->documents
-            ->filter(fn (ApplicationDocument $document) => $document->status === 'accepted' && collect($requiredDocuments)->contains($document->document_name))
-            ->count();
-
-        return [
-            'required' => $requiredCount,
-            'confirmed' => $confirmedRequiredCount,
-            'percent' => $requiredCount === 0 ? 100 : (int) round(($confirmedRequiredCount / $requiredCount) * 100),
-            'uploaded' => $uploadedRequiredCount,
-            'uploaded_percent' => $requiredCount === 0 ? 100 : (int) round(($uploadedRequiredCount / $requiredCount) * 100),
-            'accepted' => $acceptedRequiredCount,
-            'accepted_percent' => $requiredCount === 0 ? 100 : (int) round(($acceptedRequiredCount / $requiredCount) * 100),
-            'missing' => collect($requiredDocuments)
-                ->reject(fn (string $document) => $confirmedDocuments->contains($document))
-                ->values()
-                ->all(),
-        ];
+        return $this->eligibilityService->applicationDocumentReadiness($application);
     }
 
     private function documentRequirements(?Scholarship $scholarship): array
     {
-        return $this->splitDocumentRequirements($scholarship?->requirements);
+        return $this->eligibilityService->documentRequirements($scholarship);
     }
 
     private function splitDocumentRequirements(?string $requirements): array
     {
-        if (! $requirements) {
-            return [];
-        }
-
-        $requirements = collect(preg_split('/\r\n|\r|\n|,/', $requirements))
-            ->map(fn (string $requirement) => trim($requirement))
-            ->filter()
-            ->values()
-            ->all();
-
-        return $this->hasOpenOption($requirements) ? [] : $requirements;
+        return $this->eligibilityService->splitDocumentRequirements($requirements);
     }
 
     private function documentLibraryOptions(Request $request): array
@@ -1104,42 +1065,7 @@ class ApplicantDashboardController extends Controller
 
     private function preparedDocumentReadiness(Scholarship $scholarship, ?User $user): array
     {
-        $requiredDocuments = $this->documentRequirements($scholarship);
-
-        if (! $user) {
-            return [
-                'required' => count($requiredDocuments),
-                'uploaded' => 0,
-                'percent' => $requiredDocuments === [] ? 100 : 0,
-                'required_documents' => $requiredDocuments,
-                'matched' => [],
-                'missing' => $requiredDocuments,
-            ];
-        }
-
-        $user->loadMissing('studentDocuments');
-        $preparedNames = $user->studentDocuments
-            ->map(fn (StudentDocument $document) => $document->document_name)
-            ->values();
-        $matched = collect($requiredDocuments)
-            ->filter(fn (string $requirement) => $preparedNames->contains($requirement))
-            ->values()
-            ->all();
-        $missing = collect($requiredDocuments)
-            ->reject(fn (string $requirement) => in_array($requirement, $matched, true))
-            ->values()
-            ->all();
-        $requiredCount = count($requiredDocuments);
-        $uploadedCount = count($matched);
-
-        return [
-            'required' => $requiredCount,
-            'uploaded' => $uploadedCount,
-            'percent' => $requiredCount === 0 ? 100 : (int) round(($uploadedCount / $requiredCount) * 100),
-            'required_documents' => $requiredDocuments,
-            'matched' => $matched,
-            'missing' => $missing,
-        ];
+        return $this->eligibilityService->preparedDocumentReadiness($scholarship, $user);
     }
 
     private function attachPreparedDocumentsToApplication(User $user, ScholarshipApplication $application, array $confirmedDocuments): void
@@ -1387,317 +1313,32 @@ class ApplicantDashboardController extends Controller
 
     private function eligibilityMatch(Scholarship $scholarship, ?User $user): array
     {
-        $profile = $user?->studentProfile;
-        $criteria = [];
-        $passed = 0;
-        $applicable = 0;
-
-        $addCriterion = function (string $key, string $label, string $status, ?string $studentValue, ?string $requirement, string $note, bool $counts = true) use (&$criteria, &$passed, &$applicable): void {
-            $criteria[] = [
-                'key' => $key,
-                'label' => $label,
-                'status' => $status,
-                'student_value' => $studentValue,
-                'requirement' => $requirement,
-                'note' => $note,
-            ];
-
-            if (! $counts) {
-                return;
-            }
-
-            $applicable++;
-
-            if ($status === 'pass') {
-                $passed++;
-            }
-        };
-
-        $academicMatch = AcademicRequirement::match($profile?->gwa, $profile?->grading_scale, $scholarship->minimum_gwa, $scholarship->minimum_grade_scale);
-        $addCriterion(
-            'academic',
-            $academicMatch['label'],
-            $academicMatch['status'],
-            $academicMatch['student_value'],
-            $academicMatch['requirement'],
-            $academicMatch['note'],
-            $academicMatch['counts'],
-        );
-
-        $educationLevelOptions = $this->splitOptions($scholarship->eligible_education_levels);
-        if ($this->hasOpenOption($educationLevelOptions)) {
-            $addCriterion('education_level', 'Education level', 'info', $profile?->education_level, implode(', ', $educationLevelOptions), 'This program is open to all education levels.', false);
-        } elseif ($educationLevelOptions !== []) {
-            $studentEducationLevel = $profile?->education_level;
-            $matchesEducationLevel = filled($studentEducationLevel) && $this->matchesAnyOption($studentEducationLevel, $educationLevelOptions);
-            $addCriterion(
-                'education_level',
-                'Education level',
-                filled($studentEducationLevel) ? ($matchesEducationLevel ? 'pass' : 'fail') : 'missing',
-                $studentEducationLevel,
-                implode(', ', $educationLevelOptions),
-                $matchesEducationLevel ? 'Your education level matches this program.' : 'Confirm if your education level is eligible.',
-            );
-        } else {
-            $addCriterion('education_level', 'Education level', 'info', $profile?->education_level, null, 'No education level restriction listed.', false);
-        }
-
-        $courseOptions = $this->splitOptions($scholarship->eligible_courses);
-        if ($this->hasOpenOption($courseOptions)) {
-            $addCriterion('course', 'Track / strand / course', 'info', $profile?->course_or_strand, implode(', ', $courseOptions), 'This program accepts any track, strand, or course.', false);
-        } elseif ($courseOptions !== []) {
-            $studentCourse = $profile?->course_or_strand;
-            $matchesCourse = filled($studentCourse) && $this->matchesAnyOption($studentCourse, $courseOptions);
-            $addCriterion(
-                'course',
-                'Track / strand / course',
-                filled($studentCourse) ? ($matchesCourse ? 'pass' : 'fail') : 'missing',
-                $studentCourse,
-                implode(', ', $courseOptions),
-                $matchesCourse ? 'Your track, strand, or course matches the listed target.' : 'Check if your grade-level track, strand, or course is accepted by the provider.',
-            );
-        } else {
-            $addCriterion('course', 'Track / strand / course', 'info', $profile?->course_or_strand, null, 'No track, strand, or course restriction listed.', false);
-        }
-
-        $schoolTypeOptions = $this->splitOptions($scholarship->eligible_school_types);
-        if ($this->hasOpenOption($schoolTypeOptions)) {
-            $addCriterion('school_type', 'School type', 'info', $profile?->school_type, implode(', ', $schoolTypeOptions), 'This program accepts any school type.', false);
-        } elseif ($schoolTypeOptions !== []) {
-            $studentSchoolType = $profile?->school_type;
-            $matchesSchoolType = filled($studentSchoolType) && $this->matchesAnyOption($studentSchoolType, $schoolTypeOptions);
-            $addCriterion(
-                'school_type',
-                'School type',
-                filled($studentSchoolType) ? ($matchesSchoolType ? 'pass' : 'fail') : 'missing',
-                $studentSchoolType,
-                implode(', ', $schoolTypeOptions),
-                $matchesSchoolType ? 'Your school type matches this program.' : 'Confirm if your school type is eligible.',
-            );
-        } else {
-            $addCriterion('school_type', 'School type', 'info', $profile?->school_type, null, 'No school type restriction listed.', false);
-        }
-
-        $yearOptions = $this->splitOptions($scholarship->eligible_year_levels);
-        if ($this->hasOpenOption($yearOptions)) {
-            $addCriterion('year_level', 'Grade / year level', 'info', $profile?->year_level, implode(', ', $yearOptions), 'This program accepts any grade or year level.', false);
-        } elseif ($yearOptions !== []) {
-            $studentYear = $profile?->year_level;
-            $matchesYear = filled($studentYear) && $this->matchesAnyOption($studentYear, $yearOptions);
-            $addCriterion(
-                'year_level',
-                'Grade / year level',
-                filled($studentYear) ? ($matchesYear ? 'pass' : 'fail') : 'missing',
-                $studentYear,
-                implode(', ', $yearOptions),
-                $matchesYear ? 'Your grade or year level matches this program.' : 'Confirm if your grade or year level is eligible.',
-            );
-        } else {
-            $addCriterion('year_level', 'Grade / year level', 'info', $profile?->year_level, null, 'No grade or year level restriction listed.', false);
-        }
-
-        $locationOptions = $this->splitOptions($scholarship->eligible_locations);
-        if ($this->hasOpenOption($locationOptions)) {
-            $addCriterion('location', 'Location', 'info', $profile?->region ?? $profile?->province ?? $profile?->city, implode(', ', $locationOptions), 'This program is open to all listed locations.', false);
-        } elseif ($locationOptions !== []) {
-            $studentLocation = collect([$profile?->barangay, $profile?->city, $profile?->province, $profile?->region, $profile?->address])->filter()->implode(', ');
-            $matchesLocation = filled($studentLocation) && $this->matchesAnyOption($studentLocation, $locationOptions);
-            $addCriterion(
-                'location',
-                'Location',
-                filled($studentLocation) ? ($matchesLocation ? 'pass' : 'fail') : 'missing',
-                $studentLocation ?: null,
-                implode(', ', $locationOptions),
-                $matchesLocation ? 'Your location matches the scholarship coverage.' : 'Your location may be outside the listed coverage.',
-            );
-        } else {
-            $addCriterion('location', 'Location', 'info', $profile?->region ?? $profile?->province ?? $profile?->city, null, 'No location restriction listed.', false);
-        }
-
-        if (filled($scholarship->income_requirement) && ! $this->isOpenOption($scholarship->income_requirement)) {
-            $income = $profile?->income_bracket;
-            $matchesIncome = filled($income) && $this->matchesAnyOption($income, [$scholarship->income_requirement]);
-            $addCriterion(
-                'income',
-                'Income bracket',
-                filled($income) ? ($matchesIncome ? 'pass' : 'fail') : 'missing',
-                $income,
-                $scholarship->income_requirement,
-                $matchesIncome ? 'Your income bracket matches the listed preference.' : 'Review the income requirement before applying.',
-            );
-        } else {
-            $addCriterion('income', 'Income bracket', 'info', $profile?->income_bracket, $scholarship->income_requirement, 'No income restriction listed.', false);
-        }
-
-        $documentReadiness = $this->preparedDocumentReadiness($scholarship, $user);
-        if ($documentReadiness['required'] > 0) {
-            $documentsReady = $documentReadiness['uploaded'] >= $documentReadiness['required'];
-            $addCriterion(
-                'documents',
-                'Prepared documents',
-                $documentsReady ? 'pass' : 'missing',
-                "{$documentReadiness['uploaded']} of {$documentReadiness['required']} uploaded",
-                implode(', ', $documentReadiness['required_documents']),
-                $documentsReady
-                    ? 'Your document library already covers this program requirement.'
-                    : 'Upload matching documents in Documents to improve readiness before applying.',
-            );
-        } else {
-            $addCriterion('documents', 'Prepared documents', 'info', null, null, 'No document requirements listed.', false);
-        }
-
-        $score = $applicable === 0 ? 100 : (int) round(($passed / $applicable) * 100);
-        $blockingCriteria = $this->applicationEligibilityBlockers(['criteria' => $criteria]);
-
-        return [
-            'score' => $score,
-            'passed' => $passed,
-            'applicable' => $applicable,
-            'is_eligible' => $blockingCriteria === [],
-            'blocking_criteria' => $blockingCriteria,
-            'label' => $score >= 80 ? 'Strong match' : ($score >= 50 ? 'Needs review' : 'Low match'),
-            'summary' => $applicable === 0
-                ? 'This scholarship has no structured matching rules yet.'
-                : "{$passed} of {$applicable} structured criteria match your profile.",
-            'criteria' => $criteria,
-        ];
+        return $this->eligibilityService->evaluate($scholarship, $user);
     }
 
     private function applicationEligibilityBlockers(array $eligibilityMatch): array
     {
-        return collect($eligibilityMatch['criteria'] ?? [])
-            ->filter(fn (array $criterion) => ($criterion['status'] ?? null) === 'fail' && ($criterion['key'] ?? null) !== 'documents')
-            ->map(fn (array $criterion) => [
-                'key' => $criterion['key'] ?? null,
-                'label' => $criterion['label'] ?? 'Eligibility requirement',
-                'student_value' => $criterion['student_value'] ?? null,
-                'requirement' => $criterion['requirement'] ?? null,
-                'note' => $criterion['note'] ?? null,
-            ])
-            ->values()
-            ->all();
+        return $this->eligibilityService->blockers($eligibilityMatch);
     }
 
     private function splitOptions(?string $value): array
     {
-        if (! $value) {
-            return [];
-        }
-
-        return collect(preg_split('/\r\n|\r|\n|,/', $value))
-            ->map(fn (string $option) => trim($option))
-            ->filter()
-            ->values()
-            ->all();
+        return $this->eligibilityService->splitOptions($value);
     }
 
     private function matchesAnyOption(string $value, array $options): bool
     {
-        $normalizedValue = str($value)->lower()->squish()->toString();
-
-        if ($this->hasOpenOption($options)) {
-            return true;
-        }
-
-        return collect($options)->contains(function (string $option) use ($normalizedValue) {
-            $normalizedOption = str($option)->lower()->squish()->toString();
-
-            return str_contains($normalizedValue, $normalizedOption) || str_contains($normalizedOption, $normalizedValue);
-        });
+        return $this->eligibilityService->matchesAnyOption($value, $options);
     }
 
     private function hasOpenOption(array $options): bool
     {
-        return collect($options)->contains(fn (string $option) => $this->isOpenOption($option));
+        return $this->eligibilityService->hasOpenOption($options);
     }
 
     private function isOpenOption(?string $option): bool
     {
-        if (! filled($option)) {
-            return false;
-        }
-
-        $normalized = strtolower((string) preg_replace('/\s+/', ' ', trim(str_replace(['.', ';', ':'], '', $option))));
-
-        return in_array($normalized, [
-            'any',
-            'all',
-            'none',
-            'n/a',
-            'na',
-            'not applicable',
-            'no preference',
-            'no restriction',
-            'no restrictions',
-            'open to all',
-            'all students',
-            'any student',
-            'all applicants',
-            'any applicant',
-            'all education levels',
-            'any education level',
-            'all levels',
-            'any level',
-            'all courses',
-            'any course',
-            'all strands',
-            'any strand',
-            'all tracks',
-            'any track',
-            'all grades',
-            'any grade',
-            'all years',
-            'any year',
-            'all school types',
-            'any school type',
-            'all locations',
-            'any location',
-            'all regions',
-            'any region',
-            'nationwide',
-            'philippines',
-            'the philippines',
-            'republic of the philippines',
-            'nationwide philippines',
-            'philippines nationwide',
-            'anywhere in the philippines',
-            'within the philippines',
-            'all over the philippines',
-            'all philippines',
-            'no income requirement',
-        ], true)
-            || str_starts_with($normalized, 'any ')
-            || str_starts_with($normalized, 'all ')
-            || str_contains($normalized, 'n/a')
-            || str_contains($normalized, 'open to all')
-            || str_contains($normalized, 'no restriction')
-            || str_contains($normalized, 'no preference')
-            || str_contains($normalized, 'not applicable')
-            || (str_contains($normalized, 'nationwide') && ! str_contains($normalized, 'not nationwide'))
-            || str_contains($normalized, 'anywhere in the philippines')
-            || str_contains($normalized, 'within the philippines')
-            || str_contains($normalized, 'all over the philippines');
-    }
-
-    private function notificationsPayload(Request $request): array
-    {
-        return PortalNotification::query()
-            ->where('user_id', $request->user()->id)
-            ->latest()
-            ->limit(5)
-            ->get()
-            ->map(fn (PortalNotification $notification) => [
-                'id' => $notification->id,
-                'type' => $notification->type,
-                'title' => $notification->title,
-                'message' => $notification->message,
-                'action_url' => $notification->action_url,
-                'is_read' => $notification->read_at !== null,
-                'read_at' => $notification->read_at?->format('M d, Y h:i A'),
-                'created_at' => $notification->created_at?->format('M d, Y h:i A'),
-            ])
-            ->values()
-            ->all();
+        return $this->eligibilityService->isOpenOption($option);
     }
 
     private function syncApplicantReminders(User $user): void

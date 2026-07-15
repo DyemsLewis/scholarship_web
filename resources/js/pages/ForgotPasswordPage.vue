@@ -44,7 +44,6 @@ async function submitForm() {
         description="Enter the email connected to your scholarship account and follow the reset link."
         switch-href="/login"
         switch-label="Login"
-        switch-text="Remember your password?"
         panel-badge="Secure Account Desk"
         panel-title="Keep account access recoverable"
         panel-text="Password reset keeps students, providers, and admins from getting locked out before important deadlines."

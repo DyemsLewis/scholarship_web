@@ -5,6 +5,7 @@ import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
+import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const isUploadingPrepared = ref(false);
@@ -65,12 +66,6 @@ const paginatedApplications = computed(() => paginateItems(applicationsWithRequi
 const reusableDocumentCount = computed(() => preparedDocuments.value
     .filter((document) => documentReuseCount(document) > 0)
     .length);
-
-function labelFromKey(value) {
-    return String(value ?? '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
 
 function documentRequirements(requirements) {
     if (!requirements) {
@@ -312,17 +307,12 @@ async function deletePreparedDocument(document) {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadDocuments);
 </script>
 
 <template>
     <main class="student-shell">
-        <ApplicantSidebar @logout="logout" />
+        <ApplicantSidebar />
 
         <section class="student-page">
             <div class="student-container">

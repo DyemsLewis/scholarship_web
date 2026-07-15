@@ -54,6 +54,7 @@ Route::middleware(['auth', 'admin'])
     ->name('admin.')
     ->group(function (): void {
         Route::get('/', [AdminController::class, 'index'])->name('index');
+        Route::get('/dashboard/data', [AdminController::class, 'dashboardData'])->name('dashboard.data');
         Route::get('/manage-users', [AdminController::class, 'manageUsers'])->name('manage-users');
         Route::get('/accounts/create', [AdminController::class, 'accountForm'])->name('accounts.create');
         Route::get('/accounts/{user}/edit', [AdminController::class, 'accountForm'])->name('accounts.edit');
@@ -62,7 +63,6 @@ Route::middleware(['auth', 'admin'])
         Route::get('/scholarships/{scholarship}/review', [AdminController::class, 'scholarshipReview'])->name('scholarships.review.show');
         Route::get('/scholarships/{scholarship}/review/data', [AdminController::class, 'scholarshipReviewData'])->name('scholarships.review.data');
         Route::get('/logs', [AdminController::class, 'logs'])->name('logs');
-        Route::get('/platform-analytics', [AdminController::class, 'platformAnalytics'])->name('platform-analytics');
         Route::get('/users', [AdminController::class, 'users'])->name('users');
         Route::post('/users', [AdminController::class, 'storeUser'])->name('users.store');
         Route::get('/users/{user}', [AdminController::class, 'showUser'])->name('users.show');
@@ -73,7 +73,6 @@ Route::middleware(['auth', 'admin'])
         Route::post('/users/{user}/verification-email', [AdminController::class, 'resendUserVerificationEmail'])->name('users.verification-email');
         Route::get('/profile/data', [AdminController::class, 'profileData'])->name('profile.data');
         Route::patch('/profile', [AdminController::class, 'updateProfile'])->name('profile.update');
-        Route::get('/analytics', [AdminController::class, 'analytics'])->name('analytics');
         Route::get('/reviews/data', [AdminController::class, 'reviewsData'])->name('reviews.data');
         Route::patch('/providers/{provider}/verification', [AdminController::class, 'updateProviderVerification'])->name('providers.verification');
         Route::patch('/scholarships/{scholarship}/review', [AdminController::class, 'updateScholarshipReview'])->name('scholarships.review');
@@ -88,6 +87,7 @@ Route::middleware(['auth', 'provider'])
     ->name('provider.')
     ->group(function (): void {
         Route::get('/', [ProviderController::class, 'index'])->name('index');
+        Route::get('/dashboard/data', [ProviderController::class, 'dashboardData'])->name('dashboard.data');
         Route::get('/programs', [ProviderController::class, 'programs'])->name('programs');
         Route::get('/exams', [ProviderController::class, 'exams'])->name('exams');
         Route::get('/exams/data', [ProviderController::class, 'examsData'])->name('exams.data');

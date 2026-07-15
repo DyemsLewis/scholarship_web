@@ -8,7 +8,6 @@ use App\Models\PortalNotification;
 use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
-use App\Models\ScholarshipBookmark;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Services\PasswordResetLinkService;
@@ -33,6 +32,62 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         return view('admin');
+    }
+
+    public function dashboardData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $today = now()->startOfDay();
+        $deadlineLimit = now()->addDays(30)->endOfDay();
+        $recentUsers = User::query()
+            ->with(['studentProfile', 'providerProfile', 'adminProfile'])
+            ->latest()
+            ->limit(4)
+            ->get(['id', 'email', 'username', 'role', 'created_at']);
+        $recentScholarships = Scholarship::query()
+            ->with('provider.providerProfile')
+            ->latest('updated_at')
+            ->limit(3)
+            ->get();
+
+        return response()->json([
+            'stats' => [
+                'pending_providers' => User::query()
+                    ->where('role', 'provider')
+                    ->whereHas('providerProfile', fn ($query) => $query->where('verification_status', 'pending'))
+                    ->count(),
+                'documents_pending_review' => ApplicationDocument::query()->where('status', 'pending')->count(),
+                'documents_needing_replacement' => ApplicationDocument::query()->where('status', 'needs_replacement')->count(),
+                'upcoming_deadlines' => Scholarship::query()
+                    ->where('status', 'published')
+                    ->whereDate('deadline', '>=', $today->toDateString())
+                    ->whereDate('deadline', '<=', $deadlineLimit->toDateString())
+                    ->count(),
+                'expired_published' => Scholarship::query()
+                    ->where('status', 'published')
+                    ->whereDate('deadline', '<', $today->toDateString())
+                    ->count(),
+                'needs_review_applications' => ScholarshipApplication::query()
+                    ->where('dss_recommendation', 'needs_review')
+                    ->count(),
+            ],
+            'recent_users' => $recentUsers->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'created_at' => $user->created_at?->format('M d, Y'),
+            ])->values(),
+            'recent_scholarships' => $recentScholarships->map(fn (Scholarship $scholarship) => [
+                'id' => $scholarship->id,
+                'title' => $scholarship->title,
+                'provider' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
+                'image_url' => $this->scholarshipImageUrl($scholarship),
+                'status' => $scholarship->status,
+                'updated_at' => $scholarship->updated_at?->format('M d, Y'),
+            ])->values(),
+        ]);
     }
 
     public function manageUsers(Request $request): View|RedirectResponse
@@ -101,17 +156,6 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         return view('admin-logs');
-    }
-
-    public function platformAnalytics(Request $request): View|RedirectResponse
-    {
-        if (! $request->user()) {
-            return redirect()->route('login');
-        }
-
-        abort_unless($request->user()->isAdmin(), 403);
-
-        return view('admin-platform-analytics');
     }
 
     public function users(Request $request): JsonResponse
@@ -259,207 +303,6 @@ class AdminController extends Controller
         return response()->json([
             'message' => 'Admin profile updated successfully.',
             'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
-        ]);
-    }
-
-    public function analytics(Request $request): JsonResponse
-    {
-        abort_unless($request->user()?->isAdmin(), 403);
-
-        $users = User::query()
-            ->with(['studentProfile', 'providerProfile', 'adminProfile'])
-            ->latest()
-            ->get(['id', 'email', 'username', 'role', 'created_at']);
-        $scholarships = Scholarship::query()
-            ->with('provider.providerProfile')
-            ->withCount('bookmarks')
-            ->latest('updated_at')
-            ->get(['id', 'title', 'provider_id', 'image_path', 'category', 'status', 'deadline', 'created_at', 'updated_at', 'location_name', 'location_address', 'eligible_locations']);
-        $applications = ScholarshipApplication::query()
-            ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
-            ->latest('submitted_at')
-            ->get();
-        $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
-        $applicationStatuses = $applications
-            ->groupBy('status')
-            ->map(fn ($items) => $items->count())
-            ->all();
-        $dssRecommendations = $applications
-            ->groupBy('dss_recommendation')
-            ->map(fn ($items) => $items->count());
-        $decisionReasons = $applications
-            ->filter(fn (ScholarshipApplication $application) => filled($application->decision_reason))
-            ->groupBy('decision_reason')
-            ->map(fn ($items) => $items->count());
-        $documentStatuses = $applications
-            ->flatMap(fn (ScholarshipApplication $application) => $application->documents)
-            ->groupBy('status')
-            ->map(fn ($items) => $items->count());
-        $scoredApplications = $applications->filter(fn (ScholarshipApplication $application) => $application->eligibility_score !== null);
-        $now = now();
-        $upcomingDeadlineLimit = now()->addDays(30);
-
-        return response()->json([
-            'stats' => [
-                'total_users' => $users->count(),
-                'applicants' => $users->where('role', 'applicant')->count(),
-                'providers' => $users->where('role', 'provider')->count(),
-                'admins' => $users->where('role', 'admin')->count(),
-                'recent_signups' => $users->where('created_at', '>=', now()->subDays(7))->count(),
-                'scholarships' => $scholarships->count(),
-                'published_scholarships' => $scholarships->where('status', 'published')->count(),
-                'draft_scholarships' => $scholarships->where('status', 'draft')->count(),
-                'applications' => $applications->count(),
-                'recent_applications' => $applications->where('submitted_at', '>=', now()->subDays(7))->count(),
-                'average_match_score' => $scoredApplications->isEmpty() ? 0 : round((float) $scoredApplications->avg('eligibility_score'), 1),
-                'average_dss_score' => $applications->isEmpty() ? 0 : round((float) $applications->avg('dss_score'), 1),
-                'highly_recommended_applications' => $dssRecommendations['highly_recommended'] ?? 0,
-                'needs_review_applications' => $dssRecommendations['needs_review'] ?? 0,
-                'saved_scholarships' => ScholarshipBookmark::query()->count(),
-                'documents_pending_review' => $documentStatuses['pending'] ?? 0,
-                'documents_needing_replacement' => $documentStatuses['needs_replacement'] ?? 0,
-                'pending_providers' => $users
-                    ->where('role', 'provider')
-                    ->filter(fn (User $user) => $user->providerProfile?->verification_status === 'pending')
-                    ->count(),
-                'upcoming_deadlines' => $scholarships
-                    ->where('status', 'published')
-                    ->filter(fn (Scholarship $scholarship) => $scholarship->deadline && $scholarship->deadline->between($now, $upcomingDeadlineLimit))
-                    ->count(),
-                'expired_published' => $scholarships
-                    ->where('status', 'published')
-                    ->filter(fn (Scholarship $scholarship) => $scholarship->deadline && $scholarship->deadline->isPast())
-                    ->count(),
-            ],
-            'application_statuses' => [
-                'submitted' => $applicationStatuses['submitted'] ?? 0,
-                'under_review' => $applicationStatuses['under_review'] ?? 0,
-                'qualified' => $applicationStatuses['qualified'] ?? 0,
-                'approved' => $applicationStatuses['approved'] ?? 0,
-                'rejected' => $applicationStatuses['rejected'] ?? 0,
-            ],
-            'document_statuses' => [
-                'pending' => $documentStatuses['pending'] ?? 0,
-                'accepted' => $documentStatuses['accepted'] ?? 0,
-                'rejected' => $documentStatuses['rejected'] ?? 0,
-                'needs_replacement' => $documentStatuses['needs_replacement'] ?? 0,
-            ],
-            'dss_recommendations' => [
-                'highly_recommended' => $dssRecommendations['highly_recommended'] ?? 0,
-                'recommended' => $dssRecommendations['recommended'] ?? 0,
-                'needs_review' => $dssRecommendations['needs_review'] ?? 0,
-                'low_priority' => $dssRecommendations['low_priority'] ?? 0,
-                'not_recommended' => $dssRecommendations['not_recommended'] ?? 0,
-            ],
-            'decision_reasons' => $decisionReasons
-                ->map(fn (int $total, string $reason) => [
-                    'reason' => $reason,
-                    'label' => $this->labelFromKey($reason),
-                    'total' => $total,
-                ])
-                ->values(),
-            'deadline_watch' => $scholarships
-                ->where('status', 'published')
-                ->filter(fn (Scholarship $scholarship) => $scholarship->deadline)
-                ->sortBy('deadline')
-                ->take(6)
-                ->map(fn (Scholarship $scholarship) => [
-                    'id' => $scholarship->id,
-                    'title' => $scholarship->title,
-                    'deadline' => $scholarship->deadline?->format('M d, Y'),
-                    'days_left' => $scholarship->deadline ? now()->startOfDay()->diffInDays($scholarship->deadline->startOfDay(), false) : null,
-                ])
-                ->values(),
-            'recent_users' => $users->take(5)->map(fn (User $user) => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
-                'created_at' => $user->created_at?->format('M d, Y'),
-            ])->values(),
-            'recent_scholarships' => $scholarships->take(3)->map(fn (Scholarship $scholarship) => [
-                'id' => $scholarship->id,
-                'title' => $scholarship->title,
-                'provider' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
-                'image_url' => $this->scholarshipImageUrl($scholarship),
-                'status' => $scholarship->status,
-                'updated_at' => $scholarship->updated_at?->format('M d, Y'),
-            ])->values(),
-            'recent_applications_list' => $applications->take(5)->map(fn (ScholarshipApplication $application) => [
-                'id' => $application->id,
-                'applicant' => $application->applicant?->name,
-                'scholarship_id' => $application->scholarship?->id,
-                'scholarship' => $application->scholarship?->title,
-                'scholarship_image_url' => $application->scholarship
-                    ? $this->scholarshipImageUrl($application->scholarship)
-                    : asset('uploads/scholarship-default.jpg'),
-                'status' => $application->status,
-                'dss_score' => $application->dss_score,
-                'dss_recommendation' => $application->dss_recommendation,
-                'dss_explanation' => app(DecisionSupportService::class)->explainApplication($application),
-                'status_progress' => app(DecisionSupportService::class)->statusProgress($application),
-                'eligibility_score' => $application->eligibility_score,
-                'rubric_total_score' => $application->rubric_total_score,
-                'decision_reason' => $application->decision_reason,
-                'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
-            ])->values(),
-            'monthly_applications' => collect(range(5, 0))
-                ->map(function (int $monthsAgo) use ($applications) {
-                    $month = now()->subMonths($monthsAgo);
-
-                    return [
-                        'label' => $month->format('M Y'),
-                        'total' => $applications
-                            ->filter(fn (ScholarshipApplication $application) => $application->submitted_at?->format('Y-m') === $month->format('Y-m'))
-                            ->count(),
-                    ];
-                })
-                ->values(),
-            'provider_performance' => $users
-                ->where('role', 'provider')
-                ->map(function (User $provider) use ($scholarships, $applications) {
-                    $providerScholarships = $scholarships->where('provider_id', $provider->id);
-                    $providerApplications = $applications->filter(fn (ScholarshipApplication $application) => $application->scholarship?->provider_id === $provider->id);
-
-                    return [
-                        'id' => $provider->id,
-                        'name' => $provider->provider_name ?? $provider->name,
-                        'status' => $provider->providerProfile?->verification_status ?? 'pending',
-                        'programs' => $providerScholarships->count(),
-                        'published_programs' => $providerScholarships->where('status', 'published')->count(),
-                        'applications' => $providerApplications->count(),
-                        'approved' => $providerApplications->where('status', 'approved')->count(),
-                        'average_dss_score' => round((float) $providerApplications->avg('dss_score'), 1),
-                    ];
-                })
-                ->sortByDesc('applications')
-                ->values(),
-            'coverage_summary' => $scholarships
-                ->where('status', 'published')
-                ->groupBy(fn (Scholarship $scholarship) => $scholarship->location_name ?: $scholarship->eligible_locations ?: $scholarship->location_address ?: 'Unspecified')
-                ->map(function ($items, string $location) use ($applications) {
-                    $scholarshipIds = $items->pluck('id');
-
-                    return [
-                        'location' => $location,
-                        'programs' => $items->count(),
-                        'saved_count' => $items->sum(fn (Scholarship $scholarship) => $scholarship->bookmarks_count ?? 0),
-                        'applications' => $applications->whereIn('scholarship_id', $scholarshipIds)->count(),
-                    ];
-                })
-                ->sortByDesc('programs')
-                ->values(),
-            'dss_audit' => [
-                'average_score' => $applications->isEmpty() ? 0 : round((float) $applications->avg('dss_score'), 1),
-                'high_recommendations' => $dssRecommendations['highly_recommended'] ?? 0,
-                'needs_review' => $dssRecommendations['needs_review'] ?? 0,
-                'not_recommended' => $dssRecommendations['not_recommended'] ?? 0,
-                'provider_decisions' => [
-                    'approved' => $applicationStatuses['approved'] ?? 0,
-                    'rejected' => $applicationStatuses['rejected'] ?? 0,
-                    'under_review' => $applicationStatuses['under_review'] ?? 0,
-                ],
-            ],
         ]);
     }
 

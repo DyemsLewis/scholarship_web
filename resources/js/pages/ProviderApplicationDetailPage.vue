@@ -5,6 +5,7 @@ import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { decisionReasonOptions, negativeDecisionStatuses } from '../support/applicationDecisionReasons';
+import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
@@ -190,9 +191,7 @@ function labelFromKey(value) {
         return customStatusLabels[value];
     }
 
-    return String(value ?? '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    return formatKeyLabel(value);
 }
 
 function applicantAcademicLabel(applicant) {
@@ -203,14 +202,6 @@ function applicantAcademicLabel(applicant) {
     return applicant.grading_scale === 'grade_point'
         ? `${applicant.gwa} GWA/GPA`
         : `${applicant.gwa}%`;
-}
-
-function formatFileSize(size) {
-    if (!size) {
-        return '0 KB';
-    }
-
-    return `${Math.max(1, Math.round(Number(size) / 1024))} KB`;
 }
 
 function applyApplication(payload) {
@@ -513,17 +504,12 @@ async function updateDocumentStatus(document) {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadApplication);
 </script>
 
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
-        <ProviderSidebar @logout="logout" />
+        <ProviderSidebar />
 
         <ConfirmationDialog
             v-bind="confirmation"

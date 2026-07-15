@@ -6,14 +6,8 @@ import ProviderSidebar from '../components/ProviderSidebar.vue';
 const isLoading = ref(true);
 const errorMessage = ref('');
 const user = ref(null);
-const stats = ref({
-    scholarships: 0,
-    applications: 0,
-    drafts: 0,
-});
 const scholarships = ref([]);
 const reviewQueue = ref([]);
-const notifications = ref([]);
 
 const recentPrograms = computed(() => scholarships.value.slice(0, 3));
 const programHealthSignals = computed(() => {
@@ -122,13 +116,11 @@ async function loadProviderData() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/provider/profile/data');
+        const response = await window.axios.get('/provider/dashboard/data');
 
         user.value = response.data.user;
-        stats.value = response.data.stats;
         scholarships.value = response.data.scholarships;
         reviewQueue.value = response.data.review_queue ?? [];
-        notifications.value = response.data.notifications ?? [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider dashboard.';
     } finally {
@@ -136,17 +128,12 @@ async function loadProviderData() {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadProviderData);
 </script>
 
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
-        <ProviderSidebar @logout="logout" />
+        <ProviderSidebar />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-6xl">
@@ -244,49 +231,6 @@ onMounted(loadProviderData);
                                     <span>{{ application.pending_documents }} pending file{{ application.pending_documents === 1 ? '' : 's' }}</span>
                                     <span>{{ application.submitted_at }}</span>
                                 </div>
-                            </a>
-                        </div>
-                    </section>
-
-                    <section v-if="notifications.length" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Notifications
-                                </p>
-                                <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                    Recent provider updates
-                                </h3>
-                            </div>
-                            <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                                {{ notifications.filter((item) => !item.is_read).length }} unread
-                            </span>
-                        </div>
-
-                        <div class="divide-y divide-slate-200">
-                            <a
-                                v-for="notification in notifications.slice(0, 4)"
-                                :key="notification.id"
-                                :href="notification.action_url || '/provider/applications'"
-                                class="block px-5 py-3.5 transition hover:bg-slate-50"
-                            >
-                                <div class="flex items-start justify-between gap-3">
-                                    <p class="font-bold text-slate-950">
-                                        {{ notification.title }}
-                                    </p>
-                                    <span
-                                        v-if="!notification.is_read"
-                                        class="rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-800"
-                                    >
-                                        New
-                                    </span>
-                                </div>
-                                <p class="mt-1 line-clamp-2 text-sm leading-5 text-slate-600">
-                                    {{ notification.message }}
-                                </p>
-                                <p class="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                                    {{ notification.created_at }}
-                                </p>
                             </a>
                         </div>
                     </section>

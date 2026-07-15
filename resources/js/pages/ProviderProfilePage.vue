@@ -5,6 +5,7 @@ import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import { formatFileSize } from '../support/display';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -104,14 +105,6 @@ function verificationClass(status) {
 function documentTypeLabel(type) {
     return verificationDocumentOptions.find((option) => option.value === type)?.label
         ?? String(type ?? 'Document').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatFileSize(size) {
-    if (!size) {
-        return '0 KB';
-    }
-
-    return `${Math.max(1, Math.round(Number(size) / 1024))} KB`;
 }
 
 function handleVerificationFile(event) {
@@ -219,17 +212,12 @@ async function saveProviderProfile() {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadProviderProfile);
 </script>
 
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
-        <ProviderSidebar @logout="logout" />
+        <ProviderSidebar />
 
         <ConfirmationDialog
             v-bind="confirmation"

@@ -1088,11 +1088,6 @@ function handleBeforeUnload(event) {
     event.returnValue = '';
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(() => {
     window.addEventListener('beforeunload', handleBeforeUnload);
     loadProfile();
@@ -1111,7 +1106,7 @@ watch(() => form.value.grading_scale, (scale) => {
 
 <template>
     <main class="student-shell">
-        <ApplicantSidebar @logout="logout" />
+        <ApplicantSidebar />
 
         <section class="student-page">
             <div class="student-container">

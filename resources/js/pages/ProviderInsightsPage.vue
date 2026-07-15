@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import { formatFileSize, labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -112,20 +113,6 @@ function documentPriorityClass(document) {
     return 'bg-slate-100 text-slate-700';
 }
 
-function labelFromKey(value) {
-    return String(value ?? '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatFileSize(size) {
-    if (!size) {
-        return '0 KB';
-    }
-
-    return `${Math.max(1, Math.round(Number(size) / 1024))} KB`;
-}
-
 async function loadInsights() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -173,17 +160,12 @@ async function updateDocumentStatus(document) {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadInsights);
 </script>
 
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
-        <ProviderSidebar @logout="logout" />
+        <ProviderSidebar />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">

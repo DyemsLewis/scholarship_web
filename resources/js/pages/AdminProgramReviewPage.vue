@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import { labelFromKey } from '../support/display';
 
 const appElement = document.getElementById('app');
 const scholarshipId = appElement?.dataset.scholarshipId;
@@ -214,12 +215,6 @@ function formatAmount(amount) {
     }).format(Number(amount));
 }
 
-function labelFromKey(value) {
-    return String(value ?? '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 function optionItems(value) {
     return splitItems(value).map(labelFromKey);
 }
@@ -349,17 +344,12 @@ async function updateReview() {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadScholarship);
 </script>
 
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
-        <AdminSidebar active="reviews" @logout="logout" />
+        <AdminSidebar active="reviews" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">

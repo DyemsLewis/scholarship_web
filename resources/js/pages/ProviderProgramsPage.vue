@@ -5,6 +5,7 @@ import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -70,12 +71,6 @@ function statusClass(status) {
     }
 
     return 'bg-amber-100 text-amber-800';
-}
-
-function labelFromKey(value) {
-    return String(value ?? '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function targetApplicantLabel(scholarship) {
@@ -172,17 +167,12 @@ async function duplicateProgram(scholarship) {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadProviderData);
 </script>
 
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
-        <ProviderSidebar @logout="logout" />
+        <ProviderSidebar />
 
         <ConfirmationDialog
             v-bind="confirmation"

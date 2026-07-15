@@ -5,7 +5,6 @@ import EmailVerificationReminder from './EmailVerificationReminder.vue';
 import NotificationBell from './NotificationBell.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
-const emit = defineEmits(['logout']);
 const currentPath = window.location.pathname.replace(/\/$/, '') || '/dashboard';
 const isMenuOpen = ref(false);
 const {
@@ -45,9 +44,12 @@ async function requestLogout() {
         tone: 'danger',
     });
 
-    if (confirmed) {
-        emit('logout');
+    if (!confirmed) {
+        return;
     }
+
+    await window.axios.post('/logout');
+    window.location.href = '/';
 }
 </script>
 

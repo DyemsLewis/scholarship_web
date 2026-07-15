@@ -55,7 +55,7 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertJsonPath('scholarship.status', 'published');
 
         $this->actingAs($admin)
-            ->getJson('/admin/analytics')
+            ->getJson('/admin/dashboard/data')
             ->assertOk()
             ->assertJsonPath('recent_scholarships.0.id', $scholarshipId);
 
@@ -86,7 +86,7 @@ class DemoReadinessWorkflowTest extends TestCase
         ]);
 
         $this->actingAs($provider)
-            ->getJson('/provider/profile/data')
+            ->getJson('/provider/dashboard/data')
             ->assertOk()
             ->assertJsonPath('review_queue.0.id', $applicationId);
 

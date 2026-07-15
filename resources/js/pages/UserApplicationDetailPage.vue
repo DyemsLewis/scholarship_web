@@ -5,6 +5,7 @@ import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
+import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
@@ -200,9 +201,7 @@ function labelFromKey(value) {
         return labels[value];
     }
 
-    return String(value ?? '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    return formatKeyLabel(value);
 }
 
 function hasCoordinates(latitude, longitude) {
@@ -273,14 +272,6 @@ function documentRequirements(requirements) {
         .split(/\r?\n|,/)
         .map((requirement) => requirement.trim())
         .filter(Boolean);
-}
-
-function formatFileSize(size) {
-    if (!size) {
-        return '0 KB';
-    }
-
-    return `${Math.max(1, Math.round(Number(size) / 1024))} KB`;
 }
 
 function criterionImpact(criterion) {
@@ -403,17 +394,12 @@ async function deleteDocument(document) {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadApplication);
 </script>
 
 <template>
     <main class="student-shell">
-        <ApplicantSidebar @logout="logout" />
+        <ApplicantSidebar />
 
         <section class="student-page">
             <div class="student-container">

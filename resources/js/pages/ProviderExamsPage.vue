@@ -4,6 +4,7 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -52,12 +53,6 @@ function applyAssessment(value) {
         instructions: value.instructions ?? '',
         isActive: value.status === 'active',
     };
-}
-
-function labelFromKey(value) {
-    return String(value ?? '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 async function loadAssessments() {
@@ -122,17 +117,12 @@ async function saveAssessment() {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadAssessments);
 </script>
 
 <template>
     <main class="min-h-screen bg-slate-100 text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
-        <ProviderSidebar @logout="logout" />
+        <ProviderSidebar />
 
         <ConfirmationDialog
             v-bind="confirmation"

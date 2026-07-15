@@ -1,13 +1,4 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="csrf-token" content="{{ csrf_token() }}">
-        <title>Scholarship Provider Portal</title>
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
-    </head>
-    <body>
-        <div id="app" data-page="provider"></div>
-    </body>
-</html>
+@extends('layouts.app')
+
+@section('title', 'Scholarship Provider Portal')
+@section('page', 'provider')

@@ -1,34 +1,5 @@
 import './bootstrap';
 import { createApp } from 'vue';
-import AdminAccountFormPage from './pages/AdminAccountFormPage.vue';
-import AdminPage from './pages/AdminPage.vue';
-import AdminLogsPage from './pages/AdminLogsPage.vue';
-import AdminAnalyticsPage from './pages/AdminAnalyticsPage.vue';
-import AdminProfilePage from './pages/AdminProfilePage.vue';
-import AdminProgramReviewPage from './pages/AdminProgramReviewPage.vue';
-import AdminReviewsPage from './pages/AdminReviewsPage.vue';
-import AdminUsersPage from './pages/AdminUsersPage.vue';
-import AccountSetupPage from './pages/AccountSetupPage.vue';
-import ForgotPasswordPage from './pages/ForgotPasswordPage.vue';
-import LandingPage from './pages/LandingPage.vue';
-import LoginPage from './pages/LoginPage.vue';
-import ProviderApplicationDetailPage from './pages/ProviderApplicationDetailPage.vue';
-import ProviderApplicationsPage from './pages/ProviderApplicationsPage.vue';
-import ProviderExamsPage from './pages/ProviderExamsPage.vue';
-import ProviderInsightsPage from './pages/ProviderInsightsPage.vue';
-import ProviderPage from './pages/ProviderPage.vue';
-import ProviderProgramFormPage from './pages/ProviderProgramFormPage.vue';
-import ProviderProfilePage from './pages/ProviderProfilePage.vue';
-import ProviderProgramsPage from './pages/ProviderProgramsPage.vue';
-import RegisterPage from './pages/RegisterPage.vue';
-import ResetPasswordPage from './pages/ResetPasswordPage.vue';
-import UserApplicationDetailPage from './pages/UserApplicationDetailPage.vue';
-import UserApplicationsPage from './pages/UserApplicationsPage.vue';
-import UserDashboardPage from './pages/UserDashboardPage.vue';
-import UserDocumentsPage from './pages/UserDocumentsPage.vue';
-import UserProfilePage from './pages/UserProfilePage.vue';
-import UserScholarshipDetailPage from './pages/UserScholarshipDetailPage.vue';
-import UserScholarshipsPage from './pages/UserScholarshipsPage.vue';
 
 function loadIconCdn() {
     if (document.querySelector('link[data-icon-cdn="fontawesome"]')) {
@@ -46,42 +17,43 @@ function loadIconCdn() {
 
 const appElement = document.getElementById('app');
 const pages = {
-    accountSetup: AccountSetupPage,
-    admin: AdminPage,
-    adminAccountForm: AdminAccountFormPage,
-    adminAnalytics: AdminAnalyticsPage,
-    adminLogs: AdminLogsPage,
-    adminProfile: AdminProfilePage,
-    adminProgramReview: AdminProgramReviewPage,
-    adminReviews: AdminReviewsPage,
-    adminUsers: AdminUsersPage,
-    dashboard: UserDashboardPage,
-    dashboardApplicationDetail: UserApplicationDetailPage,
-    dashboardApplications: UserApplicationsPage,
-    dashboardDocuments: UserDocumentsPage,
-    dashboardProfile: UserProfilePage,
-    dashboardScholarshipDetail: UserScholarshipDetailPage,
-    dashboardScholarships: UserScholarshipsPage,
-    forgotPassword: ForgotPasswordPage,
-    landing: LandingPage,
-    login: LoginPage,
-    provider: ProviderPage,
-    providerApplicationDetail: ProviderApplicationDetailPage,
-    providerApplications: ProviderApplicationsPage,
-    providerExams: ProviderExamsPage,
-    providerInsights: ProviderInsightsPage,
-    providerProgramForm: ProviderProgramFormPage,
-    providerProfile: ProviderProfilePage,
-    providerPrograms: ProviderProgramsPage,
-    register: RegisterPage,
-    resetPassword: ResetPasswordPage,
+    accountSetup: () => import('./pages/AccountSetupPage.vue'),
+    admin: () => import('./pages/AdminPage.vue'),
+    adminAccountForm: () => import('./pages/AdminAccountFormPage.vue'),
+    adminLogs: () => import('./pages/AdminLogsPage.vue'),
+    adminProfile: () => import('./pages/AdminProfilePage.vue'),
+    adminProgramReview: () => import('./pages/AdminProgramReviewPage.vue'),
+    adminReviews: () => import('./pages/AdminReviewsPage.vue'),
+    adminUsers: () => import('./pages/AdminUsersPage.vue'),
+    dashboard: () => import('./pages/UserDashboardPage.vue'),
+    dashboardApplicationDetail: () => import('./pages/UserApplicationDetailPage.vue'),
+    dashboardApplications: () => import('./pages/UserApplicationsPage.vue'),
+    dashboardDocuments: () => import('./pages/UserDocumentsPage.vue'),
+    dashboardProfile: () => import('./pages/UserProfilePage.vue'),
+    dashboardScholarshipDetail: () => import('./pages/UserScholarshipDetailPage.vue'),
+    dashboardScholarships: () => import('./pages/UserScholarshipsPage.vue'),
+    forgotPassword: () => import('./pages/ForgotPasswordPage.vue'),
+    landing: () => import('./pages/LandingPage.vue'),
+    login: () => import('./pages/LoginPage.vue'),
+    provider: () => import('./pages/ProviderPage.vue'),
+    providerApplicationDetail: () => import('./pages/ProviderApplicationDetailPage.vue'),
+    providerApplications: () => import('./pages/ProviderApplicationsPage.vue'),
+    providerExams: () => import('./pages/ProviderExamsPage.vue'),
+    providerInsights: () => import('./pages/ProviderInsightsPage.vue'),
+    providerProgramForm: () => import('./pages/ProviderProgramFormPage.vue'),
+    providerProfile: () => import('./pages/ProviderProfilePage.vue'),
+    providerPrograms: () => import('./pages/ProviderProgramsPage.vue'),
+    register: () => import('./pages/RegisterPage.vue'),
+    resetPassword: () => import('./pages/ResetPasswordPage.vue'),
 };
 
 if (appElement) {
     loadIconCdn();
 
     const page = appElement.dataset.page ?? 'landing';
-    const component = pages[page] ?? LandingPage;
+    const loadPage = pages[page] ?? pages.landing;
 
-    createApp(component).mount(appElement);
+    loadPage().then(({ default: component }) => {
+        createApp(component).mount(appElement);
+    });
 }

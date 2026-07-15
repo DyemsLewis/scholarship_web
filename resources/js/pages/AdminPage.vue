@@ -47,8 +47,8 @@ const platformSignals = computed(() => [
         icon: 'fa-solid fa-calendar-day',
         tone: (stats.value.expired_published || 0) > 0 || (stats.value.upcoming_deadlines || 0) > 0 ? 'warn' : 'good',
         detail: `${stats.value.upcoming_deadlines || 0} upcoming deadline${(stats.value.upcoming_deadlines || 0) === 1 ? '' : 's'}, ${stats.value.expired_published || 0} expired published program${(stats.value.expired_published || 0) === 1 ? '' : 's'}.`,
-        href: '/admin/platform-analytics',
-        action: 'View analytics',
+        href: '/admin/reviews',
+        action: 'Review programs',
     },
     {
         label: 'DSS review load',
@@ -109,7 +109,7 @@ async function loadAdminData() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/admin/analytics');
+        const response = await window.axios.get('/admin/dashboard/data');
 
         stats.value = response.data.stats;
         users.value = response.data.recent_users;
@@ -121,17 +121,12 @@ async function loadAdminData() {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadAdminData);
 </script>
 
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
-        <AdminSidebar active="dashboard" @logout="logout" />
+        <AdminSidebar active="dashboard" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-6xl">

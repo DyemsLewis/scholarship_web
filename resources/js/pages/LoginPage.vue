@@ -119,7 +119,6 @@ onBeforeUnmount(() => {
         description="Sign in to review your application progress, upload supporting documents, and keep track of award updates."
         switch-href="/register"
         switch-label="Register"
-        switch-text="Need a student profile?"
         panel-badge="Merit and Grants Office"
         panel-title="One place for your application requirements"
         panel-text="The scholarship portal keeps your academic profile, contact information, and review updates together in a secure student workspace."

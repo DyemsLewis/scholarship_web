@@ -4,6 +4,7 @@ import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import { labelFromKey } from '../support/display';
 
 const appElement = document.getElementById('app');
 const scholarshipId = appElement?.dataset.scholarshipId;
@@ -198,12 +199,6 @@ function providerTypeLabel(type) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function labelFromKey(value) {
-    return String(value ?? '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 function applicationModeLabel(value) {
     return applicationModeOptions.find((option) => option.value === value)?.label ?? labelFromKey(value || 'not_listed');
 }
@@ -349,17 +344,12 @@ async function toggleSave() {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadScholarship);
 </script>
 
 <template>
     <main class="student-shell">
-        <ApplicantSidebar @logout="logout" />
+        <ApplicantSidebar />
 
         <section class="student-page">
             <div class="student-container">

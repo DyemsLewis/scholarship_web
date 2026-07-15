@@ -240,7 +240,6 @@ onBeforeUnmount(() => {
         :description="shellCopy.description"
         switch-href="/login"
         switch-label="Login"
-        switch-text="Already have a scholarship profile?"
         :panel-badge="shellCopy.panelBadge"
         :panel-title="shellCopy.panelTitle"
         :panel-text="shellCopy.panelText"

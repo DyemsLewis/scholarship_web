@@ -23,10 +23,6 @@ defineProps({
         type: String,
         required: true,
     },
-    switchText: {
-        type: String,
-        required: true,
-    },
     panelBadge: {
         type: String,
         default: 'Student Funding Desk',
@@ -140,12 +136,6 @@ defineProps({
                             <slot />
                         </div>
 
-                        <div class="mt-5 text-sm text-slate-500">
-                            <span>{{ switchText }}</span>
-                            <a :href="switchHref" class="ml-1 font-semibold text-slate-950 transition hover:text-amber-700">
-                                {{ switchLabel }}
-                            </a>
-                        </div>
                     </div>
                 </section>
             </div>

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import { formatFileSize } from '../support/display';
 
 const isLoading = ref(true);
 const updatingId = ref(null);
@@ -257,14 +258,6 @@ function statusLabel(status) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatFileSize(size) {
-    if (!size) {
-        return '0 KB';
-    }
-
-    return `${Math.max(1, Math.round(Number(size) / 1024))} KB`;
-}
-
 function documentTypeLabel(type) {
     return String(type ?? 'Document')
         .replace(/_/g, ' ')
@@ -439,17 +432,12 @@ async function updateProvider(provider, verificationStatus) {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadReviewData);
 </script>
 
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
-        <AdminSidebar active="reviews" @logout="logout" />
+        <AdminSidebar active="reviews" />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">

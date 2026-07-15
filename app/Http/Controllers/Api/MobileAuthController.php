@@ -15,6 +15,7 @@ use App\Models\ScholarshipFunnelEvent;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Services\DecisionSupportService;
+use App\Services\ScholarshipEligibilityService;
 use App\Support\AcademicRequirement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,6 +26,10 @@ use Illuminate\Validation\Rule;
 
 class MobileAuthController extends Controller
 {
+    public function __construct(private readonly ScholarshipEligibilityService $eligibilityService)
+    {
+    }
+
     public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -915,28 +920,7 @@ class MobileAuthController extends Controller
 
     private function documentReadiness(ScholarshipApplication $application): array
     {
-        $requiredDocuments = $this->documentRequirements($application->scholarship);
-        $confirmedDocuments = collect($application->document_checklist ?? [])->map(fn (string $document) => trim($document))->filter();
-        $uploadedDocuments = $application->documents->map(fn (ApplicationDocument $document) => $document->document_name);
-        $acceptedDocuments = $application->documents
-            ->filter(fn (ApplicationDocument $document) => $document->status === 'accepted')
-            ->map(fn (ApplicationDocument $document) => $document->document_name);
-        $requiredCount = count($requiredDocuments);
-        $missingDocuments = collect($requiredDocuments)
-            ->reject(fn (string $requirement) => $uploadedDocuments->contains($requirement))
-            ->values()
-            ->all();
-
-        return [
-            'required' => $requiredCount,
-            'confirmed' => $this->requirementCount($requiredDocuments, $confirmedDocuments->all()),
-            'percent' => $requiredCount === 0 ? 100 : (int) round(($this->requirementCount($requiredDocuments, $confirmedDocuments->all()) / $requiredCount) * 100),
-            'uploaded' => $this->requirementCount($requiredDocuments, $uploadedDocuments->all()),
-            'uploaded_percent' => $requiredCount === 0 ? 100 : (int) round(($this->requirementCount($requiredDocuments, $uploadedDocuments->all()) / $requiredCount) * 100),
-            'accepted' => $this->requirementCount($requiredDocuments, $acceptedDocuments->all()),
-            'accepted_percent' => $requiredCount === 0 ? 100 : (int) round(($this->requirementCount($requiredDocuments, $acceptedDocuments->all()) / $requiredCount) * 100),
-            'missing' => $missingDocuments,
-        ];
+        return $this->eligibilityService->applicationDocumentReadiness($application);
     }
 
     private function timelinePayload(ScholarshipApplication $application): array
@@ -968,239 +952,43 @@ class MobileAuthController extends Controller
 
     private function eligibilityMatch(Scholarship $scholarship, User $user): array
     {
-        $profile = $user->studentProfile;
-        $criteria = [];
-        $passed = 0;
-        $applicable = 0;
-
-        $addCriterion = function (string $key, string $label, string $status, ?string $studentValue, ?string $requirement, string $note, bool $counts = true) use (&$criteria, &$passed, &$applicable): void {
-            $criteria[] = compact('key', 'label', 'status', 'studentValue', 'requirement', 'note');
-
-            if (! $counts) {
-                return;
-            }
-
-            $applicable++;
-
-            if ($status === 'pass') {
-                $passed++;
-            }
-        };
-
-        $academicMatch = AcademicRequirement::match($profile?->gwa, $profile?->grading_scale, $scholarship->minimum_gwa, $scholarship->minimum_grade_scale);
-        $addCriterion(
-            'academic',
-            $academicMatch['label'],
-            $academicMatch['status'],
-            $academicMatch['student_value'],
-            $academicMatch['requirement'],
-            $academicMatch['note'],
-            $academicMatch['counts'],
-        );
-
-        $this->addOptionCriterion($addCriterion, 'education_level', 'Education level', $profile?->education_level, $scholarship->eligible_education_levels);
-        $this->addOptionCriterion($addCriterion, 'course', 'Track / strand / course', $profile?->course_or_strand, $scholarship->eligible_courses);
-        $this->addOptionCriterion($addCriterion, 'school_type', 'School type', $profile?->school_type, $scholarship->eligible_school_types);
-        $this->addOptionCriterion($addCriterion, 'year_level', 'Grade / year level', $profile?->year_level, $scholarship->eligible_year_levels);
-        $studentLocation = collect([$profile?->barangay, $profile?->city, $profile?->province, $profile?->region, $profile?->address])->filter()->implode(', ');
-        $this->addOptionCriterion($addCriterion, 'location', 'Location', $studentLocation ?: null, $scholarship->eligible_locations);
-
-        if (filled($scholarship->income_requirement) && ! $this->isOpenOption($scholarship->income_requirement)) {
-            $income = $profile?->income_bracket;
-            $matchesIncome = filled($income) && $this->matchesAnyOption($income, [$scholarship->income_requirement]);
-            $addCriterion('income', 'Income bracket', filled($income) ? ($matchesIncome ? 'pass' : 'fail') : 'missing', $income, $scholarship->income_requirement, $matchesIncome ? 'Income bracket matches.' : 'Review income requirement.');
-        }
-
-        $score = $applicable === 0 ? 100 : (int) round(($passed / $applicable) * 100);
-
-        return [
-            'score' => $score,
-            'passed' => $passed,
-            'applicable' => $applicable,
-            'label' => $score >= 80 ? 'Strong match' : ($score >= 50 ? 'Needs review' : 'Low match'),
-            'summary' => $applicable === 0 ? 'No structured matching rules yet.' : "{$passed} of {$applicable} structured criteria match your profile.",
-            'criteria' => $criteria,
-        ];
+        return $this->eligibilityService->evaluate($scholarship, $user);
     }
 
     private function applicationEligibilityBlockers(array $eligibilityMatch): array
     {
-        return collect($eligibilityMatch['criteria'] ?? [])
-            ->filter(fn (array $criterion) => ($criterion['status'] ?? null) === 'fail' && ($criterion['key'] ?? null) !== 'documents')
-            ->map(fn (array $criterion) => [
-                'key' => $criterion['key'] ?? null,
-                'label' => $criterion['label'] ?? 'Eligibility requirement',
-                'student_value' => $criterion['studentValue'] ?? null,
-                'requirement' => $criterion['requirement'] ?? null,
-                'note' => $criterion['note'] ?? null,
-            ])
-            ->values()
-            ->all();
+        return $this->eligibilityService->blockers($eligibilityMatch);
     }
 
-    private function addOptionCriterion(callable $addCriterion, string $key, string $label, ?string $studentValue, ?string $requirements): void
-    {
-        $options = $this->splitOptions($requirements);
-
-        if ($options === []) {
-            return;
-        }
-
-        if ($this->hasOpenOption($options)) {
-            $addCriterion($key, $label, 'info', $studentValue, implode(', ', $options), "{$label} is open to all applicants.", false);
-
-            return;
-        }
-
-        $matches = filled($studentValue) && $this->matchesAnyOption($studentValue, $options);
-        $addCriterion($key, $label, filled($studentValue) ? ($matches ? 'pass' : 'fail') : 'missing', $studentValue, implode(', ', $options), $matches ? "{$label} matches." : "{$label} may need review.");
-    }
 
     private function splitOptions(?string $value): array
     {
-        if (! $value) {
-            return [];
-        }
-
-        return collect(preg_split('/\r\n|\r|\n|,/', $value))->map(fn (string $option) => trim($option))->filter()->values()->all();
+        return $this->eligibilityService->splitOptions($value);
     }
 
     private function matchesAnyOption(string $value, array $options): bool
     {
-        $normalizedValue = str($value)->lower()->squish()->toString();
-
-        if ($this->hasOpenOption($options)) {
-            return true;
-        }
-
-        return collect($options)->contains(function (string $option) use ($normalizedValue) {
-            $normalizedOption = str($option)->lower()->squish()->toString();
-
-            return str_contains($normalizedValue, $normalizedOption) || str_contains($normalizedOption, $normalizedValue);
-        });
+        return $this->eligibilityService->matchesAnyOption($value, $options);
     }
 
     private function hasOpenOption(array $options): bool
     {
-        return collect($options)->contains(fn (string $option) => $this->isOpenOption($option));
+        return $this->eligibilityService->hasOpenOption($options);
     }
 
     private function isOpenOption(?string $option): bool
     {
-        if (! filled($option)) {
-            return false;
-        }
-
-        $normalized = strtolower((string) preg_replace('/\s+/', ' ', trim(str_replace(['.', ';', ':'], '', $option))));
-
-        return in_array($normalized, [
-            'any',
-            'all',
-            'none',
-            'n/a',
-            'na',
-            'not applicable',
-            'no preference',
-            'no restriction',
-            'no restrictions',
-            'open to all',
-            'all students',
-            'any student',
-            'all applicants',
-            'any applicant',
-            'all education levels',
-            'any education level',
-            'all levels',
-            'any level',
-            'all courses',
-            'any course',
-            'all strands',
-            'any strand',
-            'all tracks',
-            'any track',
-            'all grades',
-            'any grade',
-            'all years',
-            'any year',
-            'all school types',
-            'any school type',
-            'all locations',
-            'any location',
-            'all regions',
-            'any region',
-            'nationwide',
-            'philippines',
-            'the philippines',
-            'republic of the philippines',
-            'nationwide philippines',
-            'philippines nationwide',
-            'anywhere in the philippines',
-            'within the philippines',
-            'all over the philippines',
-            'all philippines',
-            'no income requirement',
-        ], true)
-            || str_starts_with($normalized, 'any ')
-            || str_starts_with($normalized, 'all ')
-            || str_contains($normalized, 'n/a')
-            || str_contains($normalized, 'open to all')
-            || str_contains($normalized, 'no restriction')
-            || str_contains($normalized, 'no preference')
-            || str_contains($normalized, 'not applicable')
-            || (str_contains($normalized, 'nationwide') && ! str_contains($normalized, 'not nationwide'))
-            || str_contains($normalized, 'anywhere in the philippines')
-            || str_contains($normalized, 'within the philippines')
-            || str_contains($normalized, 'all over the philippines');
+        return $this->eligibilityService->isOpenOption($option);
     }
 
     private function documentRequirements(?Scholarship $scholarship): array
     {
-        if (! $scholarship?->requirements) {
-            return [];
-        }
-
-        $requirements = $this->splitOptions($scholarship->requirements);
-
-        return $this->hasOpenOption($requirements) ? [] : $requirements;
+        return $this->eligibilityService->documentRequirements($scholarship);
     }
 
     private function preparedDocumentReadiness(Scholarship $scholarship, User $user): array
     {
-        $requirements = $this->documentRequirements($scholarship);
-
-        if ($requirements === []) {
-            return [
-                'required' => 0,
-                'uploaded' => 0,
-                'percent' => 100,
-                'matched' => [],
-                'missing' => [],
-            ];
-        }
-
-        $preparedDocuments = StudentDocument::query()
-            ->where('user_id', $user->id)
-            ->pluck('document_name')
-            ->map(fn (string $document) => trim($document))
-            ->filter()
-            ->values()
-            ->all();
-        $matched = collect($requirements)
-            ->filter(fn (string $requirement) => in_array($requirement, $preparedDocuments, true))
-            ->values()
-            ->all();
-        $missing = collect($requirements)
-            ->reject(fn (string $requirement) => in_array($requirement, $preparedDocuments, true))
-            ->values()
-            ->all();
-
-        return [
-            'required' => count($requirements),
-            'uploaded' => count($matched),
-            'percent' => (int) round((count($matched) / count($requirements)) * 100),
-            'matched' => $matched,
-            'missing' => $missing,
-        ];
+        return $this->eligibilityService->preparedDocumentReadiness($scholarship, $user);
     }
 
     private function syncApplicantReminders(User $user): void
@@ -1352,10 +1140,4 @@ class MobileAuthController extends Controller
         }
     }
 
-    private function requirementCount(array $requirements, array $documents): int
-    {
-        $documents = collect($documents)->map(fn (string $document) => trim($document))->filter();
-
-        return collect($requirements)->filter(fn (string $requirement) => $documents->contains($requirement))->count();
-    }
 }

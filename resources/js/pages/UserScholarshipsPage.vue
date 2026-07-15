@@ -4,6 +4,7 @@ import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -206,12 +207,6 @@ function matchesAcademicRequirement(scholarship, studentValue) {
 
 function providerTypeLabel(type) {
     return String(type ?? 'Provider')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function labelFromKey(value) {
-    return String(value ?? '')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -727,17 +722,12 @@ async function loadScholarships() {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadScholarships);
 </script>
 
 <template>
     <main class="student-shell">
-        <ApplicantSidebar @logout="logout" />
+        <ApplicantSidebar />
 
         <section class="student-page">
             <div class="student-container">

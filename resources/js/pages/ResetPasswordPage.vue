@@ -63,7 +63,6 @@ onMounted(() => {
         description="Use the reset link details to set a new password for your portal account."
         switch-href="/login"
         switch-label="Login"
-        switch-text="Back to sign in?"
         panel-badge="Account Recovery"
         panel-title="Finish password recovery"
         panel-text="After this step, you can return to the scholarship portal using your new password."

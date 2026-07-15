@@ -132,7 +132,7 @@ class ProviderController extends Controller
         return view('provider-insights');
     }
 
-    public function profileData(Request $request): JsonResponse
+    public function dashboardData(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
 
@@ -141,9 +141,6 @@ class ProviderController extends Controller
             ->withCount('bookmarks')
             ->latest()
             ->get();
-        $applicationsCount = ScholarshipApplication::query()
-            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id))
-            ->count();
         $reviewQueue = ScholarshipApplication::query()
             ->with(['applicant.studentProfile', 'documents', 'scholarship'])
             ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id))
@@ -154,11 +151,6 @@ class ProviderController extends Controller
 
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
-            'stats' => [
-                'scholarships' => $scholarships->count(),
-                'applications' => $applicationsCount,
-                'drafts' => $scholarships->where('status', 'draft')->count(),
-            ],
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
             'review_queue' => $reviewQueue->map(fn (ScholarshipApplication $application) => [
                 'id' => $application->id,
@@ -169,13 +161,21 @@ class ProviderController extends Controller
                 'pending_documents' => $application->documents->where('status', 'pending')->count(),
                 'submitted_at' => $application->submitted_at?->format('M d, Y'),
             ])->values(),
+        ]);
+    }
+
+    public function profileData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        return response()->json([
+            'user' => $request->user()->loadMissing(['providerProfile'])->publicPayload(),
             'verification_documents' => $request->user()
                 ->providerVerificationDocuments()
                 ->latest()
                 ->get()
                 ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))
                 ->values(),
-            'notifications' => $this->notificationsPayload($request),
         ]);
     }
 
@@ -601,7 +601,6 @@ class ProviderController extends Controller
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
             'application' => $this->applicationPayload($application),
-            'notifications' => $this->notificationsPayload($request),
         ]);
     }
 
@@ -1550,26 +1549,6 @@ class ProviderController extends Controller
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'download_url' => route('provider.verification-documents.download', $document),
         ];
-    }
-
-    private function notificationsPayload(Request $request): array
-    {
-        return PortalNotification::query()
-            ->where('user_id', $request->user()->id)
-            ->latest()
-            ->limit(5)
-            ->get()
-            ->map(fn (PortalNotification $notification) => [
-                'id' => $notification->id,
-                'type' => $notification->type,
-                'title' => $notification->title,
-                'message' => $notification->message,
-                'action_url' => $notification->action_url,
-                'is_read' => $notification->read_at !== null,
-                'created_at' => $notification->created_at?->format('M d, Y h:i A'),
-            ])
-            ->values()
-            ->all();
     }
 
     private function timelinePayload(ScholarshipApplication $application): array

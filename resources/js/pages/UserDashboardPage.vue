@@ -22,7 +22,6 @@ const profileReadiness = ref({
 const scholarships = ref([]);
 const applications = ref([]);
 const nextSteps = ref([]);
-const notifications = ref([]);
 
 const readinessMessage = computed(() => {
     if (profileReadiness.value.complete) {
@@ -279,7 +278,6 @@ async function loadDashboard() {
         scholarships.value = response.data.scholarships ?? [];
         applications.value = response.data.applications ?? [];
         nextSteps.value = response.data.next_steps ?? [];
-        notifications.value = response.data.notifications ?? [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load applicant dashboard.';
     } finally {
@@ -287,17 +285,12 @@ async function loadDashboard() {
     }
 }
 
-async function logout() {
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
-
 onMounted(loadDashboard);
 </script>
 
 <template>
     <main class="student-shell">
-        <ApplicantSidebar @logout="logout" />
+        <ApplicantSidebar />
 
         <section class="student-page">
             <div class="student-container">
@@ -593,46 +586,6 @@ onMounted(loadDashboard);
                         </div>
                     </section>
 
-                    <section v-if="notifications.length" class="student-card p-5">
-                            <div class="flex items-center gap-3">
-                                <span class="student-section-mark">
-                                    <i class="fa-solid fa-bell text-sm"></i>
-                                </span>
-                                <div>
-                                    <p class="student-kicker">
-                                        Updates
-                                    </p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                        Recent notices
-                                    </h3>
-                                </div>
-                            </div>
-                            <div class="mt-5 grid gap-3">
-                                <a
-                                    v-for="notification in notifications"
-                                    :key="notification.id"
-                                    :href="notification.action_url || '/dashboard/applications'"
-                                    class="rounded-md border border-slate-200/80 bg-slate-50 p-4 transition hover:bg-white"
-                                >
-                                    <div class="flex gap-3">
-                                        <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200">
-                                            <i class="fa-solid fa-envelope-open-text text-xs"></i>
-                                        </span>
-                                        <span class="min-w-0">
-                                            <span class="block truncate font-bold text-slate-950">
-                                                {{ notification.title }}
-                                            </span>
-                                            <span class="mt-1 block line-clamp-2 text-sm leading-6 text-slate-600">
-                                                {{ notification.message }}
-                                            </span>
-                                        </span>
-                                    </div>
-                                    <p class="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                                        {{ notification.created_at }}
-                                    </p>
-                                </a>
-                            </div>
-                    </section>
                 </div>
 
                 <ApplicantFooter />
