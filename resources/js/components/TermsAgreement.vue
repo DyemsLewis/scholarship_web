@@ -64,17 +64,6 @@ function updateValue(event) {
             </span>
         </label>
 
-        <details class="mt-2 pl-7">
-            <summary class="cursor-pointer text-xs font-bold text-slate-600">
-                What this means
-            </summary>
-            <ul class="mt-2 space-y-1 text-xs leading-5 text-slate-500">
-                <li v-for="detail in selectedContent.details" :key="detail">
-                    {{ detail }}
-                </li>
-            </ul>
-        </details>
-
         <TermsModal v-model="showTermsModal" :context="context" />
     </div>
 </template>

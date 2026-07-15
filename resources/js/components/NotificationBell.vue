@@ -16,6 +16,10 @@ const props = defineProps({
         type: String,
         default: 'compact',
     },
+    centered: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const isOpen = ref(false);
@@ -27,6 +31,7 @@ const unreadCount = ref(0);
 const root = ref(null);
 
 const isSidebar = computed(() => props.mode === 'sidebar');
+const isCentered = computed(() => props.centered);
 const panelAlignment = computed(() => (props.align === 'left' ? 'left-0' : 'right-0'));
 const buttonClasses = computed(() => {
     if (isSidebar.value) {
@@ -251,81 +256,109 @@ onBeforeUnmount(() => {
             </span>
         </button>
 
-        <div
-            v-if="isOpen"
-            :class="[
-                'absolute z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-2xl',
-                panelAlignment,
-            ]"
-        >
-            <div class="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-                <div>
-                    <p class="text-sm font-black text-slate-950">
-                        Notifications
-                    </p>
-                    <p class="text-xs text-slate-500">
-                        Recent portal updates
-                    </p>
-                </div>
-                <div class="flex items-center gap-1">
-                    <button
-                        v-if="unreadCount > 0"
-                        type="button"
-                        :disabled="isMarkingAllRead"
-                        class="rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                        @click.stop="markAllRead"
-                    >
-                        {{ isMarkingAllRead ? 'Marking...' : 'Mark all' }}
-                    </button>
-                    <button
-                        type="button"
-                        class="rounded-md px-2.5 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
-                        @click.stop="loadNotifications"
-                    >
-                        Refresh
-                    </button>
-                </div>
-            </div>
-
-            <div v-if="isLoading" class="px-4 py-5 text-sm text-slate-500">
-                Loading notifications...
-            </div>
-
-            <div v-else-if="errorMessage" class="px-4 py-5 text-sm text-rose-700">
-                {{ errorMessage }}
-            </div>
-
-            <div v-else-if="notifications.length === 0" class="px-4 py-5 text-sm text-slate-500">
-                You are all caught up.
-            </div>
-
-            <div v-else class="max-h-80 overflow-y-auto">
-                <button
-                    v-for="notification in notifications"
-                    :key="notification.id"
-                    type="button"
-                    class="block w-full border-t border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50"
-                    @click="openNotification(notification)"
+        <Teleport to="body" :disabled="!isCentered">
+            <div
+                v-if="isOpen"
+                :class="[
+                    isCentered
+                        ? 'fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm'
+                        : 'absolute z-50 mt-2',
+                    !isCentered ? panelAlignment : '',
+                ]"
+                @click.self="closeDropdown"
+            >
+                <section
+                    :class="[
+                        'overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-2xl',
+                        isCentered
+                            ? 'w-full max-w-xl'
+                            : 'w-[min(22rem,calc(100vw-2rem))]',
+                    ]"
+                    :role="isCentered ? 'dialog' : undefined"
+                    :aria-modal="isCentered ? 'true' : undefined"
+                    :aria-label="isCentered ? 'Notifications' : undefined"
+                    @click.stop
                 >
-                    <div class="flex items-start justify-between gap-3">
-                        <p class="text-sm font-black leading-5 text-slate-950">
-                            {{ notification.title }}
-                        </p>
-                        <span
-                            v-if="!notification.is_read"
-                            class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-amber-800"
-                        >
-                            New
-                        </span>
+                    <div class="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                        <div>
+                            <p class="text-sm font-black text-slate-950">
+                                Notifications
+                            </p>
+                            <p class="text-xs text-slate-500">
+                                Recent portal updates
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button
+                                v-if="unreadCount > 0"
+                                type="button"
+                                :disabled="isMarkingAllRead"
+                                class="rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                @click.stop="markAllRead"
+                            >
+                                {{ isMarkingAllRead ? 'Marking...' : 'Mark all' }}
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md px-2.5 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
+                                @click.stop="loadNotifications"
+                            >
+                                Refresh
+                            </button>
+                            <button
+                                v-if="isCentered"
+                                type="button"
+                                class="ml-1 flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                                aria-label="Close notifications"
+                                title="Close"
+                                @click.stop="closeDropdown"
+                            >
+                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </div>
-                    <p class="mt-1 text-xs leading-5 text-slate-600">
-                        {{ notification.message }}
-                    </p>
-                    <p v-if="notification.created_at" class="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                        {{ formatDate(notification.created_at) }}
-                    </p>
-                </button>
+
+                    <div v-if="isLoading" class="px-4 py-5 text-sm text-slate-500">
+                        Loading notifications...
+                    </div>
+
+                    <div v-else-if="errorMessage" class="px-4 py-5 text-sm text-rose-700">
+                        {{ errorMessage }}
+                    </div>
+
+                    <div v-else-if="notifications.length === 0" class="px-4 py-5 text-sm text-slate-500">
+                        You are all caught up.
+                    </div>
+
+                    <div v-else class="max-h-80 overflow-y-auto">
+                        <button
+                            v-for="notification in notifications"
+                            :key="notification.id"
+                            type="button"
+                            class="block w-full border-t border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50"
+                            @click="openNotification(notification)"
+                        >
+                            <div class="flex items-start justify-between gap-3">
+                                <p class="text-sm font-black leading-5 text-slate-950">
+                                    {{ notification.title }}
+                                </p>
+                                <span
+                                    v-if="!notification.is_read"
+                                    class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-amber-800"
+                                >
+                                    New
+                                </span>
+                            </div>
+                            <p class="mt-1 text-xs leading-5 text-slate-600">
+                                {{ notification.message }}
+                            </p>
+                            <p v-if="notification.created_at" class="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                                {{ formatDate(notification.created_at) }}
+                            </p>
+                        </button>
+                    </div>
+                </section>
             </div>
-        </div>
+        </Teleport>
     </div>
 </template>

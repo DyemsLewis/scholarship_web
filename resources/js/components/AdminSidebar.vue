@@ -90,7 +90,7 @@ async function requestLogout() {
             </nav>
 
             <div class="mt-6">
-                <NotificationBell align="left" mode="sidebar" />
+                <NotificationBell align="left" mode="sidebar" centered />
             </div>
 
             <EmailVerificationReminder class="mt-4" mode="dark" />
