@@ -4,6 +4,7 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import { decisionReasonOptions, negativeDecisionStatuses } from '../support/applicationDecisionReasons';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
@@ -44,26 +45,6 @@ const statusOptions = [
     { value: 'disbursed', label: 'Distributed' },
     { value: 'renewed', label: 'Renewed' },
     { value: 'rejected', label: 'Rejected' },
-];
-const decisionReasonOptions = [
-    { value: '', label: 'No reason selected' },
-    { value: 'complete_requirements', label: 'Complete requirements' },
-    { value: 'missing_documents', label: 'Missing documents' },
-    { value: 'academic_requirement_not_met', label: 'Academic requirement not met' },
-    { value: 'outside_eligibility', label: 'Outside eligibility' },
-    { value: 'for_exam', label: 'Meets exam eligibility' },
-    { value: 'exam_scheduled', label: 'Exam scheduled' },
-    { value: 'exam_completed', label: 'Exam completed' },
-    { value: 'passed_exam', label: 'Passed exam' },
-    { value: 'failed_exam', label: 'Failed exam' },
-    { value: 'for_interview', label: 'For interview' },
-    { value: 'approved_for_award', label: 'Approved for award' },
-    { value: 'distribution_scheduled', label: 'Distribution scheduled' },
-    { value: 'award_released', label: 'Reward distributed' },
-    { value: 'renewed_support', label: 'Renewed support' },
-    { value: 'funds_limited', label: 'Funds limited' },
-    { value: 'not_selected', label: 'Not selected' },
-    { value: 'other', label: 'Other' },
 ];
 const documentStatusOptions = [
     { value: 'pending', label: 'Pending' },
@@ -419,7 +400,7 @@ async function updateStatus() {
         return;
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed'].includes(reviewForm.value.status) && !reviewForm.value.decisionReason) {
+    if (negativeDecisionStatuses.includes(reviewForm.value.status) && !reviewForm.value.decisionReason) {
         errorMessage.value = 'Select a decision reason before saving a negative decision.';
         return;
     }
@@ -784,7 +765,7 @@ onMounted(loadApplication);
                                     </div>
                                     <div>
                                         <label :class="labelClass">
-                                            Decision reason <span v-if="['rejected', 'not_awarded', 'exam_failed'].includes(reviewForm.status)" class="text-rose-600">*</span>
+                                            Decision reason <span v-if="negativeDecisionStatuses.includes(reviewForm.status)" class="text-rose-600">*</span>
                                         </label>
                                         <select v-model="reviewForm.decisionReason" :class="inputClass">
                                             <option v-for="option in decisionReasonOptions" :key="option.value" :value="option.value">

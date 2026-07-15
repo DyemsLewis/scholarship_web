@@ -75,62 +75,68 @@ class AcademicRequirement
     public static function match(mixed $studentValue, ?string $studentScale, mixed $minimum, ?string $requiredScale): array
     {
         $requiredScale = self::normalizeScale($requiredScale, $minimum);
+        $studentScale = self::normalizeScale($studentScale, $studentValue);
+        $withComparison = fn (array $result, string $mode, bool $isComparable = false): array => [
+            ...$result,
+            'student_scale' => $studentScale,
+            'requirement_scale' => $requiredScale,
+            'comparison_mode' => $mode,
+            'is_comparable' => $isComparable,
+        ];
 
         if ($requiredScale === self::SCALE_PASS_FAIL) {
-            return [
+            return $withComparison([
                 'label' => 'Academic requirement',
                 'status' => 'info',
                 'student_value' => self::studentLabel($studentValue, $studentScale),
                 'requirement' => self::requirementLabel($minimum, $requiredScale),
                 'note' => 'This program uses pass/fail or competency evidence, so documents should be reviewed instead of numeric grades.',
                 'counts' => false,
-            ];
+            ], 'manual_review');
         }
 
         if ($requiredScale === self::SCALE_OTHER) {
-            return [
+            return $withComparison([
                 'label' => 'Academic requirement',
                 'status' => 'info',
                 'student_value' => self::studentLabel($studentValue, $studentScale),
                 'requirement' => self::requirementLabel($minimum, $requiredScale),
                 'note' => 'This program uses another grading scale. A reviewer should confirm the academic requirement manually.',
                 'counts' => false,
-            ];
+            ], 'manual_review');
         }
 
         if (! self::hasValue($minimum)) {
-            return [
+            return $withComparison([
                 'label' => 'Academic requirement',
                 'status' => 'info',
                 'student_value' => self::studentLabel($studentValue, $studentScale),
                 'requirement' => null,
                 'note' => 'No numeric academic minimum is listed.',
                 'counts' => false,
-            ];
+            ], 'not_required');
         }
 
         if (! self::hasValue($studentValue)) {
-            return [
+            return $withComparison([
                 'label' => 'Academic requirement',
                 'status' => 'missing',
                 'student_value' => null,
                 'requirement' => self::requirementLabel($minimum, $requiredScale),
                 'note' => 'Add your academic record and grading scale in your profile to improve matching.',
                 'counts' => true,
-            ];
+            ], 'missing_value');
         }
 
-        $studentScale = self::normalizeScale($studentScale, $studentValue);
-
         if ($studentScale !== null && $requiredScale !== null && $studentScale !== $requiredScale) {
-            return [
+            return $withComparison([
                 'label' => 'Academic requirement',
                 'status' => 'missing',
                 'student_value' => self::studentLabel($studentValue, $studentScale),
                 'requirement' => self::requirementLabel($minimum, $requiredScale),
                 'note' => 'The student and scholarship use different grading scales, so this needs provider review.',
                 'counts' => true,
-            ];
+            ], 'scale_mismatch');
         }
 
         $studentNumber = (float) $studentValue;
@@ -139,7 +145,7 @@ class AcademicRequirement
             ? $studentNumber <= $minimumNumber
             : $studentNumber >= $minimumNumber;
 
-        return [
+        return $withComparison([
             'label' => 'Academic requirement',
             'status' => $isPassing ? 'pass' : 'fail',
             'student_value' => self::studentLabel($studentValue, $studentScale),
@@ -148,7 +154,7 @@ class AcademicRequirement
                 ? 'Academic record meets the listed requirement.'
                 : 'Academic record may need provider review.',
             'counts' => true,
-        ];
+        ], 'same_scale_numeric', true);
     }
 
     public static function studentLabel(mixed $studentValue, ?string $studentScale): ?string

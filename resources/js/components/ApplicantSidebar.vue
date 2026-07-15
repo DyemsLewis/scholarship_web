@@ -1,11 +1,19 @@
 <script setup>
 import { ref } from 'vue';
+import ConfirmationDialog from './ConfirmationDialog.vue';
 import EmailVerificationReminder from './EmailVerificationReminder.vue';
 import NotificationBell from './NotificationBell.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const emit = defineEmits(['logout']);
 const currentPath = window.location.pathname.replace(/\/$/, '') || '/dashboard';
 const isMenuOpen = ref(false);
+const {
+    confirmation,
+    requestConfirmation,
+    confirmConfirmation,
+    cancelConfirmation,
+} = useConfirmationDialog();
 
 const navLinks = [
     { href: '/dashboard', label: 'Dashboard' },
@@ -27,9 +35,19 @@ function closeMenu() {
     isMenuOpen.value = false;
 }
 
-function logout() {
+async function requestLogout() {
     closeMenu();
-    emit('logout');
+
+    const confirmed = await requestConfirmation({
+        title: 'Log out of your account?',
+        message: 'You will need to sign in again to continue using the scholarship portal.',
+        confirmLabel: 'Log out',
+        tone: 'danger',
+    });
+
+    if (confirmed) {
+        emit('logout');
+    }
 }
 </script>
 
@@ -73,7 +91,7 @@ function logout() {
                 <button
                     type="button"
                     class="rounded-md border border-white/20 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white hover:text-slate-950"
-                    @click="logout"
+                    @click="requestLogout"
                 >
                     <i class="fa-solid fa-right-from-bracket mr-2 text-xs"></i>
                     Logout
@@ -153,7 +171,7 @@ function logout() {
                     <button
                         type="button"
                         class="mt-4 w-full rounded-md border border-white/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white hover:text-slate-950"
-                        @click="logout"
+                        @click="requestLogout"
                     >
                         <i class="fa-solid fa-right-from-bracket mr-2"></i>
                         Logout
@@ -162,4 +180,10 @@ function logout() {
             </div>
         </aside>
     </div>
+
+    <ConfirmationDialog
+        v-bind="confirmation"
+        @confirm="confirmConfirmation"
+        @cancel="cancelConfirmation"
+    />
 </template>

@@ -76,6 +76,16 @@ class Scholarship extends Model
         return $this->hasMany(ScholarshipBookmark::class);
     }
 
+    public function funnelEvents(): HasMany
+    {
+        return $this->hasMany(ScholarshipFunnelEvent::class);
+    }
+
+    public function dssSnapshots(): HasMany
+    {
+        return $this->hasMany(DssCalculationSnapshot::class);
+    }
+
     public function providerAssessment(): HasOne
     {
         return $this->hasOne(ProviderAssessment::class, 'provider_id', 'provider_id');

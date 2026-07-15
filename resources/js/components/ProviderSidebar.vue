@@ -1,9 +1,17 @@
 <script setup>
+import ConfirmationDialog from './ConfirmationDialog.vue';
 import EmailVerificationReminder from './EmailVerificationReminder.vue';
 import NotificationBell from './NotificationBell.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const emit = defineEmits(['logout']);
 const currentPath = window.location.pathname.replace(/\/$/, '') || '/provider';
+const {
+    confirmation,
+    requestConfirmation,
+    confirmConfirmation,
+    cancelConfirmation,
+} = useConfirmationDialog();
 
 const navLinks = [
     { href: '/provider', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
@@ -20,6 +28,19 @@ function isActive(href) {
     }
 
     return currentPath === href;
+}
+
+async function requestLogout() {
+    const confirmed = await requestConfirmation({
+        title: 'Log out of your account?',
+        message: 'You will need to sign in again to continue using the provider portal.',
+        confirmLabel: 'Log out',
+        tone: 'danger',
+    });
+
+    if (confirmed) {
+        emit('logout');
+    }
 }
 </script>
 
@@ -75,7 +96,7 @@ function isActive(href) {
                 <button
                     type="button"
                     class="w-full rounded-md border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300 transition hover:border-amber-300/40 hover:bg-white/5 hover:text-white"
-                    @click="emit('logout')"
+                    @click="requestLogout"
                 >
                     <i class="fa-solid fa-right-from-bracket mr-2"></i>
                     Logout
@@ -83,4 +104,10 @@ function isActive(href) {
             </div>
         </div>
     </aside>
+
+    <ConfirmationDialog
+        v-bind="confirmation"
+        @confirm="confirmConfirmation"
+        @cancel="cancelConfirmation"
+    />
 </template>

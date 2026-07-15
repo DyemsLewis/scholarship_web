@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\AcademicRequirement;
+use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -89,6 +91,16 @@ class User extends Authenticatable implements MustVerifyEmail
     public function studentDocuments(): HasMany
     {
         return $this->hasMany(StudentDocument::class);
+    }
+
+    public function scholarshipFunnelEvents(): HasMany
+    {
+        return $this->hasMany(ScholarshipFunnelEvent::class);
+    }
+
+    public function dssSnapshots(): HasMany
+    {
+        return $this->hasMany(DssCalculationSnapshot::class, 'applicant_id');
     }
 
     public function providerVerificationDocuments(): HasMany
@@ -201,6 +213,9 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function publicPayload(): array
     {
+        $birthdate = $this->studentProfile?->birthdate;
+        $age = $birthdate?->age;
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -257,6 +272,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'latitude' => $this->studentProfile?->latitude,
             'longitude' => $this->studentProfile?->longitude,
             'birthdate' => $this->studentProfile?->birthdate?->format('Y-m-d'),
+            'age' => $age,
+            'is_minor' => $age !== null && $age < 18,
+            'profile_updated_at' => $this->studentProfile?->updated_at?->toISOString(),
             'guardian_name' => $this->studentProfile?->guardian_name,
             'guardian_relationship' => $this->studentProfile?->guardian_relationship,
             'guardian_contact' => $this->studentProfile?->guardian_contact,
@@ -271,11 +289,9 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         $payload ??= [];
         $educationLevel = $payload['education_level'] ?? null;
-        $accountManagedBy = $payload['account_managed_by'] ?? null;
         $requiresCoursePath = in_array($educationLevel, ['senior_high_school', 'college', 'tvet'], true);
         $requiresGrades = ! in_array($educationLevel, ['preschool'], true);
-        $requiresGuardian = in_array($educationLevel, ['preschool', 'elementary', 'junior_high_school', 'senior_high_school'], true)
-            || in_array($accountManagedBy, ['parent_guardian', 'relative', 'school_representative', 'other'], true);
+        $requiresGuardian = self::applicantRequiresGuardian($payload);
 
         $fields = [
             'first_name' => 'First name',
@@ -298,10 +314,12 @@ class User extends Authenticatable implements MustVerifyEmail
         ];
 
         if ($requiresGrades) {
-            $fields += [
-                'gwa' => 'GWA / general average',
-                'grading_scale' => 'Grading scale',
-            ];
+            $fields['grading_scale'] = 'Grading scale';
+
+            if (blank($payload['grading_scale'] ?? null)
+                || AcademicRequirement::requiresNumeric($payload['grading_scale'])) {
+                $fields['gwa'] = 'GWA / general average';
+            }
         }
 
         $fields += [
@@ -313,7 +331,9 @@ class User extends Authenticatable implements MustVerifyEmail
 
         if ($requiresGuardian) {
             $fields += [
+                'account_managed_by' => 'Account manager',
                 'guardian_name' => 'Guardian name',
+                'guardian_relationship' => 'Guardian relationship',
                 'guardian_contact' => 'Guardian contact',
             ];
         }
@@ -344,7 +364,33 @@ class User extends Authenticatable implements MustVerifyEmail
             'total' => $total,
             'percent' => $total === 0 ? 100 : (int) round(($completed / $total) * 100),
             'missing' => $missing,
+            'is_minor' => self::applicantIsMinor($payload),
+            'requires_guardian' => self::applicantRequiresGuardian($payload),
         ];
+    }
+
+    public static function applicantIsMinor(?array $payload = null): bool
+    {
+        $birthdate = $payload['birthdate'] ?? null;
+
+        if (blank($birthdate)) {
+            return false;
+        }
+
+        try {
+            return CarbonImmutable::parse($birthdate)->age < 18;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    public static function applicantRequiresGuardian(?array $payload = null): bool
+    {
+        $payload ??= [];
+
+        return self::applicantIsMinor($payload)
+            || in_array($payload['education_level'] ?? null, ['preschool', 'elementary', 'junior_high_school', 'senior_high_school'], true)
+            || in_array($payload['account_managed_by'] ?? null, ['parent_guardian', 'relative', 'school_representative', 'other'], true);
     }
 
     public function hasCompleteApplicantProfile(): bool

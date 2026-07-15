@@ -10,6 +10,7 @@ use App\Models\ProviderAssessment;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
+use App\Models\ScholarshipFunnelEvent;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Services\DecisionSupportService;
@@ -61,6 +62,18 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($scholarship->status === 'published', 404);
 
+        $viewEvent = ScholarshipFunnelEvent::record(
+            $request->user(),
+            'scholarship_viewed',
+            $scholarship,
+            source: 'web',
+            deduplicationKey: "scholarship_viewed:web:{$request->user()->id}:{$scholarship->id}:".now()->toDateString(),
+        );
+
+        if ($viewEvent->wasRecentlyCreated) {
+            $scholarship->increment('views_count');
+        }
+
         $scholarship->load('provider.providerProfile')->loadCount('bookmarks');
 
         return response()->json([
@@ -69,6 +82,30 @@ class ApplicantDashboardController extends Controller
             'stats' => $this->statsPayload($request),
             'scholarship' => $this->scholarshipPayload($scholarship, $request->user()),
         ]);
+    }
+
+    public function trackApplicationStart(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($scholarship->isAcceptingApplications(), 404);
+
+        if (! ScholarshipApplication::query()
+            ->where('scholarship_id', $scholarship->id)
+            ->where('applicant_id', $request->user()->id)
+            ->exists()) {
+            ScholarshipFunnelEvent::record(
+                $request->user(),
+                'application_started',
+                $scholarship,
+                source: 'web',
+                metadata: [
+                    'profile_complete' => $request->user()->hasCompleteApplicantProfile(),
+                ],
+                deduplicationKey: "application_started:web:{$request->user()->id}:{$scholarship->id}",
+            );
+        }
+
+        return response()->json(['tracked' => true]);
     }
 
     public function applications(Request $request): View|RedirectResponse
@@ -109,6 +146,19 @@ class ApplicantDashboardController extends Controller
         }
 
         return view('dashboard-profile');
+    }
+
+    public function profileData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        $user = $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile']);
+
+        return response()->json([
+            'user' => $user->publicPayload(),
+            'profile_readiness' => $user->applicantProfileReadiness(),
+            'match_summary' => $this->profileMatchSummary($user),
+        ]);
     }
 
     public function data(Request $request): JsonResponse
@@ -254,6 +304,17 @@ class ApplicantDashboardController extends Controller
             ['student_document_id' => $document->id],
         );
 
+        ScholarshipFunnelEvent::record(
+            $request->user(),
+            'prepared_document_uploaded',
+            source: 'web',
+            metadata: [
+                'student_document_id' => $document->id,
+                'document_name' => $document->document_name,
+                'replaced_existing' => $existing !== null,
+            ],
+        );
+
         return response()->json([
             'message' => 'Prepared document saved.',
             'document' => $this->studentDocumentPayload($document),
@@ -274,6 +335,13 @@ class ApplicantDashboardController extends Controller
             'prepared_document_deleted',
             "{$request->user()->name} removed prepared document {$documentName}.",
             $request,
+        );
+
+        ScholarshipFunnelEvent::record(
+            $request->user(),
+            'prepared_document_deleted',
+            source: 'web',
+            metadata: ['document_name' => $documentName],
         );
 
         return response()->json([
@@ -303,6 +371,8 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
 
+        $gradeMaximum = $request->input('grading_scale') === AcademicRequirement::SCALE_GRADE_POINT ? 5 : 100;
+
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
@@ -318,8 +388,8 @@ class ApplicantDashboardController extends Controller
             'course_or_strand' => ['nullable', 'string', 'max:255'],
             'year_level' => ['nullable', 'string', 'max:100'],
             'enrollment_status' => ['nullable', 'string', 'max:100'],
-            'gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'grading_scale' => ['nullable', Rule::in(['percentage', 'grade_point'])],
+            'gwa' => ['nullable', 'numeric', 'min:0', "max:{$gradeMaximum}"],
+            'grading_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
             'income_bracket' => ['nullable', 'string', 'max:100'],
             'household_size' => ['nullable', 'integer', 'min:1', 'max:30'],
             'preferred_categories' => ['nullable', 'string', 'max:1000'],
@@ -342,6 +412,10 @@ class ApplicantDashboardController extends Controller
             'guardian_is_account_owner' => ['nullable', 'boolean'],
         ]);
 
+        if (! AcademicRequirement::requiresNumeric($validated['grading_scale'] ?? null)) {
+            $validated['gwa'] = null;
+        }
+
         $request->user()->studentProfile()->updateOrCreate([
             'user_id' => $request->user()->id,
         ], [
@@ -355,7 +429,19 @@ class ApplicantDashboardController extends Controller
             ->with(['applicant.studentProfile', 'documents', 'scholarship'])
             ->where('applicant_id', $request->user()->id)
             ->get()
-            ->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
+            ->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application, 'web_profile_updated'));
+
+        $profileReadiness = $request->user()->applicantProfileReadiness();
+
+        if ($profileReadiness['complete']) {
+            ScholarshipFunnelEvent::record(
+                $request->user(),
+                'profile_completed',
+                source: 'web',
+                metadata: ['education_level' => $request->user()->studentProfile?->education_level],
+                deduplicationKey: "profile_completed:{$request->user()->id}",
+            );
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -368,6 +454,7 @@ class ApplicantDashboardController extends Controller
             'message' => 'Applicant profile updated.',
             'user' => $this->userPayload($request),
             'profile_readiness' => $request->user()->applicantProfileReadiness(),
+            'match_summary' => $this->profileMatchSummary($request->user()),
         ]);
     }
 
@@ -460,7 +547,20 @@ class ApplicantDashboardController extends Controller
         ]);
 
         $this->attachPreparedDocumentsToApplication($request->user(), $application, $validated['document_checklist'] ?? []);
-        app(DecisionSupportService::class)->syncApplication($application);
+        app(DecisionSupportService::class)->syncApplication($application, 'web_application_submitted');
+
+        ScholarshipFunnelEvent::record(
+            $request->user(),
+            'application_submitted',
+            $scholarship,
+            $application,
+            'web',
+            [
+                'eligibility_score' => $application->fresh()->eligibility_score,
+                'dss_score' => $application->fresh()->dss_score,
+            ],
+            "application_submitted:{$application->id}",
+        );
 
         ActivityLog::record(
             $request->user(),
@@ -498,10 +598,19 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($scholarship->status === 'published', 404);
 
-        ScholarshipBookmark::query()->firstOrCreate([
+        $bookmark = ScholarshipBookmark::query()->firstOrCreate([
             'scholarship_id' => $scholarship->id,
             'user_id' => $request->user()->id,
         ]);
+
+        if ($bookmark->wasRecentlyCreated) {
+            ScholarshipFunnelEvent::record(
+                $request->user(),
+                'scholarship_saved',
+                $scholarship,
+                source: 'web',
+            );
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -522,10 +631,19 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
 
-        ScholarshipBookmark::query()
+        $deleted = ScholarshipBookmark::query()
             ->where('scholarship_id', $scholarship->id)
             ->where('user_id', $request->user()->id)
             ->delete();
+
+        if ($deleted > 0) {
+            ScholarshipFunnelEvent::record(
+                $request->user(),
+                'scholarship_unsaved',
+                $scholarship,
+                source: 'web',
+            );
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -590,8 +708,16 @@ class ApplicantDashboardController extends Controller
             ['application_id' => $application->id, 'document_id' => $document->id],
         );
 
+        ScholarshipFunnelEvent::record(
+            $request->user(),
+            'application_document_uploaded',
+            application: $application,
+            source: 'web',
+            metadata: ['document_name' => $document->document_name],
+        );
+
         $freshApplication = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
-        app(DecisionSupportService::class)->syncApplication($freshApplication);
+        app(DecisionSupportService::class)->syncApplication($freshApplication, 'web_document_uploaded');
 
         return response()->json([
             'message' => 'Document uploaded successfully.',
@@ -618,8 +744,16 @@ class ApplicantDashboardController extends Controller
             ['application_id' => $application?->id],
         );
 
+        ScholarshipFunnelEvent::record(
+            $request->user(),
+            'application_document_deleted',
+            application: $application,
+            source: 'web',
+            metadata: ['document_name' => $documentName],
+        );
+
         $freshApplication = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
-        app(DecisionSupportService::class)->syncApplication($freshApplication);
+        app(DecisionSupportService::class)->syncApplication($freshApplication, 'web_document_deleted');
 
         return response()->json([
             'message' => 'Document removed.',
@@ -743,6 +877,7 @@ class ApplicantDashboardController extends Controller
                 && (bool) ($match['is_eligible'] ?? false)
                 && ! $hasApplied,
             'eligibility_match' => $match,
+            'preference_match' => $this->preferenceMatch($scholarship, $user),
             'prepared_documents' => $preparedDocuments,
             'eligibility_guide' => [
                 'requires_gwa' => filled($scholarship->minimum_gwa),
@@ -1108,6 +1243,146 @@ class ApplicantDashboardController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function profileMatchSummary(User $user): array
+    {
+        $evaluations = $this->publishedScholarships()
+            ->get()
+            ->map(function (Scholarship $scholarship) use ($user): array {
+                $match = $this->eligibilityMatch($scholarship, $user);
+                $profileCriteria = collect($match['criteria'] ?? [])
+                    ->reject(fn (array $criterion): bool => ($criterion['key'] ?? null) === 'documents')
+                    ->filter(fn (array $criterion): bool => in_array($criterion['status'] ?? null, ['pass', 'fail', 'missing'], true))
+                    ->values();
+                $passed = $profileCriteria->where('status', 'pass')->count();
+                $score = $profileCriteria->isEmpty()
+                    ? 100
+                    : (int) round(($passed / $profileCriteria->count()) * 100);
+                $eligible = ! $profileCriteria->contains(fn (array $criterion): bool => ($criterion['status'] ?? null) === 'fail');
+
+                return [
+                    'eligible' => $eligible,
+                    'score' => $score,
+                    'criteria' => $profileCriteria->all(),
+                    'preference' => $this->preferenceMatch($scholarship, $user),
+                ];
+            });
+        $topGaps = $evaluations
+            ->flatMap(fn (array $evaluation) => $evaluation['criteria'])
+            ->filter(fn (array $criterion): bool => in_array($criterion['status'] ?? null, ['fail', 'missing'], true))
+            ->groupBy(fn (array $criterion): string => (string) ($criterion['key'] ?? $criterion['label'] ?? 'other'))
+            ->map(fn ($criteria): array => [
+                'key' => $criteria->first()['key'] ?? null,
+                'label' => $criteria->first()['label'] ?? 'Profile detail',
+                'count' => $criteria->count(),
+                'has_blocker' => $criteria->contains(fn (array $criterion): bool => ($criterion['status'] ?? null) === 'fail'),
+            ])
+            ->sortByDesc(fn (array $gap): int => ($gap['has_blocker'] ? 1000 : 0) + $gap['count'])
+            ->take(4)
+            ->values();
+
+        return [
+            'available_programs' => $evaluations->count(),
+            'eligible_programs' => $evaluations->where('eligible', true)->count(),
+            'strong_matches' => $evaluations->filter(fn (array $evaluation): bool => $evaluation['eligible'] && $evaluation['score'] >= 80)->count(),
+            'needs_review' => $evaluations->filter(fn (array $evaluation): bool => $evaluation['eligible'] && $evaluation['score'] < 80)->count(),
+            'blocked_programs' => $evaluations->where('eligible', false)->count(),
+            'preference_matches' => $evaluations->filter(fn (array $evaluation): bool => ($evaluation['preference']['configured'] ?? false)
+                && (int) ($evaluation['preference']['score'] ?? 0) >= 80)->count(),
+            'top_gaps' => $topGaps,
+            'calculated_at' => now()->toISOString(),
+        ];
+    }
+
+    private function preferenceMatch(Scholarship $scholarship, ?User $user): array
+    {
+        $profile = $user?->studentProfile;
+
+        if (! $profile) {
+            return [
+                'configured' => false,
+                'score' => null,
+                'label' => 'No preferences set',
+                'criteria' => [],
+            ];
+        }
+
+        $criteria = [];
+        $categoryPreferences = $this->splitOptions($profile->preferred_categories);
+
+        if ($categoryPreferences !== []) {
+            $matchesCategory = filled($scholarship->category)
+                && $this->matchesAnyOption($scholarship->category, $categoryPreferences);
+            $criteria[] = [
+                'key' => 'category',
+                'label' => 'Scholarship type',
+                'status' => $matchesCategory ? 'match' : 'miss',
+                'note' => $matchesCategory ? 'Matches a preferred scholarship type.' : 'Outside the selected scholarship types.',
+            ];
+        }
+
+        $locationPreferences = $this->splitOptions($profile->preferred_locations);
+
+        if ($locationPreferences !== []) {
+            $locationText = collect([
+                $scholarship->eligible_locations,
+                $scholarship->location_name,
+                $scholarship->location_address,
+            ])->filter()->implode(', ');
+            $studentLocations = collect([$profile->city, $profile->province, $profile->region])->filter()->values()->all();
+            $hasOpenLocation = collect($locationPreferences)->contains(fn (string $option): bool => $this->isOpenOption($option));
+            $wantsOnline = collect($locationPreferences)->contains(fn (string $option): bool => str_contains(strtolower($option), 'online'));
+            $wantsNearby = collect($locationPreferences)->contains(fn (string $option): bool => str_contains(strtolower($option), 'near my home'));
+            $explicitLocations = collect($locationPreferences)
+                ->reject(fn (string $option): bool => $this->isOpenOption($option)
+                    || str_contains(strtolower($option), 'online')
+                    || str_contains(strtolower($option), 'near my home'))
+                ->values()
+                ->all();
+            $distanceKm = $this->distanceKm($profile, $scholarship);
+            $matchesLocation = $hasOpenLocation
+                || ($wantsOnline && in_array($scholarship->application_mode, ['online', 'hybrid'], true))
+                || ($wantsNearby && (($distanceKm !== null && $distanceKm <= 50)
+                    || (filled($locationText) && $studentLocations !== [] && $this->matchesAnyOption($locationText, $studentLocations))))
+                || ($explicitLocations !== [] && filled($locationText) && $this->matchesAnyOption($locationText, $explicitLocations));
+
+            $criteria[] = [
+                'key' => 'location',
+                'label' => 'Preferred location',
+                'status' => $matchesLocation ? 'match' : 'miss',
+                'note' => $matchesLocation ? 'Matches a selected location preference.' : 'Outside the selected location preferences.',
+            ];
+        }
+
+        if ($profile->willing_to_relocate === 'no') {
+            $distanceKm = $this->distanceKm($profile, $scholarship);
+
+            if ($distanceKm !== null) {
+                $fitsTravelPreference = $distanceKm <= 50 || in_array($scholarship->application_mode, ['online', 'hybrid'], true);
+                $criteria[] = [
+                    'key' => 'travel',
+                    'label' => 'Travel preference',
+                    'status' => $fitsTravelPreference ? 'match' : 'miss',
+                    'note' => $fitsTravelPreference ? 'Fits the local-only preference.' : 'May require travel or relocation.',
+                ];
+            }
+        }
+
+        $matched = collect($criteria)->where('status', 'match')->count();
+        $score = $criteria === [] ? null : (int) round(($matched / count($criteria)) * 100);
+
+        return [
+            'configured' => $criteria !== [],
+            'score' => $score,
+            'label' => match (true) {
+                $score === null => 'No preferences set',
+                $score >= 80 => 'Fits your preferences',
+                $score >= 50 => 'Some preferences match',
+                default => 'Outside your preferences',
+            },
+            'criteria' => $criteria,
+        ];
     }
 
     private function eligibilityMatch(Scholarship $scholarship, ?User $user): array

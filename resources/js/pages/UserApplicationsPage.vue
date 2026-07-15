@@ -534,6 +534,18 @@ async function submitApplication() {
     }
 }
 
+async function trackApplicationStart(scholarship) {
+    if (!scholarship || appliedScholarshipIds.value.has(scholarship.id)) {
+        return;
+    }
+
+    try {
+        await window.axios.post(`/dashboard/scholarships/${scholarship.id}/application-start`);
+    } catch {
+        // Tracking must never interrupt the application wizard.
+    }
+}
+
 async function logout() {
     await window.axios.post('/logout');
     window.location.href = '/';
@@ -549,6 +561,7 @@ watch(selectedScholarship, (scholarship) => {
 
     documentChecklist.value = [...(scholarship.prepared_documents?.matched ?? [])];
     applicationTermsAccepted.value = false;
+    trackApplicationStart(scholarship);
 });
 </script>
 

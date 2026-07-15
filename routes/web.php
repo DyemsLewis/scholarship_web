@@ -23,9 +23,11 @@ Route::get('/dashboard', [ApplicantDashboardController::class, 'index'])->middle
 Route::get('/dashboard/scholarships', [ApplicantDashboardController::class, 'scholarships'])->middleware('auth')->name('dashboard.scholarships');
 Route::get('/dashboard/scholarships/{scholarship}', [ApplicantDashboardController::class, 'scholarshipDetail'])->middleware('auth')->name('dashboard.scholarships.show');
 Route::get('/dashboard/scholarships/{scholarship}/data', [ApplicantDashboardController::class, 'scholarshipDetailData'])->middleware('auth')->name('dashboard.scholarships.show.data');
+Route::post('/dashboard/scholarships/{scholarship}/application-start', [ApplicantDashboardController::class, 'trackApplicationStart'])->middleware(['auth', 'throttle:30,1'])->name('dashboard.scholarships.application-start');
 Route::get('/dashboard/applications', [ApplicantDashboardController::class, 'applications'])->middleware('auth')->name('dashboard.applications');
 Route::get('/dashboard/documents', [ApplicantDashboardController::class, 'documents'])->middleware('auth')->name('dashboard.documents');
 Route::get('/dashboard/profile', [ApplicantDashboardController::class, 'profile'])->middleware('auth')->name('dashboard.profile');
+Route::get('/dashboard/profile/data', [ApplicantDashboardController::class, 'profileData'])->middleware('auth')->name('dashboard.profile.data');
 Route::patch('/dashboard/profile', [ApplicantDashboardController::class, 'updateProfile'])->middleware('auth')->name('dashboard.profile.update');
 Route::get('/dashboard/data', [ApplicantDashboardController::class, 'data'])->middleware('auth')->name('dashboard.data');
 Route::get('/dashboard/applications/data', [ApplicantDashboardController::class, 'applicationsData'])->middleware('auth')->name('dashboard.applications.data');

@@ -102,4 +102,14 @@ class ScholarshipApplication extends Model
     {
         return $this->hasMany(ApplicationStatusHistory::class);
     }
+
+    public function dssSnapshots(): HasMany
+    {
+        return $this->hasMany(DssCalculationSnapshot::class);
+    }
+
+    public function funnelEvents(): HasMany
+    {
+        return $this->hasMany(ScholarshipFunnelEvent::class);
+    }
 }

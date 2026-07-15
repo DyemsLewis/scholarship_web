@@ -3,13 +3,14 @@
 namespace App\Services;
 
 use App\Models\ApplicationDocument;
+use App\Models\DssCalculationSnapshot;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Support\AcademicRequirement;
 
 class DecisionSupportService
 {
-    public const METHODOLOGY_VERSION = '2.0';
+    public const METHODOLOGY_VERSION = '2.1';
 
     private const WEIGHTS = [
         'eligibility' => 65,
@@ -61,7 +62,7 @@ class DecisionSupportService
         ];
     }
 
-    public function syncApplication(ScholarshipApplication $application): array
+    public function syncApplication(ScholarshipApplication $application, string $source = 'system'): array
     {
         $score = $this->scoreApplication($application);
         $eligibilitySnapshot = $this->currentEligibilitySnapshot($application);
@@ -78,6 +79,7 @@ class DecisionSupportService
         }
 
         $application->forceFill($updates)->saveQuietly();
+        $this->captureSnapshot($application->fresh(), $score, $eligibilitySnapshot, $source);
 
         return $score;
     }
@@ -235,6 +237,91 @@ class DecisionSupportService
         ];
     }
 
+    private function captureSnapshot(
+        ScholarshipApplication $application,
+        array $score,
+        ?array $eligibilitySnapshot,
+        string $source,
+    ): void {
+        $application->loadMissing(['applicant.studentProfile', 'documents', 'scholarship']);
+        $profile = $application->applicant?->studentProfile;
+        $scholarship = $application->scholarship;
+
+        if (! $profile || ! $scholarship) {
+            return;
+        }
+
+        $applicantInputs = [
+            'profile_updated_at' => $profile->updated_at?->toISOString(),
+            'education_level' => $profile->education_level,
+            'school_type' => $profile->school_type,
+            'course_or_strand' => $profile->course_or_strand,
+            'year_level' => $profile->year_level,
+            'gwa' => $profile->gwa,
+            'grading_scale' => AcademicRequirement::normalizeScale($profile->grading_scale, $profile->gwa),
+            'income_bracket' => $profile->income_bracket,
+            'barangay' => $profile->barangay,
+            'city' => $profile->city,
+            'province' => $profile->province,
+            'region' => $profile->region,
+        ];
+        $scholarshipInputs = [
+            'scholarship_updated_at' => $scholarship->updated_at?->toISOString(),
+            'status' => $scholarship->status,
+            'deadline' => $scholarship->deadline?->toDateString(),
+            'eligible_education_levels' => $scholarship->eligible_education_levels,
+            'eligible_courses' => $scholarship->eligible_courses,
+            'eligible_school_types' => $scholarship->eligible_school_types,
+            'eligible_year_levels' => $scholarship->eligible_year_levels,
+            'eligible_locations' => $scholarship->eligible_locations,
+            'income_requirement' => $scholarship->income_requirement,
+            'minimum_gwa' => $scholarship->minimum_gwa,
+            'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
+            'requirements' => $scholarship->requirements,
+        ];
+        $documentInputs = $application->documents
+            ->sortBy('id')
+            ->map(fn (ApplicationDocument $document): array => [
+                'id' => $document->id,
+                'name' => $document->document_name,
+                'status' => $document->status,
+                'updated_at' => $document->updated_at?->toISOString(),
+            ])
+            ->values()
+            ->all();
+        $eligibility = $eligibilitySnapshot ?? $application->eligibility_breakdown ?? [];
+        $academicEvaluation = collect($eligibility['criteria'] ?? [])->firstWhere('key', 'academic');
+        $fingerprint = hash('sha256', json_encode([
+            'methodology_version' => self::METHODOLOGY_VERSION,
+            'application_status' => $application->status,
+            'document_checklist' => $application->document_checklist ?? [],
+            'documents' => $documentInputs,
+            'applicant' => $applicantInputs,
+            'scholarship' => $scholarshipInputs,
+            'eligibility' => $eligibility,
+            'score' => $score,
+        ], JSON_THROW_ON_ERROR));
+
+        DssCalculationSnapshot::query()->firstOrCreate([
+            'scholarship_application_id' => $application->id,
+            'input_hash' => $fingerprint,
+        ], [
+            'applicant_id' => $application->applicant_id,
+            'scholarship_id' => $application->scholarship_id,
+            'methodology_version' => self::METHODOLOGY_VERSION,
+            'source' => $source,
+            'eligibility_score' => $eligibility['score'] ?? $application->eligibility_score,
+            'suitability_score' => $score['score'] ?? $application->dss_score,
+            'recommendation' => $score['recommendation'] ?? $application->dss_recommendation,
+            'eligibility_breakdown' => $eligibility,
+            'dss_breakdown' => $score,
+            'applicant_inputs' => $applicantInputs,
+            'scholarship_inputs' => $scholarshipInputs,
+            'academic_evaluation' => $academicEvaluation,
+            'calculated_at' => now(),
+        ]);
+    }
+
     private function criterion(string $key, string $label, int $score, string $note): array
     {
         $weight = self::WEIGHTS[$key];
@@ -279,7 +366,16 @@ class DecisionSupportService
         $passed = 0;
         $applicable = 0;
 
-        $addCriterion = function (string $key, string $label, string $status, ?string $studentValue, ?string $requirement, string $note, bool $counts = true) use (&$criteria, &$passed, &$applicable): void {
+        $addCriterion = function (
+            string $key,
+            string $label,
+            string $status,
+            ?string $studentValue,
+            ?string $requirement,
+            string $note,
+            bool $counts = true,
+            array $metadata = [],
+        ) use (&$criteria, &$passed, &$applicable): void {
             $criteria[] = [
                 'key' => $key,
                 'label' => $label,
@@ -287,6 +383,7 @@ class DecisionSupportService
                 'student_value' => $studentValue,
                 'requirement' => $requirement,
                 'note' => $note,
+                ...$metadata,
             ];
 
             if (! $counts) {
@@ -335,6 +432,12 @@ class DecisionSupportService
             $academicMatch['requirement'],
             $academicMatch['note'],
             $academicMatch['counts'],
+            [
+                'student_scale' => $academicMatch['student_scale'],
+                'requirement_scale' => $academicMatch['requirement_scale'],
+                'comparison_mode' => $academicMatch['comparison_mode'],
+                'is_comparable' => $academicMatch['is_comparable'],
+            ],
         );
 
         $addOptionCriterion('education_level', 'Education level', $profile->education_level, $scholarship->eligible_education_levels, 'This scholarship is open to all education levels.');
@@ -405,9 +508,20 @@ class DecisionSupportService
     {
         $gwa = $application->applicant?->studentProfile?->gwa;
         $minimumGwa = $application->scholarship?->minimum_gwa;
+        $studentScale = AcademicRequirement::normalizeScale($application->applicant?->studentProfile?->grading_scale, $gwa);
+        $requiredScale = AcademicRequirement::normalizeScale($application->scholarship?->minimum_grade_scale, $minimumGwa);
+
+        if (in_array($requiredScale, [AcademicRequirement::SCALE_PASS_FAIL, AcademicRequirement::SCALE_OTHER], true)) {
+            return 60;
+        }
 
         if ($gwa === null && $minimumGwa === null) {
             return 100;
+        }
+
+        if (in_array($studentScale, [AcademicRequirement::SCALE_PASS_FAIL, AcademicRequirement::SCALE_OTHER], true)
+            && AcademicRequirement::requiresNumeric($requiredScale)) {
+            return 60;
         }
 
         if ($gwa === null) {
@@ -420,8 +534,6 @@ class DecisionSupportService
 
         $studentGwa = (float) $gwa;
         $requiredGwa = (float) $minimumGwa;
-        $studentScale = AcademicRequirement::normalizeScale($application->applicant?->studentProfile?->grading_scale, $gwa);
-        $requiredScale = AcademicRequirement::normalizeScale($application->scholarship?->minimum_grade_scale, $minimumGwa);
 
         if ($studentGwa <= 0 || $requiredGwa <= 0) {
             return 60;

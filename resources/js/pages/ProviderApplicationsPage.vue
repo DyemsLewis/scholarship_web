@@ -4,6 +4,7 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import { decisionReasonOptions } from '../support/applicationDecisionReasons';
 
 const appElement = document.getElementById('app');
 const initialScholarshipId = appElement?.dataset.scholarshipId ?? new URLSearchParams(window.location.search).get('scholarship_id') ?? '';
@@ -117,25 +118,6 @@ const statusOptions = [
     { value: 'disbursed', label: 'Distributed' },
     { value: 'renewed', label: 'Renewed' },
     { value: 'rejected', label: 'Rejected' },
-];
-const decisionReasonOptions = [
-    { value: '', label: 'No reason selected' },
-    { value: 'complete_requirements', label: 'Complete requirements' },
-    { value: 'missing_documents', label: 'Missing documents' },
-    { value: 'academic_requirement_not_met', label: 'Academic requirement not met' },
-    { value: 'outside_eligibility', label: 'Outside eligibility' },
-    { value: 'for_exam', label: 'Meets exam eligibility' },
-    { value: 'exam_scheduled', label: 'Exam scheduled' },
-    { value: 'exam_completed', label: 'Exam completed' },
-    { value: 'passed_exam', label: 'Passed exam' },
-    { value: 'failed_exam', label: 'Failed exam' },
-    { value: 'for_interview', label: 'For interview' },
-    { value: 'approved_for_award', label: 'Approved for award' },
-    { value: 'award_released', label: 'Reward distributed' },
-    { value: 'renewed_support', label: 'Renewed support' },
-    { value: 'funds_limited', label: 'Funds limited' },
-    { value: 'not_selected', label: 'Not selected' },
-    { value: 'other', label: 'Other' },
 ];
 const documentStatusOptions = [
     { value: 'pending', label: 'Pending' },

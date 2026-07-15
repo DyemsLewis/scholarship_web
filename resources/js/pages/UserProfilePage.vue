@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
@@ -15,6 +15,17 @@ const user = ref(null);
 const form = ref(emptyForm());
 const activeSection = ref('personal');
 const addressLookupTrigger = ref(0);
+const savedFormSnapshot = ref('');
+const fieldErrors = ref({});
+const matchSummary = ref({
+    available_programs: 0,
+    eligible_programs: 0,
+    strong_matches: 0,
+    needs_review: 0,
+    blocked_programs: 0,
+    preference_matches: 0,
+    top_gaps: [],
+});
 
 const fieldClass = 'min-w-0';
 const labelClass = 'mb-2 block min-h-10 text-sm font-semibold leading-5 text-slate-700';
@@ -35,7 +46,7 @@ const accountManagerOptions = [
 const guardianRelationshipOptions = ['Parent / guardian', 'Mother', 'Father', 'Grandparent', 'Sibling', 'Relative', 'Teacher / adviser', 'Other'];
 const regionOptions = ['NCR', 'CAR', 'Region I', 'Region II', 'Region III', 'Region IV-A', 'MIMAROPA', 'Region V', 'Region VI', 'Region VII', 'Region VIII', 'Region IX', 'Region X', 'Region XI', 'Region XII', 'Region XIII', 'BARMM'];
 const provinceOptions = ['Metro Manila', 'Abra', 'Agusan del Norte', 'Agusan del Sur', 'Aklan', 'Albay', 'Antique', 'Apayao', 'Aurora', 'Bataan', 'Batangas', 'Benguet', 'Bohol', 'Bukidnon', 'Bulacan', 'Cagayan', 'Camarines Norte', 'Camarines Sur', 'Capiz', 'Cavite', 'Cebu', 'Davao del Norte', 'Davao del Sur', 'Davao Oriental', 'Iloilo', 'Isabela', 'Laguna', 'La Union', 'Leyte', 'Misamis Oriental', 'Negros Occidental', 'Negros Oriental', 'Nueva Ecija', 'Nueva Vizcaya', 'Pampanga', 'Pangasinan', 'Quezon', 'Rizal', 'South Cotabato', 'Tarlac', 'Zambales'];
-const preferredLocationOptions = ['Anywhere in the Philippines', 'Near my home address', 'NCR', 'Region III', 'Region IV-A', 'Cebu', 'Davao', 'Online-friendly'];
+const preferredLocationOptions = ['Anywhere in the Philippines', 'Near my home address', 'Online-friendly', ...regionOptions, 'Cebu', 'Davao'];
 const juniorHighPathOptions = ['General curriculum', 'STE', 'SPA', 'Sports program', 'Special science class', 'Other'];
 const seniorHighPathOptions = ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL', 'Arts and Design', 'Sports Track', 'Other'];
 const collegePathOptions = ['Any course', 'BS Information Technology', 'BS Education', 'BS Nursing', 'BS Accountancy', 'BS Business Administration', 'Engineering', 'Criminology', 'Agriculture', 'Other'];
@@ -69,6 +80,8 @@ const schoolTypeOptions = [
 const gradingScaleOptions = [
     { value: 'percentage', label: 'General average / percentage' },
     { value: 'grade_point', label: 'GWA grade point' },
+    { value: 'pass_fail', label: 'Pass/fail or competency based' },
+    { value: 'other', label: 'Other institutional grading system' },
 ];
 const genderOptions = [
     { value: 'female', label: 'Female' },
@@ -141,7 +154,7 @@ const profileSections = [
         impact: 'Applicant identity.',
         required: true,
         fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'gender', 'birthdate', 'contact_number', 'account_managed_by'],
-        requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number'],
+        requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number', 'account_managed_by'],
     },
     {
         id: 'academic',
@@ -164,6 +177,15 @@ const profileSections = [
         requiredFields: ['income_bracket', 'city', 'province', 'region'],
     },
     {
+        id: 'preferences',
+        label: 'Preferences',
+        detail: 'Finder priorities',
+        icon: 'fa-solid fa-sliders',
+        impact: 'Personalizes result order.',
+        required: false,
+        fields: ['preferred_categories', 'preferred_locations', 'willing_to_relocate', 'support_needs', 'scholarship_goal'],
+    },
+    {
         id: 'guardian',
         label: 'Guardian',
         detail: 'Contact person',
@@ -171,7 +193,7 @@ const profileSections = [
         impact: 'Trusted contact.',
         required: true,
         fields: ['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
-        requiredFields: ['guardian_name', 'guardian_contact'],
+        requiredFields: ['guardian_name', 'guardian_relationship', 'guardian_contact'],
     },
     {
         id: 'review',
@@ -189,7 +211,11 @@ const gradesRequiredLevels = ['elementary', 'junior_high_school', 'senior_high_s
 const guardianRequiredLevels = ['preschool', 'elementary', 'junior_high_school', 'senior_high_school'];
 const requiresProgramPath = computed(() => courseRequiredLevels.includes(form.value.education_level));
 const requiresGrades = computed(() => gradesRequiredLevels.includes(form.value.education_level));
-const needsGuardianContext = computed(() => guardianRequiredLevels.includes(form.value.education_level)
+const requiresNumericGrade = computed(() => ['percentage', 'grade_point'].includes(form.value.grading_scale));
+const applicantAge = computed(() => calculateAge(form.value.birthdate));
+const isMinor = computed(() => applicantAge.value !== null && applicantAge.value < 18);
+const needsGuardianContext = computed(() => isMinor.value
+    || guardianRequiredLevels.includes(form.value.education_level)
     || ['parent_guardian', 'relative', 'school_representative', 'other'].includes(form.value.account_managed_by));
 const hasGuardianDetails = computed(() => [
     form.value.guardian_name,
@@ -214,6 +240,7 @@ const completedRequiredFields = computed(() => requiredFieldData.value.filter((f
 const profileCompletion = computed(() => requiredFieldData.value.length === 0 ? 100 : Math.round((completedRequiredFields.value / requiredFieldData.value.length) * 100));
 const missingProfileFields = computed(() => requiredFieldData.value.filter((field) => !hasValue(field.value)));
 const profileComplete = computed(() => missingProfileFields.value.length === 0);
+const hasUnsavedChanges = computed(() => savedFormSnapshot.value !== '' && savedFormSnapshot.value !== formSnapshot());
 const profileQuality = computed(() => {
     if (profileComplete.value) {
         return {
@@ -265,6 +292,11 @@ const recommendedSection = computed(() => {
 
     return section?.id ?? 'review';
 });
+const validationErrorEntries = computed(() => Object.entries(fieldErrors.value).map(([key, messages]) => ({
+    key,
+    label: fieldLabel(key),
+    message: Array.isArray(messages) ? messages[0] : String(messages),
+})));
 const profileMapAddress = computed(() => {
     const parts = [
         form.value.address,
@@ -318,6 +350,37 @@ function emptyForm() {
     };
 }
 
+function calculateAge(value) {
+    if (!value) {
+        return null;
+    }
+
+    const birthdate = new Date(`${value}T00:00:00`);
+
+    if (Number.isNaN(birthdate.getTime())) {
+        return null;
+    }
+
+    const today = new Date();
+    let age = today.getFullYear() - birthdate.getFullYear();
+    const birthdayHasPassed = today.getMonth() > birthdate.getMonth()
+        || (today.getMonth() === birthdate.getMonth() && today.getDate() >= birthdate.getDate());
+
+    if (!birthdayHasPassed) {
+        age -= 1;
+    }
+
+    return age;
+}
+
+function formSnapshot() {
+    return JSON.stringify(form.value);
+}
+
+function markFormSaved() {
+    savedFormSnapshot.value = formSnapshot();
+}
+
 function hasValue(value) {
     return value !== null && value !== undefined && String(value).trim() !== '';
 }
@@ -339,8 +402,13 @@ function isFieldRelevant(field) {
         return requiresProgramPath.value || hasValue(form.value.course_or_strand);
     }
 
-    if (['gwa', 'grading_scale'].includes(field)) {
-        return requiresGrades.value || hasValue(form.value[field]);
+    if (field === 'grading_scale') {
+        return requiresGrades.value || hasValue(form.value.grading_scale);
+    }
+
+    if (field === 'gwa') {
+        return (requiresGrades.value && (!form.value.grading_scale || requiresNumericGrade.value))
+            || (!requiresGrades.value && hasValue(form.value.gwa));
     }
 
     if (['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'].includes(field)) {
@@ -356,12 +424,20 @@ function isFieldRelevant(field) {
 }
 
 function isFieldRequired(field) {
+    if (field === 'account_managed_by') {
+        return needsGuardianContext.value;
+    }
+
     if (field === 'course_or_strand') {
         return requiresProgramPath.value;
     }
 
-    if (['gwa', 'grading_scale'].includes(field)) {
+    if (field === 'grading_scale') {
         return requiresGrades.value;
+    }
+
+    if (field === 'gwa') {
+        return requiresGrades.value && (!form.value.grading_scale || requiresNumericGrade.value);
     }
 
     if (['guardian_name', 'guardian_relationship', 'guardian_contact'].includes(field)) {
@@ -433,6 +509,30 @@ function sectionStatusClass(section) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function profileSection(sectionId) {
+    return profileSections.find((section) => section.id === sectionId) ?? profileSections[0];
+}
+
+function sectionForField(field) {
+    return profileSections.find((section) => section.fields.includes(field))?.id ?? 'personal';
+}
+
+function sectionForMatchGap(gap) {
+    if (['academic', 'education_level', 'course', 'school_type', 'year_level'].includes(gap?.key)) {
+        return 'academic';
+    }
+
+    if (['location', 'income'].includes(gap?.key)) {
+        return 'location';
+    }
+
+    return 'personal';
+}
+
+function sectionHasErrors(section) {
+    return Object.keys(fieldErrors.value).some((field) => section.fields.includes(field));
+}
+
 function openSection(sectionId) {
     activeSection.value = sectionId;
     errorMessage.value = '';
@@ -446,12 +546,19 @@ function goToPreviousSection() {
     }
 }
 
-function goToNextSection() {
+async function goToNextSection() {
     const next = visibleProfileSections.value[visibleActiveSectionIndex.value + 1];
 
-    if (next) {
-        openSection(next.id);
+    if (!next) {
+        return;
     }
+
+    if (hasUnsavedChanges.value) {
+        await saveProfile(false, next.id);
+        return;
+    }
+
+    openSection(next.id);
 }
 
 function gradingScaleLabel(value) {
@@ -604,10 +711,22 @@ const coursePathOptions = computed(() => {
             return [];
     }
 });
-const guardianRequirementLabel = computed(() => needsGuardianContext.value ? 'Required for this profile' : 'Optional contact');
-const guardianRequirementText = computed(() => needsGuardianContext.value
-    ? 'Younger learners or parent-managed accounts need a guardian contact for scholarship follow-ups.'
-    : 'Add a trusted contact if someone else helps with applications.');
+const guardianRequirementLabel = computed(() => {
+    if (isMinor.value) {
+        return 'Required for a learner under 18';
+    }
+
+    return needsGuardianContext.value ? 'Required for this profile' : 'Optional contact';
+});
+const guardianRequirementText = computed(() => {
+    if (isMinor.value) {
+        return `The learner is ${applicantAge.value}. Add the adult who can receive scholarship follow-ups and help manage consent.`;
+    }
+
+    return needsGuardianContext.value
+        ? 'Younger education levels or adult-managed accounts need a guardian contact for scholarship follow-ups.'
+        : 'Add a trusted contact if someone else helps with applications.';
+});
 const reviewGroups = computed(() => [
     {
         title: 'Learner',
@@ -638,6 +757,16 @@ const reviewGroups = computed(() => [
         ],
     },
     {
+        title: 'Preferences',
+        items: [
+            ['Scholarship types', listFromText(form.value.preferred_categories).join(', ')],
+            ['Preferred locations', listFromText(form.value.preferred_locations).join(', ')],
+            ['Relocation', fieldDisplayValue({ key: 'willing_to_relocate', value: form.value.willing_to_relocate })],
+            ['Support needed', listFromText(form.value.support_needs).join(', ')],
+            ['Goal', form.value.scholarship_goal],
+        ],
+    },
+    {
         title: 'Guardian',
         items: [
             ['Name', form.value.guardian_name],
@@ -656,6 +785,7 @@ const providerPreviewRows = computed(() => [
     ['Academic record', isFieldRelevant('gwa') ? [form.value.gwa, gradingScaleLabel(form.value.grading_scale)].filter(Boolean).join(' - ') : 'Not required'],
     ['Location', [form.value.city, form.value.province, form.value.region].filter(Boolean).join(', ')],
     ['Need context', [form.value.income_bracket, form.value.support_needs].filter(Boolean).join(' - ')],
+    ['Preferences', [form.value.preferred_categories, form.value.preferred_locations].filter(Boolean).join(' - ')],
 ]);
 const yearLevelOptions = computed(() => {
     switch (form.value.education_level) {
@@ -866,10 +996,12 @@ async function loadProfile() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/dashboard/data');
+        const response = await window.axios.get('/dashboard/profile/data');
 
         user.value = response.data.user;
         fillForm(response.data.user);
+        matchSummary.value = response.data.match_summary ?? matchSummary.value;
+        markFormSaved();
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load applicant profile.';
     } finally {
@@ -877,31 +1009,69 @@ async function loadProfile() {
     }
 }
 
-async function saveProfile(requireComplete = false) {
+async function saveProfile(requireComplete = false, nextSectionId = null) {
     if (requireComplete && missingProfileFields.value.length > 0) {
         errorMessage.value = `Add ${missingProfileFields.value.slice(0, 4).map((field) => field.label).join(', ')}${missingProfileFields.value.length > 4 ? ', and the remaining required details' : ''} before completing the profile.`;
         statusMessage.value = '';
         openSection(recommendedSection.value);
-        return;
+        return false;
+    }
+
+    if (!requireComplete && !hasUnsavedChanges.value) {
+        if (nextSectionId) {
+            openSection(nextSectionId);
+        } else {
+            statusMessage.value = 'Your profile is already up to date.';
+        }
+
+        return true;
     }
 
     isSaving.value = true;
     statusMessage.value = '';
     errorMessage.value = '';
+    fieldErrors.value = {};
 
     try {
         const response = await window.axios.patch('/dashboard/profile', form.value);
 
         user.value = response.data.user;
         fillForm(response.data.user);
+        matchSummary.value = response.data.match_summary ?? matchSummary.value;
+        markFormSaved();
         statusMessage.value = requireComplete
             ? 'Profile completed. You can now apply for scholarships.'
             : response.data.message ?? 'Profile progress saved.';
+        if (nextSectionId) {
+            openSection(nextSectionId);
+        }
+
+        return true;
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update applicant profile.';
+        fieldErrors.value = error.response?.data?.errors ?? {};
+        const firstError = Object.keys(fieldErrors.value)[0];
+
+        if (firstError) {
+            openSection(sectionForField(firstError));
+        }
+
+        errorMessage.value = firstError
+            ? fieldErrors.value[firstError]?.[0] ?? 'Review the highlighted profile details.'
+            : error.response?.data?.message ?? 'Unable to update applicant profile.';
+
+        return false;
     } finally {
         isSaving.value = false;
     }
+}
+
+function handleBeforeUnload(event) {
+    if (!hasUnsavedChanges.value) {
+        return;
+    }
+
+    event.preventDefault();
+    event.returnValue = '';
 }
 
 async function logout() {
@@ -909,7 +1079,20 @@ async function logout() {
     window.location.href = '/';
 }
 
-onMounted(loadProfile);
+onMounted(() => {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    loadProfile();
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+});
+
+watch(() => form.value.grading_scale, (scale) => {
+    if (['pass_fail', 'other'].includes(scale)) {
+        form.value.gwa = '';
+    }
+});
 </script>
 
 <template>
@@ -1012,7 +1195,13 @@ onMounted(loadProfile);
                                         <span class="flex items-center justify-between gap-2">
                                             <span class="truncate text-sm font-bold text-slate-950">{{ section.label }}</span>
                                             <span
-                                                v-if="section.fields.length"
+                                                v-if="sectionHasErrors(section)"
+                                                class="shrink-0 rounded-md bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700"
+                                            >
+                                                Fix
+                                            </span>
+                                            <span
+                                                v-else-if="section.fields.length"
                                                 :class="[
                                                     'shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold',
                                                     sectionStatusClass(section),
@@ -1030,13 +1219,16 @@ onMounted(loadProfile);
                         </nav>
 
                         <div class="mt-4 grid gap-2">
+                            <p :class="['text-center text-xs font-semibold', hasUnsavedChanges ? 'text-amber-700' : 'text-slate-400']">
+                                {{ hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved' }}
+                            </p>
                             <button
                                 type="button"
                                 class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                :disabled="isSaving"
+                                :disabled="isSaving || !hasUnsavedChanges"
                                 @click="saveProfile(false)"
                             >
-                                {{ isSaving ? 'Saving...' : 'Save progress' }}
+                                {{ isSaving ? 'Saving...' : (hasUnsavedChanges ? 'Save progress' : 'Saved') }}
                             </button>
                             <button
                                 type="button"
@@ -1057,6 +1249,17 @@ onMounted(loadProfile);
                             <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">
                                 {{ errorMessage }}
                             </p>
+                            <div v-if="validationErrorEntries.length" class="mt-3 flex flex-wrap gap-2">
+                                <button
+                                    v-for="error in validationErrorEntries.slice(0, 5)"
+                                    :key="error.key"
+                                    type="button"
+                                    class="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700"
+                                    @click="openSection(sectionForField(error.key))"
+                                >
+                                    Review {{ error.label }}
+                                </button>
+                            </div>
                         </div>
 
                         <section v-if="activeSection === 'personal'" id="profile-personal" class="student-card p-6">
@@ -1065,8 +1268,8 @@ onMounted(loadProfile);
                                     <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Personal details</h3>
                                 </div>
-                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSections[0])]">
-                                    {{ sectionStatusLabel(profileSections[0]) }}
+                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSection('personal'))]">
+                                    {{ sectionStatusLabel(profileSection('personal')) }}
                                 </span>
                             </div>
 
@@ -1123,7 +1326,10 @@ onMounted(loadProfile);
                                 </div>
                                 <div>
                                     <label :class="labelClass" for="profile-birthdate">Birthdate</label>
-                                    <input id="profile-birthdate" v-model="form.birthdate" type="date" :class="inputClass">
+                                    <input id="profile-birthdate" v-model="form.birthdate" type="date" :max="new Date().toISOString().slice(0, 10)" :class="inputClass">
+                                    <p v-if="applicantAge !== null" class="mt-1 text-xs font-semibold text-slate-500">
+                                        Age {{ applicantAge }}<span v-if="isMinor"> - guardian details are required</span>
+                                    </p>
                                 </div>
                                 <div>
                                     <label :class="labelClass" for="profile-contact">Contact number</label>
@@ -1137,11 +1343,14 @@ onMounted(loadProfile);
                                         Account context
                                     </p>
                                     <p class="mt-1 text-xs leading-5 text-slate-500">
-                                        Use this for guardian-managed accounts.
+                                        Tell the platform who is responsible for managing this profile and its applications.
                                     </p>
                                 </div>
                                 <div>
-                                    <label :class="labelClass" for="profile-account-manager">Who manages this account? <span class="font-normal text-sky-600">(optional)</span></label>
+                                    <label :class="labelClass" for="profile-account-manager">
+                                        Who manages this account?
+                                        <span class="font-normal text-sky-600">{{ needsGuardianContext ? '(required)' : '(optional)' }}</span>
+                                    </label>
                                     <select id="profile-account-manager" v-model="form.account_managed_by" :class="inputClass">
                                         <option value="">Select account manager</option>
                                         <option
@@ -1162,8 +1371,8 @@ onMounted(loadProfile);
                                     <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Learning background</h3>
                                 </div>
-                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSections[1])]">
-                                    {{ sectionStatusLabel(profileSections[1]) }}
+                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSection('academic'))]">
+                                    {{ sectionStatusLabel(profileSection('academic')) }}
                                 </span>
                             </div>
 
@@ -1285,13 +1494,25 @@ onMounted(loadProfile);
                                             {{ option.label }}
                                         </option>
                                     </select>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">
+                                        Different numeric scales are not automatically converted. Pass/fail and other systems are reviewed using supporting records.
+                                    </p>
                                 </div>
                             </div>
 
                             <div v-if="isFieldRelevant('gwa')" class="mt-4 grid gap-4 md:grid-cols-3">
                                 <div>
                                     <label :class="labelClass" for="profile-gwa">{{ gwaLabel }}</label>
-                                    <input id="profile-gwa" v-model="form.gwa" type="number" min="0" max="100" step="0.01" placeholder="92.50 or 1.75" :class="inputClass">
+                                    <input
+                                        id="profile-gwa"
+                                        v-model="form.gwa"
+                                        type="number"
+                                        min="0"
+                                        :max="form.grading_scale === 'grade_point' ? 5 : 100"
+                                        step="0.01"
+                                        :placeholder="form.grading_scale === 'grade_point' ? 'Example: 1.75' : 'Example: 92.50'"
+                                        :class="inputClass"
+                                    >
                                 </div>
                             </div>
 
@@ -1340,8 +1561,8 @@ onMounted(loadProfile);
                                     <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Location and financial need</h3>
                                 </div>
-                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSections[2])]">
-                                    {{ sectionStatusLabel(profileSections[2]) }}
+                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSection('location'))]">
+                                    {{ sectionStatusLabel(profileSection('location')) }}
                                 </span>
                             </div>
 
@@ -1469,14 +1690,123 @@ onMounted(loadProfile);
                             </details>
                         </section>
 
+                        <section v-if="activeSection === 'preferences'" id="profile-preferences" class="student-card p-6">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <p class="student-kicker">Optional</p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Scholarship preferences</h3>
+                                </div>
+                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSection('preferences'))]">
+                                    {{ sectionStatusLabel(profileSection('preferences')) }}
+                                </span>
+                            </div>
+
+                            <div class="student-soft-card mt-5 p-4">
+                                <p class="text-sm font-bold text-slate-950">Personalize your finder</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-600">
+                                    These choices help order scholarship results and explain what support you need. They never override eligibility rules or the provider's final decision.
+                                </p>
+                            </div>
+
+                            <fieldset class="mt-5">
+                                <legend class="text-sm font-bold text-slate-950">Preferred scholarship types</legend>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Choose every type you would like to see first.</p>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                        v-for="option in categoryOptions"
+                                        :key="option"
+                                        type="button"
+                                        :aria-pressed="isOptionSelected('preferred_categories', option)"
+                                        :class="[
+                                            'rounded-md border px-3 py-2 text-sm font-semibold transition',
+                                            isOptionSelected('preferred_categories', option)
+                                                ? 'border-slate-900 bg-slate-900 text-white'
+                                                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400',
+                                        ]"
+                                        @click="toggleListOption('preferred_categories', option)"
+                                    >
+                                        {{ option }}
+                                    </button>
+                                </div>
+                            </fieldset>
+
+                            <fieldset class="mt-6 border-t border-slate-200 pt-5">
+                                <legend class="text-sm font-bold text-slate-950">Preferred locations</legend>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Select broad areas, nearby programs, or online-friendly options.</p>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                        v-for="option in preferredLocationOptions"
+                                        :key="option"
+                                        type="button"
+                                        :aria-pressed="isOptionSelected('preferred_locations', option)"
+                                        :class="[
+                                            'rounded-md border px-3 py-2 text-sm font-semibold transition',
+                                            isOptionSelected('preferred_locations', option)
+                                                ? 'border-amber-400 bg-amber-50 text-slate-950'
+                                                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400',
+                                        ]"
+                                        @click="toggleListOption('preferred_locations', option)"
+                                    >
+                                        {{ option }}
+                                    </button>
+                                </div>
+                            </fieldset>
+
+                            <fieldset class="mt-6 border-t border-slate-200 pt-5">
+                                <legend class="text-sm font-bold text-slate-950">Support needed</legend>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">This helps reviewers understand what the scholarship would support.</p>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                        v-for="option in supportNeedOptions"
+                                        :key="option"
+                                        type="button"
+                                        :aria-pressed="isOptionSelected('support_needs', option)"
+                                        :class="[
+                                            'rounded-md border px-3 py-2 text-sm font-semibold transition',
+                                            isOptionSelected('support_needs', option)
+                                                ? 'border-slate-900 bg-slate-100 text-slate-950'
+                                                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400',
+                                        ]"
+                                        @click="toggleListOption('support_needs', option)"
+                                    >
+                                        {{ option }}
+                                    </button>
+                                </div>
+                            </fieldset>
+
+                            <div class="mt-6 grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2">
+                                <div>
+                                    <label :class="labelClass" for="profile-relocation">Willing to relocate</label>
+                                    <select id="profile-relocation" v-model="form.willing_to_relocate" :class="inputClass">
+                                        <option value="">No preference selected</option>
+                                        <option v-for="option in relocationOptions" :key="option.value" :value="option.value">
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label :class="labelClass" for="profile-goal">Scholarship goal</label>
+                                    <textarea
+                                        id="profile-goal"
+                                        v-model="form.scholarship_goal"
+                                        rows="4"
+                                        maxlength="1500"
+                                        placeholder="Briefly describe what the scholarship would help you continue or achieve."
+                                        :class="inputClass"
+                                    ></textarea>
+                                    <p class="mt-1 text-right text-xs text-slate-400">{{ form.scholarship_goal.length }}/1500</p>
+                                </div>
+                            </div>
+                        </section>
+
                         <section v-if="activeSection === 'guardian'" id="profile-guardian" class="student-card p-6">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
                                     <p class="student-kicker">{{ needsGuardianContext ? 'Required' : 'Optional' }}</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Guardian information</h3>
                                 </div>
-                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSections[3])]">
-                                    {{ sectionStatusLabel(profileSections[3]) }}
+                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSection('guardian'))]">
+                                    {{ sectionStatusLabel(profileSection('guardian')) }}
                                 </span>
                             </div>
 
@@ -1489,10 +1819,19 @@ onMounted(loadProfile);
                                 </p>
                             </div>
 
-                            <div class="mt-5 grid gap-4 md:grid-cols-2">
+                            <div class="mt-5 grid gap-4 md:grid-cols-3">
                                 <div>
                                     <label :class="labelClass" for="profile-guardian">Guardian name</label>
                                     <input id="profile-guardian" v-model="form.guardian_name" placeholder="Parent or guardian" :class="inputClass">
+                                </div>
+                                <div>
+                                    <label :class="labelClass" for="profile-guardian-relationship">Relationship to learner</label>
+                                    <select id="profile-guardian-relationship" v-model="form.guardian_relationship" :class="inputClass">
+                                        <option value="">Select relationship</option>
+                                        <option v-for="option in guardianRelationshipOptions" :key="option" :value="option">
+                                            {{ option }}
+                                        </option>
+                                    </select>
                                 </div>
                                 <div>
                                     <label :class="labelClass" for="profile-guardian-contact">Guardian contact</label>
@@ -1502,22 +1841,9 @@ onMounted(loadProfile);
 
                             <details class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
                                 <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
-                                    Optional guardian details
+                                    Guardian email and account access
                                 </summary>
-                                <div class="mt-4 grid gap-4 md:grid-cols-2">
-                                    <div>
-                                        <label :class="labelClass" for="profile-guardian-relationship">Relationship to learner</label>
-                                        <select id="profile-guardian-relationship" v-model="form.guardian_relationship" :class="inputClass">
-                                            <option value="">Select relationship</option>
-                                            <option
-                                                v-for="option in guardianRelationshipOptions"
-                                                :key="option"
-                                                :value="option"
-                                            >
-                                                {{ option }}
-                                            </option>
-                                        </select>
-                                    </div>
+                                <div class="mt-4 grid gap-4">
                                     <div>
                                         <label :class="labelClass" for="profile-guardian-email">Guardian email</label>
                                         <input id="profile-guardian-email" v-model="form.guardian_email" type="email" placeholder="guardian@example.com" :class="inputClass">
@@ -1553,6 +1879,41 @@ onMounted(loadProfile);
                                     {{ profileQuality.label }}
                                 </span>
                             </div>
+
+                            <section class="mt-5 rounded-lg border border-slate-200 bg-slate-950 p-4 text-white">
+                                <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-200">Saved-profile match check</p>
+                                        <h4 class="mt-1 text-lg font-bold">How the current catalog reads your profile</h4>
+                                        <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-300">
+                                            This checks structured eligibility only. Documents and the provider's final review remain separate.
+                                        </p>
+                                    </div>
+                                    <a href="/dashboard/scholarships" class="w-fit rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-950">
+                                        Open finder
+                                    </a>
+                                </div>
+                                <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/10 pt-4 text-sm">
+                                    <p><span class="font-bold text-amber-200">{{ matchSummary.strong_matches }}</span> strong</p>
+                                    <p><span class="font-bold text-amber-200">{{ matchSummary.eligible_programs }}</span> eligible</p>
+                                    <p><span class="font-bold text-amber-200">{{ matchSummary.preference_matches }}</span> fit preferences</p>
+                                    <p><span class="font-bold text-amber-200">{{ matchSummary.available_programs }}</span> checked</p>
+                                </div>
+                                <div v-if="matchSummary.top_gaps?.length" class="mt-4 border-t border-white/10 pt-4">
+                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-300">Most common missing or conflicting details</p>
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        <button
+                                            v-for="gap in matchSummary.top_gaps"
+                                            :key="gap.key || gap.label"
+                                            type="button"
+                                            class="rounded-md bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white ring-1 ring-white/10 transition hover:bg-white/15"
+                                            @click="openSection(sectionForMatchGap(gap))"
+                                        >
+                                            {{ gap.label }} ({{ gap.count }})
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
 
                             <div class="mt-5 grid gap-4 md:grid-cols-2">
                                 <article
@@ -1641,16 +2002,16 @@ onMounted(loadProfile);
                             </button>
 
                             <p class="text-center text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                {{ activeProfileSection.label }} · {{ visibleActiveSectionIndex + 1 }} of {{ visibleProfileSections.length }}
+                                {{ activeProfileSection.label }} - {{ visibleActiveSectionIndex + 1 }} of {{ visibleProfileSections.length }}
                             </p>
 
                             <button
                                 type="button"
                                 class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                :disabled="visibleActiveSectionIndex >= visibleProfileSections.length - 1"
+                                :disabled="isSaving || visibleActiveSectionIndex >= visibleProfileSections.length - 1"
                                 @click="goToNextSection"
                             >
-                                Next section
+                                {{ isSaving ? 'Saving...' : (hasUnsavedChanges ? 'Save and continue' : 'Next section') }}
                             </button>
                         </div>
                     </section>

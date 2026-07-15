@@ -10,9 +10,11 @@ use App\Models\ProviderAssessment;
 use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\ScholarshipFunnelEvent;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Support\AcademicRequirement;
+use App\Support\ApplicationDecisionReason;
 use App\Support\ReviewRubric;
 use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
@@ -629,7 +631,12 @@ class ProviderController extends Controller
                 'renewed',
                 'rejected',
             ])],
-            'decision_reason' => [Rule::requiredIf(in_array($request->input('status'), ['rejected', 'not_awarded', 'exam_failed'], true)), 'nullable', 'string', 'max:255'],
+            'decision_reason' => [
+                Rule::requiredIf(ApplicationDecisionReason::requiredForStatus($request->input('status'))),
+                'nullable',
+                'string',
+                Rule::in(ApplicationDecisionReason::acceptedValues()),
+            ],
             'review_notes' => ['nullable', 'string', 'max:1500'],
             'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'outcome_notes' => ['nullable', 'string', 'max:2000'],
@@ -715,7 +722,6 @@ class ProviderController extends Controller
             'rubric_scored_by' => $rubricResult ? $request->user()->id : $application->rubric_scored_by,
             'rubric_scored_at' => $rubricResult && $rubricResult['completed'] > 0 ? now() : $application->rubric_scored_at,
         ]);
-        app(DecisionSupportService::class)->syncApplication($application);
 
         if ($applicantFacingChanged || $reviewNoteChanged) {
             ApplicationStatusHistory::create([
@@ -727,6 +733,25 @@ class ProviderController extends Controller
                 'review_notes' => $validated['review_notes'] ?? null,
                 'changed_at' => now(),
             ]);
+        }
+
+        if ($previousStatus !== $validated['status']) {
+            ScholarshipFunnelEvent::record(
+                $application->applicant,
+                "application_status_{$validated['status']}",
+                $application->scholarship,
+                $application,
+                'provider',
+                [
+                    'previous_status' => $previousStatus,
+                    'status' => $validated['status'],
+                    'decision_reason' => $decisionReason,
+                    'canonical_decision_reason' => ApplicationDecisionReason::canonical($decisionReason),
+                    'awarded_amount' => $application->awarded_amount,
+                    'reviewed_by' => $request->user()->id,
+                    'rubric_total_score' => $application->rubric_total_score,
+                ],
+            );
         }
 
         ActivityLog::record(
@@ -751,7 +776,7 @@ class ProviderController extends Controller
         }
 
         $freshApplication = $application->fresh()->load(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship']);
-        app(DecisionSupportService::class)->syncApplication($freshApplication);
+        app(DecisionSupportService::class)->syncApplication($freshApplication, 'provider_status_updated');
 
         return response()->json([
             'message' => $applicantFacingChanged ? 'Application status updated.' : 'Provider review saved.',
@@ -771,13 +796,30 @@ class ProviderController extends Controller
             'review_notes' => [Rule::requiredIf(in_array($request->input('status'), ['rejected', 'needs_replacement'], true)), 'nullable', 'string', 'max:1000'],
         ]);
 
+        $previousStatus = $document->status;
         $document->update([
             'status' => $validated['status'],
             'review_notes' => $validated['review_notes'] ?? null,
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
         ]);
-        app(DecisionSupportService::class)->syncApplication($document->application);
+
+        if ($previousStatus !== $validated['status']) {
+            ScholarshipFunnelEvent::record(
+                $document->application->applicant,
+                "application_document_{$validated['status']}",
+                $document->application->scholarship,
+                $document->application,
+                'provider',
+                [
+                    'document_id' => $document->id,
+                    'document_name' => $document->document_name,
+                    'previous_status' => $previousStatus,
+                    'status' => $validated['status'],
+                    'reviewed_by' => $request->user()->id,
+                ],
+            );
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -806,7 +848,7 @@ class ProviderController extends Controller
         ]);
 
         $freshApplication = $document->application->fresh()->load(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship']);
-        app(DecisionSupportService::class)->syncApplication($freshApplication);
+        app(DecisionSupportService::class)->syncApplication($freshApplication, 'provider_document_reviewed');
 
         return response()->json([
             'message' => 'Document status updated.',

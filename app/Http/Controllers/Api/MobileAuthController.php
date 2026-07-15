@@ -11,6 +11,7 @@ use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
+use App\Models\ScholarshipFunnelEvent;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Services\DecisionSupportService;
@@ -180,6 +181,8 @@ class MobileAuthController extends Controller
             ], 401);
         }
 
+        $gradeMaximum = $request->input('grading_scale') === AcademicRequirement::SCALE_GRADE_POINT ? 5 : 100;
+
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
@@ -194,8 +197,8 @@ class MobileAuthController extends Controller
             'course_or_strand' => ['nullable', 'string', 'max:255'],
             'year_level' => ['nullable', 'string', 'max:100'],
             'enrollment_status' => ['nullable', 'string', 'max:100'],
-            'gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'grading_scale' => ['nullable', Rule::in(['percentage', 'grade_point'])],
+            'gwa' => ['nullable', 'numeric', 'min:0', "max:{$gradeMaximum}"],
+            'grading_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
             'income_bracket' => ['nullable', 'string', 'max:100'],
             'household_size' => ['nullable', 'integer', 'min:1', 'max:30'],
             'preferred_categories' => ['nullable', 'string', 'max:1000'],
@@ -215,6 +218,10 @@ class MobileAuthController extends Controller
             'guardian_contact' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
         ]);
 
+        if (! AcademicRequirement::requiresNumeric($validated['grading_scale'] ?? null)) {
+            $validated['gwa'] = null;
+        }
+
         $user->studentProfile()->updateOrCreate([
             'user_id' => $user->id,
         ], [
@@ -222,11 +229,23 @@ class MobileAuthController extends Controller
             'middle_initial' => filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null,
         ]);
 
+        $user->unsetRelation('studentProfile');
+
+        if ($user->hasCompleteApplicantProfile()) {
+            ScholarshipFunnelEvent::record(
+                $user,
+                'profile_completed',
+                source: 'mobile',
+                metadata: ['education_level' => $user->studentProfile?->education_level],
+                deduplicationKey: "profile_completed:{$user->id}",
+            );
+        }
+
         ScholarshipApplication::query()
             ->with(['applicant.studentProfile', 'documents', 'scholarship'])
             ->where('applicant_id', $user->id)
             ->get()
-            ->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
+            ->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application, 'mobile_profile_updated'));
 
         ActivityLog::record(
             $user,
@@ -235,9 +254,12 @@ class MobileAuthController extends Controller
             $request,
         );
 
+        $freshUser = $user->fresh();
+
         return response()->json([
             'message' => 'Applicant profile updated.',
-            'user' => $this->userPayload($user->fresh()),
+            'user' => $this->userPayload($freshUser),
+            'profile_readiness' => $freshUser->applicantProfileReadiness(),
         ]);
     }
 
@@ -326,6 +348,17 @@ class MobileAuthController extends Controller
             ['student_document_id' => $document->id],
         );
 
+        ScholarshipFunnelEvent::record(
+            $user,
+            'prepared_document_uploaded',
+            source: 'mobile',
+            metadata: [
+                'student_document_id' => $document->id,
+                'document_name' => $document->document_name,
+                'replaced_existing' => $existing !== null,
+            ],
+        );
+
         return response()->json([
             'message' => 'Prepared document saved.',
             'document' => $this->studentDocumentPayload($document),
@@ -357,6 +390,13 @@ class MobileAuthController extends Controller
             'mobile_prepared_document_deleted',
             "{$user->name} removed prepared document {$documentName} from mobile.",
             $request,
+        );
+
+        ScholarshipFunnelEvent::record(
+            $user,
+            'prepared_document_deleted',
+            source: 'mobile',
+            metadata: ['document_name' => $documentName],
         );
 
         return response()->json([
@@ -420,6 +460,15 @@ class MobileAuthController extends Controller
             ], 422);
         }
 
+        ScholarshipFunnelEvent::record(
+            $user,
+            'application_started',
+            $scholarship,
+            source: 'mobile',
+            metadata: ['profile_complete' => true],
+            deduplicationKey: "application_started:mobile:{$user->id}:{$scholarship->id}",
+        );
+
         $eligibilityMatch = $this->eligibilityMatch($scholarship, $user);
         $eligibilityBlockers = $this->applicationEligibilityBlockers($eligibilityMatch);
 
@@ -453,7 +502,21 @@ class MobileAuthController extends Controller
         ]);
 
         $this->attachPreparedDocumentsToApplication($user, $application, $validated['document_checklist'] ?? []);
-        app(DecisionSupportService::class)->syncApplication($application);
+        app(DecisionSupportService::class)->syncApplication($application, 'mobile_application_submitted');
+
+        $application->refresh();
+        ScholarshipFunnelEvent::record(
+            $user,
+            'application_submitted',
+            $scholarship,
+            $application,
+            'mobile',
+            [
+                'eligibility_score' => $application->eligibility_score,
+                'dss_score' => $application->dss_score,
+            ],
+            "application_submitted:{$application->id}",
+        );
 
         ActivityLog::record(
             $user,
@@ -494,10 +557,19 @@ class MobileAuthController extends Controller
             ], 404);
         }
 
-        ScholarshipBookmark::query()->firstOrCreate([
+        $bookmark = ScholarshipBookmark::query()->firstOrCreate([
             'scholarship_id' => $scholarship->id,
             'user_id' => $user->id,
         ]);
+
+        if ($bookmark->wasRecentlyCreated) {
+            ScholarshipFunnelEvent::record(
+                $user,
+                'scholarship_saved',
+                $scholarship,
+                source: 'mobile',
+            );
+        }
 
         return response()->json([
             'message' => 'Scholarship saved.',
@@ -516,10 +588,19 @@ class MobileAuthController extends Controller
             ], 401);
         }
 
-        ScholarshipBookmark::query()
+        $deleted = ScholarshipBookmark::query()
             ->where('scholarship_id', $scholarship->id)
             ->where('user_id', $user->id)
             ->delete();
+
+        if ($deleted > 0) {
+            ScholarshipFunnelEvent::record(
+                $user,
+                'scholarship_unsaved',
+                $scholarship,
+                source: 'mobile',
+            );
+        }
 
         return response()->json([
             'message' => 'Scholarship removed from saved list.',
