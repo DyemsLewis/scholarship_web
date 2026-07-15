@@ -28,9 +28,14 @@ const matchSummary = ref({
 });
 
 const fieldClass = 'min-w-0';
-const labelClass = 'mb-2 block min-h-10 text-sm font-semibold leading-5 text-slate-700';
+const labelClass = 'mb-2 block text-sm font-semibold leading-5 text-slate-700';
 const inputClass = 'min-h-11 w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const compactInputClass = 'min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const sectionCardClass = 'student-card overflow-hidden';
+const sectionHeaderClass = 'flex flex-col gap-2 border-b border-slate-200 bg-white p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6';
+const sectionBodyClass = 'p-5 sm:p-6';
+const sectionStatusPillClass = 'w-fit rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]';
+const optionButtonBaseClass = 'rounded-md border px-3 py-2 text-sm font-semibold transition';
 
 const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
 const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
@@ -507,6 +512,15 @@ function sectionStatusClass(section) {
     }
 
     return 'bg-amber-100 text-amber-800';
+}
+
+function optionButtonClass(isSelected) {
+    return [
+        optionButtonBaseClass,
+        isSelected
+            ? 'border-slate-900 bg-slate-900 text-white'
+            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400',
+    ];
 }
 
 function profileSection(sectionId) {
@@ -1118,60 +1132,85 @@ watch(() => form.value.grading_scale, (scale) => {
                     Loading profile...
                 </div>
 
-                <div v-else class="mt-6 grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
-                    <aside class="student-card h-fit p-4 lg:sticky lg:top-24">
-                        <div class="rounded-lg bg-slate-950 p-4 text-white">
-                            <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
-                                Profile Progress
-                            </p>
-                            <div class="mt-4 flex items-end justify-between gap-3">
-                                <div>
-                                    <p class="font-display text-3xl font-bold">
-                                        {{ profileCompletion }}%
-                                    </p>
-                                    <p class="mt-1 text-sm font-semibold text-slate-200">
-                                        {{ profileQuality.label }}
+                <div v-else class="mt-6 space-y-5">
+                    <section class="student-card p-4">
+                        <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                            <div class="grid gap-3 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-stretch">
+                                <div class="rounded-lg bg-slate-950 p-4 text-white">
+                                    <div class="flex items-end justify-between gap-3">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
+                                                Profile Progress
+                                            </p>
+                                            <p class="mt-2 font-display text-3xl font-bold">
+                                                {{ profileCompletion }}%
+                                            </p>
+                                        </div>
+                                        <span class="rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold text-slate-200 ring-1 ring-white/10">
+                                            {{ completedRequiredFields }}/{{ requiredFieldData.length }}
+                                        </span>
+                                    </div>
+                                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-white/15">
+                                        <div class="h-full rounded-full bg-amber-300 transition-all" :style="{ width: `${profileCompletion}%` }"></div>
+                                    </div>
+                                    <p class="mt-2 text-xs font-semibold leading-5 text-slate-300">
+                                        {{ profileQuality.label }} - {{ profileQuality.detail }}
                                     </p>
                                 </div>
-                                <span class="rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold text-slate-200 ring-1 ring-white/10">
-                                    {{ completedRequiredFields }}/{{ requiredFieldData.length }}
-                                </span>
+
+                                <button
+                                    v-if="missingProfileFields.length"
+                                    type="button"
+                                    class="rounded-lg border border-amber-100 bg-amber-50 p-4 text-left transition hover:border-amber-200 hover:bg-amber-100/60"
+                                    @click="openSection(profileRecommendedAction.section)"
+                                >
+                                    <span class="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">
+                                        Next needed
+                                    </span>
+                                    <span class="mt-1 block text-sm font-bold text-slate-950">
+                                        {{ profileRecommendedAction.label }}
+                                    </span>
+                                    <span class="mt-1 block text-xs leading-5 text-slate-600">
+                                        {{ missingProfileFields.slice(0, 3).map((field) => field.label).join(', ') }}{{ missingProfileFields.length > 3 ? ', and more' : '' }}
+                                    </span>
+                                </button>
+                                <div v-else class="rounded-lg border border-emerald-100 bg-emerald-50 p-4">
+                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-emerald-800">
+                                        Application-ready
+                                    </p>
+                                    <p class="mt-1 text-sm font-bold text-slate-950">
+                                        Required details are complete.
+                                    </p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-600">
+                                        You can still update preferences or guardian details anytime.
+                                    </p>
+                                </div>
                             </div>
-                            <div class="mt-4 h-2 overflow-hidden rounded-full bg-white/15">
-                                <div class="h-full rounded-full bg-amber-300 transition-all" :style="{ width: `${profileCompletion}%` }"></div>
+
+                            <div class="flex flex-col gap-2 sm:flex-row xl:w-72 xl:flex-col">
+                                <p :class="['rounded-md px-3 py-2 text-center text-xs font-bold', hasUnsavedChanges ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500']">
+                                    {{ hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved' }}
+                                </p>
+                                <button
+                                    type="button"
+                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                    :disabled="isSaving || !hasUnsavedChanges"
+                                    @click="saveProfile(false)"
+                                >
+                                    {{ isSaving ? 'Saving...' : (hasUnsavedChanges ? 'Save progress' : 'Saved') }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    :disabled="isSaving || missingProfileFields.length > 0"
+                                    @click="saveProfile(true)"
+                                >
+                                    Mark complete
+                                </button>
                             </div>
-                            <p class="mt-3 text-xs leading-5 text-slate-300">
-                                {{ profileQuality.detail }}
-                            </p>
                         </div>
 
-                        <div v-if="missingProfileFields.length" class="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-3">
-                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">
-                                Next needed
-                            </p>
-                            <p class="mt-1 text-sm leading-5 text-slate-700">
-                                {{ missingProfileFields.slice(0, 3).map((field) => field.label).join(', ') }}{{ missingProfileFields.length > 3 ? ', and more' : '' }}
-                            </p>
-                        </div>
-
-                        <button
-                            v-if="missingProfileFields.length"
-                            type="button"
-                            class="mt-4 w-full rounded-md border border-slate-200 bg-white p-3 text-left transition hover:border-slate-400 hover:bg-slate-50"
-                            @click="openSection(profileRecommendedAction.section)"
-                        >
-                            <span class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                Recommended next action
-                            </span>
-                            <span class="mt-1 block text-sm font-bold text-slate-950">
-                                {{ profileRecommendedAction.label }}
-                            </span>
-                            <span class="mt-1 block text-xs leading-5 text-slate-500">
-                                {{ profileRecommendedAction.detail }}
-                            </span>
-                        </button>
-
-                        <nav class="mt-4 grid gap-2">
+                        <nav class="mt-4 grid grid-flow-col auto-cols-[minmax(9.5rem,1fr)] gap-2 overflow-x-auto pb-1 lg:grid-flow-row lg:grid-cols-6 lg:overflow-visible" aria-label="Profile sections">
                             <button
                                 v-for="section in visibleProfileSections"
                                 :key="section.id"
@@ -1182,64 +1221,39 @@ watch(() => form.value.grading_scale, (scale) => {
                                 ]"
                                 @click="openSection(section.id)"
                             >
-                                <span class="flex items-center gap-3">
+                                <span class="flex items-start justify-between gap-2">
+                                    <span class="min-w-0">
+                                        <span class="block truncate text-sm font-bold text-slate-950">{{ section.label }}</span>
+                                        <span class="mt-0.5 block truncate text-xs font-semibold text-slate-500">{{ section.detail }}</span>
+                                    </span>
                                     <span
+                                        v-if="sectionHasErrors(section)"
+                                        class="shrink-0 rounded-md bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700"
+                                    >
+                                        Fix
+                                    </span>
+                                    <span
+                                        v-else-if="section.fields.length"
                                         :class="[
-                                            'flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
-                                            activeSection === section.id ? 'bg-slate-900 text-amber-200' : 'bg-white text-slate-700 ring-1 ring-slate-200',
+                                            'shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold',
+                                            sectionStatusClass(section),
                                         ]"
                                     >
-                                        <i :class="[section.icon, 'text-xs']"></i>
+                                        {{ sectionStatusLabel(section) }}
                                     </span>
-                                    <span class="min-w-0 flex-1">
-                                        <span class="flex items-center justify-between gap-2">
-                                            <span class="truncate text-sm font-bold text-slate-950">{{ section.label }}</span>
-                                            <span
-                                                v-if="sectionHasErrors(section)"
-                                                class="shrink-0 rounded-md bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700"
-                                            >
-                                                Fix
-                                            </span>
-                                            <span
-                                                v-else-if="section.fields.length"
-                                                :class="[
-                                                    'shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold',
-                                                    sectionStatusClass(section),
-                                                ]"
-                                            >
-                                                {{ sectionStatusLabel(section) }}
-                                            </span>
-                                            <span v-else class="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
-                                                Check
-                                            </span>
-                                        </span>
+                                    <span v-else class="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
+                                        Check
                                     </span>
+                                </span>
+                                <span class="mt-2 block h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                    <span
+                                        class="block h-full rounded-full bg-slate-900"
+                                        :style="{ width: `${sectionProgress(section).percent}%` }"
+                                    ></span>
                                 </span>
                             </button>
                         </nav>
-
-                        <div class="mt-4 grid gap-2">
-                            <p :class="['text-center text-xs font-semibold', hasUnsavedChanges ? 'text-amber-700' : 'text-slate-400']">
-                                {{ hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved' }}
-                            </p>
-                            <button
-                                type="button"
-                                class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                :disabled="isSaving || !hasUnsavedChanges"
-                                @click="saveProfile(false)"
-                            >
-                                {{ isSaving ? 'Saving...' : (hasUnsavedChanges ? 'Save progress' : 'Saved') }}
-                            </button>
-                            <button
-                                type="button"
-                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                :disabled="isSaving || missingProfileFields.length > 0"
-                                @click="saveProfile(true)"
-                            >
-                                Mark complete
-                            </button>
-                        </div>
-                    </aside>
+                    </section>
 
                     <section class="space-y-5">
                         <div v-if="statusMessage || errorMessage" class="student-card p-4">
@@ -1262,271 +1276,46 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </div>
 
-                        <section v-if="activeSection === 'personal'" id="profile-personal" class="student-card p-6">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <section v-if="activeSection === 'personal'" id="profile-personal" :class="sectionCardClass">
+                            <div :class="sectionHeaderClass">
                                 <div>
                                     <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Personal details</h3>
                                 </div>
-                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSection('personal'))]">
+                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('personal'))]">
                                     {{ sectionStatusLabel(profileSection('personal')) }}
                                 </span>
                             </div>
 
-                            <div class="mt-5 grid gap-4 md:grid-cols-12">
-                                <div :class="[fieldClass, 'md:col-span-4']">
-                                    <label :class="labelClass" for="profile-first-name">First name</label>
-                                    <input id="profile-first-name" v-model="form.first_name" :class="inputClass">
-                                </div>
-                                <div :class="[fieldClass, 'md:col-span-2']">
-                                    <label :class="[labelClass, 'text-center']" for="profile-middle">M.I.</label>
-                                    <input
-                                        id="profile-middle"
-                                        :value="form.middle_initial"
-                                        maxlength="1"
-                                        :class="compactInputClass"
-                                        @input="handleMiddleInitialInput"
-                                    >
-                                </div>
-                                <div :class="[fieldClass, 'md:col-span-4']">
-                                    <label :class="labelClass" for="profile-last-name">Last name</label>
-                                    <input id="profile-last-name" v-model="form.last_name" :class="inputClass">
-                                </div>
-                                <div :class="[fieldClass, 'md:col-span-2']">
-                                    <label :class="labelClass" for="profile-suffix">Suffix <span class="font-normal text-sky-600">(optional)</span></label>
-                                    <select id="profile-suffix" v-model="form.suffix" :class="inputClass">
-                                        <option value="">None</option>
-                                        <option v-if="form.suffix && !suffixOptions.includes(form.suffix)" :value="form.suffix">
-                                            {{ form.suffix }}
-                                        </option>
-                                        <option
-                                            v-for="option in suffixOptions"
-                                            :key="option"
-                                            :value="option"
+                            <div :class="sectionBodyClass">
+                                <div class="grid gap-4 md:grid-cols-12">
+                                    <div :class="[fieldClass, 'md:col-span-4']">
+                                        <label :class="labelClass" for="profile-first-name">First name</label>
+                                        <input id="profile-first-name" v-model="form.first_name" :class="inputClass">
+                                    </div>
+                                    <div :class="[fieldClass, 'md:col-span-2']">
+                                        <label :class="[labelClass, 'text-center']" for="profile-middle">M.I.</label>
+                                        <input
+                                            id="profile-middle"
+                                            :value="form.middle_initial"
+                                            maxlength="1"
+                                            :class="compactInputClass"
+                                            @input="handleMiddleInitialInput"
                                         >
-                                            {{ option }}
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div class="mt-4 grid gap-4 md:grid-cols-3">
-                                <div>
-                                    <label :class="labelClass" for="profile-gender">Gender <span class="font-normal text-sky-600">(optional)</span></label>
-                                    <select id="profile-gender" v-model="form.gender" :class="inputClass">
-                                        <option value="">Select gender</option>
-                                        <option
-                                            v-for="option in genderOptions"
-                                            :key="option.value"
-                                            :value="option.value"
-                                        >
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-birthdate">Birthdate</label>
-                                    <input id="profile-birthdate" v-model="form.birthdate" type="date" :max="new Date().toISOString().slice(0, 10)" :class="inputClass">
-                                    <p v-if="applicantAge !== null" class="mt-1 text-xs font-semibold text-slate-500">
-                                        Age {{ applicantAge }}<span v-if="isMinor"> - guardian details are required</span>
-                                    </p>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-contact">Contact number</label>
-                                    <input id="profile-contact" :value="form.contact_number" :class="inputClass" @input="handlePhoneInput('contact_number', $event)">
-                                </div>
-                            </div>
-
-                            <div class="student-soft-card mt-4 grid gap-4 p-4 md:grid-cols-[1fr_1.2fr] md:items-center">
-                                <div>
-                                    <p class="text-sm font-bold text-slate-950">
-                                        Account context
-                                    </p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">
-                                        Tell the platform who is responsible for managing this profile and its applications.
-                                    </p>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-account-manager">
-                                        Who manages this account?
-                                        <span class="font-normal text-sky-600">{{ needsGuardianContext ? '(required)' : '(optional)' }}</span>
-                                    </label>
-                                    <select id="profile-account-manager" v-model="form.account_managed_by" :class="inputClass">
-                                        <option value="">Select account manager</option>
-                                        <option
-                                            v-for="option in accountManagerOptions"
-                                            :key="option.value"
-                                            :value="option.value"
-                                        >
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section v-if="activeSection === 'academic'" id="profile-academic" class="student-card p-6">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <div>
-                                    <p class="student-kicker">Required</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Learning background</h3>
-                                </div>
-                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSection('academic'))]">
-                                    {{ sectionStatusLabel(profileSection('academic')) }}
-                                </span>
-                            </div>
-
-                            <div class="student-soft-card mt-5 grid gap-3 p-4 md:grid-cols-[1fr_2fr] md:items-center">
-                                <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                        Current learner path
-                                    </p>
-                                    <p class="mt-1 text-lg font-bold text-slate-950">
-                                        {{ form.education_level ? educationLevelLabel(form.education_level) : 'Choose education level' }}
-                                    </p>
-                                </div>
-                                <p class="text-sm leading-5 text-slate-600">
-                                    {{ academicSummary }}
-                                </p>
-                            </div>
-
-                            <div class="mt-4 grid gap-4 md:grid-cols-2">
-                                <div>
-                                    <label :class="labelClass" for="profile-education-level">Education level</label>
-                                    <select id="profile-education-level" v-model="form.education_level" :class="inputClass">
-                                        <option value="">Select education level</option>
-                                        <option
-                                            v-for="option in educationLevelOptions"
-                                            :key="option.value"
-                                            :value="option.value"
-                                        >
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-school">School / learning institution</label>
-                                    <input id="profile-school" v-model="form.school" placeholder="School or learning center" :class="inputClass">
-                                </div>
-                            </div>
-
-                            <div class="mt-4 grid gap-4 md:grid-cols-3">
-                                <div v-if="isFieldRelevant('course_or_strand')">
-                                    <label :class="labelClass" for="profile-course">
-                                        {{ courseLabel }}
-                                        <span class="font-normal text-sky-600">
-                                            {{ requiresProgramPath ? '(required)' : '(optional)' }}
-                                        </span>
-                                    </label>
-                                    <select
-                                        v-if="coursePathOptions.length"
-                                        id="profile-course"
-                                        v-model="form.course_or_strand"
-                                        :class="inputClass"
-                                    >
-                                        <option value="">Select {{ courseLabel.toLowerCase() }}</option>
-                                        <option v-if="form.course_or_strand && !coursePathOptions.includes(form.course_or_strand)" :value="form.course_or_strand">
-                                            {{ form.course_or_strand }}
-                                        </option>
-                                        <option
-                                            v-for="option in coursePathOptions"
-                                            :key="option"
-                                            :value="option"
-                                        >
-                                            {{ option }}
-                                        </option>
-                                    </select>
-                                    <input
-                                        v-else
-                                        id="profile-course"
-                                        v-model="form.course_or_strand"
-                                        :placeholder="coursePlaceholder"
-                                        :class="inputClass"
-                                    >
-                                    <input
-                                        v-if="coursePathOptions.length && (form.course_or_strand === 'Other' || (hasValue(form.course_or_strand) && !coursePathOptions.includes(form.course_or_strand)))"
-                                        v-model="form.course_or_strand"
-                                        class="mt-2"
-                                        :placeholder="`Type exact ${courseLabel.toLowerCase()}`"
-                                        :class="inputClass"
-                                    >
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">
-                                        {{ courseHelpText }}
-                                    </p>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-year">{{ yearLabel }}</label>
-                                    <select
-                                        v-if="yearLevelOptions.length"
-                                        id="profile-year"
-                                        v-model="form.year_level"
-                                        :class="inputClass"
-                                    >
-                                        <option value="">Select {{ yearLabel.toLowerCase() }}</option>
-                                        <option v-if="form.year_level && !yearLevelOptions.includes(form.year_level)" :value="form.year_level">
-                                            {{ form.year_level }}
-                                        </option>
-                                        <option
-                                            v-for="option in yearLevelOptions"
-                                            :key="option"
-                                            :value="option"
-                                        >
-                                            {{ option }}
-                                        </option>
-                                    </select>
-                                    <input
-                                        v-else
-                                        id="profile-year"
-                                        v-model="form.year_level"
-                                        :placeholder="yearPlaceholder"
-                                        :class="inputClass"
-                                    >
-                                </div>
-                                <div v-if="isFieldRelevant('grading_scale')">
-                                    <label :class="labelClass" for="profile-grading-scale">Grading scale</label>
-                                    <select id="profile-grading-scale" v-model="form.grading_scale" :class="inputClass">
-                                        <option value="">Select grading scale</option>
-                                        <option
-                                            v-for="option in gradingScaleOptions"
-                                            :key="option.value"
-                                            :value="option.value"
-                                        >
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">
-                                        Different numeric scales are not automatically converted. Pass/fail and other systems are reviewed using supporting records.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div v-if="isFieldRelevant('gwa')" class="mt-4 grid gap-4 md:grid-cols-3">
-                                <div>
-                                    <label :class="labelClass" for="profile-gwa">{{ gwaLabel }}</label>
-                                    <input
-                                        id="profile-gwa"
-                                        v-model="form.gwa"
-                                        type="number"
-                                        min="0"
-                                        :max="form.grading_scale === 'grade_point' ? 5 : 100"
-                                        step="0.01"
-                                        :placeholder="form.grading_scale === 'grade_point' ? 'Example: 1.75' : 'Example: 92.50'"
-                                        :class="inputClass"
-                                    >
-                                </div>
-                            </div>
-
-                            <details class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
-                                    Optional school details
-                                </summary>
-                                <div class="mt-4 grid gap-4 md:grid-cols-3">
-                                    <div>
-                                        <label :class="labelClass" for="profile-enrollment">Enrollment status</label>
-                                        <select id="profile-enrollment" v-model="form.enrollment_status" :class="inputClass">
-                                            <option value="">Select status</option>
+                                    </div>
+                                    <div :class="[fieldClass, 'md:col-span-4']">
+                                        <label :class="labelClass" for="profile-last-name">Last name</label>
+                                        <input id="profile-last-name" v-model="form.last_name" :class="inputClass">
+                                    </div>
+                                    <div :class="[fieldClass, 'md:col-span-2']">
+                                        <label :class="labelClass" for="profile-suffix">Suffix <span class="font-normal text-sky-600">(optional)</span></label>
+                                        <select id="profile-suffix" v-model="form.suffix" :class="inputClass">
+                                            <option value="">None</option>
+                                            <option v-if="form.suffix && !suffixOptions.includes(form.suffix)" :value="form.suffix">
+                                                {{ form.suffix }}
+                                            </option>
                                             <option
-                                                v-for="option in enrollmentOptions"
+                                                v-for="option in suffixOptions"
                                                 :key="option"
                                                 :value="option"
                                             >
@@ -1534,12 +1323,15 @@ watch(() => form.value.grading_scale, (scale) => {
                                             </option>
                                         </select>
                                     </div>
+                                </div>
+
+                                <div class="mt-4 grid gap-4 md:grid-cols-3">
                                     <div>
-                                        <label :class="labelClass" for="profile-school-type">Institution type</label>
-                                        <select id="profile-school-type" v-model="form.school_type" :class="inputClass">
-                                            <option value="">Select institution type</option>
+                                        <label :class="labelClass" for="profile-gender">Gender <span class="font-normal text-sky-600">(optional)</span></label>
+                                        <select id="profile-gender" v-model="form.gender" :class="inputClass">
+                                            <option value="">Select gender</option>
                                             <option
-                                                v-for="option in schoolTypeOptions"
+                                                v-for="option in genderOptions"
                                                 :key="option.value"
                                                 :value="option.value"
                                             >
@@ -1548,331 +1340,548 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label :class="labelClass" for="profile-lrn">{{ learnerIdLabel }}</label>
-                                        <input id="profile-lrn" v-model="form.learner_reference_number" :placeholder="learnerIdPlaceholder" :class="inputClass">
+                                        <label :class="labelClass" for="profile-birthdate">Birthdate</label>
+                                        <input id="profile-birthdate" v-model="form.birthdate" type="date" :max="new Date().toISOString().slice(0, 10)" :class="inputClass">
+                                        <p v-if="applicantAge !== null" class="mt-1 text-xs font-semibold text-slate-500">
+                                            Age {{ applicantAge }}<span v-if="isMinor"> - guardian details are required</span>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-contact">Contact number</label>
+                                        <input id="profile-contact" :value="form.contact_number" :class="inputClass" @input="handlePhoneInput('contact_number', $event)">
                                     </div>
                                 </div>
-                            </details>
+
+                                <div class="student-soft-card mt-4 grid gap-4 p-4 md:grid-cols-[1fr_1.2fr] md:items-center">
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-950">
+                                            Account context
+                                        </p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            Tell the platform who is responsible for managing this profile and its applications.
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-account-manager">
+                                            Who manages this account?
+                                            <span class="font-normal text-sky-600">{{ needsGuardianContext ? '(required)' : '(optional)' }}</span>
+                                        </label>
+                                        <select id="profile-account-manager" v-model="form.account_managed_by" :class="inputClass">
+                                            <option value="">Select account manager</option>
+                                            <option
+                                                v-for="option in accountManagerOptions"
+                                                :key="option.value"
+                                                :value="option.value"
+                                            >
+                                                {{ option.label }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
                         </section>
 
-                        <section v-if="activeSection === 'location'" id="profile-location" class="student-card p-6">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <section v-if="activeSection === 'academic'" id="profile-academic" :class="sectionCardClass">
+                            <div :class="sectionHeaderClass">
+                                <div>
+                                    <p class="student-kicker">Required</p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Learning background</h3>
+                                </div>
+                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('academic'))]">
+                                    {{ sectionStatusLabel(profileSection('academic')) }}
+                                </span>
+                            </div>
+
+                            <div :class="sectionBodyClass">
+                                <div class="student-soft-card grid gap-3 p-4 md:grid-cols-[1fr_2fr] md:items-center">
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                            Current learner path
+                                        </p>
+                                        <p class="mt-1 text-lg font-bold text-slate-950">
+                                            {{ form.education_level ? educationLevelLabel(form.education_level) : 'Choose education level' }}
+                                        </p>
+                                    </div>
+                                    <p class="text-sm leading-5 text-slate-600">
+                                        {{ academicSummary }}
+                                    </p>
+                                </div>
+
+                                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label :class="labelClass" for="profile-education-level">Education level</label>
+                                        <select id="profile-education-level" v-model="form.education_level" :class="inputClass">
+                                            <option value="">Select education level</option>
+                                            <option
+                                                v-for="option in educationLevelOptions"
+                                                :key="option.value"
+                                                :value="option.value"
+                                            >
+                                                {{ option.label }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-school">School / learning institution</label>
+                                        <input id="profile-school" v-model="form.school" placeholder="School or learning center" :class="inputClass">
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 grid gap-4 md:grid-cols-3">
+                                    <div v-if="isFieldRelevant('course_or_strand')">
+                                        <label :class="labelClass" for="profile-course">
+                                            {{ courseLabel }}
+                                            <span class="font-normal text-sky-600">
+                                                {{ requiresProgramPath ? '(required)' : '(optional)' }}
+                                            </span>
+                                        </label>
+                                        <select
+                                            v-if="coursePathOptions.length"
+                                            id="profile-course"
+                                            v-model="form.course_or_strand"
+                                            :class="inputClass"
+                                        >
+                                            <option value="">Select {{ courseLabel.toLowerCase() }}</option>
+                                            <option v-if="form.course_or_strand && !coursePathOptions.includes(form.course_or_strand)" :value="form.course_or_strand">
+                                                {{ form.course_or_strand }}
+                                            </option>
+                                            <option
+                                                v-for="option in coursePathOptions"
+                                                :key="option"
+                                                :value="option"
+                                            >
+                                                {{ option }}
+                                            </option>
+                                        </select>
+                                        <input
+                                            v-else
+                                            id="profile-course"
+                                            v-model="form.course_or_strand"
+                                            :placeholder="coursePlaceholder"
+                                            :class="inputClass"
+                                        >
+                                        <input
+                                            v-if="coursePathOptions.length && (form.course_or_strand === 'Other' || (hasValue(form.course_or_strand) && !coursePathOptions.includes(form.course_or_strand)))"
+                                            v-model="form.course_or_strand"
+                                            class="mt-2"
+                                            :placeholder="`Type exact ${courseLabel.toLowerCase()}`"
+                                            :class="inputClass"
+                                        >
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            {{ courseHelpText }}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-year">{{ yearLabel }}</label>
+                                        <select
+                                            v-if="yearLevelOptions.length"
+                                            id="profile-year"
+                                            v-model="form.year_level"
+                                            :class="inputClass"
+                                        >
+                                            <option value="">Select {{ yearLabel.toLowerCase() }}</option>
+                                            <option v-if="form.year_level && !yearLevelOptions.includes(form.year_level)" :value="form.year_level">
+                                                {{ form.year_level }}
+                                            </option>
+                                            <option
+                                                v-for="option in yearLevelOptions"
+                                                :key="option"
+                                                :value="option"
+                                            >
+                                                {{ option }}
+                                            </option>
+                                        </select>
+                                        <input
+                                            v-else
+                                            id="profile-year"
+                                            v-model="form.year_level"
+                                            :placeholder="yearPlaceholder"
+                                            :class="inputClass"
+                                        >
+                                    </div>
+                                    <div v-if="isFieldRelevant('grading_scale')">
+                                        <label :class="labelClass" for="profile-grading-scale">Grading scale</label>
+                                        <select id="profile-grading-scale" v-model="form.grading_scale" :class="inputClass">
+                                            <option value="">Select grading scale</option>
+                                            <option
+                                                v-for="option in gradingScaleOptions"
+                                                :key="option.value"
+                                                :value="option.value"
+                                            >
+                                                {{ option.label }}
+                                            </option>
+                                        </select>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            Different numeric scales are not automatically converted. Pass/fail and other systems are reviewed using supporting records.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div v-if="isFieldRelevant('gwa')" class="mt-4 grid gap-4 md:grid-cols-3">
+                                    <div>
+                                        <label :class="labelClass" for="profile-gwa">{{ gwaLabel }}</label>
+                                        <input
+                                            id="profile-gwa"
+                                            v-model="form.gwa"
+                                            type="number"
+                                            min="0"
+                                            :max="form.grading_scale === 'grade_point' ? 5 : 100"
+                                            step="0.01"
+                                            :placeholder="form.grading_scale === 'grade_point' ? 'Example: 1.75' : 'Example: 92.50'"
+                                            :class="inputClass"
+                                        >
+                                    </div>
+                                </div>
+
+                                <details class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                    <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
+                                        Optional school details
+                                    </summary>
+                                    <div class="mt-4 grid gap-4 md:grid-cols-3">
+                                        <div>
+                                            <label :class="labelClass" for="profile-enrollment">Enrollment status</label>
+                                            <select id="profile-enrollment" v-model="form.enrollment_status" :class="inputClass">
+                                                <option value="">Select status</option>
+                                                <option
+                                                    v-for="option in enrollmentOptions"
+                                                    :key="option"
+                                                    :value="option"
+                                                >
+                                                    {{ option }}
+                                                </option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" for="profile-school-type">Institution type</label>
+                                            <select id="profile-school-type" v-model="form.school_type" :class="inputClass">
+                                                <option value="">Select institution type</option>
+                                                <option
+                                                    v-for="option in schoolTypeOptions"
+                                                    :key="option.value"
+                                                    :value="option.value"
+                                                >
+                                                    {{ option.label }}
+                                                </option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" for="profile-lrn">{{ learnerIdLabel }}</label>
+                                            <input id="profile-lrn" v-model="form.learner_reference_number" :placeholder="learnerIdPlaceholder" :class="inputClass">
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+                        </section>
+
+                        <section v-if="activeSection === 'location'" id="profile-location" :class="sectionCardClass">
+                            <div :class="sectionHeaderClass">
                                 <div>
                                     <p class="student-kicker">Required</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Location and financial need</h3>
                                 </div>
-                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSection('location'))]">
+                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('location'))]">
                                     {{ sectionStatusLabel(profileSection('location')) }}
                                 </span>
                             </div>
 
-                            <div class="mt-5 grid gap-4 md:grid-cols-4">
-                                <div>
-                                    <label :class="labelClass" for="profile-income">Household income bracket</label>
-                                    <select id="profile-income" v-model="form.income_bracket" :class="inputClass">
-                                        <option value="">Select income bracket</option>
-                                        <option
-                                            v-for="option in incomeOptions"
-                                            :key="option"
-                                            :value="option"
-                                        >
-                                            {{ option }}
-                                        </option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-city">City / municipality</label>
-                                    <input id="profile-city" v-model="form.city" placeholder="City or municipality" :class="inputClass" @input="clearProfileMapPoint">
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-province">Province</label>
-                                    <select id="profile-province" v-model="form.province" :class="inputClass" @change="clearProfileMapPoint">
-                                        <option value="">Select province</option>
-                                        <option v-if="form.province && form.province !== 'Other' && !provinceOptions.includes(form.province)" :value="form.province">
-                                            {{ form.province }}
-                                        </option>
-                                        <option
-                                            v-for="province in provinceOptions"
-                                            :key="province"
-                                            :value="province"
-                                        >
-                                            {{ province }}
-                                        </option>
-                                        <option value="Other">Other / not listed</option>
-                                    </select>
-                                    <input
-                                        v-if="form.province === 'Other' || (hasValue(form.province) && !provinceOptions.includes(form.province))"
-                                        v-model="form.province"
-                                        class="mt-2"
-                                        placeholder="Type province"
-                                        :class="inputClass"
-                                        @input="clearProfileMapPoint"
-                                    >
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-region">Region</label>
-                                    <select id="profile-region" v-model="form.region" :class="inputClass" @change="clearProfileMapPoint">
-                                        <option value="">Select region</option>
-                                        <option v-if="form.region && !regionOptions.includes(form.region)" :value="form.region">
-                                            {{ form.region }}
-                                        </option>
-                                        <option
-                                            v-for="region in regionOptions"
-                                            :key="region"
-                                            :value="region"
-                                        >
-                                            {{ region }}
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <details class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
-                                    Optional address details
-                                </summary>
-
-                                <div class="mt-4 grid gap-4 md:grid-cols-3">
+                            <div :class="sectionBodyClass">
+                                <div class="grid gap-4 md:grid-cols-4">
                                     <div>
-                                        <label :class="labelClass" for="profile-household-size">Household size</label>
+                                        <label :class="labelClass" for="profile-income">Household income bracket</label>
+                                        <select id="profile-income" v-model="form.income_bracket" :class="inputClass">
+                                            <option value="">Select income bracket</option>
+                                            <option
+                                                v-for="option in incomeOptions"
+                                                :key="option"
+                                                :value="option"
+                                            >
+                                                {{ option }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-city">City / municipality</label>
+                                        <input id="profile-city" v-model="form.city" placeholder="City or municipality" :class="inputClass" @input="clearProfileMapPoint">
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-province">Province</label>
+                                        <select id="profile-province" v-model="form.province" :class="inputClass" @change="clearProfileMapPoint">
+                                            <option value="">Select province</option>
+                                            <option v-if="form.province && form.province !== 'Other' && !provinceOptions.includes(form.province)" :value="form.province">
+                                                {{ form.province }}
+                                            </option>
+                                            <option
+                                                v-for="province in provinceOptions"
+                                                :key="province"
+                                                :value="province"
+                                            >
+                                                {{ province }}
+                                            </option>
+                                            <option value="Other">Other / not listed</option>
+                                        </select>
                                         <input
-                                            id="profile-household-size"
-                                            v-model="form.household_size"
-                                            type="number"
-                                            min="1"
-                                            max="30"
-                                            placeholder="Number of people in household"
+                                            v-if="form.province === 'Other' || (hasValue(form.province) && !provinceOptions.includes(form.province))"
+                                            v-model="form.province"
+                                            class="mt-2"
+                                            placeholder="Type province"
                                             :class="inputClass"
+                                            @input="clearProfileMapPoint"
                                         >
                                     </div>
-                                    <div class="md:col-span-2">
-                                        <label :class="labelClass" for="profile-address">Street / home address</label>
-                                        <input id="profile-address" v-model="form.address" placeholder="Home address" :class="inputClass" @input="clearProfileMapPoint">
-                                    </div>
                                     <div>
-                                        <label :class="labelClass" for="profile-barangay">Barangay</label>
-                                        <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass" @input="clearProfileMapPoint">
+                                        <label :class="labelClass" for="profile-region">Region</label>
+                                        <select id="profile-region" v-model="form.region" :class="inputClass" @change="clearProfileMapPoint">
+                                            <option value="">Select region</option>
+                                            <option v-if="form.region && !regionOptions.includes(form.region)" :value="form.region">
+                                                {{ form.region }}
+                                            </option>
+                                            <option
+                                                v-for="region in regionOptions"
+                                                :key="region"
+                                                :value="region"
+                                            >
+                                                {{ region }}
+                                            </option>
+                                        </select>
                                     </div>
                                 </div>
 
-                                <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                        <p class="text-sm font-semibold text-slate-700">
-                                            Address map preview
-                                        </p>
+                                <details class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                    <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
+                                        Optional address details
+                                    </summary>
+
+                                    <div class="mt-4 grid gap-4 md:grid-cols-3">
+                                        <div>
+                                            <label :class="labelClass" for="profile-household-size">Household size</label>
+                                            <input
+                                                id="profile-household-size"
+                                                v-model="form.household_size"
+                                                type="number"
+                                                min="1"
+                                                max="30"
+                                                placeholder="Number of people in household"
+                                                :class="inputClass"
+                                            >
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label :class="labelClass" for="profile-address">Street / home address</label>
+                                            <input id="profile-address" v-model="form.address" placeholder="Home address" :class="inputClass" @input="clearProfileMapPoint">
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" for="profile-barangay">Barangay</label>
+                                            <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass" @input="clearProfileMapPoint">
+                                        </div>
                                     </div>
-                                    <button
-                                        type="button"
-                                        class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                        @click="lookupProfileAddress"
-                                    >
-                                        Find address on map
-                                    </button>
-                                </div>
 
-                                <LeafletMapPreview
-                                    class="mt-4"
-                                    :address="profileMapAddress"
-                                    :latitude="form.latitude"
-                                    :longitude="form.longitude"
-                                    title="Student address map preview"
-                                    marker-text="Student address"
-                                    :geocode-trigger="addressLookupTrigger"
-                                    picker
-                                    @resolved="handleProfileLocationResolved"
-                                    @picked="handleProfileLocationPicked"
-                                    @error="handleProfileLocationError"
-                                />
+                                    <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-sm font-semibold text-slate-700">
+                                                Address map preview
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                            @click="lookupProfileAddress"
+                                        >
+                                            Find address on map
+                                        </button>
+                                    </div>
 
-                                <p v-if="locationMessage" class="mt-3 text-xs font-semibold text-slate-700">
-                                    {{ locationMessage }}
-                                </p>
-                            </details>
+                                    <LeafletMapPreview
+                                        class="mt-4"
+                                        :address="profileMapAddress"
+                                        :latitude="form.latitude"
+                                        :longitude="form.longitude"
+                                        title="Student address map preview"
+                                        marker-text="Student address"
+                                        :geocode-trigger="addressLookupTrigger"
+                                        picker
+                                        @resolved="handleProfileLocationResolved"
+                                        @picked="handleProfileLocationPicked"
+                                        @error="handleProfileLocationError"
+                                    />
+
+                                    <p v-if="locationMessage" class="mt-3 text-xs font-semibold text-slate-700">
+                                        {{ locationMessage }}
+                                    </p>
+                                </details>
+                            </div>
                         </section>
 
-                        <section v-if="activeSection === 'preferences'" id="profile-preferences" class="student-card p-6">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <section v-if="activeSection === 'preferences'" id="profile-preferences" :class="sectionCardClass">
+                            <div :class="sectionHeaderClass">
                                 <div>
                                     <p class="student-kicker">Optional</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Scholarship preferences</h3>
                                 </div>
-                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSection('preferences'))]">
+                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('preferences'))]">
                                     {{ sectionStatusLabel(profileSection('preferences')) }}
                                 </span>
                             </div>
 
-                            <div class="student-soft-card mt-5 p-4">
-                                <p class="text-sm font-bold text-slate-950">Personalize your finder</p>
-                                <p class="mt-1 text-xs leading-5 text-slate-600">
-                                    These choices help order scholarship results and explain what support you need. They never override eligibility rules or the provider's final decision.
-                                </p>
-                            </div>
-
-                            <fieldset class="mt-5">
-                                <legend class="text-sm font-bold text-slate-950">Preferred scholarship types</legend>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Choose every type you would like to see first.</p>
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <button
-                                        v-for="option in categoryOptions"
-                                        :key="option"
-                                        type="button"
-                                        :aria-pressed="isOptionSelected('preferred_categories', option)"
-                                        :class="[
-                                            'rounded-md border px-3 py-2 text-sm font-semibold transition',
-                                            isOptionSelected('preferred_categories', option)
-                                                ? 'border-slate-900 bg-slate-900 text-white'
-                                                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400',
-                                        ]"
-                                        @click="toggleListOption('preferred_categories', option)"
-                                    >
-                                        {{ option }}
-                                    </button>
+                            <div :class="sectionBodyClass">
+                                <div class="student-soft-card p-4">
+                                    <p class="text-sm font-bold text-slate-950">Personalize your finder</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-600">
+                                        These choices help order scholarship results and explain what support you need. They never override eligibility rules or the provider's final decision.
+                                    </p>
                                 </div>
-                            </fieldset>
 
-                            <fieldset class="mt-6 border-t border-slate-200 pt-5">
-                                <legend class="text-sm font-bold text-slate-950">Preferred locations</legend>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Select broad areas, nearby programs, or online-friendly options.</p>
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <button
-                                        v-for="option in preferredLocationOptions"
-                                        :key="option"
-                                        type="button"
-                                        :aria-pressed="isOptionSelected('preferred_locations', option)"
-                                        :class="[
-                                            'rounded-md border px-3 py-2 text-sm font-semibold transition',
-                                            isOptionSelected('preferred_locations', option)
-                                                ? 'border-amber-400 bg-amber-50 text-slate-950'
-                                                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400',
-                                        ]"
-                                        @click="toggleListOption('preferred_locations', option)"
-                                    >
-                                        {{ option }}
-                                    </button>
-                                </div>
-                            </fieldset>
+                                <fieldset class="mt-5">
+                                    <legend class="text-sm font-bold text-slate-950">Preferred scholarship types</legend>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">Choose every type you would like to see first.</p>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                            v-for="option in categoryOptions"
+                                            :key="option"
+                                            type="button"
+                                            :aria-pressed="isOptionSelected('preferred_categories', option)"
+                                            :class="optionButtonClass(isOptionSelected('preferred_categories', option))"
+                                            @click="toggleListOption('preferred_categories', option)"
+                                        >
+                                            {{ option }}
+                                        </button>
+                                    </div>
+                                </fieldset>
 
-                            <fieldset class="mt-6 border-t border-slate-200 pt-5">
-                                <legend class="text-sm font-bold text-slate-950">Support needed</legend>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">This helps reviewers understand what the scholarship would support.</p>
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <button
-                                        v-for="option in supportNeedOptions"
-                                        :key="option"
-                                        type="button"
-                                        :aria-pressed="isOptionSelected('support_needs', option)"
-                                        :class="[
-                                            'rounded-md border px-3 py-2 text-sm font-semibold transition',
-                                            isOptionSelected('support_needs', option)
-                                                ? 'border-slate-900 bg-slate-100 text-slate-950'
-                                                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400',
-                                        ]"
-                                        @click="toggleListOption('support_needs', option)"
-                                    >
-                                        {{ option }}
-                                    </button>
-                                </div>
-                            </fieldset>
+                                <fieldset class="mt-6 border-t border-slate-200 pt-5">
+                                    <legend class="text-sm font-bold text-slate-950">Preferred locations</legend>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">Select broad areas, nearby programs, or online-friendly options.</p>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                            v-for="option in preferredLocationOptions"
+                                            :key="option"
+                                            type="button"
+                                            :aria-pressed="isOptionSelected('preferred_locations', option)"
+                                            :class="optionButtonClass(isOptionSelected('preferred_locations', option))"
+                                            @click="toggleListOption('preferred_locations', option)"
+                                        >
+                                            {{ option }}
+                                        </button>
+                                    </div>
+                                </fieldset>
 
-                            <div class="mt-6 grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2">
-                                <div>
-                                    <label :class="labelClass" for="profile-relocation">Willing to relocate</label>
-                                    <select id="profile-relocation" v-model="form.willing_to_relocate" :class="inputClass">
-                                        <option value="">No preference selected</option>
-                                        <option v-for="option in relocationOptions" :key="option.value" :value="option.value">
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-goal">Scholarship goal</label>
-                                    <textarea
-                                        id="profile-goal"
-                                        v-model="form.scholarship_goal"
-                                        rows="4"
-                                        maxlength="1500"
-                                        placeholder="Briefly describe what the scholarship would help you continue or achieve."
-                                        :class="inputClass"
-                                    ></textarea>
-                                    <p class="mt-1 text-right text-xs text-slate-400">{{ form.scholarship_goal.length }}/1500</p>
+                                <fieldset class="mt-6 border-t border-slate-200 pt-5">
+                                    <legend class="text-sm font-bold text-slate-950">Support needed</legend>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">This helps reviewers understand what the scholarship would support.</p>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                            v-for="option in supportNeedOptions"
+                                            :key="option"
+                                            type="button"
+                                            :aria-pressed="isOptionSelected('support_needs', option)"
+                                            :class="optionButtonClass(isOptionSelected('support_needs', option))"
+                                            @click="toggleListOption('support_needs', option)"
+                                        >
+                                            {{ option }}
+                                        </button>
+                                    </div>
+                                </fieldset>
+
+                                <div class="mt-6 grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2">
+                                    <div>
+                                        <label :class="labelClass" for="profile-relocation">Willing to relocate</label>
+                                        <select id="profile-relocation" v-model="form.willing_to_relocate" :class="inputClass">
+                                            <option value="">No preference selected</option>
+                                            <option v-for="option in relocationOptions" :key="option.value" :value="option.value">
+                                                {{ option.label }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-goal">Scholarship goal</label>
+                                        <textarea
+                                            id="profile-goal"
+                                            v-model="form.scholarship_goal"
+                                            rows="4"
+                                            maxlength="1500"
+                                            placeholder="Briefly describe what the scholarship would help you continue or achieve."
+                                            :class="inputClass"
+                                        ></textarea>
+                                        <p class="mt-1 text-right text-xs text-slate-400">{{ form.scholarship_goal.length }}/1500</p>
+                                    </div>
                                 </div>
                             </div>
                         </section>
 
-                        <section v-if="activeSection === 'guardian'" id="profile-guardian" class="student-card p-6">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <section v-if="activeSection === 'guardian'" id="profile-guardian" :class="sectionCardClass">
+                            <div :class="sectionHeaderClass">
                                 <div>
                                     <p class="student-kicker">{{ needsGuardianContext ? 'Required' : 'Optional' }}</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Guardian information</h3>
                                 </div>
-                                <span :class="['rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]', sectionStatusClass(profileSection('guardian'))]">
+                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('guardian'))]">
                                     {{ sectionStatusLabel(profileSection('guardian')) }}
                                 </span>
                             </div>
 
-                            <div class="student-soft-card mt-5 p-4">
-                                <p class="text-sm font-bold text-slate-950">
-                                    {{ guardianRequirementLabel }}
-                                </p>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">
-                                    {{ guardianRequirementText }}
-                                </p>
-                            </div>
+                            <div :class="sectionBodyClass">
+                                <div class="student-soft-card p-4">
+                                    <p class="text-sm font-bold text-slate-950">
+                                        {{ guardianRequirementLabel }}
+                                    </p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">
+                                        {{ guardianRequirementText }}
+                                    </p>
+                                </div>
 
-                            <div class="mt-5 grid gap-4 md:grid-cols-3">
-                                <div>
-                                    <label :class="labelClass" for="profile-guardian">Guardian name</label>
-                                    <input id="profile-guardian" v-model="form.guardian_name" placeholder="Parent or guardian" :class="inputClass">
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-guardian-relationship">Relationship to learner</label>
-                                    <select id="profile-guardian-relationship" v-model="form.guardian_relationship" :class="inputClass">
-                                        <option value="">Select relationship</option>
-                                        <option v-for="option in guardianRelationshipOptions" :key="option" :value="option">
-                                            {{ option }}
-                                        </option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label :class="labelClass" for="profile-guardian-contact">Guardian contact</label>
-                                    <input id="profile-guardian-contact" :value="form.guardian_contact" placeholder="Guardian contact number" :class="inputClass" @input="handlePhoneInput('guardian_contact', $event)">
-                                </div>
-                            </div>
-
-                            <details class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
-                                    Guardian email and account access
-                                </summary>
-                                <div class="mt-4 grid gap-4">
+                                <div class="mt-5 grid gap-4 md:grid-cols-3">
                                     <div>
-                                        <label :class="labelClass" for="profile-guardian-email">Guardian email</label>
-                                        <input id="profile-guardian-email" v-model="form.guardian_email" type="email" placeholder="guardian@example.com" :class="inputClass">
+                                        <label :class="labelClass" for="profile-guardian">Guardian name</label>
+                                        <input id="profile-guardian" v-model="form.guardian_name" placeholder="Parent or guardian" :class="inputClass">
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-guardian-relationship">Relationship to learner</label>
+                                        <select id="profile-guardian-relationship" v-model="form.guardian_relationship" :class="inputClass">
+                                            <option value="">Select relationship</option>
+                                            <option v-for="option in guardianRelationshipOptions" :key="option" :value="option">
+                                                {{ option }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label :class="labelClass" for="profile-guardian-contact">Guardian contact</label>
+                                        <input id="profile-guardian-contact" :value="form.guardian_contact" placeholder="Guardian contact number" :class="inputClass" @input="handlePhoneInput('guardian_contact', $event)">
                                     </div>
                                 </div>
 
-                                <label class="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                                    <input
-                                        v-model="form.guardian_is_account_owner"
-                                        type="checkbox"
-                                        class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                                    >
-                                    <span>
-                                        <span class="block font-bold text-slate-950">Guardian manages this account</span>
-                                        <span class="mt-1 block text-xs leading-5">Use this when a parent or guardian signs in and manages applications for the learner.</span>
-                                    </span>
-                                </label>
-                            </details>
+                                <details class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                    <summary class="cursor-pointer list-none text-sm font-bold text-slate-950">
+                                        Guardian email and account access
+                                    </summary>
+                                    <div class="mt-4 grid gap-4">
+                                        <div>
+                                            <label :class="labelClass" for="profile-guardian-email">Guardian email</label>
+                                            <input id="profile-guardian-email" v-model="form.guardian_email" type="email" placeholder="guardian@example.com" :class="inputClass">
+                                        </div>
+                                    </div>
+
+                                    <label class="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                                        <input
+                                            v-model="form.guardian_is_account_owner"
+                                            type="checkbox"
+                                            class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                        >
+                                        <span>
+                                            <span class="block font-bold text-slate-950">Guardian manages this account</span>
+                                            <span class="mt-1 block text-xs leading-5">Use this when a parent or guardian signs in and manages applications for the learner.</span>
+                                        </span>
+                                    </label>
+                                </details>
+                            </div>
                         </section>
 
-                        <section v-if="activeSection === 'review'" id="profile-review" class="student-card p-6">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <section v-if="activeSection === 'review'" id="profile-review" :class="sectionCardClass">
+                            <div :class="sectionHeaderClass">
                                 <div>
                                     <p class="student-kicker">Final check</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Review profile</h3>
                                 </div>
                                 <span
                                     :class="[
-                                        'rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.14em]',
+                                        sectionStatusPillClass,
                                         profileComplete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
                                     ]"
                                 >
@@ -1880,114 +1889,116 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </span>
                             </div>
 
-                            <section class="mt-5 rounded-lg border border-slate-200 bg-slate-950 p-4 text-white">
-                                <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-200">Saved-profile match check</p>
-                                        <h4 class="mt-1 text-lg font-bold">How the current catalog reads your profile</h4>
-                                        <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-300">
-                                            This checks structured eligibility only. Documents and the provider's final review remain separate.
-                                        </p>
+                            <div :class="sectionBodyClass">
+                                <section class="rounded-lg border border-slate-200 bg-slate-950 p-4 text-white">
+                                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-200">Saved-profile match check</p>
+                                            <h4 class="mt-1 text-lg font-bold">How the current catalog reads your profile</h4>
+                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-300">
+                                                This checks structured eligibility only. Documents and the provider's final review remain separate.
+                                            </p>
+                                        </div>
+                                        <a href="/dashboard/scholarships" class="w-fit rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-950">
+                                            Open finder
+                                        </a>
                                     </div>
-                                    <a href="/dashboard/scholarships" class="w-fit rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-950">
-                                        Open finder
-                                    </a>
+                                    <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/10 pt-4 text-sm">
+                                        <p><span class="font-bold text-amber-200">{{ matchSummary.strong_matches }}</span> strong</p>
+                                        <p><span class="font-bold text-amber-200">{{ matchSummary.eligible_programs }}</span> eligible</p>
+                                        <p><span class="font-bold text-amber-200">{{ matchSummary.preference_matches }}</span> fit preferences</p>
+                                        <p><span class="font-bold text-amber-200">{{ matchSummary.available_programs }}</span> checked</p>
+                                    </div>
+                                    <div v-if="matchSummary.top_gaps?.length" class="mt-4 border-t border-white/10 pt-4">
+                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-300">Most common missing or conflicting details</p>
+                                        <div class="mt-2 flex flex-wrap gap-2">
+                                            <button
+                                                v-for="gap in matchSummary.top_gaps"
+                                                :key="gap.key || gap.label"
+                                                type="button"
+                                                class="rounded-md bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white ring-1 ring-white/10 transition hover:bg-white/15"
+                                                @click="openSection(sectionForMatchGap(gap))"
+                                            >
+                                                {{ gap.label }} ({{ gap.count }})
+                                            </button>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <div class="mt-5 grid gap-4 md:grid-cols-2">
+                                    <article
+                                        v-for="group in reviewGroups"
+                                        :key="group.title"
+                                        class="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                                    >
+                                        <h4 class="font-bold text-slate-950">
+                                            {{ group.title }}
+                                        </h4>
+                                        <div class="mt-3 grid gap-2">
+                                            <div
+                                                v-for="item in group.items"
+                                                :key="`${group.title}-${item[0]}`"
+                                                class="flex items-start justify-between gap-3 text-sm"
+                                            >
+                                                <span class="text-slate-500">{{ item[0] }}</span>
+                                                <span class="max-w-[60%] text-right font-semibold text-slate-900">
+                                                    {{ hasValue(item[1]) ? item[1] : 'Not set' }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </article>
                                 </div>
-                                <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/10 pt-4 text-sm">
-                                    <p><span class="font-bold text-amber-200">{{ matchSummary.strong_matches }}</span> strong</p>
-                                    <p><span class="font-bold text-amber-200">{{ matchSummary.eligible_programs }}</span> eligible</p>
-                                    <p><span class="font-bold text-amber-200">{{ matchSummary.preference_matches }}</span> fit preferences</p>
-                                    <p><span class="font-bold text-amber-200">{{ matchSummary.available_programs }}</span> checked</p>
-                                </div>
-                                <div v-if="matchSummary.top_gaps?.length" class="mt-4 border-t border-white/10 pt-4">
-                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-300">Most common missing or conflicting details</p>
-                                    <div class="mt-2 flex flex-wrap gap-2">
-                                        <button
-                                            v-for="gap in matchSummary.top_gaps"
-                                            :key="gap.key || gap.label"
-                                            type="button"
-                                            class="rounded-md bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white ring-1 ring-white/10 transition hover:bg-white/15"
-                                            @click="openSection(sectionForMatchGap(gap))"
+
+                                <section class="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="student-kicker">
+                                                Provider Preview
+                                            </p>
+                                            <h4 class="mt-2 text-lg font-bold text-slate-950">
+                                                What reviewers will scan first
+                                            </h4>
+                                        </div>
+                                        <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                            Preview only
+                                        </span>
+                                    </div>
+                                    <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                                        <div
+                                            v-for="row in providerPreviewRows"
+                                            :key="row[0]"
+                                            class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
                                         >
-                                            {{ gap.label }} ({{ gap.count }})
+                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+                                                {{ row[0] }}
+                                            </p>
+                                            <p class="mt-1 line-clamp-2 text-sm font-bold text-slate-900">
+                                                {{ hasValue(row[1]) ? row[1] : 'Not set' }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <div v-if="missingProfileFields.length" class="mt-5 rounded-lg border border-amber-100 bg-amber-50 p-4">
+                                    <p class="text-sm font-bold text-amber-900">
+                                        Add these before applying
+                                    </p>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                            v-for="field in missingProfileFields"
+                                            :key="field.key"
+                                            type="button"
+                                            class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-100"
+                                            @click="openSection(profileSections.find((section) => sectionAllFields(section).includes(field.key))?.id || 'personal')"
+                                        >
+                                            {{ field.label }}
                                         </button>
                                     </div>
                                 </div>
-                            </section>
 
-                            <div class="mt-5 grid gap-4 md:grid-cols-2">
-                                <article
-                                    v-for="group in reviewGroups"
-                                    :key="group.title"
-                                    class="rounded-lg border border-slate-200 bg-slate-50 p-4"
-                                >
-                                    <h4 class="font-bold text-slate-950">
-                                        {{ group.title }}
-                                    </h4>
-                                    <div class="mt-3 grid gap-2">
-                                        <div
-                                            v-for="item in group.items"
-                                            :key="`${group.title}-${item[0]}`"
-                                            class="flex items-start justify-between gap-3 text-sm"
-                                        >
-                                            <span class="text-slate-500">{{ item[0] }}</span>
-                                            <span class="max-w-[60%] text-right font-semibold text-slate-900">
-                                                {{ hasValue(item[1]) ? item[1] : 'Not set' }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </article>
-                            </div>
-
-                            <section class="mt-5 rounded-lg border border-slate-200 bg-white p-4">
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                        <p class="student-kicker">
-                                            Provider Preview
-                                        </p>
-                                        <h4 class="mt-2 text-lg font-bold text-slate-950">
-                                            What reviewers will scan first
-                                        </h4>
-                                    </div>
-                                    <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                        Preview only
-                                    </span>
+                                <div v-else class="mt-5 rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+                                    Profile is application-ready. You can save it as complete.
                                 </div>
-                                <div class="mt-4 grid gap-2 sm:grid-cols-2">
-                                    <div
-                                        v-for="row in providerPreviewRows"
-                                        :key="row[0]"
-                                        class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
-                                    >
-                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
-                                            {{ row[0] }}
-                                        </p>
-                                        <p class="mt-1 line-clamp-2 text-sm font-bold text-slate-900">
-                                            {{ hasValue(row[1]) ? row[1] : 'Not set' }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <div v-if="missingProfileFields.length" class="mt-5 rounded-lg border border-amber-100 bg-amber-50 p-4">
-                                <p class="text-sm font-bold text-amber-900">
-                                    Add these before applying
-                                </p>
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <button
-                                        v-for="field in missingProfileFields"
-                                        :key="field.key"
-                                        type="button"
-                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-100"
-                                        @click="openSection(profileSections.find((section) => sectionAllFields(section).includes(field.key))?.id || 'personal')"
-                                    >
-                                        {{ field.label }}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div v-else class="mt-5 rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
-                                Profile is application-ready. You can save it as complete.
                             </div>
                         </section>
 
