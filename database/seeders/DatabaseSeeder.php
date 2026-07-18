@@ -152,6 +152,10 @@ class DatabaseSeeder extends Seeder
             'guardian_contact' => '09170000003',
             'guardian_email' => 'guardian@scholarship.test',
             'guardian_is_account_owner' => false,
+            'verification_status' => 'approved',
+            'verification_notes' => 'Seeded verified student profile for local scholarship testing.',
+            'verified_at' => now(),
+            'verified_by' => $admin->id,
         ]);
 
         $legacyProgramTitles = [

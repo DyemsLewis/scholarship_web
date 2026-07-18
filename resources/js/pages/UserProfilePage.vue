@@ -272,6 +272,81 @@ const profileCompletion = computed(() => requiredFieldData.value.length === 0 ? 
 const missingProfileFields = computed(() => requiredFieldData.value.filter((field) => !hasValue(field.value)));
 const profileComplete = computed(() => missingProfileFields.value.length === 0);
 const profileVerificationStatus = computed(() => user.value?.applicant_verification_status ?? 'unsubmitted');
+const selectedVerificationDocument = computed(() => verificationDocuments.value
+    .find((document) => document.document_type === verificationDocumentType.value) ?? null);
+const verificationSteps = computed(() => {
+    const status = profileVerificationStatus.value;
+    const proofCount = verificationDocuments.value.length;
+
+    return [
+        {
+            number: 1,
+            label: status === 'rejected' ? 'Replace proof' : 'Submit proof',
+            detail: status === 'rejected'
+                ? 'Upload a clearer or updated file.'
+                : proofCount
+                    ? `${proofCount} proof file${proofCount === 1 ? '' : 's'} submitted.`
+                    : 'Choose an identity or enrollment file.',
+            state: ['pending', 'approved'].includes(status) ? 'complete' : 'current',
+        },
+        {
+            number: 2,
+            label: 'Admin review',
+            detail: status === 'approved'
+                ? 'Review completed.'
+                : status === 'pending'
+                    ? 'Your account is being checked.'
+                    : status === 'rejected'
+                        ? 'Restarts after resubmission.'
+                        : 'Begins after you submit proof.',
+            state: status === 'approved' ? 'complete' : status === 'pending' ? 'current' : 'upcoming',
+        },
+        {
+            number: 3,
+            label: 'Verified badge',
+            detail: status === 'approved' ? 'Visible to scholarship providers.' : 'Appears after admin approval.',
+            state: status === 'approved' ? 'complete' : 'upcoming',
+        },
+    ];
+});
+const verificationUploadCopy = computed(() => {
+    if (profileVerificationStatus.value === 'rejected') {
+        return {
+            title: 'Replace the requested proof',
+            detail: 'Review the admin note, then submit a clearer or updated file.',
+        };
+    }
+
+    if (profileVerificationStatus.value === 'pending') {
+        return {
+            title: 'Add or update proof',
+            detail: 'Changing a file restarts the admin review, so update only when needed.',
+        };
+    }
+
+    if (profileVerificationStatus.value === 'approved') {
+        return {
+            title: 'Keep your proof current',
+            detail: 'Only replace a file when it is outdated. Any change returns the account to review.',
+        };
+    }
+
+    return {
+        title: 'Submit verification proof',
+        detail: 'One clear school ID or enrollment certificate is usually enough.',
+    };
+});
+const verificationSubmitLabel = computed(() => {
+    if (isUploadingVerificationDocument.value) {
+        return 'Uploading...';
+    }
+
+    if (selectedVerificationDocument.value) {
+        return profileVerificationStatus.value === 'rejected' ? 'Replace and resubmit' : 'Update proof';
+    }
+
+    return verificationDocuments.value.length ? 'Add proof' : 'Submit for review';
+});
 const hasUnsavedChanges = computed(() => savedFormSnapshot.value !== '' && savedFormSnapshot.value !== formSnapshot());
 const profileDisplayName = computed(() => [
     form.value.first_name,
@@ -1205,6 +1280,26 @@ function verificationProgress(status) {
 
 function verificationDocumentTypeLabel(type) {
     return verificationDocumentOptions.find((option) => option.value === type)?.label ?? 'Verification proof';
+}
+
+function verificationDocumentStatusLabel(status) {
+    return {
+        submitted: 'Awaiting review',
+        approved: 'Accepted',
+        rejected: 'Needs replacement',
+    }[status] ?? 'Submitted';
+}
+
+function verificationDocumentStatusClass(status) {
+    if (status === 'approved') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    return 'bg-amber-100 text-amber-800';
 }
 
 function handleVerificationFile(event) {
@@ -2346,7 +2441,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <p class="student-kicker">Account trust</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Profile verification</h3>
                                     <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Submit a clear identity or enrollment proof. An admin reviews it before providers see a verified badge on your applications.
+                                        Confirm your student identity so scholarship providers can trust the profile attached to your applications.
                                     </p>
                                 </div>
                                 <span :class="[sectionStatusPillClass, verificationStatusClass(profileVerificationStatus)]">
@@ -2354,109 +2449,197 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </span>
                             </div>
 
-                            <div :class="sectionBodyClass">
-                                <div
-                                    v-if="user?.applicant_verification_notes"
-                                    :class="[
-                                        'mb-5 rounded-md border p-4 text-sm leading-6',
-                                        profileVerificationStatus === 'rejected'
-                                            ? 'border-rose-200 bg-rose-50 text-rose-800'
-                                            : 'border-slate-200 bg-slate-50 text-slate-700',
-                                    ]"
+                            <ol class="grid border-b border-slate-200 bg-slate-50 md:grid-cols-3 md:divide-x md:divide-slate-200">
+                                <li
+                                    v-for="step in verificationSteps"
+                                    :key="step.number"
+                                    class="flex items-start gap-3 border-b border-slate-200 p-4 last:border-b-0 md:border-b-0 sm:p-5"
                                 >
+                                    <span
+                                        :class="[
+                                            'grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black',
+                                            step.state === 'complete'
+                                                ? 'bg-emerald-100 text-emerald-700'
+                                                : step.state === 'current'
+                                                    ? 'bg-slate-900 text-white'
+                                                    : 'border border-slate-300 bg-white text-slate-500',
+                                        ]"
+                                    >
+                                        <i v-if="step.state === 'complete'" class="fa-solid fa-check" aria-hidden="true"></i>
+                                        <span v-else>{{ step.number }}</span>
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-bold text-slate-950">{{ step.label }}</p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ step.detail }}</p>
+                                    </div>
+                                </li>
+                            </ol>
+
+                            <div
+                                v-if="user?.applicant_verification_notes"
+                                :class="[
+                                    'flex items-start gap-3 border-b p-4 text-sm sm:px-6',
+                                    profileVerificationStatus === 'rejected'
+                                        ? 'border-rose-200 bg-rose-50 text-rose-800'
+                                        : 'border-slate-200 bg-slate-50 text-slate-700',
+                                ]"
+                            >
+                                <i class="fa-solid fa-message mt-1 shrink-0" aria-hidden="true"></i>
+                                <div>
                                     <p class="font-bold">Admin review note</p>
-                                    <p class="mt-1">{{ user.applicant_verification_notes }}</p>
+                                    <p class="mt-1 leading-6">{{ user.applicant_verification_notes }}</p>
+                                </div>
+                            </div>
+
+                            <div class="grid border-b border-slate-200 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.58fr)]">
+                                <div class="p-5 sm:p-6">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <h4 class="text-lg font-bold text-slate-950">{{ verificationUploadCopy.title }}</h4>
+                                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{{ verificationUploadCopy.detail }}</p>
+                                        </div>
+                                        <span class="shrink-0 text-xs font-bold text-slate-500">
+                                            {{ verificationDocuments.length }} of 3 files
+                                        </span>
+                                    </div>
+
+                                    <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                                        <label>
+                                            <span :class="labelClass">Proof type</span>
+                                            <select v-model="verificationDocumentType" :class="inputClass">
+                                                <option v-for="option in verificationDocumentOptions" :key="option.value" :value="option.value">
+                                                    {{ option.label }}
+                                                </option>
+                                            </select>
+                                        </label>
+
+                                        <label class="min-w-0 cursor-pointer">
+                                            <span :class="labelClass">Proof file</span>
+                                            <span class="flex min-h-11 items-center gap-2 rounded-md border border-dashed border-slate-400 bg-white px-3 py-2.5 text-sm transition hover:border-slate-500 hover:bg-slate-50">
+                                                <i class="fa-solid fa-paperclip shrink-0 text-xs text-slate-500" aria-hidden="true"></i>
+                                                <span :class="['min-w-0 flex-1 truncate font-semibold', verificationDocumentFile ? 'text-slate-900' : 'text-slate-400']">
+                                                    {{ verificationDocumentFile?.name || 'Select from your device' }}
+                                                </span>
+                                                <span class="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">Browse</span>
+                                            </span>
+                                            <input
+                                                ref="verificationFileInput"
+                                                type="file"
+                                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                                class="sr-only"
+                                                @change="handleVerificationFile"
+                                            >
+                                            <span class="mt-1 block text-xs text-slate-500">PDF, image, or Word file up to 5 MB.</span>
+                                        </label>
+                                    </div>
+
+                                    <p v-if="selectedVerificationDocument" class="mt-3 text-xs font-semibold text-slate-600">
+                                        This proof type already has a file. Submitting here will update it and restart admin review.
+                                    </p>
+
+                                    <div class="mt-4">
+                                        <TermsAgreement v-model="verificationDocumentTermsAccepted" context="document" />
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        :disabled="isUploadingVerificationDocument"
+                                        class="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                                        @click="uploadVerificationDocument"
+                                    >
+                                        <i :class="[isUploadingVerificationDocument ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-shield', 'text-xs']" aria-hidden="true"></i>
+                                        {{ verificationSubmitLabel }}
+                                    </button>
                                 </div>
 
-                                <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,0.8fr)]">
-                                    <div>
-                                        <h4 class="text-base font-bold text-slate-950">Submitted proof</h4>
-                                        <p class="mt-1 text-sm leading-6 text-slate-500">
-                                            You can keep up to three files. Uploading or replacing a file sends the account back for admin review.
-                                        </p>
+                                <aside class="border-t border-slate-200 bg-slate-50 p-5 lg:border-l lg:border-t-0 sm:p-6">
+                                    <p class="student-kicker">Good proof checklist</p>
+                                    <h4 class="mt-2 text-base font-bold text-slate-950">Before uploading</h4>
+                                    <ul class="mt-4 grid gap-4 text-sm text-slate-600">
+                                        <li class="flex items-start gap-3">
+                                            <i class="fa-solid fa-check mt-1 text-emerald-600" aria-hidden="true"></i>
+                                            <span>Use a current document with all edges visible.</span>
+                                        </li>
+                                        <li class="flex items-start gap-3">
+                                            <i class="fa-solid fa-check mt-1 text-emerald-600" aria-hidden="true"></i>
+                                            <span>Keep your name, school, and identifying details readable.</span>
+                                        </li>
+                                        <li class="flex items-start gap-3">
+                                            <i class="fa-solid fa-check mt-1 text-emerald-600" aria-hidden="true"></i>
+                                            <span>Avoid blur, glare, heavy cropping, or password-protected files.</span>
+                                        </li>
+                                    </ul>
+                                </aside>
+                            </div>
 
-                                        <div v-if="verificationDocuments.length" class="mt-4 divide-y divide-slate-200 rounded-md border border-slate-200">
-                                            <div
-                                                v-for="document in verificationDocuments"
-                                                :key="document.id"
-                                                class="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between"
-                                            >
-                                                <div class="min-w-0">
-                                                    <p class="truncate text-sm font-bold text-slate-950">
-                                                        {{ verificationDocumentTypeLabel(document.document_type) }}
-                                                    </p>
-                                                    <p class="mt-1 truncate text-xs text-slate-500">
-                                                        {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
-                                                    </p>
-                                                </div>
-                                                <div class="flex shrink-0 items-center gap-2">
-                                                    <a
-                                                        :href="document.view_url"
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                                    >
-                                                        View
-                                                    </a>
-                                                    <button
-                                                        type="button"
-                                                        :disabled="deletingVerificationDocumentId === document.id"
-                                                        class="grid h-9 w-9 place-items-center rounded-md border border-slate-300 text-slate-500 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        title="Remove proof"
-                                                        aria-label="Remove verification proof"
-                                                        @click="deleteVerificationDocument(document)"
-                                                    >
-                                                        <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
-                                                    </button>
-                                                </div>
+                            <div class="flex flex-col gap-1 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                <div>
+                                    <h4 class="text-base font-bold text-slate-950">Proofs on file</h4>
+                                    <p class="mt-1 text-xs text-slate-500">Files submitted specifically for applicant account verification.</p>
+                                </div>
+                                <p class="text-xs font-bold text-slate-500">{{ verificationDocuments.length }} submitted</p>
+                            </div>
+
+                            <div v-if="verificationDocuments.length" class="divide-y divide-slate-200">
+                                <article
+                                    v-for="document in verificationDocuments"
+                                    :key="document.id"
+                                    class="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+                                >
+                                    <div class="flex min-w-0 items-start gap-3">
+                                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
+                                            <i class="fa-solid fa-file-lines" aria-hidden="true"></i>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <div class="flex min-w-0 flex-wrap items-center gap-2">
+                                                <h5 class="truncate text-sm font-bold text-slate-950">
+                                                    {{ verificationDocumentTypeLabel(document.document_type) }}
+                                                </h5>
+                                                <span :class="['rounded px-2 py-1 text-[11px] font-bold', verificationDocumentStatusClass(document.status)]">
+                                                    {{ verificationDocumentStatusLabel(document.status) }}
+                                                </span>
                                             </div>
-                                        </div>
-                                        <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
-                                            No proof submitted yet. One clear school ID or enrollment document is usually enough for review.
-                                        </div>
-
-                                        <p class="mt-4 text-xs leading-5 text-slate-500">
-                                            Your proof stays private and is available only to you and authorized admins. Providers see the verification result only.
-                                        </p>
-                                    </div>
-
-                                    <div class="rounded-md border border-slate-200 bg-slate-50 p-4">
-                                        <h4 class="text-base font-bold text-slate-950">Upload or replace proof</h4>
-                                        <div class="mt-4 grid gap-4">
-                                            <label>
-                                                <span :class="labelClass">Proof type</span>
-                                                <select v-model="verificationDocumentType" :class="inputClass">
-                                                    <option v-for="option in verificationDocumentOptions" :key="option.value" :value="option.value">
-                                                        {{ option.label }}
-                                                    </option>
-                                                </select>
-                                            </label>
-
-                                            <label>
-                                                <span :class="labelClass">File</span>
-                                                <input
-                                                    ref="verificationFileInput"
-                                                    type="file"
-                                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                                    :class="[inputClass, 'file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white']"
-                                                    @change="handleVerificationFile"
-                                                >
-                                                <span class="mt-1 block text-xs text-slate-500">PDF, image, or Word file up to 5 MB.</span>
-                                            </label>
-
-                                            <TermsAgreement v-model="verificationDocumentTermsAccepted" context="document" />
-
-                                            <button
-                                                type="button"
-                                                :disabled="isUploadingVerificationDocument"
-                                                class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="uploadVerificationDocument"
-                                            >
-                                                {{ isUploadingVerificationDocument ? 'Uploading...' : 'Submit for review' }}
-                                            </button>
+                                            <p class="mt-1 truncate text-xs text-slate-500">{{ document.original_name }}</p>
+                                            <p class="mt-1 text-xs text-slate-500">{{ formatFileSize(document.size) }} - {{ document.uploaded_at }}</p>
                                         </div>
                                     </div>
+                                    <div class="flex shrink-0 items-center gap-2">
+                                        <a
+                                            :href="document.view_url"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                        >
+                                            <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                                            View
+                                        </a>
+                                        <button
+                                            type="button"
+                                            :disabled="deletingVerificationDocumentId === document.id"
+                                            class="grid h-9 w-9 place-items-center rounded-md border border-rose-200 bg-white text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                            title="Remove proof"
+                                            aria-label="Remove verification proof"
+                                            @click="deleteVerificationDocument(document)"
+                                        >
+                                            <i :class="[deletingVerificationDocumentId === document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can', 'text-xs']" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </article>
+                            </div>
+
+                            <div v-else class="flex items-start gap-3 px-5 py-6 sm:px-6">
+                                <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-500">
+                                    <i class="fa-regular fa-file-lines" aria-hidden="true"></i>
+                                </span>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-950">No verification proof submitted</p>
+                                    <p class="mt-1 text-sm leading-6 text-slate-500">Choose one clear school ID or enrollment document above to begin review.</p>
                                 </div>
+                            </div>
+
+                            <div class="flex items-start gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 text-xs leading-5 text-slate-600 sm:px-6">
+                                <i class="fa-solid fa-lock mt-1 shrink-0 text-slate-500" aria-hidden="true"></i>
+                                <p>Your proof stays private and is available only to you and authorized admins. Scholarship providers see only your verification result.</p>
                             </div>
                         </section>
 

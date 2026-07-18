@@ -353,6 +353,7 @@ class ScholarshipEligibilityService
             'all over the philippines',
             'all philippines',
             'no income requirement',
+            'no income ceiling',
         ], true)
             || str_starts_with($normalized, 'any ')
             || str_starts_with($normalized, 'all ')

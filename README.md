@@ -40,17 +40,18 @@ php artisan schedule:work
 
 Run each long-running command in its own terminal. The queue sends notification emails, while the scheduler creates deadline reminders.
 
-## Demo Admin Account
+## Demo Accounts
 
-The seeder creates one admin account using these default local values:
+The seeder creates four verified local accounts. All use `password123` unless their corresponding environment variables are changed.
 
-```text
-Email: admin@scholarship.test
-Username: admin
-Password: password123
-```
+| Role | Email | Username |
+| --- | --- | --- |
+| Admin | `admin@scholarship.test` | `admin` |
+| Demo student | `student@scholarship.test` | `student` |
+| DOST provider | `provider@scholarship.test` | `provider` |
+| CHED provider | `ched.provider@scholarship.test` | `chedprovider` |
 
-Change `ADMIN_EMAIL`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` before seeding a hosted/production database.
+Both providers are approved and own published scholarship programs. Change the demo account environment variables before seeding a hosted/production database.
 
 ## Hosting Checklist
 

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\ProviderAssessment;
 use App\Models\Scholarship;
 use App\Models\User;
+use App\Services\ScholarshipEligibilityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -17,8 +18,13 @@ class ProgramCatalogSeedTest extends TestCase
         $this->seed();
         $this->seed();
 
+        $users = User::query()->with(['studentProfile', 'providerProfile'])->get();
         $programs = Scholarship::query()->orderBy('title')->get();
 
+        $this->assertCount(4, $users);
+        $this->assertSame(1, $users->where('role', 'admin')->count());
+        $this->assertSame(2, $users->where('role', 'provider')->count());
+        $this->assertSame(1, $users->where('role', 'applicant')->count());
         $this->assertCount(4, $programs);
         $this->assertCount(2, $programs->pluck('image_path')->filter()->unique());
 
@@ -34,8 +40,12 @@ class ProgramCatalogSeedTest extends TestCase
             ->where('provider_id', $chedProvider->id)
             ->where('title', 'CHED Merit Scholarship Program (CMSP)')
             ->firstOrFail();
+        $student = $users->firstWhere('email', 'student@scholarship.test');
 
         $this->assertSame('approved', $chedProvider->providerProfile?->verification_status);
+        $this->assertNotNull($student);
+        $this->assertTrue($student->hasCompleteApplicantProfile());
+        $this->assertSame('approved', $student->studentProfile?->verification_status);
         $dostPrograms = $programs->filter(fn (Scholarship $program): bool => str_starts_with($program->title, 'DOST-SEI'));
 
         $this->assertCount(3, $dostPrograms);
@@ -46,6 +56,12 @@ class ProgramCatalogSeedTest extends TestCase
         $this->assertSame('CHED Central Office', $chedProgram->location_name);
         $this->assertSame('93.00', $chedProgram->minimum_gwa);
         $this->assertStringContainsString('PHP 500,000', $chedProgram->income_requirement);
+        $this->assertTrue(app(ScholarshipEligibilityService::class)
+            ->evaluate($dostPrograms->firstWhere('title', 'DOST-SEI Merit Undergraduate Scholarship'), $student)['is_eligible']);
+
+        $programsByProvider = $programs->groupBy('provider_id');
+        $this->assertCount(2, $programsByProvider);
+        $this->assertTrue($programsByProvider->every(fn ($providerPrograms): bool => $providerPrograms->isNotEmpty()));
 
         $assessments = ProviderAssessment::query()->with('provider')->get();
 
