@@ -45,6 +45,10 @@ class StudentProfile extends Model
         'guardian_contact',
         'guardian_email',
         'guardian_is_account_owner',
+        'verification_status',
+        'verification_notes',
+        'verified_at',
+        'verified_by',
     ];
 
     protected function casts(): array
@@ -56,11 +60,17 @@ class StudentProfile extends Model
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
             'guardian_is_account_owner' => 'boolean',
+            'verified_at' => 'datetime',
         ];
     }
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function verifier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by');
     }
 }

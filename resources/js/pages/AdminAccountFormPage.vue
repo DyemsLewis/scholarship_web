@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import { formatFileSize } from '../support/display';
 
 const accountId = window.location.pathname.match(/\/admin\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
 const isEditMode = computed(() => Boolean(accountId));
@@ -15,6 +16,8 @@ const account = ref(null);
 const accountAction = ref('');
 const suspensionReason = ref('');
 const supportLink = ref('');
+const verificationDocuments = ref([]);
+const applicantVerificationNotes = ref('');
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
@@ -59,6 +62,35 @@ const emailStatusLabel = computed(() => account.value?.email_verified ? 'Email v
 const emailStatusClass = computed(() => account.value?.email_verified
     ? 'bg-emerald-100 text-emerald-800'
     : 'bg-amber-100 text-amber-800');
+const applicantVerificationStatus = computed(() => account.value?.applicant_verification_status ?? 'unsubmitted');
+const applicantVerificationLabel = computed(() => ({
+    unsubmitted: 'Not submitted',
+    pending: 'Pending review',
+    approved: 'Admin verified',
+    rejected: 'Needs replacement',
+}[applicantVerificationStatus.value] ?? 'Not submitted'));
+const applicantVerificationClass = computed(() => {
+    if (applicantVerificationStatus.value === 'approved') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (applicantVerificationStatus.value === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (applicantVerificationStatus.value === 'pending') {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-slate-100 text-slate-600';
+});
+const applicantVerificationDocumentOptions = {
+    school_id: 'School or student ID',
+    government_id: 'Government-issued ID',
+    enrollment_certificate: 'Enrollment certificate',
+    birth_certificate: 'Birth certificate',
+    other: 'Other identity or school proof',
+};
 
 function handleMiddleInitialInput(event) {
     form.value.middleInitial = event.target.value.replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase();
@@ -89,6 +121,8 @@ async function loadAccount() {
         const response = await window.axios.get(`/admin/users/${accountId}`);
 
         fillForm(response.data.user);
+        verificationDocuments.value = response.data.verification_documents ?? [];
+        applicantVerificationNotes.value = response.data.user?.applicant_verification_notes ?? '';
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load account.';
     } finally {
@@ -263,6 +297,41 @@ async function resendVerificationEmail() {
     } finally {
         accountAction.value = '';
     }
+}
+
+async function updateApplicantVerification(status) {
+    if (!accountId || account.value?.role !== 'applicant') {
+        return;
+    }
+
+    if (status === 'rejected' && !applicantVerificationNotes.value.trim()) {
+        errorMessage.value = 'Add a review note explaining what the applicant needs to replace.';
+        return;
+    }
+
+    accountAction.value = `profile-verification-${status}`;
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    try {
+        const response = await window.axios.patch(`/admin/users/${accountId}/profile-verification`, {
+            verification_status: status,
+            verification_notes: applicantVerificationNotes.value.trim() || null,
+        });
+
+        fillForm(response.data.user);
+        verificationDocuments.value = response.data.verification_documents ?? [];
+        applicantVerificationNotes.value = response.data.user?.applicant_verification_notes ?? '';
+        statusMessage.value = response.data.message ?? 'Applicant profile verification updated.';
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to update applicant profile verification.';
+    } finally {
+        accountAction.value = '';
+    }
+}
+
+function applicantVerificationDocumentLabel(type) {
+    return applicantVerificationDocumentOptions[type] ?? 'Verification proof';
 }
 
 onMounted(loadAccount);
@@ -537,6 +606,98 @@ onMounted(loadAccount);
                             >
                                 {{ accountAction === 'suspend' ? 'Suspending...' : 'Suspend account' }}
                             </button>
+                        </div>
+                    </div>
+                </section>
+
+                <section
+                    v-if="isEditMode && account?.role === 'applicant'"
+                    class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                >
+                    <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                Applicant verification
+                            </p>
+                            <h3 class="mt-2 text-lg font-bold text-slate-950">
+                                Review profile proof
+                            </h3>
+                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                                Check the applicant's private proof, then approve the account badge or explain what needs replacement.
+                            </p>
+                        </div>
+                        <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.12em]', applicantVerificationClass]">
+                            {{ applicantVerificationLabel }}
+                        </span>
+                    </div>
+
+                    <div class="p-5 sm:p-6">
+                        <div v-if="verificationDocuments.length" class="divide-y divide-slate-200 rounded-md border border-slate-200">
+                            <div
+                                v-for="document in verificationDocuments"
+                                :key="document.id"
+                                class="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-bold text-slate-950">
+                                        {{ applicantVerificationDocumentLabel(document.document_type) }}
+                                    </p>
+                                    <p class="mt-1 truncate text-xs text-slate-500">
+                                        {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
+                                    </p>
+                                </div>
+                                <a
+                                    :href="document.view_url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="w-fit rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                >
+                                    View proof
+                                </a>
+                            </div>
+                        </div>
+                        <div v-else class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
+                            This applicant has not submitted a verification proof yet.
+                        </div>
+
+                        <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                            <div>
+                                <label :class="labelClass" for="admin-applicant-verification-notes">Review note</label>
+                                <textarea
+                                    id="admin-applicant-verification-notes"
+                                    v-model="applicantVerificationNotes"
+                                    rows="3"
+                                    placeholder="Required when proof needs replacement"
+                                    class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
+                                />
+                            </div>
+
+                            <div class="flex flex-col gap-2 sm:flex-row lg:justify-end">
+                                <button
+                                    type="button"
+                                    :disabled="Boolean(accountAction) || verificationDocuments.length === 0"
+                                    class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    @click="updateApplicantVerification('pending')"
+                                >
+                                    {{ accountAction === 'profile-verification-pending' ? 'Updating...' : 'Keep pending' }}
+                                </button>
+                                <button
+                                    type="button"
+                                    :disabled="Boolean(accountAction) || verificationDocuments.length === 0"
+                                    class="rounded-md border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-sm font-bold text-rose-800 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    @click="updateApplicantVerification('rejected')"
+                                >
+                                    {{ accountAction === 'profile-verification-rejected' ? 'Updating...' : 'Needs replacement' }}
+                                </button>
+                                <button
+                                    type="button"
+                                    :disabled="Boolean(accountAction) || verificationDocuments.length === 0"
+                                    class="rounded-md bg-slate-900 px-3.5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                    @click="updateApplicantVerification('approved')"
+                                >
+                                    {{ accountAction === 'profile-verification-approved' ? 'Verifying...' : 'Verify profile' }}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </section>

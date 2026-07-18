@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
@@ -23,6 +24,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class ApplicantDashboardController extends Controller
@@ -158,11 +160,18 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
 
         $user = $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile']);
+        $verificationDocuments = $user->applicantVerificationDocuments()
+            ->latest('uploaded_at')
+            ->get();
 
         return response()->json([
             'user' => $user->publicPayload(),
             'profile_readiness' => $user->applicantProfileReadiness(),
             'match_summary' => $this->profileMatchSummary($user),
+            'prepared_documents_count' => $user->studentDocuments()->count(),
+            'verification_documents' => $verificationDocuments
+                ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
+                ->values(),
         ]);
     }
 
@@ -364,6 +373,145 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($document->user_id === $request->user()->id, 403);
+        abort_unless(Storage::disk('local')->exists($document->path), 404);
+
+        return Storage::disk('local')->response($document->path, $document->original_name);
+    }
+
+    public function uploadApplicantVerificationDocument(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        $validated = $request->validate([
+            'document_type' => ['required', Rule::in([
+                'school_id',
+                'government_id',
+                'enrollment_certificate',
+                'birth_certificate',
+                'other',
+            ])],
+            'document_file' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
+            'terms_accepted' => ['accepted'],
+        ]);
+
+        $user = $request->user();
+        $existing = $user->applicantVerificationDocuments()
+            ->where('document_type', $validated['document_type'])
+            ->first();
+
+        if (! $existing && $user->applicantVerificationDocuments()->count() >= 3) {
+            throw ValidationException::withMessages([
+                'document_file' => 'You can keep up to three verification proofs. Replace or remove one before adding another.',
+            ]);
+        }
+
+        $file = $validated['document_file'];
+        $path = $file->store("applicant-verification/{$user->id}", 'local');
+
+        if ($existing && Storage::disk('local')->exists($existing->path)) {
+            Storage::disk('local')->delete($existing->path);
+        }
+
+        $document = ApplicantVerificationDocument::query()->updateOrCreate([
+            'applicant_id' => $user->id,
+            'document_type' => $validated['document_type'],
+        ], [
+            'uploaded_by' => $user->id,
+            'original_name' => $file->getClientOriginalName(),
+            'path' => $path,
+            'mime_type' => $file->getMimeType(),
+            'size' => $file->getSize() ?: 0,
+            'status' => 'submitted',
+            'review_notes' => null,
+            'uploaded_at' => now(),
+            'terms_accepted_at' => now(),
+            'terms_version' => Terms::VERSION,
+        ]);
+
+        $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
+            'verification_status' => 'pending',
+            'verification_notes' => null,
+            'verified_at' => null,
+            'verified_by' => null,
+        ]);
+        $user->applicantVerificationDocuments()->update([
+            'status' => 'submitted',
+            'review_notes' => null,
+        ]);
+
+        User::query()
+            ->where('role', 'admin')
+            ->get()
+            ->each(fn (User $admin) => PortalNotification::create([
+                'user_id' => $admin->id,
+                'type' => 'applicant_profile_verification',
+                'title' => 'Applicant proof uploaded',
+                'message' => "{$user->name} submitted a profile verification proof.",
+                'action_url' => "/admin/accounts/{$user->id}/edit",
+            ]));
+
+        ActivityLog::record(
+            $user,
+            'applicant_verification_document_uploaded',
+            "{$user->name} uploaded an applicant profile verification proof.",
+            $request,
+            ['document_id' => $document->id, 'document_type' => $document->document_type],
+        );
+
+        return response()->json([
+            'message' => $existing ? 'Verification proof updated and sent for review.' : 'Verification proof sent for admin review.',
+            'user' => $user->fresh(['studentProfile'])->publicPayload(),
+            'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
+        ], $existing ? 200 : 201);
+    }
+
+    public function deleteApplicantVerificationDocument(Request $request, ApplicantVerificationDocument $document): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($document->applicant_id === $request->user()->id, 403);
+
+        if (Storage::disk('local')->exists($document->path)) {
+            Storage::disk('local')->delete($document->path);
+        }
+
+        $document->delete();
+        $user = $request->user();
+        $hasDocuments = $user->applicantVerificationDocuments()->exists();
+
+        $user->studentProfile()->update([
+            'verification_status' => $hasDocuments ? 'pending' : 'unsubmitted',
+            'verification_notes' => null,
+            'verified_at' => null,
+            'verified_by' => null,
+        ]);
+
+        if ($hasDocuments) {
+            $user->applicantVerificationDocuments()->update([
+                'status' => 'submitted',
+                'review_notes' => null,
+            ]);
+        }
+
+        ActivityLog::record(
+            $user,
+            'applicant_verification_document_deleted',
+            "{$user->name} removed an applicant profile verification proof.",
+            $request,
+        );
+
+        return response()->json([
+            'message' => $hasDocuments
+                ? 'Proof removed. The remaining documents are pending admin review.'
+                : 'Verification proof removed.',
+            'user' => $user->fresh(['studentProfile'])->publicPayload(),
+            'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
+        ]);
+    }
+
+    public function viewApplicantVerificationDocument(Request $request, ApplicantVerificationDocument $document)
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($document->applicant_id === $request->user()->id, 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
         return Storage::disk('local')->response($document->path, $document->original_name);
@@ -1139,6 +1287,29 @@ class ApplicantDashboardController extends Controller
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'view_url' => route('dashboard.student-documents.view', $document),
             'download_url' => route('dashboard.student-documents.download', $document),
+        ];
+    }
+
+    private function applicantVerificationDocumentsPayload(User $user)
+    {
+        return $user->applicantVerificationDocuments()
+            ->latest('uploaded_at')
+            ->get()
+            ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
+            ->values();
+    }
+
+    private function applicantVerificationDocumentPayload(ApplicantVerificationDocument $document): array
+    {
+        return [
+            'id' => $document->id,
+            'document_type' => $document->document_type,
+            'original_name' => $document->original_name,
+            'size' => $document->size,
+            'status' => $document->status,
+            'review_notes' => $document->review_notes,
+            'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'view_url' => route('dashboard.applicant-verification-documents.view', $document),
         ];
     }
 

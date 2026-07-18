@@ -389,6 +389,27 @@ onMounted(loadAdminData);
                                             >
                                                 Reset required
                                             </span>
+                                            <span
+                                                v-if="user.role === 'applicant'"
+                                                :class="[
+                                                    'whitespace-nowrap rounded-md px-2 py-1 text-xs font-bold',
+                                                    user.applicant_verification_status === 'approved'
+                                                        ? 'bg-emerald-100 text-emerald-800'
+                                                        : user.applicant_verification_status === 'pending'
+                                                            ? 'bg-amber-100 text-amber-800'
+                                                            : user.applicant_verification_status === 'rejected'
+                                                                ? 'bg-rose-100 text-rose-800'
+                                                                : 'bg-slate-100 text-slate-600',
+                                                ]"
+                                            >
+                                                {{ user.applicant_verification_status === 'approved'
+                                                    ? 'Profile verified'
+                                                    : user.applicant_verification_status === 'pending'
+                                                        ? 'Proof pending'
+                                                        : user.applicant_verification_status === 'rejected'
+                                                            ? 'Proof rejected'
+                                                            : 'No proof' }}
+                                            </span>
                                         </div>
                                     </td>
                                     <td class="px-4 py-3 align-top text-slate-600">

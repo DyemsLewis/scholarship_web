@@ -1318,6 +1318,8 @@ class ProviderController extends Controller
                 ])->filter()->implode(', '),
                 'latitude' => $application->applicant?->studentProfile?->latitude,
                 'longitude' => $application->applicant?->studentProfile?->longitude,
+                'profile_verification_status' => $application->applicant?->studentProfile?->verification_status ?? 'unsubmitted',
+                'profile_verified_at' => $application->applicant?->studentProfile?->verified_at?->format('M d, Y'),
             ],
             'scholarship' => $application->scholarship
                 ? $this->scholarshipPayload($application->scholarship)

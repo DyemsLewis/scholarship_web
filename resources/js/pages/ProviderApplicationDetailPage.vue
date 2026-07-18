@@ -1101,9 +1101,19 @@ onMounted(loadApplication);
                             </section>
 
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Applicant
-                                </p>
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                        Applicant
+                                    </p>
+                                    <span
+                                        v-if="application.applicant?.profile_verification_status === 'approved'"
+                                        class="rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800"
+                                        :title="application.applicant?.profile_verified_at ? `Verified ${application.applicant.profile_verified_at}` : 'Verified by an administrator'"
+                                    >
+                                        <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
+                                        Admin verified
+                                    </span>
+                                </div>
                                 <div class="mt-3 grid gap-3 text-sm">
                                     <div>
                                         <p class="font-semibold text-slate-500">Education level</p>

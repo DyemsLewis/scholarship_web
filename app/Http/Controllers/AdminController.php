@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\PortalNotification;
 use App\Models\ProviderVerificationDocument;
@@ -248,6 +249,13 @@ class AdminController extends Controller
 
         return response()->json([
             'user' => $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+            'verification_documents' => $user->isApplicant()
+                ? $user->applicantVerificationDocuments()
+                    ->latest('uploaded_at')
+                    ->get()
+                    ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
+                    ->values()
+                : [],
         ]);
     }
 
@@ -488,6 +496,88 @@ class AdminController extends Controller
             'message' => 'Provider verification updated.',
             'provider' => $provider->fresh('providerProfile')->publicPayload(),
         ]);
+    }
+
+    public function updateApplicantVerification(Request $request, User $applicant): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($applicant->isApplicant(), 404);
+
+        $validated = $request->validate([
+            'verification_status' => ['required', Rule::in(['pending', 'approved', 'rejected'])],
+            'verification_notes' => [Rule::requiredIf($request->input('verification_status') === 'rejected'), 'nullable', 'string', 'max:1500'],
+        ]);
+
+        if ($validated['verification_status'] === 'approved' && ! $applicant->applicantVerificationDocuments()->exists()) {
+            return response()->json([
+                'message' => 'The applicant must upload at least one proof before the profile can be verified.',
+            ], 422);
+        }
+
+        $documentStatus = match ($validated['verification_status']) {
+            'approved' => 'approved',
+            'rejected' => 'rejected',
+            default => 'submitted',
+        };
+        $notes = $validated['verification_status'] === 'rejected'
+            && filled($validated['verification_notes'] ?? null)
+            ? trim($validated['verification_notes'])
+            : null;
+
+        $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
+            'verification_status' => $validated['verification_status'],
+            'verification_notes' => $notes,
+            'verified_by' => $validated['verification_status'] === 'pending' ? null : $request->user()->id,
+            'verified_at' => $validated['verification_status'] === 'approved' ? now() : null,
+        ]);
+
+        $applicant->applicantVerificationDocuments()->update([
+            'status' => $documentStatus,
+            'review_notes' => $notes,
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'applicant_profile_verification_updated',
+            "{$request->user()->name} marked applicant {$applicant->name} as {$validated['verification_status']}.",
+            $request,
+            [
+                'applicant_id' => $applicant->id,
+                'verification_status' => $validated['verification_status'],
+            ],
+        );
+
+        $message = "Your applicant profile verification is now {$validated['verification_status']}.";
+
+        if ($validated['verification_status'] === 'rejected' && $notes) {
+            $message .= " Review note: {$notes}";
+        }
+
+        PortalNotification::create([
+            'user_id' => $applicant->id,
+            'type' => 'applicant_profile_verification',
+            'title' => 'Profile verification updated',
+            'message' => $message,
+            'action_url' => '/dashboard/profile',
+        ]);
+
+        return response()->json([
+            'message' => 'Applicant profile verification updated.',
+            'user' => $applicant->fresh(['studentProfile'])->publicPayload(),
+            'verification_documents' => $applicant->applicantVerificationDocuments()
+                ->latest('uploaded_at')
+                ->get()
+                ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
+                ->values(),
+        ]);
+    }
+
+    public function viewApplicantVerificationDocument(Request $request, ApplicantVerificationDocument $document)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless(Storage::disk('local')->exists($document->path), 404);
+
+        return Storage::disk('local')->response($document->path, $document->original_name);
     }
 
     public function downloadProviderVerificationDocument(Request $request, ProviderVerificationDocument $document)
@@ -1091,6 +1181,20 @@ class AdminController extends Controller
             'review_notes' => $document->review_notes,
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'download_url' => route('admin.provider-verification-documents.download', $document),
+        ];
+    }
+
+    private function applicantVerificationDocumentPayload(ApplicantVerificationDocument $document): array
+    {
+        return [
+            'id' => $document->id,
+            'document_type' => $document->document_type,
+            'original_name' => $document->original_name,
+            'size' => $document->size,
+            'status' => $document->status,
+            'review_notes' => $document->review_notes,
+            'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'view_url' => route('admin.applicant-verification-documents.view', $document),
         ];
     }
 

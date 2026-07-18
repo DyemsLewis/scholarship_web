@@ -29,6 +29,9 @@ Route::get('/dashboard/documents', [ApplicantDashboardController::class, 'docume
 Route::get('/dashboard/profile', [ApplicantDashboardController::class, 'profile'])->middleware('auth')->name('dashboard.profile');
 Route::get('/dashboard/profile/data', [ApplicantDashboardController::class, 'profileData'])->middleware('auth')->name('dashboard.profile.data');
 Route::patch('/dashboard/profile', [ApplicantDashboardController::class, 'updateProfile'])->middleware('auth')->name('dashboard.profile.update');
+Route::post('/dashboard/profile/verification-documents', [ApplicantDashboardController::class, 'uploadApplicantVerificationDocument'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applicant-verification-documents.store');
+Route::get('/dashboard/profile/verification-documents/{document}/view', [ApplicantDashboardController::class, 'viewApplicantVerificationDocument'])->middleware('auth')->name('dashboard.applicant-verification-documents.view');
+Route::delete('/dashboard/profile/verification-documents/{document}', [ApplicantDashboardController::class, 'deleteApplicantVerificationDocument'])->middleware('auth')->name('dashboard.applicant-verification-documents.destroy');
 Route::get('/dashboard/data', [ApplicantDashboardController::class, 'data'])->middleware('auth')->name('dashboard.data');
 Route::get('/dashboard/applications/data', [ApplicantDashboardController::class, 'applicationsData'])->middleware('auth')->name('dashboard.applications.data');
 Route::get('/dashboard/applications/{application}', [ApplicantDashboardController::class, 'applicationDetail'])->middleware('auth')->name('dashboard.applications.show');
@@ -71,6 +74,8 @@ Route::middleware(['auth', 'admin'])
         Route::post('/users/{user}/force-password-reset', [AdminController::class, 'forcePasswordReset'])->name('users.force-password-reset');
         Route::patch('/users/{user}/email-verification', [AdminController::class, 'verifyUserEmail'])->name('users.email-verification');
         Route::post('/users/{user}/verification-email', [AdminController::class, 'resendUserVerificationEmail'])->name('users.verification-email');
+        Route::patch('/users/{applicant}/profile-verification', [AdminController::class, 'updateApplicantVerification'])->name('users.profile-verification');
+        Route::get('/applicant-verification-documents/{document}/view', [AdminController::class, 'viewApplicantVerificationDocument'])->name('applicant-verification-documents.view');
         Route::get('/profile/data', [AdminController::class, 'profileData'])->name('profile.data');
         Route::patch('/profile', [AdminController::class, 'updateProfile'])->name('profile.update');
         Route::get('/reviews/data', [AdminController::class, 'reviewsData'])->name('reviews.data');

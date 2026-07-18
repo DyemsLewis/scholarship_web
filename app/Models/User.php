@@ -93,6 +93,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(StudentDocument::class);
     }
 
+    public function applicantVerificationDocuments(): HasMany
+    {
+        return $this->hasMany(ApplicantVerificationDocument::class, 'applicant_id');
+    }
+
     public function scholarshipFunnelEvents(): HasMany
     {
         return $this->hasMany(ScholarshipFunnelEvent::class);
@@ -248,6 +253,10 @@ class User extends Authenticatable implements MustVerifyEmail
             'verification_status' => $this->providerProfile?->verification_status,
             'verification_notes' => $this->providerProfile?->verification_notes,
             'can_post_scholarships' => $this->isProvider() && $this->providerProfile?->isVerified(),
+            'applicant_verification_status' => $this->studentProfile?->verification_status ?? 'unsubmitted',
+            'applicant_verification_notes' => $this->studentProfile?->verification_notes,
+            'applicant_verified_at' => $this->studentProfile?->verified_at?->format('M d, Y'),
+            'is_profile_verified' => $this->isApplicant() && $this->studentProfile?->verification_status === 'approved',
             'education_level' => $this->studentProfile?->education_level,
             'school' => $this->studentProfile?->school,
             'school_type' => $this->studentProfile?->school_type,

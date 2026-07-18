@@ -388,9 +388,18 @@ onMounted(loadProviderData);
                                         <p class="truncate text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                                             {{ application.scholarship?.title || 'Scholarship' }}
                                         </p>
-                                        <h4 class="mt-1 truncate text-lg font-bold text-slate-950">
-                                            {{ application.applicant?.name || 'Applicant' }}
-                                        </h4>
+                                        <div class="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                                            <h4 class="min-w-0 truncate text-lg font-bold text-slate-950">
+                                                {{ application.applicant?.name || 'Applicant' }}
+                                            </h4>
+                                            <span
+                                                v-if="application.applicant?.profile_verification_status === 'approved'"
+                                                class="shrink-0 rounded-md bg-emerald-100 px-2 py-1 text-[11px] font-bold text-emerald-800"
+                                            >
+                                                <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
+                                                Verified
+                                            </span>
+                                        </div>
                                         <p class="mt-1 text-xs text-slate-500">
                                             Submitted {{ application.submitted_at || 'recently' }}
                                         </p>
