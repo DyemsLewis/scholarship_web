@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
+use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
 use App\Models\ProviderAssessment;
@@ -17,6 +18,7 @@ use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
 use App\Support\AcademicRequirement;
+use App\Support\ApplicationSchedulePayload;
 use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -181,7 +183,7 @@ class ApplicantDashboardController extends Controller
 
         $scholarships = $this->publishedScholarships()->limit(8)->get();
         $applications = ScholarshipApplication::query()
-            ->with(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
+            ->with(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
             ->where('applicant_id', $request->user()->id)
             ->latest('submitted_at')
             ->limit(5)
@@ -209,7 +211,7 @@ class ApplicantDashboardController extends Controller
 
         $scholarships = $this->publishedScholarships()->get();
         $applications = ScholarshipApplication::query()
-            ->with(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
+            ->with(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
             ->where('applicant_id', $request->user()->id)
             ->latest('submitted_at')
             ->get();
@@ -229,9 +231,9 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($application->applicant_id === $request->user()->id, 403);
 
-        $application->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
+        $application->load(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
         app(DecisionSupportService::class)->syncApplication($application);
-        $application = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
+        $application = $application->fresh()->load(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile']);
 
         return response()->json([
             'user' => $this->userPayload($request),
@@ -245,7 +247,7 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
 
         $applications = ScholarshipApplication::query()
-            ->with(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
+            ->with(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
             ->where('applicant_id', $request->user()->id)
             ->latest('submitted_at')
             ->get();
@@ -921,6 +923,58 @@ class ApplicantDashboardController extends Controller
         ], 422);
     }
 
+    public function acknowledgeApplicationSchedule(
+        Request $request,
+        ScholarshipApplication $application,
+        ApplicationSchedule $schedule,
+    ): JsonResponse {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+        abort_unless($schedule->scholarship_application_id === $application->id, 404);
+
+        if ($schedule->status !== 'scheduled') {
+            return response()->json([
+                'message' => 'Only an active schedule can be acknowledged.',
+            ], 422);
+        }
+
+        if ($schedule->applicant_acknowledged_at === null) {
+            $schedule->update(['applicant_acknowledged_at' => now()]);
+
+            ActivityLog::record(
+                $request->user(),
+                'application_schedule_acknowledged',
+                "{$request->user()->name} acknowledged the {$schedule->type} schedule for application #{$application->id}.",
+                $request,
+                ['application_id' => $application->id, 'schedule_id' => $schedule->id],
+            );
+
+            if ($application->scholarship?->provider_id) {
+                PortalNotification::create([
+                    'user_id' => $application->scholarship->provider_id,
+                    'type' => 'schedule_acknowledged',
+                    'title' => ucfirst($schedule->type).' schedule acknowledged',
+                    'message' => "{$request->user()->name} confirmed that they saw the {$schedule->type} schedule for {$application->scholarship->title}.",
+                    'action_url' => route('provider.applications.show', $application, false),
+                ]);
+            }
+        }
+
+        $freshApplication = $application->fresh()->load([
+            'applicant.studentProfile',
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+        ]);
+
+        return response()->json([
+            'message' => 'Schedule acknowledged. The provider can now see your confirmation.',
+            'schedule' => ApplicationSchedulePayload::make($schedule->fresh()),
+            'application' => $this->applicationPayload($freshApplication),
+        ]);
+    }
+
     private function ensureApplicant(Request $request): ?RedirectResponse
     {
         if (! $request->user()) {
@@ -1105,6 +1159,7 @@ class ApplicantDashboardController extends Controller
     {
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
+        $application->loadMissing('schedules');
         $application->scholarship?->loadMissing('providerAssessment');
         $examStatuses = ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed'];
         $assessment = in_array($application->status, $examStatuses, true)
@@ -1131,6 +1186,10 @@ class ApplicantDashboardController extends Controller
             'distribution_instructions' => $application->distribution_instructions,
             'requires_student_response' => false,
             'can_respond' => false,
+            'schedules' => $application->schedules
+                ->sortBy('scheduled_at')
+                ->map(fn (ApplicationSchedule $schedule) => ApplicationSchedulePayload::make($schedule))
+                ->values(),
             'dss_score' => $dss['score'],
             'dss_recommendation' => $dss['recommendation'],
             'dss_breakdown' => $dss,

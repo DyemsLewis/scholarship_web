@@ -48,7 +48,22 @@ const recommendedScholarships = computed(() => [...scholarships.value]
         return Number(first.has_applied) - Number(second.has_applied);
     })
     .slice(0, 3));
-const activeApplication = computed(() => applications.value.find((application) => ![
+const scheduledActivities = computed(() => applications.value
+    .flatMap((application) => (application.schedules ?? [])
+        .filter((schedule) => schedule.status === 'scheduled')
+        .map((schedule) => ({ application, schedule })))
+    .sort((first, second) => {
+        const firstNeedsConfirmation = Number(!first.schedule.applicant_acknowledged);
+        const secondNeedsConfirmation = Number(!second.schedule.applicant_acknowledged);
+
+        if (firstNeedsConfirmation !== secondNeedsConfirmation) {
+            return secondNeedsConfirmation - firstNeedsConfirmation;
+        }
+
+        return scheduleTimestamp(first.schedule) - scheduleTimestamp(second.schedule);
+    }));
+const nextScheduledActivity = computed(() => scheduledActivities.value[0] ?? null);
+const activeApplication = computed(() => nextScheduledActivity.value?.application ?? applications.value.find((application) => ![
     'rejected',
     'not_awarded',
     'disbursed',
@@ -59,6 +74,14 @@ const activeApplicationNextAction = computed(() => {
 
     if (!application) {
         return '';
+    }
+
+    const schedule = application.schedules?.find((item) => item.status === 'scheduled');
+
+    if (schedule) {
+        return schedule.applicant_acknowledged
+            ? `Follow the ${scheduleTypeLabel(schedule.type).toLowerCase()} instructions for ${schedule.scheduled_label}.`
+            : `Review and confirm the ${scheduleTypeLabel(schedule.type).toLowerCase()} schedule.`;
     }
 
     if (application.status === 'distribution_scheduled') {
@@ -80,6 +103,33 @@ const activeApplicationNextAction = computed(() => {
     }
 
     return 'Open the application to review its latest status and provider feedback.';
+});
+const dashboardPrimaryAction = computed(() => {
+    const entry = nextScheduledActivity.value;
+
+    if (entry) {
+        return {
+            message: entry.schedule.applicant_acknowledged
+                ? `Your ${scheduleTypeLabel(entry.schedule.type).toLowerCase()} is set for ${entry.schedule.scheduled_label}.`
+                : `A ${scheduleTypeLabel(entry.schedule.type).toLowerCase()} was posted. Review the instructions and confirm that you saw them.`,
+            href: entry.application.detail_url || `/dashboard/applications/${entry.application.id}`,
+            label: entry.schedule.applicant_acknowledged ? 'View schedule' : 'Review and confirm',
+        };
+    }
+
+    if (!profileReadiness.value.complete) {
+        return {
+            message: readinessMessage.value,
+            href: '/dashboard/profile',
+            label: 'Complete profile',
+        };
+    }
+
+    return {
+        message: nextSteps.value[0] || 'Browse scholarships and save programs that fit your profile.',
+        href: '/dashboard/scholarships',
+        label: 'Browse scholarships',
+    };
 });
 const urgentScholarships = computed(() => scholarships.value
     .map((scholarship) => ({ ...scholarship, days_left: deadlineDays(scholarship.deadline) }))
@@ -247,6 +297,48 @@ function deadlineDays(value) {
     return Math.ceil((parsed - startOfToday) / 86400000);
 }
 
+function scheduleTimestamp(schedule) {
+    const timestamp = Date.parse(schedule?.scheduled_at ?? '');
+
+    return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
+}
+
+function scheduleTypeLabel(type) {
+    return {
+        exam: 'Scholarship exam',
+        interview: 'Interview',
+        distribution: 'Award distribution',
+    }[type] ?? 'Scheduled activity';
+}
+
+function scheduleTypeIcon(type) {
+    return {
+        exam: 'fa-solid fa-clipboard-check',
+        interview: 'fa-solid fa-comments',
+        distribution: 'fa-solid fa-hand-holding-heart',
+    }[type] ?? 'fa-solid fa-calendar-day';
+}
+
+function scheduleModeLabel(mode) {
+    return {
+        onsite: 'On-site',
+        online: 'Online',
+        hybrid: 'On-site and online',
+        provider_managed: 'Provider-managed',
+    }[mode] ?? 'Provider-managed';
+}
+
+function formatAwardAmount(value) {
+    if (value === null || value === undefined || value === '') {
+        return 'Amount not listed';
+    }
+
+    return new Intl.NumberFormat('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+    }).format(Number(value));
+}
+
 function urgentDeadlineLabel(scholarship) {
     if (scholarship.days_left === 0) {
         return 'Due today';
@@ -389,13 +481,13 @@ onMounted(loadDashboard);
                                     Your next best move
                                 </h3>
                                 <p class="mt-3 text-sm leading-6 text-slate-300">
-                                    {{ nextSteps[0] || 'Browse scholarships and save programs that fit your profile.' }}
+                                    {{ dashboardPrimaryAction.message }}
                                 </p>
                                 <a
-                                    :href="profileReadiness.complete ? '/dashboard/scholarships' : '/dashboard/profile'"
+                                    :href="dashboardPrimaryAction.href"
                                     class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-slate-100"
                                 >
-                                    {{ profileReadiness.complete ? 'Browse scholarships' : 'Complete profile' }}
+                                    {{ dashboardPrimaryAction.label }}
                                     <i class="fa-solid fa-arrow-right text-xs"></i>
                                 </a>
                             </aside>
@@ -510,7 +602,68 @@ onMounted(loadDashboard);
                         </div>
                     </section>
 
-                    <section v-if="activeApplication" class="student-card p-4">
+                    <section
+                        v-if="nextScheduledActivity"
+                        :class="[
+                            'student-card overflow-hidden border-l-4 p-4',
+                            nextScheduledActivity.schedule.applicant_acknowledged ? 'border-l-slate-900' : 'border-l-amber-500',
+                        ]"
+                    >
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-center">
+                            <span :class="['grid h-12 w-12 shrink-0 place-items-center rounded-md text-white', nextScheduledActivity.schedule.applicant_acknowledged ? 'bg-slate-900' : 'bg-amber-600']">
+                                <i :class="scheduleTypeIcon(nextScheduledActivity.schedule.type)" aria-hidden="true"></i>
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <p class="student-kicker">{{ scheduleTypeLabel(nextScheduledActivity.schedule.type) }}</p>
+                                    <span
+                                        v-if="!nextScheduledActivity.schedule.applicant_acknowledged"
+                                        class="rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-900"
+                                    >
+                                        Confirmation needed
+                                    </span>
+                                    <span v-else class="rounded-md bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-800 ring-1 ring-emerald-200">
+                                        Confirmed
+                                    </span>
+                                </div>
+                                <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                    {{ nextScheduledActivity.schedule.title }}
+                                </h3>
+                                <p class="mt-1 text-sm text-slate-600">
+                                    {{ nextScheduledActivity.application.scholarship?.title || 'Scholarship application' }}
+                                    <span class="px-1 text-slate-300">|</span>
+                                    {{ nextScheduledActivity.application.scholarship?.provider?.name || 'Scholarship provider' }}
+                                </p>
+                                <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-700">
+                                    <span class="rounded-md bg-slate-100 px-2.5 py-1.5">
+                                        {{ nextScheduledActivity.schedule.scheduled_label }}
+                                    </span>
+                                    <span class="rounded-md bg-slate-100 px-2.5 py-1.5">
+                                        {{ scheduleModeLabel(nextScheduledActivity.schedule.mode) }}
+                                    </span>
+                                    <span v-if="nextScheduledActivity.schedule.venue" class="rounded-md bg-slate-100 px-2.5 py-1.5">
+                                        {{ nextScheduledActivity.schedule.venue }}
+                                    </span>
+                                    <span v-if="nextScheduledActivity.schedule.type === 'distribution'" class="rounded-md bg-emerald-50 px-2.5 py-1.5 text-emerald-800 ring-1 ring-emerald-200">
+                                        {{ formatAwardAmount(nextScheduledActivity.application.awarded_amount) }}
+                                    </span>
+                                </div>
+                            </div>
+                            <a
+                                :href="nextScheduledActivity.application.detail_url || `/dashboard/applications/${nextScheduledActivity.application.id}`"
+                                :class="[
+                                    'shrink-0 rounded-md px-4 py-2.5 text-center text-sm font-bold transition',
+                                    nextScheduledActivity.schedule.applicant_acknowledged
+                                        ? 'border border-slate-300 bg-white text-slate-800 hover:border-slate-500'
+                                        : 'bg-slate-900 text-white hover:bg-slate-800',
+                                ]"
+                            >
+                                {{ nextScheduledActivity.schedule.applicant_acknowledged ? 'View schedule' : 'Review and confirm' }}
+                            </a>
+                        </div>
+                    </section>
+
+                    <section v-else-if="activeApplication" class="student-card p-4">
                         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex min-w-0 items-start gap-3">
                                 <img

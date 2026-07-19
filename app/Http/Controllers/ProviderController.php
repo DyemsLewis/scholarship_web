@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ApplicationSchedule;
 use App\Models\ActivityLog;
+use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
@@ -15,11 +17,14 @@ use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationDecisionReason;
+use App\Support\ApplicationSchedulePayload;
 use App\Support\ReviewRubric;
 use App\Support\Terms;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -600,7 +605,363 @@ class ProviderController extends Controller
 
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
-            'application' => $this->applicationPayload($application),
+            'application' => $this->applicationPayload($application, true),
+        ]);
+    }
+
+    public function upsertApplicationSchedule(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+
+        $validated = $request->validate([
+            'type' => ['required', Rule::in(['exam', 'interview', 'distribution'])],
+            'title' => ['nullable', 'string', 'max:255'],
+            'scheduled_at' => ['required', 'date', 'after_or_equal:now'],
+            'mode' => ['required', Rule::in(['onsite', 'online', 'hybrid', 'provider_managed'])],
+            'venue' => [
+                Rule::requiredIf(in_array($request->input('mode'), ['onsite', 'hybrid'], true)),
+                'nullable',
+                'string',
+                'max:500',
+            ],
+            'location_address' => ['nullable', 'string', 'max:1000'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
+            'online_url' => [
+                Rule::requiredIf(in_array($request->input('mode'), ['online', 'hybrid'], true)),
+                'nullable',
+                'url:http,https',
+                'max:2000',
+            ],
+            'instructions' => ['required', 'string', 'max:3000'],
+            'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
+        ]);
+
+        $application->loadMissing(['scholarship.providerAssessment', 'applicant']);
+        $this->ensureScheduleCanBePublished($application, $validated['type']);
+
+        $eventLabel = $this->scheduleTypeLabel($validated['type']);
+        $scheduledAt = CarbonImmutable::parse($validated['scheduled_at']);
+        $scheduleData = [
+            'title' => filled($validated['title'] ?? null) ? trim($validated['title']) : "{$eventLabel} schedule",
+            'scheduled_at' => $scheduledAt,
+            'mode' => $validated['mode'],
+            'venue' => $validated['venue'] ?? null,
+            'location_address' => $validated['location_address'] ?? null,
+            'latitude' => $validated['latitude'] ?? null,
+            'longitude' => $validated['longitude'] ?? null,
+            'online_url' => $validated['online_url'] ?? null,
+            'instructions' => $validated['instructions'],
+            'status' => 'scheduled',
+            'attendance_status' => 'pending',
+            'attendance_notes' => null,
+            'completed_at' => null,
+            'cancelled_at' => null,
+            'updated_by' => $request->user()->id,
+        ];
+
+        [$schedule, $announcementChanged, $previousStatus, $nextStatus] = DB::transaction(function () use (
+            $application,
+            $request,
+            $validated,
+            $scheduleData,
+            $scheduledAt,
+            $eventLabel,
+        ): array {
+            $schedule = $application->schedules()->where('type', $validated['type'])->first();
+
+            if ($schedule) {
+                $schedule->update($scheduleData);
+            } else {
+                $schedule = $application->schedules()->create([
+                    ...$scheduleData,
+                    'type' => $validated['type'],
+                    'created_by' => $request->user()->id,
+                ]);
+            }
+
+            $announcementChanged = $schedule->wasRecentlyCreated || $schedule->wasChanged([
+                'title',
+                'scheduled_at',
+                'mode',
+                'venue',
+                'location_address',
+                'latitude',
+                'longitude',
+                'online_url',
+                'instructions',
+                'status',
+            ]);
+
+            if ($validated['type'] === 'distribution'
+                && array_key_exists('awarded_amount', $validated)
+                && $this->comparableScholarshipValue($application->awarded_amount)
+                    !== $this->comparableScholarshipValue($validated['awarded_amount'])) {
+                $announcementChanged = true;
+            }
+
+            if ($announcementChanged && $schedule->applicant_acknowledged_at !== null) {
+                $schedule->forceFill(['applicant_acknowledged_at' => null])->saveQuietly();
+            }
+
+            $previousStatus = $application->status;
+            $nextStatus = $this->scheduleApplicationStatus($validated['type']);
+            $applicationUpdates = [
+                'status' => $nextStatus,
+                'decision_reason' => $this->scheduleDecisionReason($validated['type']),
+                'reviewed_by' => $request->user()->id,
+                'reviewed_at' => now(),
+            ];
+
+            if ($validated['type'] === 'distribution') {
+                $applicationUpdates += [
+                    'distribution_scheduled_for' => $scheduledAt->toDateString(),
+                    'distribution_instructions' => $validated['instructions'],
+                ];
+
+                if (array_key_exists('awarded_amount', $validated)) {
+                    $applicationUpdates['awarded_amount'] = $validated['awarded_amount'];
+                }
+            }
+
+            $application->update($applicationUpdates);
+
+            if ($previousStatus !== $nextStatus) {
+                ApplicationStatusHistory::create([
+                    'scholarship_application_id' => $application->id,
+                    'changed_by' => $request->user()->id,
+                    'from_status' => $previousStatus,
+                    'to_status' => $nextStatus,
+                    'decision_reason' => $this->scheduleDecisionReason($validated['type']),
+                    'review_notes' => "{$eventLabel} announced for {$scheduledAt->format('M d, Y h:i A')}.",
+                    'changed_at' => now(),
+                ]);
+            }
+
+            return [$schedule, $announcementChanged, $previousStatus, $nextStatus];
+        });
+
+        if ($previousStatus !== $nextStatus) {
+            ScholarshipFunnelEvent::record(
+                $application->applicant,
+                "application_status_{$nextStatus}",
+                $application->scholarship,
+                $application,
+                'provider',
+                ['schedule_id' => $schedule->id, 'schedule_type' => $schedule->type],
+            );
+        }
+
+        ActivityLog::record(
+            $request->user(),
+            'application_schedule_published',
+            "{$request->user()->name} published the {$eventLabel} schedule for application #{$application->id}.",
+            $request,
+            [
+                'application_id' => $application->id,
+                'schedule_id' => $schedule->id,
+                'schedule_type' => $schedule->type,
+                'scheduled_at' => $scheduledAt->toIso8601String(),
+            ],
+        );
+
+        if ($announcementChanged) {
+            $destination = $schedule->mode === 'online'
+                ? ' online'
+                : ' at '.($schedule->venue ?: $schedule->location_address ?: 'the provider location');
+
+            PortalNotification::create([
+                'user_id' => $application->applicant_id,
+                'type' => 'application_schedule',
+                'title' => "{$eventLabel} schedule posted",
+                'message' => "Your {$eventLabel} for {$application->scholarship?->title} is scheduled for {$scheduledAt->format('M d, Y h:i A')}{$destination}. Open the application and acknowledge the schedule.",
+                'action_url' => route('dashboard.applications.show', $application, false),
+            ]);
+        }
+
+        $freshApplication = $application->fresh()->load([
+            'applicant.studentProfile',
+            'documents.reviewer',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship',
+        ]);
+        app(DecisionSupportService::class)->syncApplication($freshApplication, 'provider_schedule_published');
+
+        return response()->json([
+            'message' => "{$eventLabel} schedule published and the applicant was notified.",
+            'schedule' => ApplicationSchedulePayload::make($schedule->fresh()),
+            'application' => $this->applicationPayload($freshApplication, true),
+        ]);
+    }
+
+    public function updateApplicationScheduleTracking(
+        Request $request,
+        ScholarshipApplication $application,
+        ApplicationSchedule $schedule,
+    ): JsonResponse {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+        abort_unless($schedule->scholarship_application_id === $application->id, 404);
+
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(['scheduled', 'completed', 'cancelled'])],
+            'attendance_status' => ['required', Rule::in(['pending', 'attended', 'absent', 'excused', 'received', 'not_required'])],
+            'attendance_notes' => ['nullable', 'string', 'max:1500'],
+        ]);
+
+        if ($validated['status'] === 'completed' && $schedule->scheduled_at?->isFuture()) {
+            throw ValidationException::withMessages([
+                'status' => 'This activity cannot be marked complete before its scheduled date and time.',
+            ]);
+        }
+
+        if ($validated['status'] === 'scheduled' && $validated['attendance_status'] !== 'pending') {
+            throw ValidationException::withMessages([
+                'attendance_status' => 'Attendance stays pending until the activity is completed or cancelled.',
+            ]);
+        }
+
+        if ($validated['status'] === 'completed'
+            && $schedule->type !== 'distribution'
+            && ! in_array($validated['attendance_status'], ['attended', 'absent', 'excused'], true)) {
+            throw ValidationException::withMessages([
+                'attendance_status' => 'Choose attended, absent, or excused when completing this activity.',
+            ]);
+        }
+
+        if ($validated['status'] === 'cancelled'
+            && ! in_array($validated['attendance_status'], ['pending', 'excused', 'not_required'], true)) {
+            throw ValidationException::withMessages([
+                'attendance_status' => 'A cancelled activity cannot be marked attended or received.',
+            ]);
+        }
+
+        if ($schedule->type === 'distribution'
+            && $validated['status'] === 'completed'
+            && $validated['attendance_status'] !== 'received') {
+            throw ValidationException::withMessages([
+                'attendance_status' => 'Mark the reward as received before completing distribution.',
+            ]);
+        }
+
+        $previousApplicationStatus = $application->status;
+        $previousScheduleStatus = $schedule->status;
+        $previousAttendance = $schedule->attendance_status;
+
+        DB::transaction(function () use ($application, $request, $schedule, $validated): void {
+            $schedule->update([
+                'status' => $validated['status'],
+                'attendance_status' => $validated['attendance_status'],
+                'attendance_notes' => $validated['attendance_notes'] ?? null,
+                'completed_at' => $validated['status'] === 'completed' ? now() : null,
+                'cancelled_at' => $validated['status'] === 'cancelled' ? now() : null,
+                'updated_by' => $request->user()->id,
+            ]);
+
+            $nextStatus = null;
+
+            if ($validated['status'] === 'completed'
+                && $schedule->type === 'exam'
+                && $validated['attendance_status'] === 'attended') {
+                $nextStatus = 'exam_taken';
+            }
+
+            if ($validated['status'] === 'completed' && $schedule->type === 'distribution') {
+                $nextStatus = 'disbursed';
+            }
+
+            if ($nextStatus && $application->status !== $nextStatus) {
+                $fromStatus = $application->status;
+                $application->update([
+                    'status' => $nextStatus,
+                    'decision_reason' => $nextStatus === 'disbursed' ? 'award_released' : 'exam_completed',
+                    'outcome_at' => $nextStatus === 'disbursed' ? now() : $application->outcome_at,
+                    'reviewed_by' => $request->user()->id,
+                    'reviewed_at' => now(),
+                ]);
+
+                ApplicationStatusHistory::create([
+                    'scholarship_application_id' => $application->id,
+                    'changed_by' => $request->user()->id,
+                    'from_status' => $fromStatus,
+                    'to_status' => $nextStatus,
+                    'decision_reason' => $nextStatus === 'disbursed' ? 'award_released' : 'exam_completed',
+                    'review_notes' => "{$this->scheduleTypeLabel($schedule->type)} attendance and completion recorded.",
+                    'changed_at' => now(),
+                ]);
+            }
+        });
+
+        $trackingChanged = $previousScheduleStatus !== $schedule->status
+            || $previousAttendance !== $schedule->attendance_status
+            || $schedule->wasChanged('attendance_notes');
+
+        ActivityLog::record(
+            $request->user(),
+            'application_schedule_tracking_updated',
+            "{$request->user()->name} updated {$schedule->type} tracking for application #{$application->id}.",
+            $request,
+            [
+                'application_id' => $application->id,
+                'schedule_id' => $schedule->id,
+                'status' => $schedule->status,
+                'attendance_status' => $schedule->attendance_status,
+            ],
+        );
+
+        if ($trackingChanged) {
+            PortalNotification::create([
+                'user_id' => $application->applicant_id,
+                'type' => 'application_schedule',
+                'title' => $this->scheduleTypeLabel($schedule->type).' record updated',
+                'message' => "The provider updated your {$this->scheduleTypeLabel($schedule->type)} record to {$schedule->status} with participation marked {$schedule->attendance_status}.",
+                'action_url' => route('dashboard.applications.show', $application, false),
+            ]);
+        }
+
+        $freshApplication = $application->fresh()->load([
+            'applicant.studentProfile',
+            'documents.reviewer',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship',
+        ]);
+
+        if ($previousApplicationStatus !== $freshApplication->status) {
+            ScholarshipFunnelEvent::record(
+                $freshApplication->applicant,
+                "application_status_{$freshApplication->status}",
+                $freshApplication->scholarship,
+                $freshApplication,
+                'provider',
+                ['schedule_id' => $schedule->id, 'schedule_type' => $schedule->type],
+            );
+        }
+
+        app(DecisionSupportService::class)->syncApplication($freshApplication, 'provider_schedule_tracking_updated');
+
+        return response()->json([
+            'message' => 'Schedule tracking updated.',
+            'schedule' => ApplicationSchedulePayload::make($schedule->fresh()),
+            'application' => $this->applicationPayload($freshApplication, true),
+        ]);
+    }
+
+    public function viewApplicantProfileProof(
+        Request $request,
+        ScholarshipApplication $application,
+        ApplicantVerificationDocument $document,
+    ) {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+        abort_unless($document->applicant_id === $application->applicant_id, 403);
+        abort_unless(Storage::disk('local')->exists($document->path), 404);
+
+        return Storage::disk('local')->response($document->path, $document->original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
@@ -779,7 +1140,7 @@ class ProviderController extends Controller
 
         return response()->json([
             'message' => $applicantFacingChanged ? 'Application status updated.' : 'Provider review saved.',
-            'application' => $this->applicationPayload($freshApplication),
+            'application' => $this->applicationPayload($freshApplication, true),
         ]);
     }
 
@@ -851,7 +1212,7 @@ class ProviderController extends Controller
 
         return response()->json([
             'message' => 'Document status updated.',
-            'application' => $this->applicationPayload($freshApplication),
+            'application' => $this->applicationPayload($freshApplication, true),
         ]);
     }
 
@@ -1250,12 +1611,17 @@ class ProviderController extends Controller
         return "uploads/scholarships/{$filename}";
     }
 
-    private function applicationPayload(ScholarshipApplication $application): array
+    private function applicationPayload(ScholarshipApplication $application, bool $includeApplicantProfile = false): array
     {
         $readiness = $this->documentReadiness($application);
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
+        $application->loadMissing('schedules');
         $application->scholarship?->loadMissing('providerAssessment');
+
+        if ($includeApplicantProfile) {
+            $application->loadMissing('applicant.applicantVerificationDocuments');
+        }
 
         return [
             'id' => $application->id,
@@ -1288,39 +1654,13 @@ class ProviderController extends Controller
             'reviewed_at' => $application->reviewed_at?->format('M d, Y h:i A'),
             'requires_student_response' => false,
             'can_receive_student_response' => false,
+            'schedules' => $application->schedules
+                ->sortBy('scheduled_at')
+                ->map(fn (ApplicationSchedule $schedule) => ApplicationSchedulePayload::make($schedule))
+                ->values(),
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
-            'applicant' => [
-                'name' => $application->applicant?->name,
-                'email' => $application->applicant?->email,
-                'username' => $application->applicant?->username,
-                'contact_number' => $application->applicant?->contact_number,
-                'education_level' => $application->applicant?->studentProfile?->education_level,
-                'school' => $application->applicant?->studentProfile?->school,
-                'school_type' => $application->applicant?->studentProfile?->school_type,
-                'learner_reference_number' => $application->applicant?->studentProfile?->learner_reference_number,
-                'course_or_strand' => $application->applicant?->studentProfile?->course_or_strand,
-                'year_level' => $application->applicant?->studentProfile?->year_level,
-                'gwa' => $application->applicant?->studentProfile?->gwa,
-                'grading_scale' => $application->applicant?->studentProfile?->grading_scale,
-                'income_bracket' => $application->applicant?->studentProfile?->income_bracket,
-                'household_size' => $application->applicant?->studentProfile?->household_size,
-                'preferred_categories' => $application->applicant?->studentProfile?->preferred_categories,
-                'preferred_locations' => $application->applicant?->studentProfile?->preferred_locations,
-                'willing_to_relocate' => $application->applicant?->studentProfile?->willing_to_relocate,
-                'support_needs' => $application->applicant?->studentProfile?->support_needs,
-                'scholarship_goal' => $application->applicant?->studentProfile?->scholarship_goal,
-                'location' => collect([
-                    $application->applicant?->studentProfile?->barangay,
-                    $application->applicant?->studentProfile?->city,
-                    $application->applicant?->studentProfile?->province,
-                    $application->applicant?->studentProfile?->region,
-                ])->filter()->implode(', '),
-                'latitude' => $application->applicant?->studentProfile?->latitude,
-                'longitude' => $application->applicant?->studentProfile?->longitude,
-                'profile_verification_status' => $application->applicant?->studentProfile?->verification_status ?? 'unsubmitted',
-                'profile_verified_at' => $application->applicant?->studentProfile?->verified_at?->format('M d, Y'),
-            ],
+            'applicant' => $this->applicantPayload($application, $includeApplicantProfile),
             'scholarship' => $application->scholarship
                 ? $this->scholarshipPayload($application->scholarship)
                 : null,
@@ -1328,6 +1668,71 @@ class ProviderController extends Controller
                 ? $this->assessmentPayload($application->scholarship->providerAssessment)
                 : null,
         ];
+    }
+
+    private function applicantPayload(ScholarshipApplication $application, bool $includeProfileDetails): array
+    {
+        $applicant = $application->applicant;
+        $profile = $applicant?->studentProfile;
+        $payload = [
+            'name' => $applicant?->name,
+            'email' => $applicant?->email,
+            'username' => $applicant?->username,
+            'contact_number' => $applicant?->contact_number,
+            'education_level' => $profile?->education_level,
+            'school' => $profile?->school,
+            'school_type' => $profile?->school_type,
+            'learner_reference_number' => $profile?->learner_reference_number,
+            'course_or_strand' => $profile?->course_or_strand,
+            'year_level' => $profile?->year_level,
+            'gwa' => $profile?->gwa,
+            'grading_scale' => $profile?->grading_scale,
+            'income_bracket' => $profile?->income_bracket,
+            'household_size' => $profile?->household_size,
+            'preferred_categories' => $profile?->preferred_categories,
+            'preferred_locations' => $profile?->preferred_locations,
+            'willing_to_relocate' => $profile?->willing_to_relocate,
+            'support_needs' => $profile?->support_needs,
+            'scholarship_goal' => $profile?->scholarship_goal,
+            'location' => collect([
+                $profile?->barangay,
+                $profile?->city,
+                $profile?->province,
+                $profile?->region,
+            ])->filter()->implode(', '),
+            'latitude' => $profile?->latitude,
+            'longitude' => $profile?->longitude,
+            'profile_verification_status' => $profile?->verification_status ?? 'unsubmitted',
+            'profile_verified_at' => $profile?->verified_at?->format('M d, Y'),
+        ];
+
+        if (! $includeProfileDetails) {
+            return $payload;
+        }
+
+        return array_merge($payload, [
+            'first_name' => $profile?->first_name,
+            'middle_initial' => $profile?->middle_initial,
+            'last_name' => $profile?->last_name,
+            'suffix' => $profile?->suffix,
+            'gender' => $profile?->gender,
+            'birthdate' => $profile?->birthdate?->format('M d, Y'),
+            'age' => $profile?->birthdate?->age,
+            'account_managed_by' => $profile?->account_managed_by,
+            'enrollment_status' => $profile?->enrollment_status,
+            'address' => $profile?->address,
+            'profile_updated_at' => $profile?->updated_at?->format('M d, Y h:i A'),
+            'profile_verification_notes' => $profile?->verification_notes,
+            'guardian_name' => $profile?->guardian_name,
+            'guardian_relationship' => $profile?->guardian_relationship,
+            'guardian_contact' => $profile?->guardian_contact,
+            'guardian_email' => $profile?->guardian_email,
+            'guardian_is_account_owner' => (bool) $profile?->guardian_is_account_owner,
+            'profile_proofs' => ($applicant?->applicantVerificationDocuments ?? collect())
+                ->sortByDesc('uploaded_at')
+                ->map(fn (ApplicantVerificationDocument $document) => $this->applicantProfileProofPayload($application, $document))
+                ->values(),
+        ]);
     }
 
     private function documentReadiness(ScholarshipApplication $application): array
@@ -1529,12 +1934,14 @@ class ProviderController extends Controller
             'id' => $document->id,
             'document_name' => $document->document_name,
             'original_name' => $document->original_name,
+            'mime_type' => $document->mime_type,
             'size' => $document->size,
             'status' => $document->status,
             'review_notes' => $document->review_notes,
             'reviewed_by' => $document->reviewer?->name,
             'reviewed_at' => $document->reviewed_at?->format('M d, Y h:i A'),
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'view_url' => route('documents.view', $document),
             'download_url' => route('documents.download', $document),
         ];
     }
@@ -1550,6 +1957,23 @@ class ProviderController extends Controller
             'review_notes' => $document->review_notes,
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'download_url' => route('provider.verification-documents.download', $document),
+        ];
+    }
+
+    private function applicantProfileProofPayload(
+        ScholarshipApplication $application,
+        ApplicantVerificationDocument $document,
+    ): array {
+        return [
+            'id' => $document->id,
+            'document_type' => $document->document_type,
+            'original_name' => $document->original_name,
+            'mime_type' => $document->mime_type,
+            'size' => $document->size,
+            'status' => $document->status,
+            'review_notes' => $document->review_notes,
+            'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'view_url' => route('provider.applications.profile-proofs.view', [$application, $document]),
         ];
     }
 
@@ -1580,6 +2004,62 @@ class ProviderController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function ensureScheduleCanBePublished(ScholarshipApplication $application, string $type): void
+    {
+        $allowedStatuses = match ($type) {
+            'exam' => ['qualified', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled'],
+            'interview' => ['under_review', 'qualified', 'shortlisted', 'interview'],
+            'distribution' => ['approved', 'awarded', 'distribution_scheduled'],
+            default => [],
+        };
+
+        if (! in_array($application->status, $allowedStatuses, true)) {
+            throw ValidationException::withMessages([
+                'type' => match ($type) {
+                    'distribution' => 'Approve or award the application before announcing distribution.',
+                    'exam' => 'Qualify or shortlist the applicant before announcing an exam.',
+                    default => 'Start or qualify the application review before announcing an interview.',
+                },
+            ]);
+        }
+
+        if ($type === 'exam' && $application->scholarship?->providerAssessment?->status !== 'active') {
+            throw ValidationException::withMessages([
+                'type' => 'Configure an active provider assessment before announcing an exam.',
+            ]);
+        }
+    }
+
+    private function scheduleTypeLabel(string $type): string
+    {
+        return match ($type) {
+            'exam' => 'exam',
+            'interview' => 'interview',
+            'distribution' => 'reward distribution',
+            default => 'activity',
+        };
+    }
+
+    private function scheduleApplicationStatus(string $type): string
+    {
+        return match ($type) {
+            'exam' => 'exam_scheduled',
+            'interview' => 'interview',
+            'distribution' => 'distribution_scheduled',
+            default => 'under_review',
+        };
+    }
+
+    private function scheduleDecisionReason(string $type): string
+    {
+        return match ($type) {
+            'exam' => 'exam_scheduled',
+            'interview' => 'for_interview',
+            'distribution' => 'distribution_scheduled',
+            default => 'other',
+        };
     }
 
     private function applicationStatusNotificationPayload(

@@ -2441,7 +2441,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <p class="student-kicker">Account trust</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Profile verification</h3>
                                     <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Confirm your student identity so scholarship providers can trust the profile attached to your applications.
+                                        Confirm your student identity. Admins review these proofs, and providers can view them only when reviewing an application you submitted to their program.
                                     </p>
                                 </div>
                                 <span :class="[sectionStatusPillClass, verificationStatusClass(profileVerificationStatus)]">
@@ -2575,7 +2575,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             <div class="flex flex-col gap-1 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                                 <div>
                                     <h4 class="text-base font-bold text-slate-950">Proofs on file</h4>
-                                    <p class="mt-1 text-xs text-slate-500">Files submitted specifically for applicant account verification.</p>
+                                    <p class="mt-1 text-xs text-slate-500">Profile verification files shared only with admins and providers reviewing your submitted applications.</p>
                                 </div>
                                 <p class="text-xs font-bold text-slate-500">{{ verificationDocuments.length }} submitted</p>
                             </div>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\ApplicationDocument;
+use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStatusHistory;
 use App\Models\MobileApiToken;
 use App\Models\PortalNotification;
@@ -17,6 +18,7 @@ use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
 use App\Support\AcademicRequirement;
+use App\Support\ApplicationSchedulePayload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -154,7 +156,7 @@ class MobileAuthController extends Controller
         $token->forceFill(['last_used_at' => now()])->save();
         $scholarships = $this->publishedScholarships()->get();
         $applications = ScholarshipApplication::query()
-            ->with(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
+            ->with(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
             ->where('applicant_id', $user->id)
             ->latest('submitted_at')
             ->get();
@@ -280,7 +282,7 @@ class MobileAuthController extends Controller
 
         $token->forceFill(['last_used_at' => now()])->save();
         $applications = ScholarshipApplication::query()
-            ->with(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
+            ->with(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
             ->where('applicant_id', $user->id)
             ->latest('submitted_at')
             ->get();
@@ -541,7 +543,7 @@ class MobileAuthController extends Controller
 
         return response()->json([
             'message' => 'Application submitted successfully.',
-            'application' => $this->applicationPayload($application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile'])),
+            'application' => $this->applicationPayload($application->fresh()->load(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile'])),
             'stats' => $this->statsPayload($user),
         ], 201);
     }
@@ -660,6 +662,66 @@ class MobileAuthController extends Controller
         return response()->json([
             'message' => 'Notification marked as read.',
             'notifications' => $this->notificationsPayload($user),
+        ]);
+    }
+
+    public function acknowledgeApplicationSchedule(
+        Request $request,
+        ScholarshipApplication $application,
+        ApplicationSchedule $schedule,
+    ): JsonResponse {
+        [$token, $user] = $this->resolveToken($request);
+
+        if (! $token || ! $user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        if ($application->applicant_id !== $user->id
+            || $schedule->scholarship_application_id !== $application->id) {
+            return response()->json(['message' => 'Schedule not found.'], 404);
+        }
+
+        if ($schedule->status !== 'scheduled') {
+            return response()->json([
+                'message' => 'Only an active schedule can be acknowledged.',
+            ], 422);
+        }
+
+        if ($schedule->applicant_acknowledged_at === null) {
+            $schedule->update(['applicant_acknowledged_at' => now()]);
+
+            ActivityLog::record(
+                $user,
+                'application_schedule_acknowledged',
+                "{$user->name} acknowledged the {$schedule->type} schedule for application #{$application->id} from the mobile app.",
+                $request,
+                ['application_id' => $application->id, 'schedule_id' => $schedule->id, 'source' => 'mobile'],
+            );
+
+            if ($application->scholarship?->provider_id) {
+                PortalNotification::create([
+                    'user_id' => $application->scholarship->provider_id,
+                    'type' => 'schedule_acknowledged',
+                    'title' => ucfirst($schedule->type).' schedule acknowledged',
+                    'message' => "{$user->name} confirmed through the mobile app that they saw the {$schedule->type} schedule for {$application->scholarship->title}.",
+                    'action_url' => route('provider.applications.show', $application, false),
+                ]);
+            }
+        }
+
+        $token->forceFill(['last_used_at' => now()])->save();
+        $freshApplication = $application->fresh()->load([
+            'applicant.studentProfile',
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+        ]);
+
+        return response()->json([
+            'message' => 'Schedule acknowledged. The provider can now see your confirmation.',
+            'schedule' => ApplicationSchedulePayload::make($schedule->fresh()),
+            'application' => $this->applicationPayload($freshApplication),
         ]);
     }
 
@@ -882,6 +944,7 @@ class MobileAuthController extends Controller
     private function applicationPayload(ScholarshipApplication $application): array
     {
         $dss = app(DecisionSupportService::class)->scoreApplication($application);
+        $application->loadMissing('schedules');
 
         return [
             'id' => $application->id,
@@ -910,6 +973,10 @@ class MobileAuthController extends Controller
             'outcome_at' => $application->outcome_at?->format('M d, Y'),
             'distribution_scheduled_for' => $application->distribution_scheduled_for?->format('M d, Y'),
             'distribution_instructions' => $application->distribution_instructions,
+            'schedules' => $application->schedules
+                ->sortBy('scheduled_at')
+                ->map(fn (ApplicationSchedule $schedule) => ApplicationSchedulePayload::make($schedule))
+                ->values(),
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
             'scholarship' => $application->scholarship

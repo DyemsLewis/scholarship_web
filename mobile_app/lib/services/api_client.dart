@@ -112,6 +112,16 @@ class ApiClient {
     });
   }
 
+  Future<Map<String, dynamic>> acknowledgeApplicationSchedule({
+    required int applicationId,
+    required int scheduleId,
+  }) async {
+    return _patch(
+      '/applications/$applicationId/schedules/$scheduleId/acknowledge',
+      {},
+    );
+  }
+
   Future<Map<String, dynamic>> saveScholarship(int scholarshipId) async {
     return _post('/scholarships/$scholarshipId/save', {});
   }

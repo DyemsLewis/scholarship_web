@@ -41,10 +41,11 @@ export const termsContent = {
     },
     application: {
         title: 'Application Submission Terms',
-        summary: 'Your profile, checklist, notes, DSS result, and attached documents may be shared with the scholarship provider and portal admins for review.',
+        summary: 'Your profile, profile verification proofs, checklist, notes, DSS result, and attached documents may be shared with the scholarship provider and portal admins for review.',
         details: [
             'Submitted information should be accurate and belong to the applicant.',
             'Prepared documents may be attached automatically when they match the program requirements.',
+            'Profile verification proofs are visible only to admins and providers reviewing applications submitted to their own programs.',
             'Final approval, rejection, or awarding remains with the scholarship provider.',
         ],
     },
@@ -53,7 +54,7 @@ export const termsContent = {
         summary: 'Uploaded files may be stored and used for scholarship matching, application review, verification, and audit history.',
         details: [
             'The file should be correct, readable, and related to the applicant or authorized organization.',
-            'Documents may be reviewed by providers or admins depending on where they are uploaded.',
+            'Profile verification proofs may be reviewed by admins and by providers after you submit an application to their program.',
             'False, altered, or unauthorized documents may affect account or application status.',
         ],
     },

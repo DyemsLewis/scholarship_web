@@ -1,6 +1,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import ApplicantProfileProofModal from '../components/ApplicantProfileProofModal.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
@@ -14,13 +17,23 @@ const updatingId = ref(null);
 const documentUpdatingId = ref(null);
 const errorMessage = ref('');
 const statusMessage = ref('');
-const user = ref(null);
 const application = ref(null);
+const activeSection = ref('review');
+const showRubricDetails = ref(false);
+const showDssDetails = ref(false);
 const reviewForm = ref(emptyReviewForm());
-const documentStatuses = ref({});
-const documentNotes = ref({});
+const selectedDocument = ref(null);
+const selectedProfileProof = ref(null);
+const selectedReviewActionKey = ref('');
+const documentReviewError = ref('');
 const rubricScores = ref({});
-const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+const scheduleSaving = ref(false);
+const scheduleTrackingId = ref(null);
+const showScheduleEditor = ref(false);
+const scheduleForm = ref(emptyScheduleForm());
+const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
 const {
     confirmation,
     requestConfirmation,
@@ -28,31 +41,238 @@ const {
     cancelConfirmation,
 } = useConfirmationDialog();
 
-const statusOptions = [
-    { value: 'submitted', label: 'Submitted' },
-    { value: 'under_review', label: 'Under review' },
-    { value: 'qualified', label: 'Qualified' },
-    { value: 'exam_qualified', label: 'Qualified for exam' },
-    { value: 'exam_scheduled', label: 'Exam scheduled' },
-    { value: 'exam_taken', label: 'Exam taken' },
-    { value: 'exam_passed', label: 'Passed exam' },
-    { value: 'exam_failed', label: 'Failed exam' },
-    { value: 'shortlisted', label: 'Shortlisted' },
-    { value: 'interview', label: 'For interview' },
-    { value: 'approved', label: 'Approved' },
-    { value: 'awarded', label: 'Awarded' },
-    { value: 'distribution_scheduled', label: 'Distribution scheduled' },
-    { value: 'not_awarded', label: 'Not awarded' },
-    { value: 'disbursed', label: 'Distributed' },
-    { value: 'renewed', label: 'Renewed' },
-    { value: 'rejected', label: 'Rejected' },
+const detailSections = [
+    { key: 'review', label: 'Review' },
+    { key: 'schedule', label: 'Schedule' },
+    { key: 'documents', label: 'Documents' },
+    { key: 'applicant', label: 'Applicant' },
+    { key: 'history', label: 'History' },
 ];
-const documentStatusOptions = [
-    { value: 'pending', label: 'Pending' },
-    { value: 'accepted', label: 'Accepted' },
-    { value: 'needs_replacement', label: 'Needs replacement' },
-    { value: 'rejected', label: 'Rejected' },
+const scheduleTypeCatalog = [
+    { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question' },
+    { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments' },
+    { value: 'distribution', label: 'Distribution', icon: 'fa-solid fa-hand-holding-dollar' },
 ];
+const scheduleModeOptions = [
+    { value: 'onsite', label: 'On-site' },
+    { value: 'online', label: 'Online' },
+    { value: 'hybrid', label: 'Hybrid' },
+    { value: 'provider_managed', label: 'Provider managed' },
+];
+const statusGroups = [
+    {
+        label: 'Screening',
+        options: [
+            { value: 'submitted', label: 'Submitted' },
+            { value: 'under_review', label: 'Under review' },
+            { value: 'qualified', label: 'Qualified' },
+            { value: 'shortlisted', label: 'Shortlisted' },
+            { value: 'interview', label: 'For interview' },
+        ],
+    },
+    {
+        label: 'Exam',
+        options: [
+            { value: 'exam_qualified', label: 'Qualified for exam' },
+            { value: 'exam_scheduled', label: 'Exam scheduled' },
+            { value: 'exam_taken', label: 'Exam taken' },
+            { value: 'exam_passed', label: 'Passed exam' },
+            { value: 'exam_failed', label: 'Failed exam' },
+        ],
+    },
+    {
+        label: 'Decision',
+        options: [
+            { value: 'approved', label: 'Approved' },
+            { value: 'awarded', label: 'Awarded' },
+            { value: 'not_awarded', label: 'Not awarded' },
+            { value: 'rejected', label: 'Rejected' },
+        ],
+    },
+    {
+        label: 'Distribution',
+        options: [
+            { value: 'distribution_scheduled', label: 'Distribution scheduled' },
+            { value: 'disbursed', label: 'Distributed' },
+            { value: 'renewed', label: 'Renewed' },
+        ],
+    },
+];
+const reviewActionCatalog = {
+    start_review: {
+        key: 'start_review',
+        status: 'under_review',
+        label: 'Start review',
+        description: 'Begin checking the profile and submitted files.',
+        confirmLabel: 'Start review',
+        reason: '',
+        note: 'Application review started.',
+        icon: 'fa-solid fa-magnifying-glass',
+    },
+    request_documents: {
+        key: 'request_documents',
+        status: 'under_review',
+        label: 'Request document updates',
+        description: 'Ask the applicant to replace or complete a file.',
+        confirmLabel: 'Send document request',
+        reason: 'missing_documents',
+        note: 'Please review the document checklist and replace any files marked for correction.',
+        icon: 'fa-solid fa-file-circle-exclamation',
+    },
+    qualify: {
+        key: 'qualify',
+        status: 'qualified',
+        label: 'Mark qualified',
+        description: 'The applicant meets the initial requirements.',
+        confirmLabel: 'Mark qualified',
+        reason: 'complete_requirements',
+        note: 'Applicant meets the initial scholarship requirements.',
+        icon: 'fa-solid fa-circle-check',
+    },
+    shortlist: {
+        key: 'shortlist',
+        status: 'shortlisted',
+        label: 'Add to shortlist',
+        description: 'Keep the applicant for final comparison.',
+        confirmLabel: 'Shortlist applicant',
+        reason: 'complete_requirements',
+        note: 'Applicant shortlisted for the next review step.',
+        icon: 'fa-solid fa-list-check',
+    },
+    interview: {
+        key: 'interview',
+        status: 'interview',
+        label: 'Invite to interview',
+        description: 'Move the applicant to interview or follow-up screening.',
+        confirmLabel: 'Set interview stage',
+        reason: 'for_interview',
+        note: 'Applicant selected for interview or follow-up screening.',
+        icon: 'fa-solid fa-comments',
+    },
+    exam_qualify: {
+        key: 'exam_qualify',
+        status: 'exam_qualified',
+        label: 'Send to exam',
+        description: 'The applicant passed screening and may take the exam.',
+        confirmLabel: 'Qualify for exam',
+        reason: 'for_exam',
+        note: 'Applicant passed eligibility screening and is qualified to take the scholarship exam.',
+        icon: 'fa-solid fa-clipboard-question',
+    },
+    exam_schedule: {
+        key: 'exam_schedule',
+        status: 'exam_scheduled',
+        label: 'Schedule exam',
+        description: 'Confirm that exam instructions are ready for the applicant.',
+        confirmLabel: 'Confirm exam schedule',
+        reason: 'exam_scheduled',
+        note: 'Scholarship exam is scheduled. Check provider instructions for the date, venue, or online access details.',
+        icon: 'fa-solid fa-calendar-check',
+    },
+    exam_taken: {
+        key: 'exam_taken',
+        status: 'exam_taken',
+        label: 'Mark exam completed',
+        description: 'Record that the applicant finished the assessment.',
+        confirmLabel: 'Mark exam completed',
+        reason: 'exam_completed',
+        note: 'Scholarship exam was marked as taken.',
+        icon: 'fa-solid fa-pen-to-square',
+    },
+    exam_pass: {
+        key: 'exam_pass',
+        status: 'exam_passed',
+        label: 'Record pass',
+        description: 'Move the applicant to final award review.',
+        confirmLabel: 'Record exam pass',
+        reason: 'passed_exam',
+        note: 'Applicant passed the scholarship exam and may proceed to final award review.',
+        icon: 'fa-solid fa-check',
+    },
+    exam_fail: {
+        key: 'exam_fail',
+        status: 'exam_failed',
+        label: 'Record not passed',
+        description: 'Close the exam stage with a clear result.',
+        confirmLabel: 'Record exam result',
+        reason: 'failed_exam',
+        note: 'Applicant did not pass the scholarship exam.',
+        icon: 'fa-solid fa-xmark',
+        tone: 'danger',
+    },
+    approve: {
+        key: 'approve',
+        status: 'approved',
+        label: 'Approve application',
+        description: 'Select the applicant for scholarship support.',
+        confirmLabel: 'Approve application',
+        reason: 'approved_for_award',
+        note: 'Application approved after provider review.',
+        icon: 'fa-solid fa-award',
+    },
+    award: {
+        key: 'award',
+        status: 'awarded',
+        label: 'Confirm award',
+        description: 'Record the final scholarship award.',
+        confirmLabel: 'Confirm scholarship award',
+        reason: 'approved_for_award',
+        note: 'Scholarship award confirmed by the provider.',
+        icon: 'fa-solid fa-trophy',
+    },
+    not_award: {
+        key: 'not_award',
+        status: 'not_awarded',
+        label: 'Do not award',
+        description: 'Record a final non-award decision with a reason.',
+        confirmLabel: 'Record non-award decision',
+        reason: '',
+        note: 'Application was not selected for a scholarship award.',
+        icon: 'fa-solid fa-ban',
+        tone: 'danger',
+    },
+    reject: {
+        key: 'reject',
+        status: 'rejected',
+        label: 'Reject application',
+        description: 'End the application and provide a clear reason.',
+        confirmLabel: 'Reject application',
+        reason: '',
+        note: 'Application was not selected after provider review.',
+        icon: 'fa-solid fa-ban',
+        tone: 'danger',
+    },
+    reopen: {
+        key: 'reopen',
+        status: 'under_review',
+        label: 'Reopen review',
+        description: 'Return the application to active review.',
+        confirmLabel: 'Reopen application',
+        reason: '',
+        note: 'Application returned to provider review.',
+        icon: 'fa-solid fa-arrow-rotate-left',
+    },
+    renew: {
+        key: 'renew',
+        status: 'renewed',
+        label: 'Record renewal',
+        description: 'Confirm another period of scholarship support.',
+        confirmLabel: 'Confirm renewal',
+        reason: 'renewed_support',
+        note: 'Scholarship support renewed by the provider.',
+        icon: 'fa-solid fa-rotate',
+    },
+};
+const negativeDecisionReasonOptions = decisionReasonOptions.filter((option) => [
+    '',
+    'missing_documents',
+    'academic_requirement_not_met',
+    'outside_eligibility',
+    'failed_exam',
+    'funds_limited',
+    'not_selected',
+    'other',
+].includes(option.value));
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
 const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500';
 const customStatusLabels = {
@@ -71,8 +291,167 @@ const customStatusLabels = {
 
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
 const rubricReview = computed(() => application.value?.rubric_review ?? { criteria: [], completed: 0, total_criteria: 0 });
+const rubricDraftSummary = computed(() => {
+    const criteria = rubricReview.value.criteria ?? [];
+    let completed = 0;
+    let weightedScore = 0;
+
+    criteria.forEach((criterion) => {
+        const rawScore = rubricScores.value[criterion.key];
+        const score = Number(rawScore);
+
+        if (rawScore === '' || rawScore === null || rawScore === undefined || !Number.isFinite(score) || score < 0 || score > 100) {
+            return;
+        }
+
+        completed += 1;
+        weightedScore += (score * Number(criterion.weight ?? 0)) / 100;
+    });
+
+    const total = criteria.length;
+    const isComplete = total > 0 && completed === total;
+
+    return {
+        completed,
+        total,
+        isComplete,
+        completionPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
+        totalScore: isComplete ? Math.round(weightedScore * 100) / 100 : null,
+    };
+});
 const timeline = computed(() => application.value?.timeline ?? []);
+const schedules = computed(() => application.value?.schedules ?? []);
+const applicantProfileProofs = computed(() => application.value?.applicant?.profile_proofs ?? []);
+const hasGuardianDetails = computed(() => {
+    const applicant = application.value?.applicant;
+
+    return Boolean(
+        applicant?.guardian_name
+        || applicant?.guardian_relationship
+        || applicant?.guardian_contact
+        || applicant?.guardian_email
+        || applicant?.guardian_is_account_owner,
+    );
+});
+const usesDetailSidebar = computed(() => activeSection.value === 'history');
+const showsOutcomeNote = computed(() => ['approved', 'awarded', 'not_awarded', 'disbursed', 'renewed', 'rejected', 'exam_passed', 'exam_failed'].includes(reviewForm.value.status));
+const suggestedReviewActions = computed(() => {
+    const hasExam = Boolean(application.value?.exam);
+    const actionKeys = (() => {
+        switch (application.value?.status) {
+            case 'submitted':
+                return ['start_review', 'reject'];
+            case 'under_review':
+                return ['request_documents', 'qualify', 'reject'];
+            case 'qualified':
+                return hasExam
+                    ? ['exam_qualify', 'shortlist', 'reject']
+                    : ['shortlist', 'approve', 'reject'];
+            case 'shortlisted':
+                return hasExam
+                    ? ['exam_qualify', 'interview', 'reject']
+                    : ['interview', 'approve', 'reject'];
+            case 'interview':
+                return hasExam
+                    ? ['exam_qualify', 'approve', 'reject']
+                    : ['approve', 'reject'];
+            case 'exam_qualified':
+                return [];
+            case 'exam_scheduled':
+                return ['exam_taken'];
+            case 'exam_taken':
+                return ['exam_pass', 'exam_fail'];
+            case 'exam_passed':
+                return ['approve', 'not_award'];
+            case 'approved':
+                return ['award', 'not_award'];
+            case 'disbursed':
+                return ['renew'];
+            case 'rejected':
+            case 'not_awarded':
+            case 'exam_failed':
+                return ['reopen'];
+            default:
+                return [];
+        }
+    })();
+
+    return actionKeys.map((key) => reviewActionCatalog[key]);
+});
+const selectedReviewAction = computed(() => (
+    suggestedReviewActions.value.find((action) => action.key === selectedReviewActionKey.value) ?? null
+));
+const reviewStatusChanged = computed(() => reviewForm.value.status !== application.value?.status);
+const reviewSubmitLabel = computed(() => {
+    if (updatingId.value === application.value?.id) {
+        return 'Saving...';
+    }
+
+    if (selectedReviewAction.value) {
+        return selectedReviewAction.value.confirmLabel;
+    }
+
+    if (reviewStatusChanged.value) {
+        return `Save as ${statusLabel(reviewForm.value.status)}`;
+    }
+
+    return 'Save notes and scores';
+});
+const completedStageMessage = computed(() => ({
+    exam_qualified: 'Initial screening is complete. Use Schedule to publish the exam details.',
+    awarded: 'The award is confirmed. Use Schedule to announce its release details.',
+    distribution_scheduled: 'Distribution is scheduled. Use Schedule to record when it is released.',
+    renewed: 'The renewal is recorded. You can still update notes or correct the status manually.',
+}[application.value?.status] ?? 'No guided action is needed at this stage. You can still save notes or correct the status manually.'));
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
+const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
+const applicationRequirements = computed(() => {
+    const checklist = confirmedDocuments.value
+        .map((requirement) => String(requirement).trim())
+        .filter(Boolean);
+
+    return checklist.length ? checklist : requiredDocuments.value;
+});
+const applicationFileRows = computed(() => {
+    const documents = application.value?.documents ?? [];
+    const documentsByName = new Map(
+        documents.map((document) => [normalizeDocumentName(document.document_name), document]),
+    );
+    const seenNames = new Set();
+    const rows = [];
+
+    applicationRequirements.value.forEach((requirement) => {
+        const normalizedName = normalizeDocumentName(requirement);
+
+        if (!normalizedName || seenNames.has(normalizedName)) {
+            return;
+        }
+
+        seenNames.add(normalizedName);
+        rows.push({
+            name: requirement,
+            document: documentsByName.get(normalizedName) ?? null,
+            required: true,
+        });
+    });
+
+    documents.forEach((document) => {
+        const normalizedName = normalizeDocumentName(document.document_name);
+
+        if (seenNames.has(normalizedName)) {
+            return;
+        }
+
+        seenNames.add(normalizedName);
+        rows.push({
+            name: document.document_name,
+            document,
+            required: false,
+        });
+    });
+
+    return rows;
+});
 const providerContractSections = computed(() => {
     const scholarship = application.value?.scholarship ?? {};
 
@@ -93,6 +472,22 @@ function emptyReviewForm() {
         distributionScheduledFor: '',
         distributionInstructions: '',
         reviewNotes: '',
+    };
+}
+
+function emptyScheduleForm(type = 'interview') {
+    return {
+        type,
+        title: '',
+        scheduledAt: '',
+        mode: 'onsite',
+        venue: '',
+        locationAddress: '',
+        latitude: '',
+        longitude: '',
+        onlineUrl: '',
+        instructions: '',
+        awardedAmount: '',
     };
 }
 
@@ -122,16 +517,235 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
-function matchClass(score) {
-    if (Number(score) >= 80) {
+function scheduleStatusClass(status) {
+    if (status === 'completed') {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (Number(score) >= 50) {
-        return 'bg-amber-100 text-amber-800';
+    if (status === 'cancelled') {
+        return 'bg-rose-100 text-rose-800';
     }
 
-    return 'bg-rose-100 text-rose-800';
+    return 'bg-amber-100 text-amber-800';
+}
+
+function scheduleTypeLabel(type) {
+    return scheduleTypeCatalog.find((option) => option.value === type)?.label ?? labelFromKey(type);
+}
+
+function scheduleTypeIcon(type) {
+    return scheduleTypeCatalog.find((option) => option.value === type)?.icon ?? 'fa-solid fa-calendar';
+}
+
+function scheduleModeLabel(mode) {
+    return scheduleModeOptions.find((option) => option.value === mode)?.label ?? labelFromKey(mode);
+}
+
+function attendanceOptions(type) {
+    if (type === 'distribution') {
+        return [
+            { value: 'pending', label: 'Pending release' },
+            { value: 'received', label: 'Received' },
+            { value: 'not_required', label: 'Not required' },
+        ];
+    }
+
+    return [
+        { value: 'pending', label: 'Pending attendance' },
+        { value: 'attended', label: 'Attended' },
+        { value: 'absent', label: 'Absent' },
+        { value: 'excused', label: 'Excused' },
+        { value: 'not_required', label: 'Not required' },
+    ];
+}
+
+function handleScheduleStatusChange(schedule) {
+    if (schedule.status === 'scheduled') {
+        schedule.attendance_status = 'pending';
+        return;
+    }
+
+    if (schedule.status === 'completed' && schedule.attendance_status === 'pending') {
+        schedule.attendance_status = schedule.type === 'distribution' ? 'received' : 'attended';
+        return;
+    }
+
+    if (schedule.status === 'cancelled' && ['attended', 'absent', 'received'].includes(schedule.attendance_status)) {
+        schedule.attendance_status = 'pending';
+    }
+}
+
+function formatAwardAmount(value) {
+    if (value === null || value === undefined || value === '') {
+        return 'Not listed';
+    }
+
+    return new Intl.NumberFormat('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+    }).format(Number(value));
+}
+
+function canPublishSchedule(type) {
+    const status = application.value?.status;
+
+    if (type === 'exam') {
+        return Boolean(application.value?.exam)
+            && ['qualified', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled'].includes(status);
+    }
+
+    if (type === 'interview') {
+        return ['under_review', 'qualified', 'shortlisted', 'interview'].includes(status);
+    }
+
+    return ['approved', 'awarded', 'distribution_scheduled'].includes(status);
+}
+
+function defaultScheduleDetails(type) {
+    const scholarship = application.value?.scholarship ?? {};
+    const exam = application.value?.exam ?? {};
+
+    if (type === 'exam') {
+        return {
+            title: exam.title || 'Scholarship exam',
+            mode: exam.delivery_mode || 'onsite',
+            venue: exam.venue || '',
+            instructions: exam.instructions || '',
+        };
+    }
+
+    return {
+        title: type === 'distribution' ? 'Scholarship reward distribution' : 'Applicant interview',
+        mode: 'onsite',
+        venue: scholarship.location_name || '',
+        locationAddress: scholarship.location_address || '',
+        latitude: scholarship.latitude || '',
+        longitude: scholarship.longitude || '',
+        instructions: type === 'distribution'
+            ? 'Bring a valid school ID and any release documents listed by the provider.'
+            : 'Bring a valid school ID and arrive at least 15 minutes before the schedule.',
+        awardedAmount: type === 'distribution' ? application.value?.awarded_amount ?? '' : '',
+    };
+}
+
+function openScheduleEditor(type) {
+    const existing = schedules.value.find((schedule) => schedule.type === type);
+    const defaults = defaultScheduleDetails(type);
+
+    scheduleForm.value = existing
+        ? {
+            type: existing.type,
+            title: existing.title ?? '',
+            scheduledAt: existing.scheduled_at ?? '',
+            mode: existing.mode ?? 'onsite',
+            venue: existing.venue ?? '',
+            locationAddress: existing.location_address ?? '',
+            latitude: existing.latitude ?? '',
+            longitude: existing.longitude ?? '',
+            onlineUrl: existing.online_url ?? '',
+            instructions: existing.instructions ?? '',
+            awardedAmount: type === 'distribution' ? application.value?.awarded_amount ?? '' : '',
+        }
+        : { ...emptyScheduleForm(type), ...defaults, type };
+    showScheduleEditor.value = true;
+    errorMessage.value = '';
+}
+
+function closeScheduleEditor() {
+    showScheduleEditor.value = false;
+    scheduleForm.value = emptyScheduleForm();
+}
+
+function handleSchedulePinPicked(location) {
+    scheduleForm.value.latitude = location.latitude;
+    scheduleForm.value.longitude = location.longitude;
+
+    if (location.displayName) {
+        scheduleForm.value.locationAddress = location.displayName;
+    }
+}
+
+function apiErrorMessage(error, fallback) {
+    const validationMessage = Object.values(error.response?.data?.errors ?? {})
+        .flat()
+        .find(Boolean);
+
+    return validationMessage ?? error.response?.data?.message ?? fallback;
+}
+
+async function saveSchedule() {
+    if (!application.value || !scheduleForm.value.scheduledAt || !scheduleForm.value.instructions.trim()) {
+        errorMessage.value = 'Add the schedule date, time, and applicant instructions.';
+        return;
+    }
+
+    scheduleSaving.value = true;
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    try {
+        const response = await window.axios.post(`/provider/applications/${application.value.id}/schedules`, {
+            type: scheduleForm.value.type,
+            title: scheduleForm.value.title,
+            scheduled_at: scheduleForm.value.scheduledAt,
+            mode: scheduleForm.value.mode,
+            venue: scheduleForm.value.venue || null,
+            location_address: scheduleForm.value.locationAddress || null,
+            latitude: scheduleForm.value.latitude || null,
+            longitude: scheduleForm.value.longitude || null,
+            online_url: scheduleForm.value.onlineUrl || null,
+            instructions: scheduleForm.value.instructions,
+            awarded_amount: scheduleForm.value.type === 'distribution'
+                ? scheduleForm.value.awardedAmount || null
+                : null,
+        });
+
+        applyApplication(response.data.application);
+        statusMessage.value = response.data.message ?? 'Schedule published.';
+        closeScheduleEditor();
+    } catch (error) {
+        errorMessage.value = apiErrorMessage(error, 'Unable to publish this schedule.');
+    } finally {
+        scheduleSaving.value = false;
+    }
+}
+
+async function saveScheduleTracking(schedule) {
+    if (['completed', 'cancelled'].includes(schedule.status)) {
+        const confirmed = await requestConfirmation({
+            title: schedule.status === 'completed' ? 'Complete this activity?' : 'Cancel this schedule?',
+            message: schedule.status === 'completed'
+                ? 'The applicant will see the attendance or release result and the application may advance automatically.'
+                : 'The applicant will be notified that this schedule was cancelled.',
+            confirmLabel: schedule.status === 'completed' ? 'Mark complete' : 'Cancel schedule',
+            tone: schedule.status === 'cancelled' ? 'danger' : 'warning',
+        });
+
+        if (!confirmed) {
+            await loadApplication();
+            return;
+        }
+    }
+
+    scheduleTrackingId.value = schedule.id;
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    try {
+        const response = await window.axios.patch(`/provider/applications/${application.value.id}/schedules/${schedule.id}`, {
+            status: schedule.status,
+            attendance_status: schedule.attendance_status,
+            attendance_notes: schedule.attendance_notes || null,
+        });
+
+        applyApplication(response.data.application);
+        statusMessage.value = response.data.message ?? 'Schedule tracking updated.';
+    } catch (error) {
+        errorMessage.value = apiErrorMessage(error, 'Unable to update schedule tracking.');
+        await loadApplication();
+    } finally {
+        scheduleTrackingId.value = null;
+    }
 }
 
 function recommendationClass(recommendation) {
@@ -170,20 +784,29 @@ function documentStatusClass(status) {
     return 'bg-slate-100 text-slate-700';
 }
 
-function stepClass(state) {
-    if (state === 'complete') {
-        return 'bg-slate-900 text-white';
+function profileVerificationClass(status) {
+    if (status === 'approved') {
+        return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (state === 'current') {
-        return 'bg-slate-100 text-slate-950 ring-1 ring-slate-300';
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
     }
 
-    if (state === 'skipped') {
-        return 'bg-rose-50 text-rose-700 ring-1 ring-rose-100';
+    if (status === 'pending') {
+        return 'bg-amber-100 text-amber-800';
     }
 
-    return 'bg-white text-slate-500 ring-1 ring-slate-200';
+    return 'bg-slate-100 text-slate-700';
+}
+
+function profileVerificationLabel(status) {
+    return {
+        approved: 'Admin verified',
+        rejected: 'Verification rejected',
+        pending: 'Verification pending',
+        unsubmitted: 'Not verified',
+    }[status] ?? labelFromKey(status || 'unsubmitted');
 }
 
 function labelFromKey(value) {
@@ -192,6 +815,21 @@ function labelFromKey(value) {
     }
 
     return formatKeyLabel(value);
+}
+
+function documentRequirements(requirements) {
+    if (!requirements) {
+        return [];
+    }
+
+    return String(requirements)
+        .split(/\r?\n|,/)
+        .map((requirement) => requirement.trim())
+        .filter(Boolean);
+}
+
+function normalizeDocumentName(documentName) {
+    return String(documentName ?? '').trim().toLocaleLowerCase();
 }
 
 function applicantAcademicLabel(applicant) {
@@ -206,6 +844,7 @@ function applicantAcademicLabel(applicant) {
 
 function applyApplication(payload) {
     application.value = payload;
+    selectedReviewActionKey.value = '';
     reviewForm.value = {
         status: payload?.status ?? 'submitted',
         decisionReason: payload?.decision_reason ?? '',
@@ -216,66 +855,56 @@ function applyApplication(payload) {
         distributionInstructions: payload?.distribution_instructions ?? '',
         reviewNotes: payload?.review_notes ?? '',
     };
-    documentStatuses.value = Object.fromEntries(
-        (payload?.documents ?? []).map((document) => [document.id, document.status ?? 'pending']),
-    );
-    documentNotes.value = Object.fromEntries(
-        (payload?.documents ?? []).map((document) => [document.id, document.review_notes ?? '']),
-    );
     rubricScores.value = Object.fromEntries(
         (payload?.rubric_review?.criteria ?? []).map((criterion) => [criterion.key, criterion.score ?? '']),
     );
 }
 
-function quickActionNote(action) {
-    if (action === 'under_review') {
-        return 'Application moved to provider review.';
-    }
+function openDocumentReview(document) {
+    selectedDocument.value = document;
+    documentReviewError.value = '';
+}
 
-    if (action === 'missing_documents') {
-        const missingDocuments = application.value?.document_readiness?.missing ?? [];
-        const missingList = missingDocuments.length ? missingDocuments.slice(0, 3).join(', ') : 'remaining listed documents';
+function closeDocumentReview() {
+    selectedDocument.value = null;
+    documentReviewError.value = '';
+}
 
-        return `Please upload or replace ${missingList}.`;
-    }
+function openProfileProof(proof) {
+    selectedProfileProof.value = proof;
+}
 
-    if (action === 'shortlisted') {
-        return 'Applicant shortlisted for the next review step.';
-    }
+function closeProfileProof() {
+    selectedProfileProof.value = null;
+}
 
-    if (action === 'interview') {
-        return 'Applicant selected for interview or follow-up screening.';
-    }
+function selectReviewAction(action) {
+    selectedReviewActionKey.value = action.key;
+    reviewForm.value.status = action.status;
+    reviewForm.value.decisionReason = action.reason;
+    reviewForm.value.reviewNotes = action.note;
+    errorMessage.value = '';
+}
 
-    if (action === 'exam_qualified') {
-        return 'Applicant passed eligibility screening and is qualified to take the scholarship exam.';
-    }
+function selectManualStatus() {
+    selectedReviewActionKey.value = '';
+    reviewForm.value.decisionReason = reviewForm.value.status === application.value?.status
+        ? application.value?.decision_reason ?? ''
+        : '';
+    errorMessage.value = '';
+}
 
-    if (action === 'exam_scheduled') {
-        return 'Scholarship exam is scheduled. Check provider instructions for date, venue, or online exam details.';
-    }
+function clearReviewAction() {
+    selectedReviewActionKey.value = '';
+    reviewForm.value.status = application.value?.status ?? 'submitted';
+    reviewForm.value.decisionReason = application.value?.decision_reason ?? '';
+    reviewForm.value.reviewNotes = application.value?.review_notes ?? '';
+    reviewForm.value.outcomeNotes = application.value?.outcome_notes ?? '';
+    errorMessage.value = '';
+}
 
-    if (action === 'exam_taken') {
-        return 'Scholarship exam was marked as taken.';
-    }
-
-    if (action === 'exam_passed') {
-        return 'Applicant passed the scholarship exam and may proceed to final award review.';
-    }
-
-    if (action === 'exam_failed') {
-        return 'Applicant did not pass the scholarship exam.';
-    }
-
-    if (action === 'approved') {
-        return 'Application approved after provider review.';
-    }
-
-    if (action === 'rejected') {
-        return 'Application was not selected after provider review.';
-    }
-
-    return '';
+function isSelectedReviewAction(action) {
+    return selectedReviewActionKey.value === action.key;
 }
 
 function statusConfirmation(status) {
@@ -344,32 +973,6 @@ function statusConfirmation(status) {
     return confirmations[status] ?? null;
 }
 
-async function applyQuickAction(action) {
-    const map = {
-        under_review: { status: 'under_review', reason: '' },
-        missing_documents: { status: 'under_review', reason: 'missing_documents' },
-        shortlisted: { status: 'shortlisted', reason: 'complete_requirements' },
-        interview: { status: 'interview', reason: 'for_interview' },
-        exam_qualified: { status: 'exam_qualified', reason: 'for_exam' },
-        exam_scheduled: { status: 'exam_scheduled', reason: 'exam_scheduled' },
-        exam_taken: { status: 'exam_taken', reason: 'exam_completed' },
-        exam_passed: { status: 'exam_passed', reason: 'passed_exam' },
-        exam_failed: { status: 'exam_failed', reason: 'failed_exam' },
-        approved: { status: 'approved', reason: 'approved_for_award' },
-        rejected: { status: 'rejected', reason: 'not_selected' },
-    };
-    const selected = map[action];
-
-    if (!selected) {
-        return;
-    }
-
-    reviewForm.value.status = selected.status;
-    reviewForm.value.decisionReason = selected.reason;
-    reviewForm.value.reviewNotes = quickActionNote(action);
-    await updateStatus();
-}
-
 async function loadApplication() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -377,7 +980,6 @@ async function loadApplication() {
     try {
         const response = await window.axios.get(`/provider/applications/${applicationId}/data`);
 
-        user.value = response.data.user;
         applyApplication(response.data.application);
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load application details.';
@@ -433,44 +1035,15 @@ async function updateStatus() {
     }
 }
 
-async function scheduleDistribution() {
-    if (!reviewForm.value.distributionScheduledFor) {
-        errorMessage.value = 'Choose a reward distribution date before scheduling.';
+async function updateDocumentStatus(review) {
+    const document = review?.document ?? selectedDocument.value;
+
+    if (!application.value || !document) {
         return;
     }
 
-    const dateLabel = new Date(`${reviewForm.value.distributionScheduledFor}T00:00:00`).toLocaleDateString('en-PH', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-    });
-
-    reviewForm.value.status = 'distribution_scheduled';
-    reviewForm.value.decisionReason = 'distribution_scheduled';
-    reviewForm.value.reviewNotes = `Reward distribution scheduled for ${dateLabel}.`;
-    await updateStatus();
-}
-
-async function markDistributionComplete() {
-    reviewForm.value.status = 'disbursed';
-    reviewForm.value.decisionReason = 'award_released';
-    reviewForm.value.outcomeAt = new Date().toISOString().slice(0, 10);
-    reviewForm.value.reviewNotes = 'Scholarship reward marked as distributed by the provider.';
-    await updateStatus();
-}
-
-async function updateDocumentStatus(document) {
-    if (!application.value) {
-        return;
-    }
-
-    const documentStatus = documentStatuses.value[document.id] ?? 'pending';
-    const documentNote = documentNotes.value[document.id]?.trim() ?? '';
-
-    if (['rejected', 'needs_replacement'].includes(documentStatus) && !documentNote) {
-        errorMessage.value = 'Add a document note explaining why the file was rejected or needs replacement.';
-        return;
-    }
+    const documentStatus = review?.status ?? 'pending';
+    const documentNote = review?.review_notes ?? '';
 
     if (documentStatus !== document.status && ['rejected', 'needs_replacement'].includes(documentStatus)) {
         const confirmed = await requestConfirmation({
@@ -488,6 +1061,7 @@ async function updateDocumentStatus(document) {
     documentUpdatingId.value = document.id;
     statusMessage.value = '';
     errorMessage.value = '';
+    documentReviewError.value = '';
 
     try {
         const response = await window.axios.patch(`/provider/documents/${document.id}/status`, {
@@ -497,8 +1071,11 @@ async function updateDocumentStatus(document) {
 
         applyApplication(response.data.application);
         statusMessage.value = response.data.message ?? 'Document status updated.';
+        closeDocumentReview();
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update document status.';
+        documentReviewError.value = error.response?.data?.errors?.review_notes?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to update document status.';
     } finally {
         documentUpdatingId.value = null;
     }
@@ -534,6 +1111,11 @@ onMounted(loadApplication);
                             <p class="mt-3 text-sm leading-6 text-slate-600">
                                 {{ application?.scholarship?.title || 'Scholarship program' }}
                             </p>
+                            <div v-if="application" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
+                                <span>{{ application.applicant?.email || 'Email not provided' }}</span>
+                                <span>{{ application.applicant?.contact_number || 'Contact not provided' }}</span>
+                                <span>Submitted {{ application.submitted_at || 'recently' }}</span>
+                            </div>
                         </div>
                         <span v-if="application" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(application.status)]">
                             {{ statusLabel(application.status) }}
@@ -557,52 +1139,48 @@ onMounted(loadApplication);
                         {{ statusMessage }}
                     </p>
 
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
-                            <div class="min-w-0">
-                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                                    Submitted {{ application.submitted_at || 'recently' }}
-                                </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    {{ application.applicant?.name || 'Applicant' }}
-                                </h3>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">
-                                    {{ application.applicant?.email || 'Email not provided' }} - {{ application.applicant?.contact_number || 'Contact not provided' }}
-                                </p>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', recommendationClass(application.dss_recommendation)]">
-                                    {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
-                                </span>
-                                <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', matchClass(application.eligibility_score)]">
-                                    {{ application.eligibility_score ?? 0 }}% match
-                                </span>
-                            </div>
-                        </div>
+                    <nav class="flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Application detail sections">
+                        <button
+                            v-for="section in detailSections"
+                            :key="section.key"
+                            type="button"
+                            :aria-current="activeSection === section.key ? 'page' : undefined"
+                            :class="[
+                                'inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition',
+                                activeSection === section.key
+                                    ? 'bg-slate-900 text-white'
+                                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+                            ]"
+                            @click="activeSection = section.key"
+                        >
+                            {{ section.label }}
+                            <span
+                                v-if="section.key === 'documents'"
+                                :class="activeSection === section.key ? 'text-slate-300' : 'text-slate-400'"
+                                class="text-xs"
+                            >
+                                {{ application.document_readiness?.uploaded ?? 0 }}/{{ application.document_readiness?.required ?? applicationRequirements.length }}
+                            </span>
+                            <span
+                                v-else-if="section.key === 'schedule'"
+                                :class="activeSection === section.key ? 'text-slate-300' : 'text-slate-400'"
+                                class="text-xs"
+                            >
+                                {{ schedules.length }}
+                            </span>
+                            <span
+                                v-else-if="section.key === 'history'"
+                                :class="activeSection === section.key ? 'text-slate-300' : 'text-slate-400'"
+                                class="text-xs"
+                            >
+                                {{ timeline.length }}
+                            </span>
+                        </button>
+                    </nav>
 
-                        <div class="grid border-t border-slate-200 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                            <div class="border-b border-slate-200 p-4 sm:border-r lg:border-b-0">
-                                <p class="font-semibold text-slate-500">Suitability</p>
-                                <p class="mt-1 font-bold text-slate-950">{{ application.dss_score ?? 0 }}%</p>
-                            </div>
-                            <div class="border-b border-slate-200 p-4 lg:border-r lg:border-b-0">
-                                <p class="font-semibold text-slate-500">Documents</p>
-                                <p class="mt-1 font-bold text-slate-950">{{ application.document_readiness?.percent ?? 0 }}% ready</p>
-                            </div>
-                            <div class="border-b border-slate-200 p-4 sm:border-r sm:border-b-0">
-                                <p class="font-semibold text-slate-500">Stage</p>
-                                <p class="mt-1 font-bold text-slate-950">{{ application.status_progress?.label || statusLabel(application.status) }}</p>
-                            </div>
-                            <div class="p-4">
-                                <p class="font-semibold text-slate-500">Scholarship</p>
-                                <p class="mt-1 font-bold text-slate-950">{{ application.scholarship?.title || 'Program' }}</p>
-                            </div>
-                        </div>
-                    </section>
-
-                    <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-                        <div class="space-y-5">
-                            <section v-if="application.exam" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div :class="usesDetailSidebar ? 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]' : 'block'">
+                        <div v-if="activeSection !== 'applicant'" class="space-y-5">
+                            <section v-if="activeSection === 'review' && application.exam" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                                 <div class="grid sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center">
                                     <div class="flex h-36 items-center justify-center border-b border-slate-200 bg-slate-50 p-4 sm:border-b-0 sm:border-r">
                                         <img :src="application.exam.image_url" :alt="application.exam.title" class="h-full w-full object-contain">
@@ -624,153 +1202,141 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <section v-if="activeSection === 'review'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                             Provider Review
                                         </p>
                                         <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                            Decision and notes
+                                            Choose the next action
                                         </h3>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">
+                                            Select one clear next step, add a note if needed, then confirm.
+                                        </p>
                                     </div>
-                                    <button
-                                        type="button"
-                                        :disabled="updatingId === application.id"
-                                        class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                        @click="updateStatus"
-                                    >
-                                        {{ updatingId === application.id ? 'Saving...' : 'Save review' }}
-                                    </button>
+                                    <div class="shrink-0 sm:text-right">
+                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Current stage</p>
+                                        <span :class="['mt-1 inline-flex rounded-md px-2.5 py-1.5 text-xs font-bold uppercase', statusClass(application.status)]">
+                                            {{ statusLabel(application.status) }}
+                                        </span>
+                                    </div>
                                 </div>
 
-                                <div class="mt-5 grid gap-3 md:grid-cols-2">
-                                    <div class="md:col-span-2 rounded-md border border-slate-200 bg-slate-50 p-3">
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                            Quick actions
-                                        </p>
-                                        <div class="mt-3 flex flex-wrap gap-2">
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('under_review')"
+                                <div class="mt-5">
+                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Recommended next steps</p>
+                                    <div v-if="suggestedReviewActions.length" class="mt-3 grid gap-3 md:grid-cols-3">
+                                        <button
+                                            v-for="action in suggestedReviewActions"
+                                            :key="action.key"
+                                            type="button"
+                                            :class="[
+                                                'group flex min-h-32 flex-col rounded-md border p-4 text-left transition',
+                                                isSelectedReviewAction(action)
+                                                    ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                                                    : action.tone === 'danger'
+                                                        ? 'border-rose-200 bg-white hover:border-rose-300 hover:bg-rose-50'
+                                                        : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white',
+                                            ]"
+                                            @click="selectReviewAction(action)"
+                                        >
+                                            <span
+                                                :class="[
+                                                    'inline-flex h-9 w-9 items-center justify-center rounded-md',
+                                                    isSelectedReviewAction(action)
+                                                        ? 'bg-white/10 text-white'
+                                                        : action.tone === 'danger'
+                                                            ? 'bg-rose-100 text-rose-700'
+                                                            : 'bg-white text-slate-700 ring-1 ring-slate-200',
+                                                ]"
                                             >
-                                                Start review
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('missing_documents')"
-                                            >
-                                                Request documents
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('exam_qualified')"
-                                            >
-                                                Qualify for exam
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('exam_scheduled')"
-                                            >
-                                                Schedule exam
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('exam_taken')"
-                                            >
-                                                Exam taken
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('exam_passed')"
-                                            >
-                                                Passed exam
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('exam_failed')"
-                                            >
-                                                Failed exam
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('shortlisted')"
-                                            >
-                                                Shortlist
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('interview')"
-                                            >
-                                                Interview
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('approved')"
-                                            >
-                                                Approve
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="updatingId === application.id"
-                                                class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="applyQuickAction('rejected')"
-                                            >
-                                                Reject
-                                            </button>
-                                        </div>
+                                                <i :class="action.icon" aria-hidden="true"></i>
+                                            </span>
+                                            <span :class="['mt-3 font-bold', isSelectedReviewAction(action) ? 'text-white' : 'text-slate-950']">
+                                                {{ action.label }}
+                                            </span>
+                                            <span :class="['mt-1 text-xs leading-5', isSelectedReviewAction(action) ? 'text-slate-300' : 'text-slate-600']">
+                                                {{ action.description }}
+                                            </span>
+                                        </button>
                                     </div>
+                                    <div v-else class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+                                        {{ completedStageMessage }}
+                                    </div>
+                                </div>
 
-                                    <div>
-                                        <label :class="labelClass">Pipeline status</label>
-                                        <select v-model="reviewForm.status" :class="inputClass">
-                                            <option v-for="option in statusOptions" :key="option.value" :value="option.value">
-                                                {{ option.label }}
-                                            </option>
+                                <details class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                    <summary class="cursor-pointer text-sm font-bold text-slate-700">Correct status manually</summary>
+                                    <div class="mt-3">
+                                        <label :class="labelClass">Application stage</label>
+                                        <select v-model="reviewForm.status" :class="inputClass" @change="selectManualStatus">
+                                            <optgroup v-for="group in statusGroups" :key="group.label" :label="group.label">
+                                                <option v-for="option in group.options" :key="option.value" :value="option.value">
+                                                    {{ option.label }}
+                                                </option>
+                                            </optgroup>
                                         </select>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">
+                                            Use this only to fix a previous status or handle an unusual workflow.
+                                        </p>
                                     </div>
-                                    <div>
+                                </details>
+
+                                <div class="mt-5 grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2">
+                                    <div v-if="negativeDecisionStatuses.includes(reviewForm.status)">
                                         <label :class="labelClass">
-                                            Decision reason <span v-if="negativeDecisionStatuses.includes(reviewForm.status)" class="text-rose-600">*</span>
+                                            Why was this decision made? <span class="text-rose-600">*</span>
                                         </label>
                                         <select v-model="reviewForm.decisionReason" :class="inputClass">
-                                            <option v-for="option in decisionReasonOptions" :key="option.value" :value="option.value">
+                                            <option v-for="option in negativeDecisionReasonOptions" :key="option.value" :value="option.value">
                                                 {{ option.label }}
                                             </option>
                                         </select>
                                     </div>
-                                    <div class="md:col-span-2">
-                                        <label :class="labelClass">Outcome note</label>
+                                    <div v-if="showsOutcomeNote" :class="negativeDecisionStatuses.includes(reviewForm.status) ? '' : 'md:col-span-2'">
+                                        <label :class="labelClass">Outcome message <span class="font-medium normal-case tracking-normal text-slate-400">(optional)</span></label>
                                         <input v-model="reviewForm.outcomeNotes" type="text" maxlength="2000" placeholder="Award, release, renewal, or closure note" :class="inputClass">
                                     </div>
                                     <div class="md:col-span-2">
-                                        <label :class="labelClass">Review note</label>
-                                        <textarea v-model="reviewForm.reviewNotes" rows="4" maxlength="1500" placeholder="Example: Missing proof of income, qualified for interview, or approved for final review." :class="inputClass"></textarea>
+                                        <label :class="labelClass">Note for the applicant</label>
+                                        <textarea v-model="reviewForm.reviewNotes" rows="3" maxlength="1500" placeholder="Add useful instructions or explain the next step." :class="inputClass"></textarea>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">Keep this short and specific. It appears in the applicant's application record.</p>
+                                    </div>
+
+                                    <div class="flex flex-col gap-3 md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="text-sm text-slate-600">
+                                            <p v-if="selectedReviewAction" class="font-semibold text-slate-800">
+                                                Selected: {{ selectedReviewAction.label }}
+                                            </p>
+                                            <p v-else-if="reviewStatusChanged" class="font-semibold text-slate-800">
+                                                Manual change: {{ statusLabel(reviewForm.status) }}
+                                            </p>
+                                            <p v-else>Save without changing the current stage.</p>
+                                        </div>
+                                        <div class="flex flex-col-reverse gap-2 sm:flex-row">
+                                            <button
+                                                v-if="selectedReviewAction || reviewStatusChanged"
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                                                @click="clearReviewAction"
+                                            >
+                                                Cancel action
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="updatingId === application.id"
+                                                class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                                @click="updateStatus"
+                                            >
+                                                {{ reviewSubmitLabel }}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </section>
 
-                            <section v-if="rubricReview.criteria?.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'review' && rubricReview.criteria?.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -783,17 +1349,39 @@ onMounted(loadApplication);
                                             Score each criterion from 0 to 100. The weighted total appears when all criteria are complete.
                                         </p>
                                     </div>
-                                    <div class="rounded-md bg-slate-100 px-3 py-2 text-right">
-                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                                            Provider score
-                                        </p>
-                                        <p class="mt-1 text-lg font-bold text-slate-950">
-                                            {{ rubricReview.total_score !== null ? `${rubricReview.total_score}%` : `${rubricReview.completed}/${rubricReview.total_criteria}` }}
-                                        </p>
+                                    <button
+                                        type="button"
+                                        class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                        @click="showRubricDetails = !showRubricDetails"
+                                    >
+                                        {{ showRubricDetails ? 'Hide criteria' : 'Score rubric' }}
+                                    </button>
+                                </div>
+
+                                <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Rubric progress</p>
+                                            <p class="mt-1 text-sm font-bold text-slate-950">
+                                                {{ rubricDraftSummary.completed }} of {{ rubricDraftSummary.total }} criteria scored
+                                            </p>
+                                        </div>
+                                        <div class="sm:text-right">
+                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Weighted score</p>
+                                            <p :class="['mt-1 text-lg font-bold', rubricDraftSummary.isComplete ? 'text-slate-950' : 'text-slate-500']">
+                                                {{ rubricDraftSummary.isComplete ? `${rubricDraftSummary.totalScore}%` : 'Complete all criteria' }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-white ring-1 ring-slate-200">
+                                        <div
+                                            class="h-full rounded-full bg-slate-900 transition-all"
+                                            :style="{ width: `${rubricDraftSummary.completionPercent}%` }"
+                                        ></div>
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid gap-3">
+                                <div v-if="showRubricDetails" class="mt-4 grid gap-3">
                                     <div
                                         v-for="criterion in rubricReview.criteria"
                                         :key="criterion.key"
@@ -828,12 +1416,12 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <p class="mt-3 text-xs leading-5 text-slate-500">
-                                    {{ rubricReview.decision_notice }} Save review above to keep these scores.
+                                <p v-if="showRubricDetails" class="mt-3 text-xs leading-5 text-slate-500">
+                                    {{ rubricReview.decision_notice }} Use the review button above to save these scores.
                                 </p>
                             </section>
 
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'review'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Decision Support
                                 </p>
@@ -849,12 +1437,21 @@ onMounted(loadApplication);
                                             {{ application.dss_explanation?.next_action || 'Review eligibility, documents, and notes before deciding.' }}
                                         </p>
                                     </div>
-                                    <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', recommendationClass(application.dss_recommendation)]">
-                                        {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
-                                    </span>
+                                    <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                        <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', recommendationClass(application.dss_recommendation)]">
+                                            {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                            @click="showDssDetails = !showDssDetails"
+                                        >
+                                            {{ showDssDetails ? 'Hide details' : 'View details' }}
+                                        </button>
+                                    </div>
                                 </div>
 
-                                <div v-if="application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length" class="mt-4 grid gap-3 md:grid-cols-2">
+                                <div v-if="showDssDetails && (application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length)" class="mt-4 grid gap-3 md:grid-cols-2">
                                     <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Strengths</p>
                                         <div class="mt-2 grid gap-2">
@@ -873,7 +1470,7 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <div v-if="dssCriteria.length" class="mt-4 grid gap-3 md:grid-cols-2">
+                                <div v-if="showDssDetails && dssCriteria.length" class="mt-4 grid gap-3 md:grid-cols-2">
                                     <div v-for="criterion in dssCriteria" :key="criterion.key" class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                         <div class="flex items-center justify-between gap-3">
                                             <p class="font-bold text-slate-950">{{ criterion.label }}</p>
@@ -889,80 +1486,267 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'documents'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                             Documents
                                         </p>
                                         <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                            Uploaded files and checklist
+                                            Document checklist
                                         </h3>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">
+                                            Open an uploaded file to review it and record your decision.
+                                        </p>
                                     </div>
                                     <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                        {{ application.document_readiness?.uploaded ?? 0 }} uploaded
+                                        {{ application.document_readiness?.uploaded ?? 0 }} of {{ application.document_readiness?.required ?? applicationRequirements.length }} uploaded
                                     </span>
                                 </div>
 
-                                <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <p class="font-semibold text-slate-700">Confirmed checklist</p>
-                                        <span class="text-xs font-bold text-slate-500">{{ application.document_readiness?.percent ?? 0 }}% ready</span>
-                                    </div>
-                                    <div v-if="confirmedDocuments.length" class="mt-2 flex flex-wrap gap-2">
-                                        <span v-for="document in confirmedDocuments" :key="document" class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
-                                            {{ document }}
-                                        </span>
-                                    </div>
-                                    <p v-else class="mt-2 text-slate-500">No checklist items saved.</p>
-                                </div>
+                                <div v-if="applicationFileRows.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
+                                    <div
+                                        v-for="row in applicationFileRows"
+                                        :key="row.name"
+                                        class="flex flex-col gap-3 border-b border-slate-200 p-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                                    >
+                                        <div class="flex min-w-0 items-start gap-3">
+                                            <span
+                                                :class="[
+                                                    'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+                                                    row.document ? 'bg-slate-100 text-slate-700' : 'bg-amber-50 text-amber-700',
+                                                ]"
+                                            >
+                                                <i :class="row.document ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file'"></i>
+                                            </span>
 
-                                <div v-if="application.documents?.length" class="mt-4 grid gap-3">
-                                    <div v-for="document in application.documents" :key="document.id" class="rounded-md border border-slate-200 bg-slate-50 p-3">
-                                        <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                                             <div class="min-w-0">
-                                                <p class="font-bold text-slate-950">{{ document.document_name }}</p>
-                                                <p class="mt-1 text-xs text-slate-500">
-                                                    {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <p class="font-bold text-slate-950">{{ row.name }}</p>
+                                                    <span v-if="!row.required" class="rounded bg-slate-100 px-2 py-0.5 text-[0.65rem] font-bold uppercase text-slate-500">
+                                                        Additional file
+                                                    </span>
+                                                </div>
+                                                <p v-if="row.document" class="mt-1 truncate text-xs text-slate-500">
+                                                    {{ row.document.original_name }} - {{ formatFileSize(row.document.size) }} - {{ row.document.uploaded_at }}
+                                                </p>
+                                                <p v-else class="mt-1 text-xs font-semibold text-amber-700">
+                                                    Applicant has not uploaded this file
+                                                </p>
+                                                <p v-if="row.document?.review_notes" class="mt-1 line-clamp-1 text-xs text-slate-600">
+                                                    Review note: {{ row.document.review_notes }}
                                                 </p>
                                             </div>
-                                            <span :class="['h-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', documentStatusClass(document.status)]">
-                                                {{ labelFromKey(document.status || 'pending') }}
-                                            </span>
                                         </div>
 
-                                        <div class="mt-3 grid gap-3 lg:grid-cols-[12rem_1fr_auto] lg:items-end">
+                                        <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                                            <span
+                                                :class="[
+                                                    'h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase',
+                                                    row.document ? documentStatusClass(row.document.status) : 'bg-amber-50 text-amber-700',
+                                                ]"
+                                            >
+                                                {{ row.document ? labelFromKey(row.document.status || 'pending') : 'Not uploaded' }}
+                                            </span>
+                                            <button
+                                                v-if="row.document"
+                                                type="button"
+                                                class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                                @click="openDocumentReview(row.document)"
+                                            >
+                                                <i class="fa-regular fa-eye"></i>
+                                                View
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                                    This application does not have any document requirements yet.
+                                </div>
+                            </section>
+
+                            <section v-if="activeSection === 'schedule'" class="space-y-5">
+                                <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                        <div>
+                                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant schedule</p>
+                                            <h3 class="mt-2 text-xl font-bold text-slate-950">Announcements and attendance</h3>
+                                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                                Publish the date, site, link, and instructions here. The activity itself stays provider-managed.
+                                            </p>
+                                        </div>
+                                        <div class="flex flex-wrap gap-2">
+                                            <button
+                                                v-for="type in scheduleTypeCatalog"
+                                                :key="type.value"
+                                                type="button"
+                                                :disabled="!canPublishSchedule(type.value)"
+                                                class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                                @click="openScheduleEditor(type.value)"
+                                            >
+                                                <i :class="type.icon" aria-hidden="true"></i>
+                                                {{ schedules.some((schedule) => schedule.type === type.value) ? `Edit ${type.label}` : `Add ${type.label}` }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p class="mt-3 text-xs leading-5 text-slate-500">
+                                        Exam and interview announcements become available during screening. Distribution becomes available after approval.
+                                    </p>
+                                </div>
+
+                                <form v-if="showScheduleEditor" class="rounded-lg border border-slate-300 bg-white p-5 shadow-sm" @submit.prevent="saveSchedule">
+                                    <div class="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">{{ scheduleTypeLabel(scheduleForm.type) }}</p>
+                                            <h3 class="mt-1 text-lg font-bold text-slate-950">Publish applicant instructions</h3>
+                                        </div>
+                                        <button type="button" class="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50" @click="closeScheduleEditor">
+                                            Close
+                                        </button>
+                                    </div>
+
+                                    <div class="mt-5 grid gap-4 md:grid-cols-2">
+                                        <div>
+                                            <label :class="labelClass">Announcement title</label>
+                                            <input v-model="scheduleForm.title" type="text" maxlength="255" placeholder="Example: Final applicant interview" :class="inputClass">
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass">Date and time</label>
+                                            <input v-model="scheduleForm.scheduledAt" type="datetime-local" :min="minimumScheduleDateTime" required :class="inputClass">
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass">Delivery mode</label>
+                                            <select v-model="scheduleForm.mode" :class="inputClass">
+                                                <option v-for="option in scheduleModeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                            </select>
+                                        </div>
+                                        <div v-if="scheduleForm.type === 'distribution'">
+                                            <label :class="labelClass">Award amount</label>
+                                            <input v-model="scheduleForm.awardedAmount" type="number" min="0" step="0.01" placeholder="Optional" :class="inputClass">
+                                        </div>
+                                    </div>
+
+                                    <div v-if="['onsite', 'hybrid'].includes(scheduleForm.mode)" class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                        <div class="grid gap-4 md:grid-cols-2">
                                             <div>
-                                                <label :class="labelClass">Status</label>
-                                                <select v-model="documentStatuses[document.id]" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100">
-                                                    <option v-for="option in documentStatusOptions" :key="option.value" :value="option.value">
-                                                        {{ option.label }}
-                                                    </option>
+                                                <label :class="labelClass">Venue or site</label>
+                                                <input v-model="scheduleForm.venue" type="text" maxlength="500" placeholder="Building, office, or testing center" required :class="inputClass">
+                                            </div>
+                                            <div>
+                                                <label :class="labelClass">Full address</label>
+                                                <input v-model="scheduleForm.locationAddress" type="text" maxlength="1000" placeholder="Street, barangay, city, province" :class="inputClass">
+                                            </div>
+                                        </div>
+                                        <div class="mt-4 overflow-hidden rounded-md">
+                                            <LeafletMapPreview
+                                                :address="scheduleForm.locationAddress"
+                                                :latitude="scheduleForm.latitude"
+                                                :longitude="scheduleForm.longitude"
+                                                :title="scheduleForm.venue || 'Schedule location'"
+                                                :marker-text="scheduleForm.venue || scheduleForm.title"
+                                                height="16rem"
+                                                picker
+                                                auto-geocode
+                                                @picked="handleSchedulePinPicked"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div v-if="['online', 'hybrid'].includes(scheduleForm.mode)" class="mt-5">
+                                        <label :class="labelClass">Online meeting or access link</label>
+                                        <input v-model="scheduleForm.onlineUrl" type="url" maxlength="2000" placeholder="https://..." required :class="inputClass">
+                                    </div>
+
+                                    <div class="mt-5">
+                                        <label :class="labelClass">Instructions for the applicant</label>
+                                        <textarea v-model="scheduleForm.instructions" rows="4" maxlength="3000" required placeholder="What to bring, arrival time, contact person, permitted materials, or release requirements" :class="inputClass"></textarea>
+                                    </div>
+
+                                    <div class="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                                        <button type="button" class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="closeScheduleEditor">Cancel</button>
+                                        <button type="submit" :disabled="scheduleSaving" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
+                                            {{ scheduleSaving ? 'Publishing...' : 'Publish and notify applicant' }}
+                                        </button>
+                                    </div>
+                                </form>
+
+                                <div v-if="schedules.length" class="grid gap-4 xl:grid-cols-2">
+                                    <article v-for="schedule in schedules" :key="schedule.id" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                        <div class="flex items-start gap-3 border-b border-slate-200 p-4">
+                                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
+                                                <i :class="scheduleTypeIcon(schedule.type)" aria-hidden="true"></i>
+                                            </span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex flex-wrap items-start justify-between gap-2">
+                                                    <div>
+                                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{{ scheduleTypeLabel(schedule.type) }}</p>
+                                                        <h3 class="mt-1 text-base font-bold text-slate-950">{{ schedule.title }}</h3>
+                                                    </div>
+                                                    <span :class="['rounded-md px-2 py-1 text-[11px] font-bold uppercase', scheduleStatusClass(schedule.status)]">{{ labelFromKey(schedule.status) }}</span>
+                                                </div>
+                                                <p class="mt-2 text-sm font-bold text-slate-700">{{ schedule.scheduled_label }}</p>
+                                                <p class="mt-1 text-xs text-slate-500">{{ scheduleModeLabel(schedule.mode) }}</p>
+                                                <p v-if="schedule.type === 'distribution'" class="mt-1 text-xs font-bold text-emerald-700">
+                                                    {{ formatAwardAmount(application.awarded_amount) }} award
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div class="space-y-3 p-4 text-sm">
+                                            <div v-if="schedule.venue || schedule.location_address" class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
+                                                <p class="font-bold text-slate-800">{{ schedule.venue || 'Activity site' }}</p>
+                                                <p v-if="schedule.location_address" class="mt-1 leading-5 text-slate-600">{{ schedule.location_address }}</p>
+                                            </div>
+                                            <a v-if="schedule.online_url" :href="schedule.online_url" target="_blank" rel="noopener noreferrer" class="flex items-center justify-between rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5 font-bold text-sky-800 hover:bg-sky-100">
+                                                Open online access link
+                                                <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
+                                            </a>
+                                            <p class="whitespace-pre-line rounded-md bg-slate-50 p-3 leading-6 text-slate-600 ring-1 ring-slate-200">{{ schedule.instructions }}</p>
+
+                                            <LeafletMapPreview
+                                                v-if="schedule.latitude && schedule.longitude"
+                                                :latitude="schedule.latitude"
+                                                :longitude="schedule.longitude"
+                                                :title="schedule.venue || schedule.title"
+                                                :marker-text="schedule.venue || schedule.title"
+                                                height="12rem"
+                                            />
+
+                                            <div :class="['rounded-md px-3 py-2.5 text-xs font-bold', schedule.applicant_acknowledged ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200' : 'bg-amber-50 text-amber-800 ring-1 ring-amber-200']">
+                                                {{ schedule.applicant_acknowledged ? `Applicant acknowledged ${schedule.applicant_acknowledged_at}` : 'Waiting for applicant acknowledgment' }}
+                                            </div>
+                                        </div>
+
+                                        <div class="border-t border-slate-200 bg-slate-50 p-4">
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Provider tracking</p>
+                                            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                                <select v-model="schedule.status" :class="inputClass" @change="handleScheduleStatusChange(schedule)">
+                                                    <option value="scheduled">Scheduled</option>
+                                                    <option value="completed">Completed</option>
+                                                    <option value="cancelled">Cancelled</option>
+                                                </select>
+                                                <select v-model="schedule.attendance_status" :class="inputClass">
+                                                    <option v-for="option in attendanceOptions(schedule.type)" :key="option.value" :value="option.value">{{ option.label }}</option>
                                                 </select>
                                             </div>
-                                            <div>
-                                                <label :class="labelClass">
-                                                    Document note <span v-if="['rejected', 'needs_replacement'].includes(documentStatuses[document.id])" class="text-rose-600">*</span>
-                                                </label>
-                                                <input v-model="documentNotes[document.id]" type="text" maxlength="1000" placeholder="Explain missing, unclear, or invalid document details" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100">
-                                            </div>
-                                            <div class="flex gap-2">
-                                                <a :href="document.download_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-white">
-                                                    Download
-                                                </a>
-                                                <button type="button" :disabled="documentUpdatingId === document.id" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:opacity-60" @click="updateDocumentStatus(document)">
-                                                    {{ documentUpdatingId === document.id ? 'Saving...' : 'Save' }}
+                                            <textarea v-model="schedule.attendance_notes" rows="2" maxlength="1500" placeholder="Optional attendance or release note" :class="['mt-3', inputClass]"></textarea>
+                                            <div class="mt-3 flex flex-wrap justify-end gap-2">
+                                                <button type="button" :disabled="!canPublishSchedule(schedule.type)" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40" @click="openScheduleEditor(schedule.type)">Edit announcement</button>
+                                                <button type="button" :disabled="scheduleTrackingId === schedule.id" class="rounded-md bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60" @click="saveScheduleTracking(schedule)">
+                                                    {{ scheduleTrackingId === schedule.id ? 'Saving...' : 'Save tracking' }}
                                                 </button>
                                             </div>
                                         </div>
-                                    </div>
+                                    </article>
                                 </div>
-                                <p v-else class="mt-4 text-sm text-slate-500">
-                                    No uploaded files yet.
-                                </p>
+
+                                <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
+                                    <p class="text-sm font-bold text-slate-800">No schedule announced yet</p>
+                                    <p class="mt-1 text-sm text-slate-500">Use an available activity button when the applicant reaches that stage.</p>
+                                </div>
                             </section>
 
-                            <section v-if="timeline.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'history' && timeline.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Timeline
                                 </p>
@@ -987,8 +1771,11 @@ onMounted(loadApplication);
                             </section>
                         </div>
 
-                        <aside class="space-y-5">
-                            <section v-if="application.status_progress" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <aside
+                            v-if="activeSection === 'applicant' || activeSection === 'history'"
+                            :class="activeSection === 'applicant' ? 'grid gap-5 lg:grid-cols-2' : 'space-y-5'"
+                        >
+                            <section v-if="activeSection === 'history' && application.status_progress" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Progress
                                 </p>
@@ -998,174 +1785,219 @@ onMounted(loadApplication);
                                 <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
                                     <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${application.status_progress.percent}%` }"></div>
                                 </div>
-                                <div class="mt-3 grid gap-2">
-                                    <div v-for="step in application.status_progress.steps" :key="step.key" :class="['rounded-md px-2.5 py-2 text-xs font-bold', stepClass(step.state)]">
-                                        {{ step.label }}
-                                    </div>
-                                </div>
                                 <p class="mt-3 text-sm leading-6 text-slate-600">
                                     {{ application.status_progress.next_action }}
                                 </p>
                             </section>
 
-                            <section
-                                v-if="['approved', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed'].includes(application.status)"
-                                class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-                            >
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Reward Distribution
-                                </p>
-                                <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                    {{ application.status === 'disbursed' ? 'Reward distributed' : 'Set the release schedule' }}
-                                </h3>
-                                <p class="mt-2 text-sm leading-6 text-slate-600">
-                                    {{ application.status === 'disbursed'
-                                        ? `Recorded ${application.outcome_at || 'recently'}.`
-                                        : 'Choose when the applicant should receive the scholarship reward. You can revise this schedule before distribution.' }}
-                                </p>
-
-                                <div v-if="application.status !== 'disbursed'" class="mt-4 grid gap-3">
-                                    <div>
-                                        <label :class="labelClass">Reward amount</label>
-                                        <input v-model="reviewForm.awardedAmount" type="number" min="0" step="0.01" placeholder="Optional" :class="inputClass">
+                            <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant profile</p>
+                                        <h3 class="mt-2 text-xl font-bold text-slate-950">{{ application.applicant?.name || 'Applicant' }}</h3>
+                                        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+                                            <span>{{ application.applicant?.email || 'Email not provided' }}</span>
+                                            <span>{{ application.applicant?.contact_number || 'Contact not provided' }}</span>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label :class="labelClass">Distribution date</label>
-                                        <input v-model="reviewForm.distributionScheduledFor" type="date" :min="todayDate" :class="inputClass">
-                                    </div>
-                                    <div>
-                                        <label :class="labelClass">Instructions</label>
-                                        <textarea v-model="reviewForm.distributionInstructions" rows="3" maxlength="2000" placeholder="Venue, release method, documents to bring, or contact instructions" :class="inputClass"></textarea>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        :disabled="updatingId === application.id"
-                                        class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                        @click="scheduleDistribution"
-                                    >
-                                        {{ application.status === 'distribution_scheduled' ? 'Update schedule' : 'Schedule distribution' }}
-                                    </button>
-                                    <button
-                                        v-if="application.status === 'distribution_scheduled'"
-                                        type="button"
-                                        :disabled="updatingId === application.id"
-                                        class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                        @click="markDistributionComplete"
-                                    >
-                                        Mark as distributed
-                                    </button>
-                                </div>
-
-                                <div v-else class="mt-4 grid gap-2 text-sm">
-                                    <p class="rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-700 ring-1 ring-slate-200">
-                                        Amount: {{ application.awarded_amount || 'Not listed' }}
-                                    </p>
-                                    <p class="rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-700 ring-1 ring-slate-200">
-                                        Scheduled: {{ application.distribution_scheduled_label || 'Not listed' }}
-                                    </p>
-                                    <p v-if="application.distribution_instructions" class="rounded-md bg-slate-50 px-3 py-2 leading-6 text-slate-600 ring-1 ring-slate-200">
-                                        {{ application.distribution_instructions }}
-                                    </p>
-                                </div>
-                            </section>
-
-                            <section
-                                v-if="providerContractSections.length"
-                                class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-                            >
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Provider-Managed Contract Terms
-                                </p>
-                                <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                                    <p class="font-bold text-slate-950">
-                                        Handled outside the platform
-                                    </p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">
-                                        Applicants see these terms for transparency. Any required signing, acceptance, notarization, or return-service agreement should be handled directly by the provider.
-                                    </p>
-                                </div>
-                                <div class="mt-3 grid gap-2">
-                                    <div
-                                        v-for="section in providerContractSections"
-                                        :key="section.label"
-                                        class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm"
-                                    >
-                                        <p class="font-bold text-slate-800">
-                                            {{ section.label }}
-                                        </p>
-                                        <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">
-                                            {{ section.value }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                        Applicant
-                                    </p>
                                     <span
-                                        v-if="application.applicant?.profile_verification_status === 'approved'"
-                                        class="rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800"
-                                        :title="application.applicant?.profile_verified_at ? `Verified ${application.applicant.profile_verified_at}` : 'Verified by an administrator'"
+                                        :class="['w-fit rounded-md px-2.5 py-1.5 text-xs font-bold', profileVerificationClass(application.applicant?.profile_verification_status)]"
+                                        :title="application.applicant?.profile_verified_at ? `Verified ${application.applicant.profile_verified_at}` : ''"
                                     >
-                                        <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
-                                        Admin verified
+                                        {{ profileVerificationLabel(application.applicant?.profile_verification_status) }}
                                     </span>
                                 </div>
-                                <div class="mt-3 grid gap-3 text-sm">
-                                    <div>
-                                        <p class="font-semibold text-slate-500">Education level</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.education_level || 'not_set') }}</p>
-                                        <p class="mt-1 text-xs text-slate-500">{{ application.applicant?.course_or_strand || 'Track not set' }} - {{ application.applicant?.year_level || 'Grade/year not set' }}</p>
+
+                                <dl class="mt-4 grid gap-3 border-t border-slate-200 pt-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                    <div class="rounded-md bg-slate-50 p-3">
+                                        <dt class="font-semibold text-slate-500">Birthdate</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.birthdate || 'Not provided' }}</dd>
+                                        <dd v-if="application.applicant?.age !== null && application.applicant?.age !== undefined" class="mt-1 text-xs text-slate-500">Age {{ application.applicant.age }}</dd>
                                     </div>
-                                    <div>
-                                        <p class="font-semibold text-slate-500">School</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ application.applicant?.school || 'Not provided' }}</p>
+                                    <div class="rounded-md bg-slate-50 p-3">
+                                        <dt class="font-semibold text-slate-500">Gender</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.gender || 'not provided') }}</dd>
                                     </div>
-                                    <div>
-                                        <p class="font-semibold text-slate-500">Academic / income</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ applicantAcademicLabel(application.applicant) }}</p>
-                                        <p class="mt-1 text-xs text-slate-500">{{ application.applicant?.income_bracket || 'No income data' }}</p>
+                                    <div class="rounded-md bg-slate-50 p-3">
+                                        <dt class="font-semibold text-slate-500">Account managed by</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.account_managed_by || 'applicant') }}</dd>
                                     </div>
-                                    <div>
-                                        <p class="font-semibold text-slate-500">Location</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ application.applicant?.location || 'Not provided' }}</p>
+                                    <div class="rounded-md bg-slate-50 p-3">
+                                        <dt class="font-semibold text-slate-500">Profile updated</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.profile_updated_at || 'Not available' }}</dd>
                                     </div>
-                                </div>
+                                </dl>
+
+                                <p v-if="application.applicant?.profile_verification_notes" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+                                    <span class="font-bold">Admin verification note:</span>
+                                    {{ application.applicant.profile_verification_notes }}
+                                </p>
                             </section>
 
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Context
+                                    Education
                                 </p>
+                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Education level</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.education_level || 'not set') }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Grade / year</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.year_level || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Course / strand</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.course_or_strand || 'Not applicable or not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Enrollment</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.enrollment_status || 'not provided') }}</dd>
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <dt class="font-semibold text-slate-500">School</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.school || 'Not provided' }}</dd>
+                                        <dd class="mt-1 text-xs text-slate-500">{{ labelFromKey(application.applicant?.school_type || 'school type not provided') }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Academic result</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ applicantAcademicLabel(application.applicant) }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Learner reference number</dt>
+                                        <dd class="mt-1 break-words font-bold text-slate-950">{{ application.applicant?.learner_reference_number || 'Not provided' }}</dd>
+                                    </div>
+                                </dl>
+                            </section>
+
+                            <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                    Household and location
+                                </p>
+                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Income bracket</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.income_bracket || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Household size</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.household_size ?? 'Not provided' }}</dd>
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <dt class="font-semibold text-slate-500">Address</dt>
+                                        <dd class="mt-1 leading-6 font-bold text-slate-950">{{ application.applicant?.address || application.applicant?.location || 'Not provided' }}</dd>
+                                        <dd v-if="application.applicant?.address && application.applicant?.location" class="mt-1 text-xs text-slate-500">{{ application.applicant.location }}</dd>
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <dt class="font-semibold text-slate-500">Willing to relocate</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.willing_to_relocate || 'not provided') }}</dd>
+                                    </div>
+                                </dl>
+                            </section>
+
+                            <section v-if="activeSection === 'applicant' && hasGuardianDetails" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Parent or guardian</p>
+                                    <span v-if="application.applicant?.guardian_is_account_owner" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                        Manages applicant account
+                                    </span>
+                                </div>
+                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Name</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.guardian_name || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Relationship</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.guardian_relationship || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Contact</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.guardian_contact || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Email</dt>
+                                        <dd class="mt-1 break-words font-bold text-slate-950">{{ application.applicant?.guardian_email || 'Not provided' }}</dd>
+                                    </div>
+                                </dl>
+                            </section>
+
+                            <section v-if="activeSection === 'applicant'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:col-span-2">
+                                <div class="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Profile proofs</p>
+                                        <p class="mt-2 text-sm leading-6 text-slate-600">
+                                            Supporting files from the applicant profile, shown separately from this program's requirements.
+                                        </p>
+                                    </div>
+                                    <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                        {{ applicantProfileProofs.length }} on file
+                                    </span>
+                                </div>
+
+                                <div v-if="applicantProfileProofs.length" class="divide-y divide-slate-200">
+                                    <article v-for="proof in applicantProfileProofs" :key="proof.id" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                                        <div class="flex min-w-0 items-start gap-3">
+                                            <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
+                                                <i class="fa-solid fa-id-card" aria-hidden="true"></i>
+                                            </span>
+                                            <div class="min-w-0">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <p class="font-bold text-slate-950">{{ labelFromKey(proof.document_type) }}</p>
+                                                    <span :class="['rounded px-2 py-1 text-[11px] font-bold', profileVerificationClass(proof.status)]">
+                                                        {{ labelFromKey(proof.status || 'submitted') }}
+                                                    </span>
+                                                </div>
+                                                <p class="mt-1 truncate text-xs text-slate-500">{{ proof.original_name }}</p>
+                                                <p class="mt-1 text-xs text-slate-500">{{ formatFileSize(proof.size) }} - {{ proof.uploaded_at || 'Date unavailable' }}</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                            @click="openProfileProof(proof)"
+                                        >
+                                            <i class="fa-regular fa-eye" aria-hidden="true"></i>
+                                            View proof
+                                        </button>
+                                    </article>
+                                </div>
+                                <p v-else class="p-5 text-sm leading-6 text-slate-600">
+                                    No profile proofs have been uploaded. Review the entered profile and application documents instead.
+                                </p>
+                            </section>
+
+                            <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Scholarship context</p>
                                 <div class="mt-3 grid gap-2 text-sm">
-                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600">
-                                        <span class="font-bold text-slate-800">Support needs:</span>
-                                        {{ application.applicant?.support_needs || 'Not provided' }}
-                                    </p>
-                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600">
-                                        <span class="font-bold text-slate-800">Goal:</span>
-                                        {{ application.applicant?.scholarship_goal || 'Not provided' }}
-                                    </p>
-                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600">
-                                        <span class="font-bold text-slate-800">Preferred locations:</span>
-                                        {{ application.applicant?.preferred_locations || 'Not provided' }}
-                                    </p>
+                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Goal:</span> {{ application.applicant?.scholarship_goal || 'Not provided' }}</p>
+                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Support needs:</span> {{ application.applicant?.support_needs || 'Not provided' }}</p>
+                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Preferred categories:</span> {{ application.applicant?.preferred_categories || 'Not provided' }}</p>
+                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Preferred locations:</span> {{ application.applicant?.preferred_locations || 'Not provided' }}</p>
                                 </div>
                             </section>
 
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Notes
-                                </p>
-                                <p class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
-                                    {{ application.notes || 'No applicant note added.' }}
-                                </p>
+                            <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Notes</p>
+                                <p class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">{{ application.notes || 'No applicant note added.' }}</p>
                                 <div v-if="application.review_notes" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
                                     <p class="font-semibold text-slate-700">Provider review note</p>
                                     <p class="mt-1 leading-6 text-slate-600">{{ application.review_notes }}</p>
+                                </div>
+                            </section>
+
+                            <section
+                                v-if="activeSection === 'applicant' && providerContractSections.length"
+                                class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2"
+                            >
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Post-Acceptance Obligations</p>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">Terms the applicant may need to fulfill if selected for this scholarship.</p>
+                                <div class="mt-3 grid gap-2">
+                                    <div v-for="section in providerContractSections" :key="section.label" class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                                        <p class="font-bold text-slate-800">{{ section.label }}</p>
+                                        <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">{{ section.value }}</p>
+                                    </div>
                                 </div>
                             </section>
                         </aside>
@@ -1175,5 +2007,21 @@ onMounted(loadApplication);
                 <ProviderFooter />
             </div>
         </section>
+
+        <ProviderDocumentReviewModal
+            :document="selectedDocument"
+            :context="[application?.applicant?.name, application?.scholarship?.title].filter(Boolean).join(' - ')"
+            :saving="documentUpdatingId === selectedDocument?.id"
+            :error="documentReviewError"
+            @close="closeDocumentReview"
+            @save="updateDocumentStatus"
+            @clear-error="documentReviewError = ''"
+        />
+
+        <ApplicantProfileProofModal
+            :proof="selectedProfileProof"
+            :applicant-name="application?.applicant?.name"
+            @close="closeProfileProof"
+        />
     </main>
 </template>

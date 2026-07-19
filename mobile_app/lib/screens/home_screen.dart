@@ -46,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String selectedDeadline = 'all';
   String minimumMatch = '';
   bool savedOnly = false;
+  int? acknowledgingScheduleId;
 
   @override
   void initState() {
@@ -193,6 +194,55 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } on ApiException catch (error) {
       showMessage(error.message);
+    }
+  }
+
+  Future<void> acknowledgeApplicationSchedule(
+    Map<String, dynamic> application,
+    Map<String, dynamic> schedule,
+  ) async {
+    final applicationId = intValue(application['id']);
+    final scheduleId = intValue(schedule['id']);
+
+    if (applicationId == 0 || scheduleId == 0) {
+      return;
+    }
+
+    setState(() => acknowledgingScheduleId = scheduleId);
+
+    try {
+      final response = await widget.apiClient.acknowledgeApplicationSchedule(
+        applicationId: applicationId,
+        scheduleId: scheduleId,
+      );
+      final updatedApplication = asMap(response['application']);
+
+      setState(() {
+        applications = applications
+            .map(
+              (item) => intValue(item['id']) == applicationId
+                  ? updatedApplication
+                  : item,
+            )
+            .toList();
+        documentApplications = documentApplications
+            .map(
+              (item) => intValue(item['id']) == applicationId
+                  ? updatedApplication
+                  : item,
+            )
+            .toList();
+      });
+
+      showMessage(
+        stringValue(response['message'], fallback: 'Schedule confirmed.'),
+      );
+    } on ApiException catch (error) {
+      showMessage(error.message);
+    } finally {
+      if (mounted) {
+        setState(() => acknowledgingScheduleId = null);
+      }
     }
   }
 
@@ -507,7 +557,11 @@ class _HomeScreenState extends State<HomeScreen> {
           const _EmptyCard(message: 'No applications submitted yet.')
         else
           for (final application in applications)
-            _ApplicationCard(application: application),
+            _ApplicationCard(
+              application: application,
+              acknowledgingScheduleId: acknowledgingScheduleId,
+              onAcknowledgeSchedule: acknowledgeApplicationSchedule,
+            ),
       ];
     }
 
@@ -2667,9 +2721,19 @@ class _ScholarshipDetailScreenState extends State<_ScholarshipDetailScreen> {
 }
 
 class _ApplicationCard extends StatelessWidget {
-  const _ApplicationCard({required this.application});
+  const _ApplicationCard({
+    required this.application,
+    required this.acknowledgingScheduleId,
+    required this.onAcknowledgeSchedule,
+  });
 
   final Map<String, dynamic> application;
+  final int? acknowledgingScheduleId;
+  final Future<void> Function(
+    Map<String, dynamic> application,
+    Map<String, dynamic> schedule,
+  )
+  onAcknowledgeSchedule;
 
   @override
   Widget build(BuildContext context) {
@@ -2679,19 +2743,23 @@ class _ApplicationCard extends StatelessWidget {
     final readiness = asMap(application['document_readiness']);
     final documents = asMapList(application['documents']);
     final timeline = asMapList(application['timeline']);
+    final schedules = asMapList(application['schedules']);
     final dssScore = intValue(application['dss_score']);
     final status = stringValue(application['status'], fallback: 'submitted');
     final hasOutcome =
-        stringValue(application['awarded_amount']).isNotEmpty ||
-        stringValue(application['distribution_scheduled_for']).isNotEmpty ||
-        stringValue(application['distribution_instructions']).isNotEmpty ||
-        [
-          'approved',
-          'awarded',
-          'distribution_scheduled',
-          'disbursed',
-          'renewed',
-        ].contains(status);
+        !schedules.any(
+          (schedule) => stringValue(schedule['type']) == 'distribution',
+        ) &&
+        (stringValue(application['awarded_amount']).isNotEmpty ||
+            stringValue(application['distribution_scheduled_for']).isNotEmpty ||
+            stringValue(application['distribution_instructions']).isNotEmpty ||
+            [
+              'approved',
+              'awarded',
+              'distribution_scheduled',
+              'disbursed',
+              'renewed',
+            ].contains(status));
 
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
@@ -2809,6 +2877,47 @@ class _ApplicationCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (schedules.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: ExpansionTile(
+                  initiallyExpanded: schedules.any(
+                    (schedule) =>
+                        stringValue(schedule['status']) == 'scheduled' &&
+                        schedule['applicant_acknowledged'] != true,
+                  ),
+                  leading: const Icon(Icons.event_note_outlined),
+                  title: const Text(
+                    'Activities and appointments',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  subtitle: Text(
+                    '${schedules.length} provider ${schedules.length == 1 ? 'announcement' : 'announcements'}',
+                  ),
+                  childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  children: [
+                    for (final schedule in schedules)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: _ApplicationScheduleCard(
+                          schedule: schedule,
+                          awardedAmount: application['awarded_amount'],
+                          isAcknowledging:
+                              acknowledgingScheduleId ==
+                              intValue(schedule['id']),
+                          onAcknowledge: () =>
+                              onAcknowledgeSchedule(application, schedule),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
             if (hasOutcome) ...[
               const SizedBox(height: 12),
               Container(
@@ -2903,6 +3012,200 @@ class _ApplicationCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ApplicationScheduleCard extends StatelessWidget {
+  const _ApplicationScheduleCard({
+    required this.schedule,
+    required this.awardedAmount,
+    required this.isAcknowledging,
+    required this.onAcknowledge,
+  });
+
+  final Map<String, dynamic> schedule;
+  final Object? awardedAmount;
+  final bool isAcknowledging;
+  final Future<void> Function() onAcknowledge;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = stringValue(schedule['type'], fallback: 'activity');
+    final status = stringValue(schedule['status'], fallback: 'scheduled');
+    final attendance = stringValue(
+      schedule['attendance_status'],
+      fallback: 'pending',
+    );
+    final isAcknowledged = schedule['applicant_acknowledged'] == true;
+    final mapUrl = stringValue(schedule['map_url']);
+    final onlineUrl = stringValue(schedule['online_url']);
+    final venue = stringValue(schedule['venue']);
+    final address = stringValue(schedule['location_address']);
+    final instructions = stringValue(schedule['instructions']);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(
+                  applicationScheduleIcon(type),
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      applicationScheduleTypeLabel(type),
+                      style: const TextStyle(
+                        color: Color(0xFFB45309),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      stringValue(schedule['title'], fallback: 'Schedule'),
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ],
+                ),
+              ),
+              _StatusPill(label: labelFromKey(status), status: status),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InfoChip(
+                icon: Icons.schedule_outlined,
+                label: stringValue(
+                  schedule['scheduled_label'],
+                  fallback: 'Date not listed',
+                ),
+              ),
+              _InfoChip(
+                icon: Icons.route_outlined,
+                label: applicationScheduleModeLabel(schedule['mode']),
+              ),
+              if (type == 'distribution')
+                _InfoChip(
+                  icon: Icons.payments_outlined,
+                  label: awardAmountLabel(awardedAmount),
+                ),
+              if (attendance != 'pending')
+                _InfoChip(
+                  icon: type == 'distribution'
+                      ? Icons.redeem_outlined
+                      : Icons.how_to_reg_outlined,
+                  label: labelFromKey(attendance),
+                ),
+            ],
+          ),
+          if (venue.isNotEmpty || address.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              venue.isNotEmpty ? venue : 'Activity site',
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+            if (address.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Text(
+                  address,
+                  style: const TextStyle(color: Color(0xFF64748B)),
+                ),
+              ),
+          ],
+          if (instructions.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              instructions,
+              style: const TextStyle(color: Color(0xFF475569), height: 1.4),
+            ),
+          ],
+          if (mapUrl.isNotEmpty || onlineUrl.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (mapUrl.isNotEmpty)
+                  OutlinedButton.icon(
+                    onPressed: () => openExternalMap(context, mapUrl),
+                    icon: const Icon(Icons.map_outlined),
+                    label: const Text('Open map'),
+                  ),
+                if (onlineUrl.isNotEmpty)
+                  OutlinedButton.icon(
+                    onPressed: () => openExternalLink(context, onlineUrl),
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('Open access link'),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
+          if (isAcknowledged)
+            Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_outline,
+                  color: Color(0xFF047857),
+                  size: 19,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'Confirmed ${stringValue(schedule['applicant_acknowledged_at'], fallback: 'recently')}',
+                    style: const TextStyle(
+                      color: Color(0xFF047857),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          else if (status == 'scheduled')
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: isAcknowledging ? null : onAcknowledge,
+                icon: const Icon(Icons.done_all),
+                label: Text(
+                  isAcknowledging
+                      ? 'Confirming...'
+                      : 'I have seen this schedule',
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -4122,6 +4425,42 @@ String applicationModeLabel(Object? value) {
   return labelFromKey(mode);
 }
 
+String applicationScheduleTypeLabel(Object? value) {
+  return switch (stringValue(value)) {
+    'exam' => 'SCHOLARSHIP EXAM',
+    'interview' => 'INTERVIEW',
+    'distribution' => 'AWARD DISTRIBUTION',
+    _ => 'ACTIVITY',
+  };
+}
+
+String applicationScheduleModeLabel(Object? value) {
+  return switch (stringValue(value)) {
+    'onsite' => 'On-site',
+    'online' => 'Online',
+    'hybrid' => 'On-site and online',
+    'provider_managed' => 'Provider-managed',
+    _ => 'Not listed',
+  };
+}
+
+String awardAmountLabel(Object? value) {
+  final amount = double.tryParse(stringValue(value));
+
+  return amount == null
+      ? 'Amount not listed'
+      : 'PHP ${amount.toStringAsFixed(2)}';
+}
+
+IconData applicationScheduleIcon(Object? value) {
+  return switch (stringValue(value)) {
+    'exam' => Icons.fact_check_outlined,
+    'interview' => Icons.forum_outlined,
+    'distribution' => Icons.volunteer_activism_outlined,
+    _ => Icons.event_note_outlined,
+  };
+}
+
 String statusDescription(Object? value) {
   final status = stringValue(value, fallback: 'submitted');
 
@@ -4134,7 +4473,16 @@ String statusDescription(Object? value) {
       'Your application passed initial requirements and remains in review.',
     'shortlisted' => 'You are in a smaller candidate pool for closer review.',
     'interview' =>
-      'The provider may contact you for interview or follow-up requirements.',
+      'Review any interview announcement below and follow the provider instructions.',
+    'exam_qualified' =>
+      'You passed initial screening. Wait for the provider to publish the exam schedule.',
+    'exam_scheduled' =>
+      'Review and confirm the exam announcement below before the scheduled time.',
+    'exam_taken' =>
+      'Your exam attendance is recorded. Wait for the provider to post the result.',
+    'exam_passed' =>
+      'You passed the scholarship exam and remain under final award review.',
+    'exam_failed' => 'The provider recorded that the exam was not passed.',
     'approved' => 'Your application was approved by the provider.',
     'awarded' =>
       'The provider recorded your award and will set the reward distribution schedule.',
@@ -4193,6 +4541,25 @@ Future<void> openExternalMap(BuildContext context, String url) async {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Unable to open map link.')));
+  }
+}
+
+Future<void> openExternalLink(BuildContext context, String url) async {
+  final uri = Uri.tryParse(url);
+
+  if (uri == null || !['http', 'https'].contains(uri.scheme)) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Link is not valid.')));
+    return;
+  }
+
+  final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+  if (!opened && context.mounted) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Unable to open link.')));
   }
 }
 

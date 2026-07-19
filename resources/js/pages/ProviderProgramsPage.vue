@@ -129,10 +129,12 @@ async function loadProviderData() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/provider/profile/data');
+        const response = await window.axios.get('/provider/dashboard/data');
 
         user.value = response.data.user;
-        scholarships.value = response.data.scholarships;
+        scholarships.value = Array.isArray(response.data.scholarships)
+            ? response.data.scholarships
+            : [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load scholarship programs.';
     } finally {

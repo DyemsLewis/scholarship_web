@@ -1,7 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize, labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
@@ -13,10 +16,16 @@ const programInsights = ref([]);
 const topMissingDocuments = ref([]);
 const documentIssues = ref([]);
 const documentReviewQueue = ref([]);
-const documentStatuses = ref({});
-const documentNotes = ref({});
 const documentUpdatingId = ref(null);
+const selectedReviewDocument = ref(null);
+const documentReviewError = ref('');
 const dssSummary = ref({});
+const {
+    confirmation,
+    requestConfirmation,
+    confirmConfirmation,
+    cancelConfirmation,
+} = useConfirmationDialog();
 
 const dssItems = computed(() => [
     { label: 'Highly recommended', value: dssSummary.value.highly_recommended ?? 0 },
@@ -26,12 +35,6 @@ const dssItems = computed(() => [
 ]);
 const maxFunnelValue = computed(() => Math.max(1, ...funnel.value.map((item) => Number(item.value ?? 0))));
 const maxProgramApplications = computed(() => Math.max(1, ...programInsights.value.map((program) => Number(program.applications ?? 0))));
-const documentStatusOptions = [
-    { value: 'pending', label: 'Pending' },
-    { value: 'accepted', label: 'Accepted' },
-    { value: 'needs_replacement', label: 'Needs replacement' },
-    { value: 'rejected', label: 'Rejected' },
-];
 const prioritizedDocumentReviewQueue = computed(() => [...documentReviewQueue.value].sort((first, second) => {
     const priority = {
         rejected: 4,
@@ -81,38 +84,6 @@ function documentStatusClass(status) {
     return 'bg-slate-100 text-slate-700';
 }
 
-function documentPriorityLabel(document) {
-    if (document.status === 'needs_replacement') {
-        return 'Replacement needed';
-    }
-
-    if (document.status === 'rejected') {
-        return 'Rejected file';
-    }
-
-    if (document.status === 'accepted') {
-        return 'Checked';
-    }
-
-    return 'Needs decision';
-}
-
-function documentPriorityClass(document) {
-    if (document.status === 'needs_replacement') {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    if (document.status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (document.status === 'accepted') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    return 'bg-slate-100 text-slate-700';
-}
-
 async function loadInsights() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -126,12 +97,6 @@ async function loadInsights() {
         topMissingDocuments.value = response.data.top_missing_documents ?? [];
         documentIssues.value = response.data.document_issues ?? [];
         documentReviewQueue.value = response.data.document_review_queue ?? [];
-        documentStatuses.value = Object.fromEntries(
-            documentReviewQueue.value.map((document) => [document.id, document.status ?? 'pending']),
-        );
-        documentNotes.value = Object.fromEntries(
-            documentReviewQueue.value.map((document) => [document.id, document.review_notes ?? '']),
-        );
         dssSummary.value = response.data.dss_summary ?? {};
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider review.';
@@ -140,21 +105,53 @@ async function loadInsights() {
     }
 }
 
-async function updateDocumentStatus(document) {
+function openDocumentReview(document) {
+    selectedReviewDocument.value = document;
+    documentReviewError.value = '';
+}
+
+function closeDocumentReview() {
+    selectedReviewDocument.value = null;
+    documentReviewError.value = '';
+}
+
+async function updateDocumentStatus(review) {
+    const document = review?.document ?? selectedReviewDocument.value;
+
+    if (!document) {
+        return;
+    }
+
+    if (review.status !== document.status && ['rejected', 'needs_replacement'].includes(review.status)) {
+        const confirmed = await requestConfirmation({
+            title: review.status === 'rejected' ? 'Reject this document?' : 'Request a replacement?',
+            message: `${document.applicant || 'The applicant'} will see the document status and your review note.`,
+            confirmLabel: review.status === 'rejected' ? 'Reject document' : 'Request replacement',
+            tone: review.status === 'rejected' ? 'danger' : 'warning',
+        });
+
+        if (!confirmed) {
+            return;
+        }
+    }
+
     documentUpdatingId.value = document.id;
     statusMessage.value = '';
-    errorMessage.value = '';
+    documentReviewError.value = '';
 
     try {
         const response = await window.axios.patch(`/provider/documents/${document.id}/status`, {
-            status: documentStatuses.value[document.id] ?? 'pending',
-            review_notes: documentNotes.value[document.id] ?? '',
+            status: review.status ?? 'pending',
+            review_notes: review.review_notes ?? '',
         });
 
         statusMessage.value = response.data.message ?? 'Document status updated.';
+        closeDocumentReview();
         await loadInsights();
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update document status.';
+        documentReviewError.value = error.response?.data?.errors?.review_notes?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to update document status.';
     } finally {
         documentUpdatingId.value = null;
     }
@@ -166,6 +163,12 @@ onMounted(loadInsights);
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar />
+
+        <ConfirmationDialog
+            v-bind="confirmation"
+            @confirm="confirmConfirmation"
+            @cancel="cancelConfirmation"
+        />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
@@ -265,7 +268,7 @@ onMounted(loadInsights);
                                     Uploaded files to check
                                 </h3>
                                 <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Review student-uploaded documents, add a short note, and mark each file as accepted or needing replacement.
+                                    Open a file to preview it and record your decision.
                                 </p>
                             </div>
                             <a
@@ -280,101 +283,46 @@ onMounted(loadInsights);
                             No uploaded student documents yet.
                         </div>
 
-                        <div v-else class="mt-5 grid gap-3 lg:grid-cols-2">
+                        <div v-else class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
                             <article
                                 v-for="document in prioritizedDocumentReviewQueue"
                                 :key="document.id"
-                                class="rounded-md border border-slate-200 bg-slate-50 p-3"
+                                class="flex flex-col gap-3 border-b border-slate-200 p-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
                             >
-                                <div class="flex gap-3">
+                                <div class="flex min-w-0 gap-3">
                                     <img
                                         :src="document.scholarship_image_url || '/uploads/scholarship-default.jpg'"
                                         :alt="document.scholarship || 'Scholarship'"
                                         class="h-11 w-11 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                     >
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                            <div class="min-w-0">
-                                                <p class="truncate text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
-                                                    {{ document.scholarship || 'Scholarship' }}
-                                                </p>
-                                                <h4 class="mt-1 truncate text-base font-bold text-slate-950">
-                                                    {{ document.document_name }}
-                                                </h4>
-                                                <p class="mt-1 truncate text-xs text-slate-500">
-                                                    {{ document.applicant || 'Applicant' }} - {{ document.original_name }}
-                                                </p>
-                                            </div>
-                                            <div class="flex flex-wrap gap-2">
-                                                <span :class="['h-fit w-fit rounded-md px-2.5 py-1 text-[11px] font-bold uppercase', documentPriorityClass(document)]">
-                                                    {{ documentPriorityLabel(document) }}
-                                                </span>
-                                                <span :class="['h-fit w-fit rounded-md px-2.5 py-1 text-[11px] font-bold uppercase', documentStatusClass(document.status)]">
-                                                    {{ labelFromKey(document.status || 'pending') }}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div class="mt-3 flex flex-wrap gap-2 text-[11px] font-bold text-slate-600">
-                                            <span class="rounded-md bg-white px-2 py-1 ring-1 ring-slate-200">
-                                                {{ formatFileSize(document.size) }}
-                                            </span>
-                                            <span class="rounded-md bg-white px-2 py-1 ring-1 ring-slate-200">
-                                                {{ document.uploaded_at || document.submitted_at || 'Recently uploaded' }}
-                                            </span>
-                                            <span class="rounded-md bg-white px-2 py-1 ring-1 ring-slate-200">
-                                                App #{{ document.application_id }}
-                                            </span>
-                                        </div>
-
-                                        <div class="mt-3 grid gap-2 md:grid-cols-[11rem_1fr_auto] md:items-end">
-                                            <div>
-                                                <label class="mb-1 block text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                    Status
-                                                </label>
-                                                <select
-                                                    v-model="documentStatuses[document.id]"
-                                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
-                                                >
-                                                    <option
-                                                        v-for="option in documentStatusOptions"
-                                                        :key="option.value"
-                                                        :value="option.value"
-                                                    >
-                                                        {{ option.label }}
-                                                    </option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label class="mb-1 block text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                    Note
-                                                </label>
-                                                <input
-                                                    v-model="documentNotes[document.id]"
-                                                    type="text"
-                                                    maxlength="1000"
-                                                    placeholder="Optional note for student"
-                                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
-                                                >
-                                            </div>
-                                            <div class="flex gap-2">
-                                                <a
-                                                    :href="document.download_url"
-                                                    class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-white"
-                                                >
-                                                    Download
-                                                </a>
-                                                <button
-                                                    type="button"
-                                                    :disabled="documentUpdatingId === document.id"
-                                                    class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                                    @click="updateDocumentStatus(document)"
-                                                >
-                                                    {{ documentUpdatingId === document.id ? 'Saving...' : 'Save' }}
-                                                </button>
-                                            </div>
-                                        </div>
+                                    <div class="min-w-0">
+                                        <p class="truncate text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
+                                            {{ document.scholarship || 'Scholarship' }}
+                                        </p>
+                                        <h4 class="mt-1 truncate text-base font-bold text-slate-950">
+                                            {{ document.document_name }}
+                                        </h4>
+                                        <p class="mt-1 truncate text-xs text-slate-500">
+                                            {{ document.applicant || 'Applicant' }} - {{ document.original_name }} - {{ formatFileSize(document.size) }}
+                                        </p>
+                                        <p v-if="document.review_notes" class="mt-1 line-clamp-1 text-xs text-slate-600">
+                                            Review note: {{ document.review_notes }}
+                                        </p>
                                     </div>
+                                </div>
+
+                                <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                                    <span :class="['h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase', documentStatusClass(document.status)]">
+                                        {{ labelFromKey(document.status || 'pending') }}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                        @click="openDocumentReview(document)"
+                                    >
+                                        <i class="fa-regular fa-eye"></i>
+                                        View
+                                    </button>
                                 </div>
                             </article>
                         </div>
@@ -456,5 +404,15 @@ onMounted(loadInsights);
                 <ProviderFooter />
             </div>
         </section>
+
+        <ProviderDocumentReviewModal
+            :document="selectedReviewDocument"
+            :context="[selectedReviewDocument?.applicant, selectedReviewDocument?.scholarship].filter(Boolean).join(' - ')"
+            :saving="documentUpdatingId === selectedReviewDocument?.id"
+            :error="documentReviewError"
+            @close="closeDocumentReview"
+            @save="updateDocumentStatus"
+            @clear-error="documentReviewError = ''"
+        />
     </main>
 </template>

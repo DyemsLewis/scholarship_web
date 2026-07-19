@@ -51,7 +51,7 @@ const applicationGuideItems = [
     },
     {
         title: 'Track progress',
-        text: 'Follow review status.',
+        text: 'Follow schedules and review status.',
         icon: 'fa-solid fa-timeline',
     },
 ];
@@ -123,16 +123,34 @@ const selectedDocumentReadiness = computed(() => selectedScholarship.value?.prep
 const selectedApplicationMode = computed(() => applicationModeLabel(selectedScholarship.value?.application_mode));
 const selectedSlotsLabel = computed(() => selectedScholarship.value?.slots_available ?? 'Not listed');
 const readyApplicationCount = computed(() => applications.value.filter((application) => Number(application.document_readiness?.accepted_percent ?? application.document_readiness?.uploaded_percent ?? 0) >= 100).length);
-const activeApplicationCount = computed(() => applications.value.filter((application) => [
-    'submitted',
-    'under_review',
-    'qualified',
-    'exam_qualified',
-    'exam_scheduled',
-    'exam_taken',
-    'exam_passed',
+const activeApplicationCount = computed(() => applications.value.filter((application) => ![
+    'rejected',
+    'not_awarded',
+    'disbursed',
+    'renewed',
+    'exam_failed',
 ].includes(application.status ?? 'submitted')).length);
+const pendingScheduleCount = computed(() => applications.value.reduce(
+    (total, application) => total + applicationSchedules(application)
+        .filter((schedule) => schedule.status === 'scheduled' && !schedule.applicant_acknowledged)
+        .length,
+    0,
+));
 const applicationQueue = computed(() => [...applications.value].sort((first, second) => {
+    const firstNeedsConfirmation = Number(scheduleNeedsAcknowledgment(first));
+    const secondNeedsConfirmation = Number(scheduleNeedsAcknowledgment(second));
+
+    if (firstNeedsConfirmation !== secondNeedsConfirmation) {
+        return secondNeedsConfirmation - firstNeedsConfirmation;
+    }
+
+    const firstActiveSchedule = primarySchedule(first)?.status === 'scheduled';
+    const secondActiveSchedule = primarySchedule(second)?.status === 'scheduled';
+
+    if (firstActiveSchedule !== secondActiveSchedule) {
+        return Number(secondActiveSchedule) - Number(firstActiveSchedule);
+    }
+
     const statusRank = {
         exam_passed: 9,
         exam_taken: 8,
@@ -313,6 +331,55 @@ function statusClass(status) {
     }
 
     return 'bg-amber-100 text-amber-800';
+}
+
+function applicationSchedules(application) {
+    return Array.isArray(application?.schedules) ? application.schedules : [];
+}
+
+function primarySchedule(application) {
+    const schedules = applicationSchedules(application);
+    const unacknowledged = schedules.find(
+        (schedule) => schedule.status === 'scheduled' && !schedule.applicant_acknowledged,
+    );
+    const active = schedules.find((schedule) => schedule.status === 'scheduled');
+
+    return unacknowledged ?? active ?? schedules[schedules.length - 1] ?? null;
+}
+
+function scheduleNeedsAcknowledgment(application) {
+    const schedule = primarySchedule(application);
+
+    return Boolean(schedule?.status === 'scheduled' && !schedule.applicant_acknowledged);
+}
+
+function hasDistributionSchedule(application) {
+    return applicationSchedules(application).some((schedule) => schedule.type === 'distribution');
+}
+
+function scheduleTypeLabel(type) {
+    return {
+        exam: 'Scholarship exam',
+        interview: 'Interview',
+        distribution: 'Award distribution',
+    }[type] ?? labelFromKey(type);
+}
+
+function scheduleTypeIcon(type) {
+    return {
+        exam: 'fa-solid fa-clipboard-check',
+        interview: 'fa-solid fa-comments',
+        distribution: 'fa-solid fa-hand-holding-heart',
+    }[type] ?? 'fa-solid fa-calendar-day';
+}
+
+function scheduleModeLabel(mode) {
+    return {
+        onsite: 'On-site',
+        online: 'Online',
+        hybrid: 'On-site and online',
+        provider_managed: 'Provider-managed',
+    }[mode] ?? labelFromKey(mode);
 }
 
 function timelineStepClass(state) {
@@ -564,7 +631,7 @@ watch(selectedScholarship, (scholarship) => {
                 <ApplicantPageHeader
                     eyebrow="Application Desk"
                     title="Apply step by step"
-                    description="Choose a program, confirm files, and submit."
+                    description="Choose a program, submit files, and track provider updates."
                     icon="fa-solid fa-route"
                     action-href="/dashboard/scholarships"
                     action-label="Choose scholarship"
@@ -1184,7 +1251,10 @@ watch(selectedScholarship, (scholarship) => {
 
                                     <div v-if="selectedContractSections.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                            Provider-managed contract information
+                                            Possible obligations after acceptance
+                                        </p>
+                                        <p class="mt-2 text-xs leading-5 text-slate-600">
+                                            If selected, the provider will confirm which agreements or service obligations apply to you.
                                         </p>
                                         <div class="mt-3 grid gap-3">
                                             <div
@@ -1200,9 +1270,6 @@ watch(selectedScholarship, (scholarship) => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <p class="mt-3 text-xs leading-5 text-slate-500">
-                                            These terms are shown for transparency only. Any required signing, acceptance, notarization, or return-service agreement is handled directly by the provider outside this platform.
-                                        </p>
                                     </div>
 
                                     <TermsAgreement
@@ -1257,13 +1324,18 @@ watch(selectedScholarship, (scholarship) => {
                     </section>
 
                     <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="border-b border-slate-200 bg-slate-50 p-5">
-                            <p class="student-kicker">
-                                Submitted Applications
-                            </p>
-                            <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                Review timeline
-                            </h3>
+                        <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p class="student-kicker">
+                                    Submitted Applications
+                                </p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                    Review timeline
+                                </h3>
+                            </div>
+                            <span v-if="pendingScheduleCount" class="w-fit rounded-md bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
+                                {{ pendingScheduleCount }} schedule {{ pendingScheduleCount === 1 ? 'confirmation' : 'confirmations' }} needed
+                            </span>
                         </div>
 
                         <div v-if="applications.length === 0" class="m-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
@@ -1293,7 +1365,12 @@ watch(selectedScholarship, (scholarship) => {
                             <article
                                 v-for="application in applicationQueue"
                                 :key="application.id"
-                                class="overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-slate-900 bg-white shadow-sm"
+                                :class="[
+                                    'overflow-hidden rounded-lg border border-l-4 bg-white shadow-sm',
+                                    scheduleNeedsAcknowledgment(application)
+                                        ? 'border-amber-200 border-l-amber-500'
+                                        : 'border-slate-200 border-l-slate-900',
+                                ]"
                             >
                                 <div class="p-4">
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1320,11 +1397,66 @@ watch(selectedScholarship, (scholarship) => {
                                                 {{ statusLabel(application.status) }}
                                             </span>
                                             <span
-                                                v-if="application.distribution_scheduled_for"
+                                                v-if="application.distribution_scheduled_for && !hasDistributionSchedule(application)"
                                                 class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase text-slate-700"
                                             >
                                                 Distribution {{ application.distribution_scheduled_for }}
                                             </span>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        v-if="primarySchedule(application)"
+                                        :class="[
+                                            'mt-4 rounded-lg border p-3',
+                                            scheduleNeedsAcknowledgment(application)
+                                                ? 'border-amber-200 bg-amber-50'
+                                                : 'border-slate-200 bg-slate-50',
+                                        ]"
+                                    >
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                            <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md text-white', scheduleNeedsAcknowledgment(application) ? 'bg-amber-600' : 'bg-slate-900']">
+                                                <i :class="scheduleTypeIcon(primarySchedule(application).type)" aria-hidden="true"></i>
+                                            </span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                                                        {{ scheduleTypeLabel(primarySchedule(application).type) }}
+                                                    </p>
+                                                    <span v-if="scheduleNeedsAcknowledgment(application)" class="rounded bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-900">
+                                                        Confirmation needed
+                                                    </span>
+                                                    <span v-else class="rounded bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600 ring-1 ring-slate-200">
+                                                        {{ labelFromKey(primarySchedule(application).status) }}
+                                                    </span>
+                                                </div>
+                                                <p class="mt-1 truncate text-sm font-bold text-slate-950">
+                                                    {{ primarySchedule(application).title }}
+                                                </p>
+                                                <p class="mt-1 text-xs leading-5 text-slate-600">
+                                                    {{ primarySchedule(application).scheduled_label }}
+                                                    <span class="px-1 text-slate-300">|</span>
+                                                    {{ scheduleModeLabel(primarySchedule(application).mode) }}
+                                                    <template v-if="primarySchedule(application).venue">
+                                                        <span class="px-1 text-slate-300">|</span>
+                                                        {{ primarySchedule(application).venue }}
+                                                    </template>
+                                                </p>
+                                                <p v-if="primarySchedule(application).type === 'distribution'" class="mt-1 text-xs font-bold text-emerald-700">
+                                                    Award: {{ formatAmount(application.awarded_amount) }}
+                                                </p>
+                                            </div>
+                                            <a
+                                                :href="application.detail_url || `/dashboard/applications/${application.id}`"
+                                                :class="[
+                                                    'shrink-0 rounded-md px-3 py-2 text-center text-xs font-bold transition',
+                                                    scheduleNeedsAcknowledgment(application)
+                                                        ? 'bg-slate-900 text-white hover:bg-slate-800'
+                                                        : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-500',
+                                                ]"
+                                            >
+                                                {{ scheduleNeedsAcknowledgment(application) ? 'Review and confirm' : 'View schedule' }}
+                                            </a>
                                         </div>
                                     </div>
 

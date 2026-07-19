@@ -48,10 +48,10 @@ The seeder creates four verified local accounts. All use `password123` unless th
 | --- | --- | --- |
 | Admin | `admin@scholarship.test` | `admin` |
 | Demo student | `student@scholarship.test` | `student` |
-| DOST provider | `provider@scholarship.test` | `provider` |
-| CHED provider | `ched.provider@scholarship.test` | `chedprovider` |
+| Tulay Aral provider | `tulayaral@scholarship.test` | `tulayaral` |
+| Bukas Kinabukasan provider | `bukasfoundation@scholarship.test` | `bukasfoundation` |
 
-Both providers are approved and own published scholarship programs. Change the demo account environment variables before seeding a hosted/production database.
+Both fictional community providers are approved and own published scholarship programs. Change the demo account environment variables before seeding a hosted/production database.
 
 ## Hosting Checklist
 

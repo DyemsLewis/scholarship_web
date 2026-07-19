@@ -156,6 +156,17 @@ class DemoReadinessWorkflowTest extends TestCase
             'uploaded_at' => now(),
         ]);
 
+        $this->actingAs($provider)
+            ->getJson("/provider/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.documents.0.mime_type', 'application/pdf')
+            ->assertJsonPath('application.documents.0.view_url', route('documents.view', $document));
+
+        $this->actingAs($provider)
+            ->getJson('/provider/insights/data')
+            ->assertOk()
+            ->assertJsonPath('document_review_queue.0.view_url', route('documents.view', $document));
+
         $this->actingAs($admin)
             ->patchJson("/admin/scholarships/{$scholarship->id}/review", ['status' => 'rejected'])
             ->assertUnprocessable()

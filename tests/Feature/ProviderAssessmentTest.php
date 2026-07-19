@@ -17,35 +17,35 @@ class ProviderAssessmentTest extends TestCase
     {
         $this->seed();
 
-        $dost = User::query()->where('email', 'provider@scholarship.test')->firstOrFail();
-        $ched = User::query()->where('email', 'ched.provider@scholarship.test')->firstOrFail();
+        $tulayAral = User::query()->where('email', 'tulayaral@scholarship.test')->firstOrFail();
+        $bukasKinabukasan = User::query()->where('email', 'bukasfoundation@scholarship.test')->firstOrFail();
 
-        $this->actingAs($dost)
+        $this->actingAs($tulayAral)
             ->getJson('/provider/exams/data')
             ->assertOk()
             ->assertJsonCount(1, 'assessments')
-            ->assertJsonPath('assessments.0.title', 'DOST-SEI Scholarship Qualifying Examination')
-            ->assertJsonPath('assessments.0.image_path', '/images/programs/dost-logo-card.jpg');
+            ->assertJsonPath('assessments.0.title', 'Tulay Aral Applicant Screening')
+            ->assertJsonPath('assessments.0.image_path', '/uploads/scholarship-default.jpg');
 
-        $this->actingAs($ched)
+        $this->actingAs($bukasKinabukasan)
             ->getJson('/provider/exams/data')
             ->assertOk()
             ->assertJsonCount(1, 'assessments')
-            ->assertJsonPath('assessments.0.title', 'CHED Merit Eligibility Screening Assessment')
-            ->assertJsonPath('assessments.0.assessment_type', 'screening_assessment')
-            ->assertJsonPath('assessments.0.image_path', '/images/programs/ched-logo-card.jpg');
+            ->assertJsonPath('assessments.0.title', 'Bukas Kinabukasan STEM Qualifying Activity')
+            ->assertJsonPath('assessments.0.assessment_type', 'qualifying_exam')
+            ->assertJsonPath('assessments.0.image_path', '/uploads/scholarship-default.jpg');
     }
 
     public function test_provider_can_update_its_assessment_but_not_another_providers_assessment(): void
     {
         $this->seed();
 
-        $dost = User::query()->where('email', 'provider@scholarship.test')->firstOrFail();
-        $ched = User::query()->where('email', 'ched.provider@scholarship.test')->firstOrFail();
-        $dostAssessment = ProviderAssessment::query()->where('provider_id', $dost->id)->firstOrFail();
-        $chedAssessment = ProviderAssessment::query()->where('provider_id', $ched->id)->firstOrFail();
+        $tulayAral = User::query()->where('email', 'tulayaral@scholarship.test')->firstOrFail();
+        $bukasKinabukasan = User::query()->where('email', 'bukasfoundation@scholarship.test')->firstOrFail();
+        $tulayAssessment = ProviderAssessment::query()->where('provider_id', $tulayAral->id)->firstOrFail();
+        $bukasAssessment = ProviderAssessment::query()->where('provider_id', $bukasKinabukasan->id)->firstOrFail();
         $payload = [
-            'title' => 'Updated DOST Qualifying Examination',
+            'title' => 'Updated Community Screening',
             'assessment_type' => 'qualifying_exam',
             'description' => 'Updated assessment details.',
             'duration_minutes' => 150,
@@ -56,20 +56,20 @@ class ProviderAssessmentTest extends TestCase
             'status' => 'active',
         ];
 
-        $this->actingAs($dost)
-            ->patchJson("/provider/exams/{$dostAssessment->id}", $payload)
+        $this->actingAs($tulayAral)
+            ->patchJson("/provider/exams/{$tulayAssessment->id}", $payload)
             ->assertOk()
-            ->assertJsonPath('assessment.title', 'Updated DOST Qualifying Examination')
+            ->assertJsonPath('assessment.title', 'Updated Community Screening')
             ->assertJsonPath('assessment.duration_minutes', 150);
 
         $this->assertDatabaseHas('provider_assessments', [
-            'id' => $dostAssessment->id,
-            'title' => 'Updated DOST Qualifying Examination',
+            'id' => $tulayAssessment->id,
+            'title' => 'Updated Community Screening',
             'passing_score' => 80,
         ]);
 
-        $this->actingAs($dost)
-            ->patchJson("/provider/exams/{$chedAssessment->id}", $payload)
+        $this->actingAs($tulayAral)
+            ->patchJson("/provider/exams/{$bukasAssessment->id}", $payload)
             ->assertForbidden();
     }
 
@@ -78,7 +78,7 @@ class ProviderAssessmentTest extends TestCase
         $this->seed();
 
         $applicant = User::query()->where('email', 'student@scholarship.test')->firstOrFail();
-        $scholarship = Scholarship::query()->where('title', 'DOST-SEI Merit Undergraduate Scholarship')->firstOrFail();
+        $scholarship = Scholarship::query()->where('title', 'Bukas Kinabukasan STEM Pathways Grant')->firstOrFail();
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => $applicant->id,
@@ -96,8 +96,8 @@ class ProviderAssessmentTest extends TestCase
         $this->actingAs($applicant)
             ->getJson("/dashboard/applications/{$application->id}/data")
             ->assertOk()
-            ->assertJsonPath('application.exam.title', 'DOST-SEI Scholarship Qualifying Examination')
+            ->assertJsonPath('application.exam.title', 'Bukas Kinabukasan STEM Qualifying Activity')
             ->assertJsonPath('application.exam.assessment_type', 'qualifying_exam')
-            ->assertJsonPath('application.exam.duration_minutes', 120);
+            ->assertJsonPath('application.exam.duration_minutes', 60);
     }
 }

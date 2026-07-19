@@ -18,12 +18,61 @@ const application = ref(null);
 const uploadForm = ref({ documentName: '' });
 const uploadFile = ref(null);
 const fileInput = ref(null);
+const activeUploadRequirement = ref('');
 const previewDocument = ref(null);
 const showMapModal = ref(false);
 const documentTermsAccepted = ref(false);
+const acknowledgingScheduleId = ref(null);
 
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
-const uploadedDocumentNames = computed(() => new Set((application.value?.documents ?? []).map((document) => document.document_name)));
+const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
+const applicationRequirements = computed(() => {
+    const checklist = confirmedDocuments.value
+        .map((requirement) => String(requirement).trim())
+        .filter(Boolean);
+
+    return checklist.length ? checklist : requiredDocuments.value;
+});
+const applicationFileRows = computed(() => {
+    const documents = application.value?.documents ?? [];
+    const documentsByName = new Map(
+        documents.map((document) => [normalizeDocumentName(document.document_name), document]),
+    );
+    const seenNames = new Set();
+    const rows = [];
+
+    applicationRequirements.value.forEach((requirement) => {
+        const normalizedName = normalizeDocumentName(requirement);
+
+        if (!normalizedName || seenNames.has(normalizedName)) {
+            return;
+        }
+
+        seenNames.add(normalizedName);
+        rows.push({
+            name: requirement,
+            document: documentsByName.get(normalizedName) ?? null,
+            required: true,
+        });
+    });
+
+    documents.forEach((document) => {
+        const normalizedName = normalizeDocumentName(document.document_name);
+
+        if (seenNames.has(normalizedName)) {
+            return;
+        }
+
+        seenNames.add(normalizedName);
+        rows.push({
+            name: document.document_name,
+            document,
+            required: false,
+        });
+    });
+
+    return rows;
+});
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
 const dssSupportSignals = computed(() => {
     const current = application.value;
@@ -55,7 +104,7 @@ const dssSupportSignals = computed(() => {
 const dssDecisionNotice = computed(() => application.value?.dss_breakdown?.decision_notice ?? 'This score supports screening only. The scholarship provider makes the final decision.');
 const applicantDssNextAction = computed(() => applicantNextAction(application.value));
 const timeline = computed(() => application.value?.timeline ?? []);
-const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
+const schedules = computed(() => application.value?.schedules ?? []);
 const applicationScholarship = computed(() => application.value?.scholarship ?? null);
 const scholarshipMapAddress = computed(() => {
     const parts = [
@@ -156,6 +205,54 @@ function documentStatusClass(status) {
     return 'bg-slate-100 text-slate-700';
 }
 
+function scheduleTypeLabel(type) {
+    return {
+        exam: 'Scholarship exam',
+        interview: 'Interview',
+        distribution: 'Award distribution',
+    }[type] ?? labelFromKey(type);
+}
+
+function scheduleTypeIcon(type) {
+    return {
+        exam: 'fa-solid fa-clipboard-check',
+        interview: 'fa-solid fa-comments',
+        distribution: 'fa-solid fa-hand-holding-heart',
+    }[type] ?? 'fa-solid fa-calendar-day';
+}
+
+function scheduleModeLabel(mode) {
+    return {
+        onsite: 'On-site',
+        online: 'Online',
+        hybrid: 'On-site and online',
+        provider_managed: 'Provider-managed',
+    }[mode] ?? labelFromKey(mode);
+}
+
+function scheduleStatusClass(status) {
+    if (status === 'completed') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'cancelled') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
+function formatAwardAmount(value) {
+    if (value === null || value === undefined || value === '') {
+        return 'Not listed';
+    }
+
+    return new Intl.NumberFormat('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+    }).format(Number(value));
+}
+
 function criterionClass(status) {
     if (status === 'pass') {
         return 'border-emerald-200 bg-emerald-50 text-emerald-800';
@@ -218,6 +315,19 @@ function applicantNextAction(current) {
         return 'Wait for provider review and document feedback.';
     }
 
+    const activeSchedule = current.schedules?.find((schedule) => schedule.status === 'scheduled');
+    const unacknowledgedSchedule = activeSchedule && !activeSchedule.applicant_acknowledged
+        ? activeSchedule
+        : null;
+
+    if (unacknowledgedSchedule) {
+        return `Review and confirm the ${scheduleTypeLabel(unacknowledgedSchedule.type)} details below.`;
+    }
+
+    if (activeSchedule) {
+        return `Follow the posted ${scheduleTypeLabel(activeSchedule.type)} instructions and attend at the scheduled time.`;
+    }
+
     if (['awarded', 'disbursed', 'renewed'].includes(current.status)) {
         return 'Your award is recorded. Watch for release or renewal updates.';
     }
@@ -274,6 +384,10 @@ function documentRequirements(requirements) {
         .filter(Boolean);
 }
 
+function normalizeDocumentName(documentName) {
+    return String(documentName ?? '').trim().toLocaleLowerCase();
+}
+
 function criterionImpact(criterion) {
     const weightedScore = Number(criterion.weighted_score ?? 0);
 
@@ -293,14 +407,34 @@ function criterionImpact(criterion) {
     return `${impact.toFixed(impact % 1 === 0 ? 0 : 1)} pts`;
 }
 
-function ensureUploadForm() {
-    if (!uploadForm.value.documentName) {
-        uploadForm.value.documentName = requiredDocuments.value[0] ?? '';
+async function handleFileChange(event) {
+    uploadFile.value = event.target.files?.[0] ?? null;
+
+    if (!uploadFile.value) {
+        activeUploadRequirement.value = '';
+        return;
     }
+
+    await uploadDocument();
 }
 
-function handleFileChange(event) {
-    uploadFile.value = event.target.files?.[0] ?? null;
+function openUploadPicker(requirement) {
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    if (!documentTermsAccepted.value) {
+        errorMessage.value = 'Please agree to the document upload terms first.';
+        return;
+    }
+
+    uploadForm.value.documentName = requirement;
+    uploadFile.value = null;
+    activeUploadRequirement.value = requirement;
+
+    if (fileInput.value) {
+        fileInput.value.value = '';
+        fileInput.value.click();
+    }
 }
 
 function openDocumentPreview(document) {
@@ -320,7 +454,6 @@ async function loadApplication() {
 
         user.value = response.data.user;
         application.value = response.data.application;
-        ensureUploadForm();
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load application details.';
     } finally {
@@ -330,7 +463,7 @@ async function loadApplication() {
 
 async function uploadDocument() {
     if (!application.value || !uploadForm.value.documentName || !uploadFile.value) {
-        errorMessage.value = 'Choose a document type and file before uploading.';
+        errorMessage.value = 'Choose a file before uploading.';
         return;
     }
 
@@ -360,12 +493,12 @@ async function uploadDocument() {
         if (fileInput.value) {
             fileInput.value.value = '';
         }
-        ensureUploadForm();
         statusMessage.value = response.data.message ?? 'Document uploaded.';
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to upload document.';
     } finally {
         isUploading.value = false;
+        activeUploadRequirement.value = '';
     }
 }
 
@@ -385,12 +518,34 @@ async function deleteDocument(document) {
         if (previewDocument.value?.id === document.id) {
             closeDocumentPreview();
         }
-        ensureUploadForm();
         statusMessage.value = response.data.message ?? 'Document removed.';
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to remove document.';
     } finally {
         isUploading.value = false;
+    }
+}
+
+async function acknowledgeSchedule(schedule) {
+    if (!application.value || schedule.status !== 'scheduled' || schedule.applicant_acknowledged) {
+        return;
+    }
+
+    acknowledgingScheduleId.value = schedule.id;
+    errorMessage.value = '';
+    statusMessage.value = '';
+
+    try {
+        const response = await window.axios.patch(
+            `/dashboard/applications/${application.value.id}/schedules/${schedule.id}/acknowledge`,
+        );
+
+        application.value = response.data.application;
+        statusMessage.value = response.data.message ?? 'Schedule acknowledged.';
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to acknowledge the schedule.';
+    } finally {
+        acknowledgingScheduleId.value = null;
     }
 }
 
@@ -506,6 +661,108 @@ onMounted(loadApplication);
                                 <p class="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
                                     {{ application.status_progress.next_action }}
                                 </p>
+                            </section>
+
+                            <section v-if="schedules.length" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="flex flex-col gap-2 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p class="student-kicker">Activities and appointments</p>
+                                        <h3 class="mt-1 text-lg font-bold text-slate-950">Provider announcements</h3>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">Check the schedule and confirm that you have seen it.</p>
+                                    </div>
+                                    <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                        {{ schedules.length }} {{ schedules.length === 1 ? 'activity' : 'activities' }}
+                                    </span>
+                                </div>
+
+                                <div class="divide-y divide-slate-200">
+                                    <article v-for="schedule in schedules" :key="schedule.id" class="p-4">
+                                        <div class="flex items-start gap-3">
+                                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
+                                                <i :class="scheduleTypeIcon(schedule.type)" aria-hidden="true"></i>
+                                            </span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                                    <div>
+                                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(schedule.type) }}</p>
+                                                        <h4 class="mt-1 font-bold text-slate-950">{{ schedule.title }}</h4>
+                                                    </div>
+                                                    <span :class="['w-fit rounded-md px-2 py-1 text-[11px] font-bold uppercase', scheduleStatusClass(schedule.status)]">
+                                                        {{ labelFromKey(schedule.status) }}
+                                                    </span>
+                                                </div>
+
+                                                <div class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                                                    <div class="rounded-md bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+                                                        <p class="text-xs font-semibold text-slate-500">Date and time</p>
+                                                        <p class="mt-1 font-bold text-slate-800">{{ schedule.scheduled_label }}</p>
+                                                    </div>
+                                                    <div class="rounded-md bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+                                                        <p class="text-xs font-semibold text-slate-500">Mode</p>
+                                                        <p class="mt-1 font-bold text-slate-800">{{ scheduleModeLabel(schedule.mode) }}</p>
+                                                    </div>
+                                                    <div v-if="schedule.type === 'distribution'" class="rounded-md bg-emerald-50 px-3 py-2.5 ring-1 ring-emerald-200 sm:col-span-2">
+                                                        <p class="text-xs font-semibold text-emerald-700">Award amount</p>
+                                                        <p class="mt-1 font-bold text-emerald-900">{{ formatAwardAmount(application.awarded_amount) }}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div v-if="schedule.venue || schedule.location_address" class="mt-3 text-sm leading-6 text-slate-600">
+                                                    <p v-if="schedule.venue"><span class="font-bold text-slate-800">Site:</span> {{ schedule.venue }}</p>
+                                                    <p v-if="schedule.location_address">{{ schedule.location_address }}</p>
+                                                </div>
+
+                                                <a
+                                                    v-if="schedule.online_url"
+                                                    :href="schedule.online_url"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="mt-3 inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100"
+                                                >
+                                                    Open access link
+                                                    <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
+                                                </a>
+
+                                                <p class="mt-3 whitespace-pre-line rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">{{ schedule.instructions }}</p>
+
+                                                <div
+                                                    v-if="schedule.status !== 'cancelled' && (hasCoordinates(schedule.latitude, schedule.longitude) || schedule.location_address || schedule.venue)"
+                                                    class="mt-3 overflow-hidden rounded-md"
+                                                >
+                                                    <LeafletMapPreview
+                                                        :address="schedule.location_address || schedule.venue"
+                                                        :latitude="schedule.latitude"
+                                                        :longitude="schedule.longitude"
+                                                        :title="schedule.venue || schedule.title"
+                                                        :marker-text="schedule.venue || schedule.title"
+                                                        height="11rem"
+                                                        auto-geocode
+                                                    />
+                                                </div>
+
+                                                <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div class="flex flex-wrap gap-2 text-xs font-bold">
+                                                        <span v-if="schedule.applicant_acknowledged" class="rounded-md bg-emerald-50 px-2.5 py-1.5 text-emerald-800 ring-1 ring-emerald-200">
+                                                            Confirmed {{ schedule.applicant_acknowledged_at }}
+                                                        </span>
+                                                        <span v-if="schedule.attendance_status !== 'pending'" class="rounded-md bg-slate-100 px-2.5 py-1.5 text-slate-700">
+                                                            {{ schedule.type === 'distribution' ? 'Release' : 'Participation' }}: {{ labelFromKey(schedule.attendance_status) }}
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        v-if="schedule.status === 'scheduled' && !schedule.applicant_acknowledged"
+                                                        type="button"
+                                                        :disabled="acknowledgingScheduleId === schedule.id"
+                                                        class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                                        @click="acknowledgeSchedule(schedule)"
+                                                    >
+                                                        {{ acknowledgingScheduleId === schedule.id ? 'Confirming...' : 'I have seen this schedule' }}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </article>
+                                </div>
                             </section>
 
                             <section v-if="application.exam" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -647,141 +904,108 @@ onMounted(loadApplication);
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">
                                             Application files
                                         </h3>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">
+                                            Upload each file beside the requirement it belongs to.
+                                        </p>
                                     </div>
                                     <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                         {{ application.document_readiness?.uploaded ?? 0 }} uploaded
                                     </span>
                                 </div>
 
-                                <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <p class="font-semibold text-slate-700">
-                                            Confirmed checklist
-                                        </p>
-                                        <span class="text-xs font-bold text-slate-500">
-                                            {{ application.document_readiness?.percent ?? 0 }}% ready
-                                        </span>
-                                    </div>
-                                    <div v-if="confirmedDocuments.length" class="mt-2 flex flex-wrap gap-2">
-                                        <span
-                                            v-for="document in confirmedDocuments"
-                                            :key="document"
-                                            class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
-                                        >
-                                            {{ document }}
-                                        </span>
-                                    </div>
-                                    <p v-else class="mt-2 text-slate-500">
-                                        No checklist items saved.
-                                    </p>
-                                </div>
+                                <TermsAgreement
+                                    v-model="documentTermsAccepted"
+                                    class="mt-4"
+                                    context="document"
+                                />
 
-                                <div v-if="application.documents?.length" class="mt-4 grid gap-2">
+                                <input
+                                    ref="fileInput"
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                    class="hidden"
+                                    @change="handleFileChange"
+                                >
+
+                                <div v-if="applicationFileRows.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
                                     <div
-                                        v-for="document in application.documents"
-                                        :key="document.id"
-                                        class="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                                        v-for="row in applicationFileRows"
+                                        :key="row.name"
+                                        class="flex flex-col gap-3 border-b border-slate-200 p-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
                                     >
-                                        <div class="min-w-0">
-                                            <p class="font-bold text-slate-950">
-                                                {{ document.document_name }}
-                                            </p>
-                                            <p class="mt-1 text-xs text-slate-500">
-                                                {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
-                                            </p>
-                                            <p v-if="document.review_notes" class="mt-1 text-xs font-semibold text-slate-600">
-                                                {{ document.review_notes }}
-                                            </p>
+                                        <div class="flex min-w-0 items-start gap-3">
+                                            <span
+                                                :class="[
+                                                    'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+                                                    row.document ? 'bg-slate-100 text-slate-700' : 'bg-amber-50 text-amber-700',
+                                                ]"
+                                            >
+                                                <i :class="row.document ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file'"></i>
+                                            </span>
+
+                                            <div class="min-w-0">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <p class="font-bold text-slate-950">
+                                                        {{ row.name }}
+                                                    </p>
+                                                    <span v-if="!row.required" class="rounded bg-slate-100 px-2 py-0.5 text-[0.65rem] font-bold uppercase text-slate-500">
+                                                        Additional file
+                                                    </span>
+                                                </div>
+                                                <p v-if="row.document" class="mt-1 truncate text-xs text-slate-500">
+                                                    {{ row.document.original_name }} - {{ formatFileSize(row.document.size) }} - {{ row.document.uploaded_at }}
+                                                </p>
+                                                <p v-else class="mt-1 text-xs font-semibold text-amber-700">
+                                                    No file uploaded yet
+                                                </p>
+                                                <p v-if="row.document?.review_notes" class="mt-1 text-xs font-semibold text-slate-600">
+                                                    Provider note: {{ row.document.review_notes }}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div class="flex flex-wrap gap-2">
-                                            <span :class="['h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase', documentStatusClass(document.status)]">
-                                                {{ labelFromKey(document.status || 'pending') }}
+
+                                        <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                                            <span
+                                                :class="[
+                                                    'h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase',
+                                                    row.document ? documentStatusClass(row.document.status) : 'bg-amber-50 text-amber-700',
+                                                ]"
+                                            >
+                                                {{ row.document ? labelFromKey(row.document.status || 'pending') : 'Not uploaded' }}
                                             </span>
                                             <button
-                                                v-if="document.view_url"
+                                                v-if="row.document?.view_url"
                                                 type="button"
                                                 class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                                @click="openDocumentPreview(document)"
+                                                @click="openDocumentPreview(row.document)"
                                             >
                                                 View
                                             </button>
-                                            <a
-                                                :href="document.download_url"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                            >
-                                                Download
-                                            </a>
                                             <button
                                                 type="button"
                                                 :disabled="isUploading"
-                                                class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                                                aria-label="Remove document"
-                                                @click="deleteDocument(document)"
+                                                class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="openUploadPicker(row.name)"
+                                            >
+                                                <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                                                {{ isUploading && activeUploadRequirement === row.name ? 'Uploading...' : (row.document ? 'Replace file' : 'Upload document') }}
+                                            </button>
+                                            <button
+                                                v-if="row.document"
+                                                type="button"
+                                                :disabled="isUploading"
+                                                class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
+                                                :aria-label="`Remove ${row.name}`"
+                                                @click="deleteDocument(row.document)"
                                             >
                                                 <i class="fa-solid fa-trash-can text-xs"></i>
                                             </button>
                                         </div>
                                     </div>
                                 </div>
-                                <p v-else class="mt-4 text-sm text-slate-500">
-                                    No uploaded files yet.
-                                </p>
-
-                                <div class="mt-4 grid gap-3 border-t border-slate-200 pt-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                                    <div>
-                                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                            Requirement
-                                        </label>
-                                        <select
-                                            v-if="requiredDocuments.length"
-                                            v-model="uploadForm.documentName"
-                                            class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-700 focus:ring-3 focus:ring-slate-100"
-                                        >
-                                            <option
-                                                v-for="requirement in requiredDocuments"
-                                                :key="requirement"
-                                                :value="requirement"
-                                            >
-                                                {{ requirement }}{{ uploadedDocumentNames.has(requirement) ? ' (replace)' : '' }}
-                                            </option>
-                                        </select>
-                                        <input
-                                            v-else
-                                            v-model="uploadForm.documentName"
-                                            type="text"
-                                            placeholder="Document name"
-                                            class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-700 focus:ring-3 focus:ring-slate-100"
-                                        >
-                                    </div>
-
-                                    <div>
-                                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                            File
-                                        </label>
-                                        <input
-                                            ref="fileInput"
-                                            type="file"
-                                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                            class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white"
-                                            @change="handleFileChange"
-                                        >
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        :disabled="isUploading"
-                                        class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                        @click="uploadDocument"
-                                    >
-                                        {{ isUploading ? 'Uploading...' : 'Upload' }}
-                                    </button>
+                                <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                                    This program does not have any document requirements yet.
                                 </div>
-
-                                <TermsAgreement
-                                    v-model="documentTermsAccepted"
-                                    class="mt-3"
-                                    context="document"
-                                />
                             </section>
 
                             <section v-if="timeline.length" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -899,7 +1123,7 @@ onMounted(loadApplication);
                             </section>
 
                             <section
-                                v-if="application.awarded_amount || application.distribution_scheduled_for || application.distribution_instructions || ['approved', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed'].includes(application.status)"
+                                v-if="!schedules.some((schedule) => schedule.type === 'distribution') && (application.awarded_amount || application.distribution_scheduled_for || application.distribution_instructions || ['approved', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed'].includes(application.status))"
                                 class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
                             >
                                 <p class="student-kicker">Reward Distribution</p>

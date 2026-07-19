@@ -43,6 +43,7 @@ Route::get('/dashboard/student-documents/{document}/download', [ApplicantDashboa
 Route::delete('/dashboard/student-documents/{document}', [ApplicantDashboardController::class, 'deletePreparedDocument'])->middleware('auth')->name('dashboard.student-documents.destroy');
 Route::post('/dashboard/applications', [ApplicantDashboardController::class, 'storeApplication'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applications.store');
 Route::patch('/dashboard/applications/{application}/response', [ApplicantDashboardController::class, 'respondToApplication'])->middleware('auth')->name('dashboard.applications.response');
+Route::patch('/dashboard/applications/{application}/schedules/{schedule}/acknowledge', [ApplicantDashboardController::class, 'acknowledgeApplicationSchedule'])->middleware('auth')->name('dashboard.applications.schedules.acknowledge');
 Route::post('/dashboard/applications/{application}/documents', [ApplicantDashboardController::class, 'uploadDocument'])->middleware('auth')->name('dashboard.applications.documents.store');
 Route::delete('/dashboard/documents/{document}', [ApplicantDashboardController::class, 'deleteDocument'])->middleware('auth')->name('dashboard.documents.destroy');
 Route::post('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardController::class, 'saveScholarship'])->middleware('auth')->name('dashboard.scholarships.save');
@@ -113,6 +114,12 @@ Route::middleware(['auth', 'provider'])
         Route::get('/applications/data', [ProviderController::class, 'applicationsData'])->name('applications.data');
         Route::get('/applications/{application}', [ProviderController::class, 'applicationDetail'])->whereNumber('application')->name('applications.show');
         Route::get('/applications/{application}/data', [ProviderController::class, 'applicationDetailData'])->whereNumber('application')->name('applications.show.data');
+        Route::get('/applications/{application}/profile-proofs/{document}/view', [ProviderController::class, 'viewApplicantProfileProof'])
+            ->whereNumber('application')
+            ->whereNumber('document')
+            ->name('applications.profile-proofs.view');
+        Route::post('/applications/{application}/schedules', [ProviderController::class, 'upsertApplicationSchedule'])->name('applications.schedules.upsert');
+        Route::patch('/applications/{application}/schedules/{schedule}', [ProviderController::class, 'updateApplicationScheduleTracking'])->name('applications.schedules.tracking');
         Route::patch('/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->name('applications.status');
         Route::patch('/documents/{document}/status', [ProviderController::class, 'updateDocumentStatus'])->name('documents.status');
         Route::get('/export/applications', [ProviderController::class, 'exportApplications'])->name('export.applications');
