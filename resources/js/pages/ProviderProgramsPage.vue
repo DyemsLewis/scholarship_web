@@ -21,6 +21,24 @@ const {
 } = useConfirmationDialog();
 
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
+const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
+const verificationMessage = computed(() => {
+    if (!user.value?.email_verified) {
+        return verificationDocumentCount.value
+            ? 'Your proof is saved. Verify your email before an admin can complete the provider review.'
+            : 'Verify your email and upload organization proof before creating scholarship programs.';
+    }
+
+    if (user.value?.verification_status === 'rejected') {
+        return 'The admin requested changes to your verification. Review the feedback and upload replacement proof.';
+    }
+
+    if (verificationDocumentCount.value === 0) {
+        return 'Upload at least one organization proof so an admin can review the provider account.';
+    }
+
+    return 'Your verification proof is awaiting admin review. Program creation will become available after approval.';
+});
 const selectedMapAddress = computed(() => {
     const parts = [
         selectedMapScholarship.value?.location_address,
@@ -197,6 +215,7 @@ onMounted(loadProviderData);
 
                         <div class="flex flex-col gap-2 sm:flex-row">
                             <a
+                                v-if="canPostScholarships"
                                 href="/provider/programs/create"
                                 class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
                             >
@@ -223,14 +242,25 @@ onMounted(loadProviderData);
                 <div v-else class="mt-6 space-y-6">
                     <div
                         v-if="!canPostScholarships"
-                        class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm"
+                        class="flex flex-col gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm sm:flex-row sm:items-center sm:justify-between"
                     >
-                        <p class="font-bold">
-                            Provider verification required
-                        </p>
-                        <p class="mt-1 leading-6">
-                            Your provider account is currently {{ user?.verification_status || 'pending' }}. An admin must approve the provider account before scholarships can be created or updated.
-                        </p>
+                        <div>
+                            <p class="font-bold">
+                                Verify your provider account first
+                            </p>
+                            <p class="mt-1 leading-6">
+                                {{ verificationMessage }}
+                            </p>
+                            <p v-if="user?.verification_notes" class="mt-2 text-xs leading-5">
+                                <span class="font-bold">Admin note:</span> {{ user.verification_notes }}
+                            </p>
+                        </div>
+                        <a
+                            href="/provider/profile#verification-documents"
+                            class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                        >
+                            {{ verificationDocumentCount ? 'View verification' : 'Upload proof' }}
+                        </a>
                     </div>
 
                     <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -245,6 +275,7 @@ onMounted(loadProviderData);
                             </div>
 
                             <a
+                                v-if="canPostScholarships"
                                 href="/provider/programs/create"
                                 class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
                             >
@@ -253,7 +284,9 @@ onMounted(loadProviderData);
                         </div>
 
                         <div v-if="scholarships.length === 0" class="p-6 text-sm text-slate-500">
-                            No scholarships yet. Create your first scholarship program from the Create program page.
+                            {{ canPostScholarships
+                                ? 'No scholarships yet. Create your first scholarship program from the Create program page.'
+                                : 'No scholarships yet. Complete provider verification to unlock program creation.' }}
                         </div>
 
                         <div v-else class="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">

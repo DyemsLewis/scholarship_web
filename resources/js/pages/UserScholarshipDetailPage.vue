@@ -773,6 +773,17 @@ onMounted(loadScholarship);
                                                 <p class="text-sm font-bold text-slate-950">{{ stage.label }}</p>
                                             </div>
                                             <p class="mt-1 text-xs leading-5 text-slate-500">{{ stage.detail }}</p>
+                                            <div
+                                                v-if="stage.value === 'exam' && (scholarship.exam_duration_minutes || scholarship.exam_passing_score !== null)"
+                                                class="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold text-slate-600"
+                                            >
+                                                <span v-if="scholarship.exam_duration_minutes" class="rounded-md bg-white px-2 py-1 ring-1 ring-slate-200">
+                                                    {{ scholarship.exam_duration_minutes }} minutes
+                                                </span>
+                                                <span v-if="scholarship.exam_passing_score !== null" class="rounded-md bg-white px-2 py-1 ring-1 ring-slate-200">
+                                                    {{ Number(scholarship.exam_passing_score) }}% passing
+                                                </span>
+                                            </div>
                                             <p :class="['mt-2 text-xs font-bold', stage.event ? 'text-amber-800' : 'text-slate-400']">
                                                 {{ stage.event?.scheduled_label || 'Schedule to be announced' }}
                                             </p>
@@ -784,7 +795,7 @@ onMounted(loadScholarship);
                                 </ol>
 
                                 <p class="mt-4 rounded-md bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-500 ring-1 ring-slate-200">
-                                    Private links and detailed instructions are sent only when you reach the relevant stage.
+                                    Providers conduct exams and interviews outside the portal. Private links and detailed instructions appear only when you reach the relevant stage.
                                 </p>
                             </article>
 

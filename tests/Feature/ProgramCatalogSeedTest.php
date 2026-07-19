@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\ProviderAssessment;
 use App\Models\Scholarship;
 use App\Models\ScholarshipEvent;
 use App\Models\User;
@@ -71,6 +70,9 @@ class ProgramCatalogSeedTest extends TestCase
         $this->assertSame(['screening', 'interview', 'distribution'], $collegeProgram->selection_stages);
         $this->assertSame(['screening', 'distribution'], $schoolEssentialsProgram->selection_stages);
         $this->assertSame(['screening', 'exam', 'interview', 'distribution'], $stemProgram->selection_stages);
+        $this->assertSame(60, $stemProgram->exam_duration_minutes);
+        $this->assertSame('75.00', $stemProgram->exam_passing_score);
+        $this->assertNull($collegeProgram->exam_duration_minutes);
         $this->assertTrue(app(ScholarshipEligibilityService::class)
             ->evaluate($stemProgram, $student)['is_eligible']);
 
@@ -94,11 +96,5 @@ class ProgramCatalogSeedTest extends TestCase
         $this->assertCount(2, $programsByProvider);
         $this->assertTrue($programsByProvider->every(fn ($providerPrograms): bool => $providerPrograms->isNotEmpty()));
 
-        $assessments = ProviderAssessment::query()->with('provider')->get();
-
-        $this->assertCount(2, $assessments);
-        $this->assertTrue($assessments->every(
-            fn (ProviderAssessment $assessment): bool => $assessment->image_path === '/uploads/scholarship-default.jpg'
-        ));
     }
 }

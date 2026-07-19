@@ -855,11 +855,10 @@ onMounted(loadApplication);
                                         <img :src="application.exam.image_url" :alt="application.exam.title" class="h-full w-full object-contain">
                                     </div>
                                     <div class="p-4">
-                                        <p class="student-kicker">Assessment</p>
+                                        <p class="student-kicker">Provider-managed exam</p>
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">{{ application.exam.title }}</h3>
                                         <p v-if="application.exam.description" class="mt-2 text-sm leading-6 text-slate-600">{{ application.exam.description }}</p>
                                         <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-700">
-                                            <span class="rounded-md bg-slate-100 px-2.5 py-1">{{ labelFromKey(application.exam.assessment_type) }}</span>
                                             <span v-if="application.exam.duration_minutes" class="rounded-md bg-slate-100 px-2.5 py-1">{{ application.exam.duration_minutes }} minutes</span>
                                             <span v-if="application.exam.passing_score !== null" class="rounded-md bg-slate-100 px-2.5 py-1">{{ Number(application.exam.passing_score) }}% passing score</span>
                                             <span class="rounded-md bg-slate-100 px-2.5 py-1">{{ labelFromKey(application.exam.delivery_mode) }}</span>

@@ -27,7 +27,7 @@ const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffs
 
 const scheduleTypeCatalog = [
     { value: 'screening', label: 'Screening', icon: 'fa-solid fa-list-check', help: 'Eligibility and document review' },
-    { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question', help: 'Shared assessment details' },
+    { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question', help: 'Provider-managed exam schedule' },
     { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments', help: 'Shared interview instructions' },
     { value: 'distribution', label: 'Distribution', icon: 'fa-solid fa-hand-holding-dollar', help: 'Award release announcement' },
 ];
@@ -271,7 +271,7 @@ function defaultScheduleDetails(type) {
         longitude: scholarship.longitude ?? '',
         instructions: {
             screening: 'Keep your profile and submitted requirements complete while the provider reviews your application.',
-            exam: 'Review the assessment instructions and arrive or sign in at least 15 minutes before the scheduled time.',
+            exam: 'Review the provider exam instructions and arrive or sign in at least 15 minutes before the scheduled time.',
             interview: 'Bring a valid school ID and be ready to discuss your application and scholarship goals.',
             distribution: 'Bring a valid school ID and any release documents required by the provider.',
         }[type] ?? '',

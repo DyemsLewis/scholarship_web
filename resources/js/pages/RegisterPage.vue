@@ -238,6 +238,7 @@ onBeforeUnmount(() => {
         :panel-text="shellCopy.panelText"
         :panel-highlights="shellCopy.panelHighlights"
         :panel-note="shellCopy.panelNote"
+        :show-panel="!isProviderRegistration"
     >
         <ToastMessage
             :show="toast.show"

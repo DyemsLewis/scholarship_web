@@ -10,6 +10,40 @@ const scholarships = ref([]);
 const reviewQueue = ref([]);
 
 const recentPrograms = computed(() => scholarships.value.slice(0, 3));
+const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
+const verificationPrompt = computed(() => {
+    if (!user.value?.email_verified) {
+        return {
+            title: 'Verify your email to continue',
+            description: verificationDocumentCount.value
+                ? 'Your proof is saved. Verify your email so an admin can complete the provider review.'
+                : 'Verify your email, then upload organization proof for admin review.',
+            action: verificationDocumentCount.value ? 'View verification' : 'Upload proof',
+        };
+    }
+
+    if (user.value?.verification_status === 'rejected') {
+        return {
+            title: 'Update your verification proof',
+            description: 'Review the admin feedback and upload a replacement document to return your account for review.',
+            action: 'Upload replacement proof',
+        };
+    }
+
+    if (verificationDocumentCount.value === 0) {
+        return {
+            title: 'Verify your provider account',
+            description: 'Upload organization registration, an authorization letter, or another valid proof for admin review.',
+            action: 'Upload proof',
+        };
+    }
+
+    return {
+        title: 'Verification is under review',
+        description: 'Your proof has been submitted. You can create programs after an admin approves the provider account.',
+        action: 'View verification status',
+    };
+});
 const programHealthSignals = computed(() => {
     const draftPrograms = scholarships.value.filter((scholarship) => scholarship.status === 'draft');
     const missingDocuments = scholarships.value.filter((scholarship) => !hasText(scholarship.requirements));
@@ -169,10 +203,24 @@ onMounted(loadProviderData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <section class="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <section
+                        :class="[
+                            'flex flex-col gap-4 rounded-lg border p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between',
+                            user?.can_post_scholarships
+                                ? 'border-slate-200 bg-white'
+                                : 'border-amber-200 bg-amber-50',
+                        ]"
+                    >
                         <div class="flex min-w-0 items-center gap-3">
-                            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-slate-950 text-amber-200">
-                                <i class="fa-solid fa-building-columns text-sm"></i>
+                            <span
+                                :class="[
+                                    'flex h-11 w-11 shrink-0 items-center justify-center rounded-md',
+                                    user?.can_post_scholarships
+                                        ? 'bg-slate-950 text-amber-200'
+                                        : 'bg-amber-200 text-amber-900',
+                                ]"
+                            >
+                                <i :class="[user?.can_post_scholarships ? 'fa-solid fa-building-columns' : 'fa-solid fa-shield-halved', 'text-sm']"></i>
                             </span>
                             <div class="min-w-0">
                                 <div class="flex flex-wrap items-center gap-2">
@@ -183,13 +231,24 @@ onMounted(loadProviderData);
                                         {{ verificationLabel(user?.verification_status) }}
                                     </span>
                                 </div>
-                                <p class="mt-1 text-sm text-slate-500">
-                                    {{ user?.can_post_scholarships ? 'Verified and ready to publish programs.' : 'Admin approval is required before publishing.' }}
+                                <p :class="['mt-1 text-sm font-bold', user?.can_post_scholarships ? 'text-slate-600' : 'text-amber-950']">
+                                    {{ user?.can_post_scholarships ? 'Verified and ready to create programs.' : verificationPrompt.title }}
+                                </p>
+                                <p v-if="!user?.can_post_scholarships" class="mt-1 max-w-2xl text-sm leading-6 text-amber-900/80">
+                                    {{ verificationPrompt.description }}
+                                </p>
+                                <p v-if="!user?.can_post_scholarships && user?.verification_notes" class="mt-2 text-xs leading-5 text-amber-900">
+                                    <span class="font-bold">Admin note:</span> {{ user.verification_notes }}
                                 </p>
                             </div>
                         </div>
                         <div class="flex shrink-0 gap-2">
-                            <a href="/provider/profile" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Profile</a>
+                            <a
+                                :href="user?.can_post_scholarships ? '/provider/profile' : '/provider/profile#verification-documents'"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                            >
+                                {{ user?.can_post_scholarships ? 'Profile' : verificationPrompt.action }}
+                            </a>
                             <a v-if="user?.can_post_scholarships" href="/provider/programs/create" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">New program</a>
                         </div>
                     </section>

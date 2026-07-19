@@ -175,7 +175,7 @@ class DecisionSupportService
             },
             'description' => match ($stage) {
                 'screening' => 'Eligibility and file review',
-                'exam' => 'Provider assessment',
+            'exam' => 'Provider-managed exam',
                 'interview' => 'Provider conversation',
                 'distribution' => 'Scholarship release',
                 default => 'Provider-managed stage',

@@ -1151,6 +1151,8 @@ class AdminController extends Controller
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
             'selection_stages' => ScholarshipSelectionPlan::normalize($scholarship->selection_stages),
+            'exam_duration_minutes' => $scholarship->exam_duration_minutes,
+            'exam_passing_score' => $scholarship->exam_passing_score,
             'program_events' => $scholarship->events
                 ->sortBy('scheduled_at')
                 ->map(fn ($event) => ScholarshipEventPayload::make($event))

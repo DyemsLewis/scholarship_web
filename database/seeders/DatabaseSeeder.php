@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\ProviderAssessment;
 use App\Models\Scholarship;
 use App\Models\User;
 use App\Services\ScholarshipEventService;
@@ -138,7 +137,6 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->seedScholarships($tulayAral, $bukasKinabukasan);
-        $this->seedAssessments($tulayAral, $bukasKinabukasan);
     }
 
     private function seedUser(string $email, string $username, string $role, string $password): User
@@ -345,6 +343,8 @@ class DatabaseSeeder extends Seeder
                     ...$common,
                     'image_path' => '/images/programs/bukas-kinabukasan-logo.png',
                     'selection_stages' => ['screening', 'exam', 'interview', 'distribution'],
+                    'exam_duration_minutes' => 60,
+                    'exam_passing_score' => 75,
                     'category' => 'STEM scholarship',
                     'description' => 'A small competitive grant for senior high school STEM learners preparing for science, engineering, computing, or technology studies.',
                     'eligibility' => 'Grade 11 or Grade 12 STEM learner from Laguna or Metro Manila with at least an 85% general average and availability for a qualifying exam and finalist interview.',
@@ -436,36 +436,4 @@ class DatabaseSeeder extends Seeder
         }
     }
 
-    private function seedAssessments(User $tulayAral, User $bukasKinabukasan): void
-    {
-        ProviderAssessment::query()->updateOrCreate([
-            'provider_id' => $tulayAral->id,
-        ], [
-            'title' => 'Tulay Aral Applicant Screening',
-            'assessment_type' => 'screening_assessment',
-            'image_path' => '/uploads/scholarship-default.jpg',
-            'description' => 'A short provider-managed screening activity for applicants who pass the initial profile and document review.',
-            'duration_minutes' => 30,
-            'passing_score' => 70,
-            'delivery_mode' => 'online',
-            'venue' => 'Online meeting link supplied to qualified applicants',
-            'instructions' => 'Prepare a school ID and be ready to discuss your education goals and intended use of the grant.',
-            'status' => 'active',
-        ]);
-
-        ProviderAssessment::query()->updateOrCreate([
-            'provider_id' => $bukasKinabukasan->id,
-        ], [
-            'title' => 'Bukas Kinabukasan STEM Qualifying Activity',
-            'assessment_type' => 'qualifying_exam',
-            'image_path' => '/uploads/scholarship-default.jpg',
-            'description' => 'A basic science, mathematics, and problem-solving activity for shortlisted STEM Pathways applicants.',
-            'duration_minutes' => 60,
-            'passing_score' => 75,
-            'delivery_mode' => 'onsite',
-            'venue' => 'Bukas Kinabukasan Learning Hub, San Pedro City, Laguna',
-            'instructions' => 'Bring a school ID, pencil, and the schedule notice issued through the portal.',
-            'status' => 'active',
-        ]);
-    }
 }

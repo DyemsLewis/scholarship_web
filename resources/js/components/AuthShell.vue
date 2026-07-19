@@ -43,6 +43,10 @@ defineProps({
         type: String,
         required: true,
     },
+    showPanel: {
+        type: Boolean,
+        default: true,
+    },
 });
 </script>
 
@@ -56,8 +60,15 @@ defineProps({
         </div>
 
         <div class="relative z-10 mx-auto flex min-h-[calc(100vh-4.5rem)] max-w-6xl items-center px-4 py-8 sm:px-6 lg:px-8">
-            <div class="grid w-full overflow-hidden rounded-lg border border-slate-300/80 bg-slate-950 shadow-[0_28px_90px_rgba(15,23,42,0.24)] lg:grid-cols-[0.92fr_1.08fr]">
-                <aside class="relative border-b border-white/10 bg-slate-950 px-6 py-8 text-white sm:px-8 lg:border-b-0 lg:border-r lg:px-10 lg:py-10">
+            <div
+                :class="[
+                    'w-full overflow-hidden rounded-lg border border-slate-300/80 shadow-[0_28px_90px_rgba(15,23,42,0.24)]',
+                    showPanel
+                        ? 'grid bg-slate-950 lg:grid-cols-[0.92fr_1.08fr]'
+                        : 'mx-auto max-w-3xl bg-white',
+                ]"
+            >
+                <aside v-if="showPanel" class="relative border-b border-white/10 bg-slate-950 px-6 py-8 text-white sm:px-8 lg:border-b-0 lg:border-r lg:px-10 lg:py-10">
                     <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(250,204,21,0.18),_transparent_32%),linear-gradient(180deg,_rgba(15,23,42,0.9),_rgba(15,23,42,0.84))]"></div>
                     <div class="absolute inset-y-0 right-0 hidden w-px bg-white/10 lg:block"></div>
 
@@ -108,7 +119,7 @@ defineProps({
                 </aside>
 
                 <section class="bg-white px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
-                    <div class="mx-auto max-w-xl">
+                    <div :class="['mx-auto', showPanel ? 'max-w-xl' : 'max-w-2xl']">
                         <div class="flex items-start justify-between gap-4">
                             <div>
                                 <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">

@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Scholarship extends Model
 {
@@ -35,6 +34,8 @@ class Scholarship extends Model
         'slots_available',
         'application_mode',
         'selection_stages',
+        'exam_duration_minutes',
+        'exam_passing_score',
         'renewal_policy',
         'return_service_contract',
         'other_contract_terms',
@@ -58,6 +59,8 @@ class Scholarship extends Model
             'deadline' => 'date',
             'review_rubric' => 'array',
             'selection_stages' => 'array',
+            'exam_duration_minutes' => 'integer',
+            'exam_passing_score' => 'decimal:2',
             'views_count' => 'integer',
             'provider_terms_accepted_at' => 'datetime',
         ];
@@ -91,11 +94,6 @@ class Scholarship extends Model
     public function dssSnapshots(): HasMany
     {
         return $this->hasMany(DssCalculationSnapshot::class);
-    }
-
-    public function providerAssessment(): HasOne
-    {
-        return $this->hasOne(ProviderAssessment::class, 'provider_id', 'provider_id');
     }
 
     public function scopeAcceptingApplications(Builder $query): Builder

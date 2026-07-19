@@ -8,7 +8,6 @@ use App\Models\ApplicationDocument;
 use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
-use App\Models\ProviderAssessment;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
@@ -1105,6 +1104,8 @@ class ApplicantDashboardController extends Controller
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
             'selection_stages' => $selectionStages,
+            'exam_duration_minutes' => $scholarship->exam_duration_minutes,
+            'exam_passing_score' => $scholarship->exam_passing_score,
             'program_events' => $scholarship->events
                 ->where('status', 'scheduled')
                 ->filter(fn ($event): bool => in_array($event->type, $selectionStages, true))
@@ -1215,11 +1216,12 @@ class ApplicantDashboardController extends Controller
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
         $application->loadMissing('schedules');
-        $application->scholarship?->loadMissing('providerAssessment');
+        $application->scholarship?->loadMissing('events');
         $examStatuses = ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed'];
-        $assessment = in_array($application->status, $examStatuses, true)
-            && $application->scholarship?->providerAssessment?->status === 'active'
-                ? $application->scholarship->providerAssessment
+        $exam = in_array($application->status, $examStatuses, true)
+            && $application->scholarship
+            && in_array('exam', ScholarshipSelectionPlan::normalize($application->scholarship->selection_stages), true)
+                ? $this->examPayload($application->scholarship)
                 : null;
 
         return [
@@ -1255,24 +1257,25 @@ class ApplicantDashboardController extends Controller
             'scholarship' => $application->scholarship
                 ? $this->scholarshipPayload($application->scholarship, $application->applicant)
                 : null,
-            'exam' => $assessment ? $this->assessmentPayload($assessment) : null,
+            'exam' => $exam,
         ];
     }
 
-    private function assessmentPayload(ProviderAssessment $assessment): array
+    private function examPayload(Scholarship $scholarship): array
     {
+        $scholarship->loadMissing('events');
+        $event = $scholarship->events->firstWhere('type', 'exam');
+
         return [
-            'title' => $assessment->title,
-            'assessment_type' => $assessment->assessment_type,
-            'image_url' => filled($assessment->image_path)
-                ? asset(ltrim($assessment->image_path, '/'))
-                : asset('uploads/scholarship-default.jpg'),
-            'description' => $assessment->description,
-            'duration_minutes' => $assessment->duration_minutes,
-            'passing_score' => $assessment->passing_score,
-            'delivery_mode' => $assessment->delivery_mode,
-            'venue' => $assessment->venue,
-            'instructions' => $assessment->instructions,
+            'title' => $event?->title ?: "{$scholarship->title} exam",
+            'assessment_type' => 'qualifying_exam',
+            'image_url' => $this->scholarshipImageUrl($scholarship),
+            'description' => 'The scholarship provider conducts and grades this exam outside the portal.',
+            'duration_minutes' => $scholarship->exam_duration_minutes,
+            'passing_score' => $scholarship->exam_passing_score,
+            'delivery_mode' => $event?->mode ?? 'provider_managed',
+            'venue' => $event?->venue ?: $event?->location_address,
+            'instructions' => $event?->instructions,
         ];
     }
 

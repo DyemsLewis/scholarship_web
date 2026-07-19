@@ -8,7 +8,6 @@ use App\Models\ApplicationDocument;
 use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
-use App\Models\ProviderAssessment;
 use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
@@ -58,17 +57,6 @@ class ProviderController extends Controller
         return view('provider-programs');
     }
 
-    public function exams(Request $request): View|RedirectResponse
-    {
-        if (! $request->user()) {
-            return redirect()->route('login');
-        }
-
-        abort_unless($request->user()->isProvider(), 403);
-
-        return view('provider-exams');
-    }
-
     public function programForm(Request $request): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -76,6 +64,10 @@ class ProviderController extends Controller
         }
 
         abort_unless($request->user()->isProvider(), 403);
+
+        if (! $request->user()->hasVerifiedEmail() || ! $request->user()->providerProfile?->isVerified()) {
+            return redirect()->to(route('provider.profile').'#verification-documents');
+        }
 
         return view('provider-program-form');
     }
@@ -145,21 +137,28 @@ class ProviderController extends Controller
     {
         abort_unless($request->user()?->isProvider(), 403);
 
+        $provider = $request->user()
+            ->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])
+            ->loadCount('providerVerificationDocuments');
+
         $scholarships = Scholarship::query()
-            ->where('provider_id', $request->user()->id)
+            ->where('provider_id', $provider->id)
             ->withCount('bookmarks')
             ->latest()
             ->get();
         $reviewQueue = ScholarshipApplication::query()
             ->with(['applicant.studentProfile', 'documents', 'scholarship'])
-            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id))
+            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $provider->id))
             ->whereIn('status', ['submitted', 'under_review', 'qualified', 'shortlisted', 'interview'])
             ->latest('submitted_at')
             ->limit(3)
             ->get();
 
         return response()->json([
-            'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+            'user' => [
+                ...$provider->publicPayload(),
+                'verification_documents_count' => (int) $provider->provider_verification_documents_count,
+            ],
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
             'review_queue' => $reviewQueue->map(fn (ScholarshipApplication $application) => [
                 'id' => $application->id,
@@ -280,6 +279,16 @@ class ProviderController extends Controller
             'terms_version' => Terms::VERSION,
         ]);
 
+        $returnedToReview = $request->user()->providerProfile?->verification_status === 'rejected';
+
+        if ($returnedToReview) {
+            $request->user()->providerProfile()->update([
+                'verification_status' => 'pending',
+                'verified_by' => null,
+                'verified_at' => null,
+            ]);
+        }
+
         User::query()
             ->where('role', 'admin')
             ->get()
@@ -300,7 +309,10 @@ class ProviderController extends Controller
         );
 
         return response()->json([
-            'message' => 'Verification document uploaded.',
+            'message' => $returnedToReview
+                ? 'Verification proof uploaded and returned for admin review.'
+                : 'Verification proof uploaded for admin review.',
+            'user' => $request->user()->fresh(['providerProfile'])->publicPayload(),
             'document' => $this->verificationDocumentPayload($document),
             'verification_documents' => $request->user()
                 ->providerVerificationDocuments()
@@ -556,54 +568,6 @@ class ProviderController extends Controller
         ]);
     }
 
-    public function examsData(Request $request): JsonResponse
-    {
-        abort_unless($request->user()?->isProvider(), 403);
-
-        $assessments = ProviderAssessment::query()
-            ->where('provider_id', $request->user()->id)
-            ->latest()
-            ->get();
-
-        return response()->json([
-            'user' => $request->user()->loadMissing(['providerProfile'])->publicPayload(),
-            'assessments' => $assessments->map(fn (ProviderAssessment $assessment) => $this->assessmentPayload($assessment))->values(),
-        ]);
-    }
-
-    public function updateExam(Request $request, ProviderAssessment $assessment): JsonResponse
-    {
-        abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($assessment->provider_id === $request->user()->id, 403);
-
-        $validated = $request->validate([
-            'title' => ['required', 'string', 'max:255'],
-            'assessment_type' => ['required', Rule::in(['qualifying_exam', 'screening_assessment'])],
-            'description' => ['nullable', 'string', 'max:2000'],
-            'duration_minutes' => ['nullable', 'integer', 'between:15,480'],
-            'passing_score' => ['nullable', 'numeric', 'between:0,100'],
-            'delivery_mode' => ['required', Rule::in(['provider_managed', 'onsite', 'online', 'hybrid'])],
-            'venue' => ['nullable', 'string', 'max:500'],
-            'instructions' => ['nullable', 'string', 'max:3000'],
-            'status' => ['required', Rule::in(['active', 'inactive'])],
-        ]);
-
-        $assessment->update($validated);
-
-        ActivityLog::record(
-            $request->user(),
-            'provider_assessment_updated',
-            "{$request->user()->name} updated {$assessment->title}.",
-            $request,
-            ['assessment_id' => $assessment->id],
-        );
-
-        return response()->json([
-            'message' => 'Assessment details updated.',
-            'assessment' => $this->assessmentPayload($assessment->fresh()),
-        ]);
-    }
-
     public function applicationDetailData(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -781,7 +745,7 @@ class ProviderController extends Controller
             'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
         ]);
 
-        $application->loadMissing(['scholarship.providerAssessment', 'applicant']);
+        $application->loadMissing(['scholarship.events', 'applicant']);
         $this->ensureScheduleCanBePublished($application, $validated['type']);
 
         $eventLabel = $this->scheduleTypeLabel($validated['type']);
@@ -1484,6 +1448,7 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
+        $validated = $this->normalizeScholarshipExamDetails($validated);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request);
         $imagePath = $this->storeScholarshipImage($request);
 
@@ -1536,6 +1501,7 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
+        $validated = $this->normalizeScholarshipExamDetails($validated);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request, $scholarship);
         $imagePath = $this->storeScholarshipImage($request, $scholarship);
 
@@ -1606,6 +1572,8 @@ class ProviderController extends Controller
             'slots_available' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'application_mode' => ['nullable', Rule::in(['online', 'onsite', 'hybrid', 'provider_review'])],
             'selection_stages' => ['nullable', 'string', 'max:500', 'json'],
+            'exam_duration_minutes' => ['nullable', 'integer', 'between:15,480'],
+            'exam_passing_score' => ['nullable', 'numeric', 'between:0,100'],
             'program_events' => ['nullable', 'string', 'max:20000', 'json'],
             'renewal_policy' => ['nullable', 'string', 'max:2000'],
             'return_service_contract' => ['nullable', 'string', 'max:3000'],
@@ -1665,6 +1633,16 @@ class ProviderController extends Controller
             $validated['selection_stages'] = $scholarship->selection_stages;
         } else {
             $validated['selection_stages'] = ScholarshipSelectionPlan::DEFAULT;
+        }
+
+        return $validated;
+    }
+
+    private function normalizeScholarshipExamDetails(array $validated): array
+    {
+        if (! in_array('exam', ScholarshipSelectionPlan::normalize($validated['selection_stages'] ?? null), true)) {
+            $validated['exam_duration_minutes'] = null;
+            $validated['exam_passing_score'] = null;
         }
 
         return $validated;
@@ -1743,15 +1721,6 @@ class ProviderController extends Controller
             ]);
         }
 
-        if ($eventData['type'] === 'exam' && ! ProviderAssessment::query()
-            ->where('provider_id', $provider->id)
-            ->where('status', 'active')
-            ->exists()) {
-            throw ValidationException::withMessages([
-                'type' => 'Configure an active provider assessment before publishing the exam schedule.',
-            ]);
-        }
-
         $eventLabel = ScholarshipSelectionPlan::label($eventData['type']);
         $event = $scholarship->events()->firstOrNew(['type' => $eventData['type']]);
         $event->fill([
@@ -1821,6 +1790,8 @@ class ProviderController extends Controller
             'slots_available',
             'application_mode',
             'selection_stages',
+            'exam_duration_minutes',
+            'exam_passing_score',
             'renewal_policy',
             'return_service_contract',
             'other_contract_terms',
@@ -1911,7 +1882,7 @@ class ProviderController extends Controller
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
         $application->loadMissing('schedules');
-        $application->scholarship?->loadMissing('providerAssessment');
+        $application->scholarship?->loadMissing('events');
 
         if ($includeApplicantProfile) {
             $application->loadMissing('applicant.applicantVerificationDocuments');
@@ -1958,9 +1929,9 @@ class ProviderController extends Controller
             'scholarship' => $application->scholarship
                 ? $this->scholarshipPayload($application->scholarship)
                 : null,
-            'exam' => in_array('exam', ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages), true)
-                && $application->scholarship?->providerAssessment
-                ? $this->assessmentPayload($application->scholarship->providerAssessment)
+            'exam' => $application->scholarship
+                && in_array('exam', ScholarshipSelectionPlan::normalize($application->scholarship->selection_stages), true)
+                ? $this->examPayload($application->scholarship)
                 : null,
         ];
     }
@@ -2112,6 +2083,8 @@ class ProviderController extends Controller
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
             'selection_stages' => ScholarshipSelectionPlan::normalize($scholarship->selection_stages),
+            'exam_duration_minutes' => $scholarship->exam_duration_minutes,
+            'exam_passing_score' => $scholarship->exam_passing_score,
             'program_events' => $scholarship->events
                 ->where('status', 'scheduled')
                 ->sortBy('scheduled_at')
@@ -2131,24 +2104,21 @@ class ProviderController extends Controller
         ];
     }
 
-    private function assessmentPayload(ProviderAssessment $assessment): array
+    private function examPayload(Scholarship $scholarship): array
     {
+        $scholarship->loadMissing('events');
+        $event = $scholarship->events->firstWhere('type', 'exam');
+
         return [
-            'id' => $assessment->id,
-            'title' => $assessment->title,
-            'assessment_type' => $assessment->assessment_type,
-            'image_path' => $assessment->image_path,
-            'image_url' => filled($assessment->image_path)
-                ? asset(ltrim($assessment->image_path, '/'))
-                : asset('uploads/scholarship-default.jpg'),
-            'description' => $assessment->description,
-            'duration_minutes' => $assessment->duration_minutes,
-            'passing_score' => $assessment->passing_score,
-            'delivery_mode' => $assessment->delivery_mode,
-            'venue' => $assessment->venue,
-            'instructions' => $assessment->instructions,
-            'status' => $assessment->status,
-            'updated_at' => $assessment->updated_at?->format('M d, Y h:i A'),
+            'title' => $event?->title ?: "{$scholarship->title} exam",
+            'assessment_type' => 'qualifying_exam',
+            'image_url' => $this->scholarshipImageUrl($scholarship),
+            'description' => 'This exam is conducted and graded by the scholarship provider outside the portal.',
+            'duration_minutes' => $scholarship->exam_duration_minutes,
+            'passing_score' => $scholarship->exam_passing_score,
+            'delivery_mode' => $event?->mode ?? 'provider_managed',
+            'venue' => $event?->venue ?: $event?->location_address,
+            'instructions' => $event?->instructions,
         ];
     }
 
@@ -2328,11 +2298,6 @@ class ProviderController extends Controller
             ]);
         }
 
-        if ($type === 'exam' && $application->scholarship?->providerAssessment?->status !== 'active') {
-            throw ValidationException::withMessages([
-                'type' => 'Configure an active provider assessment before announcing an exam.',
-            ]);
-        }
     }
 
     private function scheduleTypeLabel(string $type): string

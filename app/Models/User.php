@@ -252,7 +252,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'provider_description' => $this->provider_description,
             'verification_status' => $this->providerProfile?->verification_status,
             'verification_notes' => $this->providerProfile?->verification_notes,
-            'can_post_scholarships' => $this->isProvider() && $this->providerProfile?->isVerified(),
+            'can_post_scholarships' => $this->isProvider()
+                && $this->hasVerifiedEmail()
+                && $this->providerProfile?->isVerified(),
             'applicant_verification_status' => $this->studentProfile?->verification_status ?? 'unsubmitted',
             'applicant_verification_notes' => $this->studentProfile?->verification_notes,
             'applicant_verified_at' => $this->studentProfile?->verified_at?->format('M d, Y'),

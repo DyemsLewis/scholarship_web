@@ -99,9 +99,7 @@ Route::middleware(['auth', 'provider'])
         Route::get('/', [ProviderController::class, 'index'])->name('index');
         Route::get('/dashboard/data', [ProviderController::class, 'dashboardData'])->name('dashboard.data');
         Route::get('/programs', [ProviderController::class, 'programs'])->name('programs');
-        Route::get('/exams', [ProviderController::class, 'exams'])->name('exams');
-        Route::get('/exams/data', [ProviderController::class, 'examsData'])->name('exams.data');
-        Route::patch('/exams/{assessment}', [ProviderController::class, 'updateExam'])->whereNumber('assessment')->name('exams.update');
+        Route::redirect('/exams', '/provider/programs')->name('exams');
         Route::get('/programs/create', [ProviderController::class, 'programForm'])->name('programs.create');
         Route::get('/programs/{scholarship}/edit', [ProviderController::class, 'programForm'])->name('programs.edit');
         Route::get('/programs/{scholarship}/applications', [ProviderController::class, 'programApplications'])->whereNumber('scholarship')->name('programs.applications');

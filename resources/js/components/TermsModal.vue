@@ -90,9 +90,6 @@ onUnmounted(() => {
                         </article>
                     </div>
 
-                    <div class="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-                        Before live hosting, replace or review these practical terms with a final policy approved for your school, organization, and provider process.
-                    </div>
                 </div>
 
                 <footer class="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">

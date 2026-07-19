@@ -9,7 +9,7 @@ export const selectionStageDefinitions = [
         value: 'exam',
         label: 'Exam',
         icon: 'fa-solid fa-clipboard-question',
-        detail: 'Provider assessment',
+        detail: 'Provider-managed exam',
     },
     {
         value: 'interview',

@@ -581,7 +581,7 @@ function statusConfirmation(status) {
     const confirmations = {
         exam_qualified: {
             title: 'Qualify applicant for the exam?',
-            message: `${applicantName} will see the assessment details and receive a status notification.`,
+            message: `${applicantName} will see the provider-managed exam details and receive a status notification.`,
             confirmLabel: 'Qualify for exam',
         },
         interview: {
@@ -816,18 +816,18 @@ onMounted(loadApplication);
                                         <img :src="application.exam.image_url" :alt="application.exam.title" class="h-full w-full object-contain">
                                     </div>
                                     <div class="p-4">
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Assigned assessment</p>
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider-managed exam</p>
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">{{ application.exam.title }}</h3>
                                         <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-600">
-                                            <span>{{ labelFromKey(application.exam.assessment_type) }}</span>
                                             <span v-if="application.exam.duration_minutes">{{ application.exam.duration_minutes }} minutes</span>
                                             <span v-if="application.exam.passing_score !== null">{{ Number(application.exam.passing_score) }}% passing score</span>
                                             <span>{{ labelFromKey(application.exam.delivery_mode) }}</span>
                                         </div>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">Your organization conducts and grades this exam outside the portal.</p>
                                     </div>
-                                    <a href="/provider/exams" class="m-4 inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-                                        <i class="fa-solid fa-gear"></i>
-                                        Manage
+                                    <a :href="`/provider/programs/${application.scholarship.id}/edit`" class="m-4 inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
+                                        <i class="fa-solid fa-pen"></i>
+                                        Edit program
                                     </a>
                                 </div>
                             </section>

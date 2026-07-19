@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\ApplicationSchedule;
-use App\Models\ProviderAssessment;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipEvent;
@@ -31,16 +30,6 @@ class ProgramSelectionWorkflowTest extends TestCase
             'interview',
             'distribution',
         ]);
-        ProviderAssessment::create([
-            'provider_id' => $provider->id,
-            'title' => 'Shared qualifying exam',
-            'assessment_type' => 'qualifying_exam',
-            'delivery_mode' => 'onsite',
-            'venue' => 'Community Learning Center',
-            'instructions' => 'Bring a school ID and pencil.',
-            'status' => 'active',
-        ]);
-
         $this->actingAs($provider)
             ->postJson("/provider/scholarships/{$scholarship->id}/events", [
                 'type' => 'exam',
@@ -226,15 +215,6 @@ class ProgramSelectionWorkflowTest extends TestCase
         $provider = User::factory()->create(['role' => 'provider']);
         $provider->providerProfile()->update(['verification_status' => 'approved']);
         $applicant = User::factory()->create(['role' => 'applicant']);
-        ProviderAssessment::create([
-            'provider_id' => $provider->id,
-            'title' => 'Program qualifying exam',
-            'assessment_type' => 'qualifying_exam',
-            'delivery_mode' => 'onsite',
-            'venue' => 'Learning Center',
-            'instructions' => 'Bring a school ID.',
-            'status' => 'active',
-        ]);
         $examDate = now()->addDays(5)->startOfHour();
         $distributionDate = now()->addDays(20)->startOfHour();
 
@@ -243,6 +223,8 @@ class ProgramSelectionWorkflowTest extends TestCase
                 'title' => 'Scheduled Selection Scholarship',
                 'description' => 'A program with dates applicants can review before applying.',
                 'selection_stages' => json_encode(['exam']),
+                'exam_duration_minutes' => 75,
+                'exam_passing_score' => 70,
                 'program_events' => json_encode([
                     [
                         'type' => 'exam',
@@ -267,6 +249,8 @@ class ProgramSelectionWorkflowTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonCount(2, 'scholarship.program_events')
+            ->assertJsonPath('scholarship.exam_duration_minutes', 75)
+            ->assertJsonPath('scholarship.exam_passing_score', '70.00')
             ->assertJsonPath('scholarship.program_events.0.type', 'exam')
             ->assertJsonPath('scholarship.program_events.1.type', 'distribution')
             ->json('scholarship.id');
@@ -276,6 +260,8 @@ class ProgramSelectionWorkflowTest extends TestCase
         $this->actingAs($admin)
             ->getJson("/admin/scholarships/{$scholarship->id}/review/data")
             ->assertOk()
+            ->assertJsonPath('scholarship.exam_duration_minutes', 75)
+            ->assertJsonPath('scholarship.exam_passing_score', '70.00')
             ->assertJsonPath('scholarship.program_events.0.type', 'exam')
             ->assertJsonPath('scholarship.program_events.0.online_url', 'https://example.test/private-exam-room')
             ->assertJsonPath('scholarship.program_events.0.instructions', 'Use the private link sent to qualified applicants.')
@@ -424,6 +410,8 @@ class ProgramSelectionWorkflowTest extends TestCase
             'title' => 'Program Selection Test Scholarship',
             'description' => 'Used to verify program-level selection and scheduling.',
             'selection_stages' => $stages,
+            'exam_duration_minutes' => in_array('exam', $stages, true) ? 60 : null,
+            'exam_passing_score' => in_array('exam', $stages, true) ? 75 : null,
             'status' => 'published',
         ]);
         $application = ScholarshipApplication::create([

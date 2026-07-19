@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
@@ -59,6 +59,45 @@ const providerTypeLabels = Object.fromEntries(
 );
 const labelClass = 'text-xs font-bold uppercase tracking-[0.14em] text-slate-500';
 const inputClass = 'mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
+const verificationGuidance = computed(() => {
+    if (user.value?.can_post_scholarships) {
+        return {
+            title: 'Provider account verified',
+            description: 'Your organization has publishing access and can create scholarship programs.',
+            className: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+        };
+    }
+
+    if (!user.value?.email_verified) {
+        return {
+            title: 'Email verification is still required',
+            description: 'Use the verification link sent to your email. You may upload organization proof while waiting.',
+            className: 'border-amber-200 bg-amber-50 text-amber-900',
+        };
+    }
+
+    if (user.value?.verification_status === 'rejected') {
+        return {
+            title: 'Replacement proof needed',
+            description: 'Review the admin note, then upload a corrected document to return the account for review.',
+            className: 'border-rose-200 bg-rose-50 text-rose-900',
+        };
+    }
+
+    if (verificationDocuments.value.length > 0) {
+        return {
+            title: 'Proof submitted for admin review',
+            description: 'You will be notified after an admin approves or requests changes to the provider account.',
+            className: 'border-amber-200 bg-amber-50 text-amber-900',
+        };
+    }
+
+    return {
+        title: 'Upload proof to request verification',
+        description: 'Add at least one valid organization document. Program creation unlocks after admin approval.',
+        className: 'border-amber-200 bg-amber-50 text-amber-900',
+    };
+});
 
 function applyUser(payload) {
     user.value = payload;
@@ -152,8 +191,12 @@ async function uploadVerificationDocument() {
             },
         });
 
+        if (response.data.user) {
+            applyUser(response.data.user);
+        }
         applyVerificationDocuments(response.data.verification_documents);
         verificationDocumentFile.value = null;
+        verificationDocumentTermsAccepted.value = false;
     } catch (handledError) {
         void handledError;
     } finally {
@@ -260,7 +303,7 @@ onMounted(loadProviderProfile);
                         </div>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                    <section id="verification-documents" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -276,6 +319,18 @@ onMounted(loadProviderProfile);
                             <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
                                 {{ verificationDocuments.length }} file{{ verificationDocuments.length === 1 ? '' : 's' }}
                             </span>
+                        </div>
+
+                        <div :class="['mt-5 rounded-md border p-4 text-sm', verificationGuidance.className]">
+                            <p class="font-bold">
+                                {{ verificationGuidance.title }}
+                            </p>
+                            <p class="mt-1 leading-6">
+                                {{ verificationGuidance.description }}
+                            </p>
+                            <p v-if="user?.verification_notes && !user?.can_post_scholarships" class="mt-2 text-xs leading-5">
+                                <span class="font-bold">Admin note:</span> {{ user.verification_notes }}
+                            </p>
                         </div>
 
                         <div class="mt-5 grid gap-3 md:grid-cols-[1fr_1.2fr_auto] md:items-end">

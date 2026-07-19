@@ -16,7 +16,6 @@ const formError = ref('');
 const user = ref(null);
 const scholarshipFormElement = ref(null);
 const imageInputElement = ref(null);
-const scholarshipForm = ref(emptyScholarshipForm());
 const imageFile = ref(null);
 const imagePreviewUrl = ref('');
 const providerLocationMessage = ref('');
@@ -64,7 +63,7 @@ const selectionStageOptions = [
     {
         value: 'exam',
         label: 'Exam',
-        description: 'Use a provider assessment before the final decision.',
+        description: 'Provider conducts and grades an exam before the final decision.',
         icon: 'fa-solid fa-clipboard-question',
         required: false,
     },
@@ -83,6 +82,7 @@ const selectionStageOptions = [
         required: true,
     },
 ];
+const scholarshipForm = ref(emptyScholarshipForm());
 const scheduleModeOptions = [
     { value: 'onsite', label: 'On-site' },
     { value: 'online', label: 'Online' },
@@ -522,6 +522,12 @@ const programReadinessItems = computed(() => [
             ),
         help: 'How students apply and who they can contact for questions.',
     },
+    ...(scholarshipForm.value.selectionStages.includes('exam') ? [{
+        label: 'Exam details',
+        complete: hasText(scholarshipForm.value.examDurationMinutes)
+            && hasText(scholarshipForm.value.examPassingScore),
+        help: 'Provider-managed exam duration and passing score for this program.',
+    }] : []),
     {
         label: 'Return service contract',
         complete: hasText(scholarshipForm.value.returnServiceContract),
@@ -620,6 +626,11 @@ const workflowSummary = computed(() => [
     hasText(scholarshipForm.value.returnServiceContract) ? 'Return service listed' : 'No return service listed',
     hasText(scholarshipForm.value.otherContractTerms) ? 'Other contract terms listed' : 'No other contract terms',
     `${scholarshipForm.value.selectionStages.length} selection stages`,
+    ...(scholarshipForm.value.selectionStages.includes('exam')
+        ? [hasText(scholarshipForm.value.examDurationMinutes)
+            ? `${scholarshipForm.value.examDurationMinutes}-minute provider exam`
+            : 'Exam duration not set']
+        : []),
     scheduledProgramEventCount.value
         ? `${scheduledProgramEventCount.value} date${scheduledProgramEventCount.value === 1 ? '' : 's'} announced`
         : 'Dates not announced',
@@ -824,6 +835,8 @@ function emptyScholarshipForm() {
         slotsAvailable: '',
         applicationMode: '',
         selectionStages: ['screening', 'distribution'],
+        examDurationMinutes: '',
+        examPassingScore: '',
         programEvents: emptyProgramEvents(),
         renewalPolicy: '',
         returnServiceContract: '',
@@ -1046,6 +1059,8 @@ function fillScholarshipForm(scholarship) {
         selectionStages: selectionStageOptions
             .map((option) => option.value)
             .filter((value) => (scholarship.selection_stages ?? ['screening', 'distribution']).includes(value)),
+        examDurationMinutes: scholarship.exam_duration_minutes ?? '',
+        examPassingScore: scholarship.exam_passing_score ?? '',
         programEvents: fillProgramEvents(scholarship.program_events),
         renewalPolicy: scholarship.renewal_policy ?? '',
         returnServiceContract: scholarship.return_service_contract ?? '',
@@ -1302,6 +1317,12 @@ async function saveScholarship() {
         slots_available: scholarshipForm.value.slotsAvailable || '',
         application_mode: scholarshipForm.value.applicationMode || '',
         selection_stages: JSON.stringify(scholarshipForm.value.selectionStages),
+        exam_duration_minutes: scholarshipForm.value.selectionStages.includes('exam')
+            ? scholarshipForm.value.examDurationMinutes || ''
+            : '',
+        exam_passing_score: scholarshipForm.value.selectionStages.includes('exam')
+            ? scholarshipForm.value.examPassingScore || ''
+            : '',
         program_events: JSON.stringify(programEventsPayload()),
         renewal_policy: scholarshipForm.value.renewalPolicy || '',
         return_service_contract: scholarshipForm.value.returnServiceContract || '',
@@ -1702,6 +1723,55 @@ onMounted(loadFormData);
                                     </span>
                                 </div>
 
+                                <div
+                                    v-if="scholarshipForm.selectionStages.includes('exam')"
+                                    :class="['mt-4', fieldCardClass]"
+                                >
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">Provider-managed exam details</p>
+                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                                                Set the basic exam rules applicants should know. Your organization conducts and grades the exam outside this platform.
+                                            </p>
+                                        </div>
+                                        <span class="w-fit rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-200">
+                                            No online test is created
+                                        </span>
+                                    </div>
+
+                                    <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                        <div>
+                                            <label :class="labelClass" for="scholarship-exam-duration">Duration in minutes</label>
+                                            <input
+                                                id="scholarship-exam-duration"
+                                                v-model="scholarshipForm.examDurationMinutes"
+                                                type="number"
+                                                min="15"
+                                                max="480"
+                                                step="5"
+                                                placeholder="Example: 60"
+                                                :class="inputClass"
+                                            >
+                                            <p class="mt-2 text-xs leading-5 text-slate-500">Use the expected time applicants will spend at the provider's exam.</p>
+                                        </div>
+
+                                        <div>
+                                            <label :class="labelClass" for="scholarship-exam-passing-score">Passing score (%)</label>
+                                            <input
+                                                id="scholarship-exam-passing-score"
+                                                v-model="scholarshipForm.examPassingScore"
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                step="0.01"
+                                                placeholder="Example: 75"
+                                                :class="inputClass"
+                                            >
+                                            <p class="mt-2 text-xs leading-5 text-slate-500">The provider records the result and decides who advances.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div :class="['mt-4', fieldCardClass]">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
@@ -1869,10 +1939,6 @@ onMounted(loadFormData);
                                             </div>
                                         </details>
                                     </div>
-
-                                    <p v-if="scholarshipForm.selectionStages.includes('exam')" class="mt-3 text-xs leading-5 text-slate-500">
-                                        An exam date can be published after an active assessment is configured on the <a href="/provider/exams" class="font-bold text-slate-800 underline decoration-slate-300 underline-offset-2">Exams page</a>.
-                                    </p>
                                 </div>
 
                                 <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
