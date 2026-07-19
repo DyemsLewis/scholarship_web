@@ -64,6 +64,10 @@ Route::middleware(['auth', 'admin'])
         Route::get('/accounts/{user}/edit', [AdminController::class, 'accountForm'])->name('accounts.edit');
         Route::get('/profile', [AdminController::class, 'profile'])->name('profile');
         Route::get('/reviews', [AdminController::class, 'reviews'])->name('reviews');
+        Route::get('/providers/{provider}/review', [AdminController::class, 'providerReview'])->whereNumber('provider')->name('providers.review.show');
+        Route::get('/providers/{provider}/review/data', [AdminController::class, 'providerReviewData'])->whereNumber('provider')->name('providers.review.data');
+        Route::get('/applicants/{applicant}/review', [AdminController::class, 'applicantReview'])->whereNumber('applicant')->name('applicants.review.show');
+        Route::get('/applicants/{applicant}/review/data', [AdminController::class, 'applicantReviewData'])->whereNumber('applicant')->name('applicants.review.data');
         Route::get('/scholarships/{scholarship}/review', [AdminController::class, 'scholarshipReview'])->name('scholarships.review.show');
         Route::get('/scholarships/{scholarship}/review/data', [AdminController::class, 'scholarshipReviewData'])->name('scholarships.review.data');
         Route::get('/logs', [AdminController::class, 'logs'])->name('logs');

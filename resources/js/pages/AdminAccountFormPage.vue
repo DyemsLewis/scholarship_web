@@ -8,7 +8,6 @@ const accountId = window.location.pathname.match(/\/admin\/accounts\/(\d+)\/edit
 const isEditMode = computed(() => Boolean(accountId));
 const isLoading = ref(Boolean(accountId));
 const isSaving = ref(false);
-const statusMessage = ref('');
 const errorMessage = ref('');
 const formElement = ref(null);
 const form = ref(emptyForm());
@@ -105,7 +104,6 @@ function resetForm() {
     account.value = null;
     supportLink.value = '';
     suspensionReason.value = '';
-    statusMessage.value = '';
     errorMessage.value = '';
 }
 
@@ -131,7 +129,6 @@ async function loadAccount() {
 }
 
 async function saveAccount() {
-    statusMessage.value = '';
     errorMessage.value = '';
     supportLink.value = '';
 
@@ -186,16 +183,13 @@ async function saveAccount() {
             ? await window.axios.patch(`/admin/users/${accountId}`, payload)
             : await window.axios.post('/admin/users', payload);
 
-        statusMessage.value = response.data.message ?? (isEditMode.value ? 'Account updated successfully.' : 'Account created successfully.');
-
         if (isEditMode.value) {
             fillForm(response.data.user);
         } else {
             resetForm();
-            statusMessage.value = response.data.message ?? 'Account created successfully.';
         }
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to save account.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         isSaving.value = false;
     }
@@ -206,7 +200,6 @@ async function updateAccountStatus(status) {
         return;
     }
 
-    statusMessage.value = '';
     errorMessage.value = '';
     supportLink.value = '';
 
@@ -223,10 +216,9 @@ async function updateAccountStatus(status) {
             suspension_reason: status === 'suspended' ? suspensionReason.value.trim() : null,
         });
 
-        statusMessage.value = response.data.message ?? 'Account status updated.';
         fillForm(response.data.user);
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update account status.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         accountAction.value = '';
     }
@@ -237,7 +229,6 @@ async function forcePasswordReset() {
         return;
     }
 
-    statusMessage.value = '';
     errorMessage.value = '';
     supportLink.value = '';
     accountAction.value = 'force-reset';
@@ -245,11 +236,10 @@ async function forcePasswordReset() {
     try {
         const response = await window.axios.post(`/admin/users/${accountId}/force-password-reset`);
 
-        statusMessage.value = response.data.message ?? 'Password reset required.';
         supportLink.value = response.data.reset_url ?? '';
         fillForm(response.data.user);
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to require a password reset.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         accountAction.value = '';
     }
@@ -260,7 +250,6 @@ async function verifyEmail() {
         return;
     }
 
-    statusMessage.value = '';
     errorMessage.value = '';
     supportLink.value = '';
     accountAction.value = 'verify-email';
@@ -268,10 +257,9 @@ async function verifyEmail() {
     try {
         const response = await window.axios.patch(`/admin/users/${accountId}/email-verification`);
 
-        statusMessage.value = response.data.message ?? 'Email marked as verified.';
         fillForm(response.data.user);
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to verify this email.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         accountAction.value = '';
     }
@@ -282,7 +270,6 @@ async function resendVerificationEmail() {
         return;
     }
 
-    statusMessage.value = '';
     errorMessage.value = '';
     supportLink.value = '';
     accountAction.value = 'resend-verification';
@@ -290,10 +277,9 @@ async function resendVerificationEmail() {
     try {
         const response = await window.axios.post(`/admin/users/${accountId}/verification-email`);
 
-        statusMessage.value = response.data.message ?? 'Verification email processed.';
         fillForm(response.data.user);
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to resend verification email.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         accountAction.value = '';
     }
@@ -311,7 +297,6 @@ async function updateApplicantVerification(status) {
 
     accountAction.value = `profile-verification-${status}`;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
         const response = await window.axios.patch(`/admin/users/${accountId}/profile-verification`, {
@@ -322,9 +307,8 @@ async function updateApplicantVerification(status) {
         fillForm(response.data.user);
         verificationDocuments.value = response.data.verification_documents ?? [];
         applicantVerificationNotes.value = response.data.user?.applicant_verification_notes ?? '';
-        statusMessage.value = response.data.message ?? 'Applicant profile verification updated.';
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update applicant profile verification.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         accountAction.value = '';
     }
@@ -475,9 +459,6 @@ onMounted(loadAccount);
 
                     <div class="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
                         <div class="min-h-5">
-                            <p v-if="statusMessage" class="text-sm font-semibold text-emerald-700">
-                                {{ statusMessage }}
-                            </p>
                             <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">
                                 {{ errorMessage }}
                             </p>

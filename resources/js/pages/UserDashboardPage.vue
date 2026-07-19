@@ -342,6 +342,10 @@ function applicationNextAction(application) {
         return `${missingDocuments} required ${missingDocuments === 1 ? 'document is' : 'documents are'} still missing.`;
     }
 
+    if (application?.status_progress?.next_action) {
+        return application.status_progress.next_action;
+    }
+
     return {
         submitted: 'Waiting for the provider to begin reviewing your application.',
         under_review: 'The provider is checking your profile and documents.',
@@ -498,7 +502,7 @@ onMounted(loadDashboard);
             <div class="student-container">
                 <ApplicantPageHeader
                     eyebrow="Dashboard"
-                    :title="`Welcome back, ${user?.first_name || 'Scholar'}`"
+                    :title="`Welcome, ${user?.first_name || 'Scholar'}`"
                     description="Your next action, application progress, and strongest matches."
                     icon="fa-solid fa-table-columns"
                     action-href="/dashboard/scholarships"

@@ -6,13 +6,12 @@ import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { labelFromKey } from '../support/display';
+import { programEventForStage, progressStateLabel, selectionPlanFor } from '../support/selectionPlan';
 
 const isLoading = ref(true);
 const isSubmitting = ref(false);
 const isUploadingDocument = ref(false);
 const errorMessage = ref('');
-const submitMessage = ref('');
-const documentUploadMessage = ref('');
 const user = ref(null);
 const stats = ref({
     available_scholarships: 0,
@@ -134,6 +133,7 @@ const selectedDocumentReadiness = computed(() => selectedRequirements.value.leng
     ? 100
     : Math.round((selectedPreparedDocuments.value.length / selectedRequirements.value.length) * 100));
 const selectedApplicationMode = computed(() => applicationModeLabel(selectedScholarship.value?.application_mode));
+const selectedSelectionPlan = computed(() => selectionPlanFor(selectedScholarship.value));
 const selectedSlotsLabel = computed(() => selectedScholarship.value?.slots_available ?? 'Not listed');
 const readyApplicationCount = computed(() => applications.value.filter((application) => Number(application.document_readiness?.accepted_percent ?? application.document_readiness?.uploaded_percent ?? 0) >= 100).length);
 const activeApplicationCount = computed(() => applications.value.filter((application) => ![
@@ -399,11 +399,15 @@ function timelineStepClass(state) {
         return 'border-amber-300 bg-amber-50 text-slate-950';
     }
 
-    if (state === 'skipped') {
+    if (['stopped', 'skipped'].includes(state)) {
         return 'border-rose-200 bg-rose-50 text-rose-700';
     }
 
     return 'border-slate-200 bg-white text-slate-500';
+}
+
+function applicationStepEvent(application, step) {
+    return programEventForStage(application?.scholarship, step?.key);
 }
 
 function matchClass(score) {
@@ -509,10 +513,8 @@ function resetWizard() {
     notes.value = '';
     applicationTermsAccepted.value = false;
     documentTermsAccepted.value = false;
-    documentUploadMessage.value = '';
     activeUploadRequirement.value = '';
     errorMessage.value = '';
-    submitMessage.value = '';
     currentStep.value = 0;
 
     if (window.location.search) {
@@ -522,7 +524,6 @@ function resetWizard() {
 
 function openDocumentUpload(requirement) {
     errorMessage.value = '';
-    documentUploadMessage.value = '';
 
     if (!documentTermsAccepted.value) {
         errorMessage.value = 'Accept the document upload terms before choosing a file.';
@@ -555,7 +556,6 @@ async function handleDocumentFileChange(event) {
 
     isUploadingDocument.value = true;
     errorMessage.value = '';
-    documentUploadMessage.value = '';
 
     const payload = new FormData();
     payload.append('document_name', requirement);
@@ -575,11 +575,8 @@ async function handleDocumentFileChange(event) {
             ...preparedDocuments.value.filter((document) => document.document_name !== savedDocument.document_name),
         ];
         syncDocumentChecklist();
-        documentUploadMessage.value = `${requirement} is ready for this application.`;
-    } catch (error) {
-        errorMessage.value = error.response?.data?.errors?.document_file?.[0]
-            ?? error.response?.data?.message
-            ?? 'Unable to save the document.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         isUploadingDocument.value = false;
         activeUploadRequirement.value = '';
@@ -660,23 +657,19 @@ async function submitApplication() {
     }
 
     isSubmitting.value = true;
-    submitMessage.value = '';
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.post('/dashboard/applications', {
+        await window.axios.post('/dashboard/applications', {
             scholarship_id: selectedScholarship.value.id,
             document_checklist: documentChecklist.value,
             notes: notes.value,
             terms_accepted: applicationTermsAccepted.value ? '1' : '',
         });
 
-        const message = response.data.message ?? 'Application submitted successfully.';
         await loadApplications();
         resetWizard();
-        submitMessage.value = message;
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to submit application.';
         if (error.response?.data?.profile_readiness) {
             profileReadiness.value = error.response.data.profile_readiness;
         }
@@ -702,12 +695,10 @@ onMounted(loadApplications);
 watch(selectedScholarship, (scholarship) => {
     if (!scholarship) {
         documentChecklist.value = [];
-        documentUploadMessage.value = '';
         return;
     }
 
     syncDocumentChecklist();
-    documentUploadMessage.value = '';
     applicationTermsAccepted.value = false;
     trackApplicationStart(scholarship);
 });
@@ -739,10 +730,6 @@ watch(selectedScholarship, (scholarship) => {
                 <div v-else class="mt-6 space-y-6">
                     <div v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
-                    </div>
-
-                    <div v-if="submitMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 shadow-sm">
-                        {{ submitMessage }}
                     </div>
 
                     <div v-if="!canApply" class="student-card border-amber-200 bg-amber-50/90 p-5">
@@ -1077,6 +1064,34 @@ watch(selectedScholarship, (scholarship) => {
                                             </span>
                                         </div>
                                     </div>
+
+                                    <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                        <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <p class="text-sm font-bold text-slate-900">Selection process</p>
+                                                <p class="mt-1 text-xs leading-5 text-slate-500">The provider approves or rejects at each configured stage.</p>
+                                            </div>
+                                            <span class="text-xs font-bold text-slate-500">{{ selectedSelectionPlan.length }} stages</span>
+                                        </div>
+                                        <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                            <div
+                                                v-for="(stage, index) in selectedSelectionPlan"
+                                                :key="stage.value"
+                                                class="flex items-start gap-2.5 rounded-md border border-slate-200 bg-white p-3"
+                                            >
+                                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-900 text-xs text-white">
+                                                    <i :class="stage.icon" aria-hidden="true"></i>
+                                                </span>
+                                                <div class="min-w-0">
+                                                    <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Step {{ index + 1 }}</p>
+                                                    <p class="text-sm font-bold text-slate-800">{{ stage.label }}</p>
+                                                    <p :class="['mt-0.5 text-[11px] font-semibold', stage.event ? 'text-amber-700' : 'text-slate-400']">
+                                                        {{ stage.event?.scheduled_label || 'Date to be announced' }}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </section>
 
                                 <section class="rounded-lg border border-slate-200 bg-white p-4">
@@ -1190,10 +1205,6 @@ watch(selectedScholarship, (scholarship) => {
                                                 Open Documents
                                             </a>
                                         </div>
-                                    </div>
-
-                                    <div v-if="documentUploadMessage" class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-                                        {{ documentUploadMessage }}
                                     </div>
 
                                     <div class="grid gap-2">
@@ -1349,6 +1360,12 @@ watch(selectedScholarship, (scholarship) => {
                                             </p>
                                             <p class="mt-1 font-bold text-slate-950">
                                                 {{ selectedApplicationMode }}
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
+                                            <p class="font-semibold text-slate-500">Selection process</p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ selectedSelectionPlan.map((stage) => stage.label).join(' to ') }}
                                             </p>
                                         </div>
                                     </div>
@@ -1603,7 +1620,7 @@ watch(selectedScholarship, (scholarship) => {
                                     <div v-if="application.status_progress?.steps?.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
                                         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                Timeline preview
+                                                Program selection
                                             </p>
                                             <p class="text-xs font-semibold text-slate-500">
                                                 {{ application.status_progress.next_action }}
@@ -1615,7 +1632,11 @@ watch(selectedScholarship, (scholarship) => {
                                                 :key="step.key"
                                                 :class="['rounded-md border px-2.5 py-2 text-center text-[11px] font-bold', timelineStepClass(step.state)]"
                                             >
-                                                {{ step.label }}
+                                                <p>{{ step.label }}</p>
+                                                <p class="mt-0.5 text-[9px] uppercase tracking-[0.08em] opacity-70">{{ progressStateLabel(step.state) }}</p>
+                                                <p v-if="applicationStepEvent(application, step)" class="mt-1 text-[9px] font-semibold leading-3">
+                                                    {{ applicationStepEvent(application, step).scheduled_label }}
+                                                </p>
                                             </div>
                                         </div>
                                     </div>

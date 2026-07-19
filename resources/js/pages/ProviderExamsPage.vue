@@ -9,7 +9,6 @@ import { labelFromKey } from '../support/display';
 const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
-const statusMessage = ref('');
 const user = ref(null);
 const assessments = ref([]);
 const form = ref(emptyForm());
@@ -91,7 +90,6 @@ async function saveAssessment() {
 
     isSaving.value = true;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
         const response = await window.axios.patch(`/provider/exams/${assessment.value.id}`, {
@@ -108,10 +106,8 @@ async function saveAssessment() {
 
         assessments.value = [response.data.assessment];
         applyAssessment(response.data.assessment);
-        statusMessage.value = response.data.message ?? 'Assessment details updated.';
-    } catch (error) {
-        const validationMessage = Object.values(error.response?.data?.errors ?? {})[0]?.[0];
-        errorMessage.value = validationMessage ?? error.response?.data?.message ?? 'Unable to update assessment details.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         isSaving.value = false;
     }
@@ -151,7 +147,6 @@ onMounted(loadAssessments);
 
                 <div v-else class="mt-6 space-y-4">
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">{{ errorMessage }}</p>
-                    <p v-if="statusMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 shadow-sm">{{ statusMessage }}</p>
 
                     <section v-if="assessment" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="grid lg:grid-cols-[21rem_minmax(0,1fr)]">

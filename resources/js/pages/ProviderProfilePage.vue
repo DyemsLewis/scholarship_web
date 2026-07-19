@@ -10,7 +10,6 @@ import { formatFileSize } from '../support/display';
 const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
-const statusMessage = ref('');
 const validationErrors = ref({});
 const user = ref(null);
 const verificationDocuments = ref([]);
@@ -114,7 +113,6 @@ function handleVerificationFile(event) {
 async function loadProviderProfile() {
     isLoading.value = true;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
         const response = await window.axios.get('/provider/profile/data');
@@ -141,7 +139,6 @@ async function uploadVerificationDocument() {
 
     isUploadingDocument.value = true;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     const payload = new FormData();
     payload.append('document_type', verificationDocumentType.value);
@@ -157,9 +154,8 @@ async function uploadVerificationDocument() {
 
         applyVerificationDocuments(response.data.verification_documents);
         verificationDocumentFile.value = null;
-        statusMessage.value = response.data.message ?? 'Verification document uploaded.';
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to upload verification document.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         isUploadingDocument.value = false;
     }
@@ -179,15 +175,13 @@ async function deleteVerificationDocument(document) {
 
     deletingDocumentId.value = document.id;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
         const response = await window.axios.delete(`/provider/verification-documents/${document.id}`);
 
         applyVerificationDocuments(response.data.verification_documents);
-        statusMessage.value = response.data.message ?? 'Verification document removed.';
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to remove verification document.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         deletingDocumentId.value = null;
     }
@@ -196,17 +190,14 @@ async function deleteVerificationDocument(document) {
 async function saveProviderProfile() {
     isSaving.value = true;
     errorMessage.value = '';
-    statusMessage.value = '';
     validationErrors.value = {};
 
     try {
         const response = await window.axios.patch('/provider/profile', { ...form });
 
         applyUser(response.data.user);
-        statusMessage.value = response.data.message ?? 'Provider profile updated.';
     } catch (error) {
         validationErrors.value = error.response?.data?.errors ?? {};
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update provider profile.';
     } finally {
         isSaving.value = false;
     }
@@ -247,10 +238,6 @@ onMounted(loadProviderProfile);
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
-                    <p v-if="statusMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 shadow-sm">
-                        {{ statusMessage }}
-                    </p>
-
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div>

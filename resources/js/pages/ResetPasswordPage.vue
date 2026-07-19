@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import AuthShell from '../components/AuthShell.vue';
+import { showPortalToast } from '../support/portalToast';
 
 const formElement = ref(null);
 const form = ref({
@@ -10,21 +11,16 @@ const form = ref({
     passwordConfirmation: '',
 });
 const isSubmitting = ref(false);
-const statusMessage = ref('');
-const errorMessage = ref('');
 
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 
 async function submitForm() {
-    statusMessage.value = '';
-    errorMessage.value = '';
-
     if (!formElement.value?.reportValidity()) {
         return;
     }
 
     if (form.value.password !== form.value.passwordConfirmation) {
-        errorMessage.value = 'Passwords must match.';
+        showPortalToast({ type: 'error', title: 'Password mismatch', message: 'Passwords must match.' });
         return;
     }
 
@@ -38,12 +34,11 @@ async function submitForm() {
             password_confirmation: form.value.passwordConfirmation,
         });
 
-        statusMessage.value = response.data.message ?? 'Password reset successful.';
         window.setTimeout(() => {
             window.location.href = response.data.redirect ?? '/login';
         }, 1000);
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to reset password.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         isSubmitting.value = false;
     }
@@ -112,11 +107,5 @@ onMounted(() => {
             </button>
         </form>
 
-        <p v-if="statusMessage" class="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-700">
-            {{ statusMessage }}
-        </p>
-        <p v-if="errorMessage" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
-            {{ errorMessage }}
-        </p>
     </AuthShell>
 </template>

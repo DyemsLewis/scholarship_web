@@ -34,6 +34,22 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $documentId = $response->json('verification_documents.0.id');
 
+        $reviews = $this->actingAs($admin)
+            ->getJson('/admin/reviews/data')
+            ->assertOk()
+            ->assertJsonPath('stats.pending_applicants', 1)
+            ->assertJsonPath('applicants.0.id', $applicant->id)
+            ->assertJsonPath('applicants.0.applicant_verification_status', 'pending')
+            ->assertJsonPath('applicants.0.verification_documents.0.id', $documentId);
+
+        $this->assertArrayNotHasKey('applications', $reviews->json());
+
+        $this->actingAs($admin)
+            ->get($reviews->json('applicants.0.verification_documents.0.view_url'))
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
         $this->actingAs($admin)
             ->getJson("/admin/users/{$applicant->id}")
             ->assertOk()
@@ -94,6 +110,46 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $this->assertArrayNotHasKey('verification_documents', $response->json('applications.0.applicant'));
         $this->assertArrayNotHasKey('profile_proofs', $response->json('applications.0.applicant'));
+    }
+
+    public function test_replacing_an_approved_proof_returns_the_applicant_to_pending_review(): void
+    {
+        Storage::fake('local');
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'school_id',
+                'document_file' => UploadedFile::fake()->image('original-school-id.jpg'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated();
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+                'verification_status' => 'approved',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.is_profile_verified', true);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'school_id',
+                'document_file' => UploadedFile::fake()->image('updated-school-id.jpg'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('user.applicant_verification_status', 'pending')
+            ->assertJsonPath('user.is_profile_verified', false)
+            ->assertJsonPath('verification_documents.0.status', 'submitted');
+
+        $profile = $applicant->studentProfile()->firstOrFail();
+
+        $this->assertSame('pending', $profile->verification_status);
+        $this->assertNull($profile->verified_at);
+        $this->assertNull($profile->verified_by);
     }
 
     public function test_provider_can_review_profile_proof_only_through_an_owned_matching_application(): void

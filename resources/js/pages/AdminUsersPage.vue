@@ -5,7 +5,6 @@ import AdminSidebar from '../components/AdminSidebar.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
-const statusMessage = ref('');
 const activeAction = ref('');
 const search = ref('');
 const selectedRole = ref('all');
@@ -91,18 +90,16 @@ async function loadAdminData(page = 1, options = {}) {
     }
 }
 
-async function runUserAction(user, action, request, fallbackMessage) {
+async function runUserAction(user, action, request) {
     activeAction.value = actionKey(user, action);
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
-        const response = await request();
+        await request();
 
-        statusMessage.value = response.data.message ?? fallbackMessage;
         await loadAdminData(pagination.value.current_page, { silent: true });
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update this account.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         activeAction.value = '';
     }
@@ -116,7 +113,6 @@ async function toggleAccountStatus(user) {
             () => window.axios.patch(`/admin/users/${user.id}/status`, {
                 account_status: 'active',
             }),
-            'Account reactivated.',
         );
         return;
     }
@@ -129,7 +125,6 @@ async function toggleAccountStatus(user) {
 
     if (!reason.trim()) {
         errorMessage.value = 'Add a reason before suspending this account.';
-        statusMessage.value = '';
         return;
     }
 
@@ -140,7 +135,6 @@ async function toggleAccountStatus(user) {
             account_status: 'suspended',
             suspension_reason: reason.trim(),
         }),
-        'Account suspended.',
     );
 }
 
@@ -149,7 +143,6 @@ async function forcePasswordReset(user) {
         user,
         'force-reset',
         () => window.axios.post(`/admin/users/${user.id}/force-password-reset`),
-        'Password reset required.',
     );
 }
 
@@ -158,7 +151,6 @@ async function verifyEmail(user) {
         user,
         'verify-email',
         () => window.axios.patch(`/admin/users/${user.id}/email-verification`),
-        'Email marked as verified.',
     );
 }
 
@@ -167,7 +159,6 @@ async function resendVerificationEmail(user) {
         user,
         'resend-verification',
         () => window.axios.post(`/admin/users/${user.id}/verification-email`),
-        'Verification email sent.',
     );
 }
 
@@ -185,7 +176,6 @@ function goToPage(page) {
 
 watch([search, selectedRole], () => {
     clearTimeout(searchTimer);
-    statusMessage.value = '';
     searchTimer = setTimeout(() => loadAdminData(1), 300);
 });
 
@@ -279,12 +269,6 @@ onMounted(loadAdminData);
                             </button>
                         </div>
 
-                        <p
-                            v-if="statusMessage"
-                            class="rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm font-semibold text-emerald-700"
-                        >
-                            {{ statusMessage }}
-                        </p>
                     </div>
 
                     <div v-if="isLoading" class="p-6 text-sm text-slate-500">

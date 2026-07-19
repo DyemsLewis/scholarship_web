@@ -9,7 +9,6 @@ import { formatFileSize, labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
-const statusMessage = ref('');
 const summary = ref({});
 const funnel = ref([]);
 const programInsights = ref([]);
@@ -136,22 +135,18 @@ async function updateDocumentStatus(review) {
     }
 
     documentUpdatingId.value = document.id;
-    statusMessage.value = '';
     documentReviewError.value = '';
 
     try {
-        const response = await window.axios.patch(`/provider/documents/${document.id}/status`, {
+        await window.axios.patch(`/provider/documents/${document.id}/status`, {
             status: review.status ?? 'pending',
             review_notes: review.review_notes ?? '',
         });
 
-        statusMessage.value = response.data.message ?? 'Document status updated.';
         closeDocumentReview();
         await loadInsights();
-    } catch (error) {
-        documentReviewError.value = error.response?.data?.errors?.review_notes?.[0]
-            ?? error.response?.data?.message
-            ?? 'Unable to update document status.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         documentUpdatingId.value = null;
     }
@@ -193,10 +188,6 @@ onMounted(loadInsights);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <div v-if="statusMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 shadow-sm">
-                        {{ statusMessage }}
-                    </div>
-
                     <section class="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
                         <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">

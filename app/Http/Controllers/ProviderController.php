@@ -647,45 +647,13 @@ class ProviderController extends Controller
             'instructions' => ['required', 'string', 'max:3000'],
         ]);
 
-        $selectionStages = ScholarshipSelectionPlan::normalize($scholarship->selection_stages);
-
-        if (! in_array($validated['type'], $selectionStages, true)) {
-            throw ValidationException::withMessages([
-                'type' => 'Add this stage to the scholarship selection plan before publishing its schedule.',
-            ]);
-        }
-
-        $scholarship->loadMissing('providerAssessment');
-
-        if ($validated['type'] === 'exam' && $scholarship->providerAssessment?->status !== 'active') {
-            throw ValidationException::withMessages([
-                'type' => 'Configure an active provider assessment before publishing the exam schedule.',
-            ]);
-        }
-
+        [$event, $audienceCount] = $this->persistScholarshipEvent(
+            $scholarship,
+            $validated,
+            $request->user(),
+        );
         $scheduledAt = CarbonImmutable::parse($validated['scheduled_at']);
         $eventLabel = ScholarshipSelectionPlan::label($validated['type']);
-        $event = $scholarship->events()->firstOrNew(['type' => $validated['type']]);
-        $event->fill([
-            'title' => filled($validated['title'] ?? null) ? trim($validated['title']) : ucfirst($eventLabel).' schedule',
-            'scheduled_at' => $scheduledAt,
-            'mode' => $validated['mode'],
-            'venue' => $validated['venue'] ?? null,
-            'location_address' => $validated['location_address'] ?? null,
-            'latitude' => $validated['latitude'] ?? null,
-            'longitude' => $validated['longitude'] ?? null,
-            'online_url' => $validated['online_url'] ?? null,
-            'instructions' => $validated['instructions'],
-            'status' => 'scheduled',
-            'updated_by' => $request->user()->id,
-        ]);
-
-        if (! $event->exists) {
-            $event->created_by = $request->user()->id;
-        }
-
-        $event->save();
-        $audienceCount = app(ScholarshipEventService::class)->syncEligibleApplications($event);
 
         ActivityLog::record(
             $request->user(),
@@ -1455,6 +1423,7 @@ class ProviderController extends Controller
 
         $scholarships = Scholarship::query()
             ->where('provider_id', $request->user()->id)
+            ->with('events')
             ->withCount('bookmarks')
             ->latest()
             ->get();
@@ -1512,21 +1481,30 @@ class ProviderController extends Controller
         $this->ensureProviderCanPost($request);
 
         $validated = $this->validateScholarship($request);
-        $imagePath = $this->storeScholarshipImage($request);
-
-        unset($validated['image_file'], $validated['terms_accepted']);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
+        $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request);
+        $imagePath = $this->storeScholarshipImage($request);
+
+        unset($validated['image_file'], $validated['terms_accepted'], $validated['program_events']);
         $validated['status'] = $validated['status'] === 'draft' ? 'draft' : 'pending_review';
         $validated['provider_terms_accepted_at'] = now();
         $validated['provider_terms_version'] = Terms::VERSION;
 
-        $scholarship = Scholarship::create([
-            ...$validated,
-            'image_path' => $imagePath,
-            'provider_id' => $request->user()->id,
-        ]);
+        $scholarship = DB::transaction(function () use ($validated, $imagePath, $programEvents, $request): Scholarship {
+            $scholarship = Scholarship::create([
+                ...$validated,
+                'image_path' => $imagePath,
+                'provider_id' => $request->user()->id,
+            ]);
+
+            foreach ($programEvents ?? [] as $programEvent) {
+                $this->persistScholarshipEvent($scholarship, $programEvent, $request->user());
+            }
+
+            return $scholarship;
+        });
 
         if ($scholarship->status === 'pending_review') {
             $this->notifyAdminsScholarshipSubmitted($request, $scholarship);
@@ -1555,12 +1533,13 @@ class ProviderController extends Controller
         $this->ensureProviderCanPost($request);
 
         $validated = $this->validateScholarship($request);
-        $imagePath = $this->storeScholarshipImage($request, $scholarship);
-
-        unset($validated['image_file'], $validated['terms_accepted']);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
+        $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request, $scholarship);
+        $imagePath = $this->storeScholarshipImage($request, $scholarship);
+
+        unset($validated['image_file'], $validated['terms_accepted'], $validated['program_events']);
         $validated['provider_terms_accepted_at'] = now();
         $validated['provider_terms_version'] = Terms::VERSION;
 
@@ -1569,10 +1548,16 @@ class ProviderController extends Controller
         }
 
         $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status'], $validated);
-        $scholarship->update($validated);
-        $scholarship->events()
-            ->whereNotIn('type', ScholarshipSelectionPlan::normalize($scholarship->selection_stages))
-            ->delete();
+        DB::transaction(function () use ($scholarship, $validated, $programEvents, $request): void {
+            $scholarship->update($validated);
+            $scholarship->events()
+                ->whereNotIn('type', ScholarshipSelectionPlan::normalize($scholarship->selection_stages))
+                ->delete();
+
+            foreach ($programEvents ?? [] as $programEvent) {
+                $this->persistScholarshipEvent($scholarship, $programEvent, $request->user());
+            }
+        });
 
         if ($scholarship->status === 'pending_review') {
             $this->notifyAdminsScholarshipSubmitted($request, $scholarship);
@@ -1621,6 +1606,7 @@ class ProviderController extends Controller
             'slots_available' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'application_mode' => ['nullable', Rule::in(['online', 'onsite', 'hybrid', 'provider_review'])],
             'selection_stages' => ['nullable', 'string', 'max:500', 'json'],
+            'program_events' => ['nullable', 'string', 'max:20000', 'json'],
             'renewal_policy' => ['nullable', 'string', 'max:2000'],
             'return_service_contract' => ['nullable', 'string', 'max:3000'],
             'other_contract_terms' => ['nullable', 'string', 'max:3000'],
@@ -1682,6 +1668,116 @@ class ProviderController extends Controller
         }
 
         return $validated;
+    }
+
+    private function normalizeScholarshipProgramEvents(
+        array $validated,
+        Request $request,
+        ?Scholarship $scholarship = null,
+    ): ?array {
+        if (! $request->has('program_events')) {
+            return null;
+        }
+
+        $events = json_decode((string) ($validated['program_events'] ?? '[]'), true);
+        $events = is_array($events) ? $events : [];
+        $eventData = validator(['program_events' => $events], [
+            'program_events' => ['array', 'max:3'],
+            'program_events.*.type' => ['required', 'string', 'distinct', Rule::in(['exam', 'interview', 'distribution'])],
+            'program_events.*.title' => ['nullable', 'string', 'max:255'],
+            'program_events.*.scheduled_at' => ['required', 'date'],
+            'program_events.*.mode' => ['required', Rule::in(['onsite', 'online', 'hybrid', 'provider_managed'])],
+            'program_events.*.venue' => ['nullable', 'string', 'max:500'],
+            'program_events.*.location_address' => ['nullable', 'string', 'max:1000'],
+            'program_events.*.latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:program_events.*.longitude'],
+            'program_events.*.longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:program_events.*.latitude'],
+            'program_events.*.online_url' => ['nullable', 'url:http,https', 'max:2000'],
+            'program_events.*.instructions' => ['required', 'string', 'max:3000'],
+        ])->validate()['program_events'] ?? [];
+        $selectionStages = ScholarshipSelectionPlan::normalize($validated['selection_stages'] ?? null);
+        $scholarship?->loadMissing('events');
+
+        foreach ($eventData as $index => $event) {
+            if (! in_array($event['type'], $selectionStages, true)) {
+                throw ValidationException::withMessages([
+                    "program_events.{$index}.type" => 'Add this stage to the selection plan before setting its schedule.',
+                ]);
+            }
+
+            if (in_array($event['mode'], ['onsite', 'hybrid'], true) && blank($event['venue'] ?? null)) {
+                throw ValidationException::withMessages([
+                    "program_events.{$index}.venue" => 'Add a venue for an on-site or hybrid schedule.',
+                ]);
+            }
+
+            if (in_array($event['mode'], ['online', 'hybrid'], true) && blank($event['online_url'] ?? null)) {
+                throw ValidationException::withMessages([
+                    "program_events.{$index}.online_url" => 'Add the online meeting or assessment link.',
+                ]);
+            }
+
+            $scheduledAt = CarbonImmutable::parse($event['scheduled_at']);
+            $existingEvent = $scholarship?->events->firstWhere('type', $event['type']);
+            $keepsExistingDate = $existingEvent?->scheduled_at?->format('Y-m-d H:i') === $scheduledAt->format('Y-m-d H:i');
+
+            if ($scheduledAt->isBefore(now()->startOfMinute()) && ! $keepsExistingDate) {
+                throw ValidationException::withMessages([
+                    "program_events.{$index}.scheduled_at" => 'Use a future date and time for a new schedule.',
+                ]);
+            }
+        }
+
+        return $eventData;
+    }
+
+    private function persistScholarshipEvent(
+        Scholarship $scholarship,
+        array $eventData,
+        User $provider,
+    ): array {
+        $selectionStages = ScholarshipSelectionPlan::normalize($scholarship->selection_stages);
+
+        if (! in_array($eventData['type'], $selectionStages, true)) {
+            throw ValidationException::withMessages([
+                'type' => 'Add this stage to the scholarship selection plan before publishing its schedule.',
+            ]);
+        }
+
+        if ($eventData['type'] === 'exam' && ! ProviderAssessment::query()
+            ->where('provider_id', $provider->id)
+            ->where('status', 'active')
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'type' => 'Configure an active provider assessment before publishing the exam schedule.',
+            ]);
+        }
+
+        $eventLabel = ScholarshipSelectionPlan::label($eventData['type']);
+        $event = $scholarship->events()->firstOrNew(['type' => $eventData['type']]);
+        $event->fill([
+            'title' => filled($eventData['title'] ?? null) ? trim($eventData['title']) : ucfirst($eventLabel).' schedule',
+            'scheduled_at' => CarbonImmutable::parse($eventData['scheduled_at']),
+            'mode' => $eventData['mode'],
+            'venue' => $eventData['venue'] ?? null,
+            'location_address' => $eventData['location_address'] ?? null,
+            'latitude' => $eventData['latitude'] ?? null,
+            'longitude' => $eventData['longitude'] ?? null,
+            'online_url' => $eventData['online_url'] ?? null,
+            'instructions' => $eventData['instructions'],
+            'status' => 'scheduled',
+            'updated_by' => $provider->id,
+        ]);
+
+        if (! $event->exists) {
+            $event->created_by = $provider->id;
+        }
+
+        $event->save();
+
+        return [
+            $event,
+            app(ScholarshipEventService::class)->syncEligibleApplications($event),
+        ];
     }
 
     private function providerScholarshipStatus(Scholarship $scholarship, string $requestedStatus, array $validated): string
@@ -1985,6 +2081,8 @@ class ProviderController extends Controller
 
     private function scholarshipPayload(Scholarship $scholarship): array
     {
+        $scholarship->loadMissing('events');
+
         return [
             'id' => $scholarship->id,
             'image_path' => $scholarship->image_path,
@@ -2014,6 +2112,11 @@ class ProviderController extends Controller
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
             'selection_stages' => ScholarshipSelectionPlan::normalize($scholarship->selection_stages),
+            'program_events' => $scholarship->events
+                ->where('status', 'scheduled')
+                ->sortBy('scheduled_at')
+                ->map(fn (ScholarshipEvent $event): array => ScholarshipEventPayload::make($event))
+                ->values(),
             'renewal_policy' => $scholarship->renewal_policy,
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,

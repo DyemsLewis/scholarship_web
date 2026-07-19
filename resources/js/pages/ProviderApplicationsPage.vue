@@ -19,7 +19,6 @@ const selectedQueueSort = ref('priority');
 const programEvents = ref([]);
 const scheduleEditorType = ref('');
 const scheduleSaving = ref(false);
-const scheduleMessage = ref('');
 const scheduleError = ref('');
 const scheduleForm = ref(emptyScheduleForm());
 const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
@@ -299,7 +298,6 @@ function openScheduleEditor(type) {
         : { ...emptyScheduleForm(type), ...defaults, type };
     scheduleEditorType.value = type;
     scheduleError.value = '';
-    scheduleMessage.value = '';
 }
 
 function closeScheduleEditor() {
@@ -316,12 +314,6 @@ function handleSchedulePinPicked(location) {
     }
 }
 
-function apiErrorMessage(error, fallback) {
-    return Object.values(error.response?.data?.errors ?? {}).flat().find(Boolean)
-        ?? error.response?.data?.message
-        ?? fallback;
-}
-
 async function saveProgramSchedule() {
     if (!scheduleForm.value.scheduledAt || !scheduleForm.value.instructions.trim()) {
         scheduleError.value = 'Add the date, time, and applicant instructions.';
@@ -330,7 +322,6 @@ async function saveProgramSchedule() {
 
     scheduleSaving.value = true;
     scheduleError.value = '';
-    scheduleMessage.value = '';
 
     try {
         const response = await window.axios.post(`/provider/scholarships/${selectedScholarshipId.value}/events`, {
@@ -353,11 +344,10 @@ async function saveProgramSchedule() {
             programEvents.value.push(response.data.event);
         }
 
-        scheduleMessage.value = response.data.message ?? 'Program schedule published.';
         closeScheduleEditor();
         await loadProviderData(false);
-    } catch (error) {
-        scheduleError.value = apiErrorMessage(error, 'Unable to publish this program schedule.');
+    } catch (handledError) {
+        void handledError;
     } finally {
         scheduleSaving.value = false;
     }
@@ -444,7 +434,6 @@ onMounted(loadProviderData);
                             </a>
                         </div>
 
-                        <p v-if="scheduleMessage" class="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{{ scheduleMessage }}</p>
                         <p v-if="scheduleError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{{ scheduleError }}</p>
 
                         <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

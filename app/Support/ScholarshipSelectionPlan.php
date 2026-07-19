@@ -77,7 +77,7 @@ class ScholarshipSelectionPlan
     public static function scheduledStatus(string $type): string
     {
         return match ($type) {
-            'screening' => 'other',
+            'screening' => 'under_review',
             'exam' => 'exam_scheduled',
             'interview' => 'interview',
             'distribution' => 'distribution_scheduled',

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
@@ -7,10 +7,8 @@ import TermsAgreement from '../components/TermsAgreement.vue';
 import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
-const isUploadingPrepared = ref(false);
+const uploadingPreparedName = ref('');
 const errorMessage = ref('');
-const statusMessage = ref('');
-const user = ref(null);
 const stats = ref({
     applications: 0,
     prepared: 0,
@@ -22,58 +20,64 @@ const stats = ref({
 const applications = ref([]);
 const preparedDocuments = ref([]);
 const documentOptions = ref([]);
-const preparedFile = ref(null);
-const preparedFileInput = ref(null);
-const preparedForm = reactive({
-    documentName: '',
-});
 const preparedDocumentTermsAccepted = ref(false);
 const updatingPreparedId = ref(null);
 const removingPreparedId = ref(null);
 const previewDocument = ref(null);
-const preparedDocumentsPerPage = 5;
 const applicationsPerPage = 3;
-const preparedDocumentsPage = ref(1);
 const applicationsPage = ref(1);
+const documentDescriptions = {
+    'Latest report card or grades': 'Your latest available school grades or report card.',
+    'Certificate of enrollment': 'Current proof that you are enrolled in school.',
+    'School ID': 'A clear copy or photo of your current school ID.',
+    'Proof of income': 'A recent income certificate, payslip, or similar household income proof.',
+    'Certificate of indigency': 'A current certificate issued by your barangay or local office.',
+    'Birth certificate': 'A clear copy of your birth certificate.',
+    'Parent or guardian valid ID': 'Useful when a parent or guardian manages a younger applicant.',
+    'Transcript of records': 'Your official transcript or latest certificate of grades for college-level applications.',
+    'Good moral certificate': 'A current certificate of good moral character issued by your school.',
+    'Barangay certificate of residency': 'Proof of your current residence issued by your barangay.',
+    'Government-issued ID': 'A clear copy of your valid government-issued identification.',
+    'Recent 2x2 ID photo': 'A recent, clear 2x2 identification photo with a plain background.',
+    'Admission or acceptance letter': 'Proof that a school, college, university, or training institution accepted you.',
+};
 const applicationsWithRequirements = computed(() => applications.value.map((application) => ({
     ...application,
     required_documents: documentRequirements(application.scholarship?.requirements),
 })));
 const preparedDocumentNames = computed(() => new Set(preparedDocuments.value.map((document) => document.document_name)));
-const availableDocumentOptions = computed(() => documentOptions.value
-    .filter((option) => !preparedDocumentNames.value.has(option)));
-const preparedDocumentTotalPages = computed(() => pageCount(preparedDocuments.value.length, preparedDocumentsPerPage));
-const paginatedPreparedDocuments = computed(() => paginateItems(preparedDocuments.value, preparedDocumentsPage.value, preparedDocumentsPerPage));
+const preparedDocumentsByName = computed(() => new Map(
+    preparedDocuments.value.map((document) => [document.document_name, document]),
+));
+const commonDocumentRows = computed(() => documentOptions.value.map((name) => ({
+    name,
+    description: documentDescriptions[name] ?? 'A reusable document commonly requested by scholarship providers.',
+    document: preparedDocumentsByName.value.get(name) ?? null,
+})));
+const otherPreparedDocuments = computed(() => preparedDocuments.value
+    .filter((document) => !documentOptions.value.includes(document.document_name)));
+const commonDocumentReadyCount = computed(() => documentOptions.value
+    .filter((option) => preparedDocumentNames.value.has(option))
+    .length);
 const applicationTotalPages = computed(() => pageCount(applicationsWithRequirements.value.length, applicationsPerPage));
 const paginatedApplications = computed(() => paginateItems(applicationsWithRequirements.value, applicationsPage.value, applicationsPerPage));
-const reusableDocumentCount = computed(() => preparedDocuments.value
-    .filter((document) => documentReuseCount(document) > 0)
-    .length);
 const libraryStatusTitle = computed(() => {
     if (stats.value.needs_attention > 0) {
         return `${stats.value.needs_attention} application file${stats.value.needs_attention === 1 ? '' : 's'} need attention`;
     }
 
-    if (preparedDocuments.value.length === 0) {
-        return 'Start your reusable document library';
+    if (commonDocumentReadyCount.value === 0) {
+        return 'Prepare your most commonly requested files';
     }
 
-    return `${preparedDocuments.value.length} file${preparedDocuments.value.length === 1 ? '' : 's'} ready to reuse`;
+    return `${commonDocumentReadyCount.value} of ${documentOptions.value.length} common files ready`;
 });
 const libraryStatusText = computed(() => {
     if (stats.value.needs_attention > 0) {
         return 'Open the related application to replace any rejected or outdated requirement.';
     }
 
-    if (preparedDocuments.value.length === 0) {
-        return 'Add common requirements now so future scholarship applications take less time.';
-    }
-
-    if (applications.value.length === 0) {
-        return 'Your saved files will be available when a scholarship asks for the same requirement.';
-    }
-
-    return 'Keep each file current and review application-specific requirements before submitting.';
+    return 'Upload reusable documents here. Provider forms, essays, and other scholarship-specific papers are uploaded inside the application that requests them.';
 });
 
 function documentRequirements(requirements) {
@@ -102,28 +106,11 @@ function paginateItems(items, page, perPage) {
     return items.slice(start, start + perPage);
 }
 
-function paginationSummary(total, page, perPage) {
-    if (!total) {
-        return '0 items';
-    }
-
-    const currentPage = clampPage(page, pageCount(total, perPage));
-    const start = (currentPage - 1) * perPage + 1;
-    const end = Math.min(start + perPage - 1, total);
-
-    return `${start}-${end} of ${total}`;
-}
-
-function setPreparedDocumentsPage(page) {
-    preparedDocumentsPage.value = clampPage(page, preparedDocumentTotalPages.value);
-}
-
 function setApplicationsPage(page) {
     applicationsPage.value = clampPage(page, applicationTotalPages.value);
 }
 
 function clampPagination() {
-    preparedDocumentsPage.value = clampPage(preparedDocumentsPage.value, preparedDocumentTotalPages.value);
     applicationsPage.value = clampPage(applicationsPage.value, applicationTotalPages.value);
 }
 
@@ -197,10 +184,6 @@ function fileExtension(filename) {
     return extension.slice(0, 4).toUpperCase();
 }
 
-function handlePreparedFileChange(event) {
-    preparedFile.value = event.target.files?.[0] ?? null;
-}
-
 function openDocumentPreview(document) {
     previewDocument.value = document;
 }
@@ -218,21 +201,15 @@ function handlePreviewKeydown(event) {
 async function loadDocuments() {
     isLoading.value = true;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
         const response = await window.axios.get('/dashboard/documents/data');
 
-        user.value = response.data.user;
         stats.value = response.data.stats;
         applications.value = response.data.applications;
         preparedDocuments.value = response.data.prepared_documents ?? [];
         documentOptions.value = response.data.document_options ?? [];
         clampPagination();
-
-        if (!availableDocumentOptions.value.includes(preparedForm.documentName)) {
-            preparedForm.documentName = availableDocumentOptions.value[0] ?? '';
-        }
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load documents.';
     } finally {
@@ -240,50 +217,40 @@ async function loadDocuments() {
     }
 }
 
-async function uploadPreparedDocument() {
-    if (availableDocumentOptions.value.length === 0) {
-        errorMessage.value = 'All listed document types are already saved. Use Update beside a file to replace it.';
-        return;
-    }
+async function uploadPreparedDocument(documentName, event) {
+    const file = event.target.files?.[0] ?? null;
 
-    if (!preparedForm.documentName || !preparedFile.value) {
-        errorMessage.value = 'Choose a document name and file before uploading.';
+    if (!file) {
         return;
     }
 
     if (!preparedDocumentTermsAccepted.value) {
         errorMessage.value = 'Please accept the document upload terms before saving.';
+        event.target.value = '';
         return;
     }
 
-    isUploadingPrepared.value = true;
+    uploadingPreparedName.value = documentName;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     const payload = new FormData();
-    payload.append('document_name', preparedForm.documentName);
-    payload.append('document_file', preparedFile.value);
+    payload.append('document_name', documentName);
+    payload.append('document_file', file);
     payload.append('terms_accepted', '1');
 
     try {
-        const response = await window.axios.post('/dashboard/student-documents', payload, {
+        await window.axios.post('/dashboard/student-documents', payload, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
         });
 
-        statusMessage.value = response.data.message ?? 'Prepared document saved.';
-        preparedFile.value = null;
-
-        if (preparedFileInput.value) {
-            preparedFileInput.value.value = '';
-        }
-
         await loadDocuments();
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to save prepared document.';
+    } catch (handledError) {
+        void handledError;
     } finally {
-        isUploadingPrepared.value = false;
+        uploadingPreparedName.value = '';
+        event.target.value = '';
     }
 }
 
@@ -302,7 +269,6 @@ async function updatePreparedDocument(document, event) {
 
     updatingPreparedId.value = document.id;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     const payload = new FormData();
     payload.append('document_name', document.document_name);
@@ -316,10 +282,9 @@ async function updatePreparedDocument(document, event) {
             },
         });
 
-        statusMessage.value = 'Prepared document updated.';
         await loadDocuments();
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update prepared document.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         updatingPreparedId.value = null;
         event.target.value = '';
@@ -329,15 +294,13 @@ async function updatePreparedDocument(document, event) {
 async function deletePreparedDocument(document) {
     removingPreparedId.value = document.id;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
-        const response = await window.axios.delete(`/dashboard/student-documents/${document.id}`);
+        await window.axios.delete(`/dashboard/student-documents/${document.id}`);
 
-        statusMessage.value = response.data.message ?? 'Prepared document removed.';
         await loadDocuments();
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to remove prepared document.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         removingPreparedId.value = null;
     }
@@ -361,11 +324,11 @@ onBeforeUnmount(() => {
             <div class="student-container">
                 <ApplicantPageHeader
                     eyebrow="Documents"
-                    title="Your document library"
-                    description="Keep scholarship requirements organized, current, and ready to reuse."
+                    title="Prepare common documents"
+                    description="Upload files commonly requested by scholarships. Provider-specific papers are added inside the application that requests them."
                     icon="fa-solid fa-folder-open"
                     action-href="#upload-document"
-                    action-label="Add document"
+                    action-label="Prepare files"
                     secondary-href="/dashboard/applications"
                     secondary-label="View applications"
                 />
@@ -379,38 +342,16 @@ onBeforeUnmount(() => {
                         <i class="fa-solid fa-circle-exclamation mt-0.5" aria-hidden="true"></i>
                         <p>{{ errorMessage }}</p>
                     </div>
-                    <div v-if="statusMessage" class="flex items-start gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
-                        <i class="fa-solid fa-circle-check mt-0.5" aria-hidden="true"></i>
-                        <p>{{ statusMessage }}</p>
-                    </div>
-
-                    <section class="student-card overflow-hidden">
-                        <div class="grid lg:grid-cols-[minmax(0,1fr)_25rem]">
-                            <div class="flex items-start gap-4 p-5">
-                                <span class="student-section-mark shrink-0">
-                                    <i class="fa-solid fa-list-check text-sm" aria-hidden="true"></i>
-                                </span>
-                                <div class="min-w-0">
-                                    <p class="student-kicker">Library status</p>
-                                    <h2 class="mt-1 text-lg font-bold text-slate-950">{{ libraryStatusTitle }}</h2>
-                                    <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{{ libraryStatusText }}</p>
-                                </div>
+                    <section class="student-card p-5">
+                        <div class="flex items-start gap-4">
+                            <span class="student-section-mark shrink-0">
+                                <i class="fa-solid fa-list-check text-sm" aria-hidden="true"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <p class="student-kicker">Document readiness</p>
+                                <h2 class="mt-1 text-lg font-bold text-slate-950">{{ libraryStatusTitle }}</h2>
+                                <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ libraryStatusText }}</p>
                             </div>
-
-                            <dl class="grid grid-cols-3 divide-x divide-slate-200 border-t border-slate-200 lg:border-l lg:border-t-0">
-                                <div class="px-4 py-5">
-                                    <dt class="text-xs font-bold text-slate-500">Saved</dt>
-                                    <dd class="mt-1 text-xl font-bold text-slate-950">{{ preparedDocuments.length }}</dd>
-                                </div>
-                                <div class="px-4 py-5">
-                                    <dt class="text-xs font-bold text-slate-500">In use</dt>
-                                    <dd class="mt-1 text-xl font-bold text-slate-950">{{ reusableDocumentCount }}</dd>
-                                </div>
-                                <div class="px-4 py-5">
-                                    <dt class="text-xs font-bold text-slate-500">Applications</dt>
-                                    <dd class="mt-1 text-xl font-bold text-slate-950">{{ stats.applications }}</dd>
-                                </div>
-                            </dl>
                         </div>
                     </section>
 
@@ -422,200 +363,143 @@ onBeforeUnmount(() => {
                                 </span>
                                 <div class="min-w-0">
                                     <p class="student-kicker">Reusable files</p>
-                                    <h2 class="mt-1 text-xl font-bold text-slate-950">Document library</h2>
+                                    <h2 class="mt-1 text-xl font-bold text-slate-950">Common documents</h2>
                                 </div>
                             </div>
                             <p class="text-sm font-semibold text-slate-500">
-                                {{ preparedDocuments.length }} saved file{{ preparedDocuments.length === 1 ? '' : 's' }}
+                                {{ commonDocumentReadyCount }} of {{ documentOptions.length }} ready
                             </p>
                         </header>
 
-                        <div id="upload-document" class="scroll-mt-5 border-b border-slate-200 bg-slate-50/70">
-                            <div class="flex min-h-12 flex-col border-b border-slate-200 px-5 sm:flex-row sm:items-center sm:justify-between">
-                                <span class="inline-flex min-h-12 items-center gap-2 border-b-2 border-slate-950 text-sm font-bold text-slate-950">
-                                    <i class="fa-solid fa-cloud-arrow-up text-xs" aria-hidden="true"></i>
-                                    Add a new file
-                                </span>
-                                <span class="py-2 text-xs font-semibold text-slate-500">PDF, JPG, PNG, DOC or DOCX up to 5 MB</span>
-                            </div>
-
-                            <div v-if="availableDocumentOptions.length" class="grid gap-4 p-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_auto] lg:items-end">
-                                <label class="min-w-0 flex-1">
-                                    <span class="text-sm font-bold text-slate-700">Requirement type</span>
-                                    <select
-                                        v-model="preparedForm.documentName"
-                                        class="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
-                                    >
-                                        <option
-                                            v-for="option in availableDocumentOptions"
-                                            :key="option"
-                                            :value="option"
-                                        >
-                                            {{ option }}
-                                        </option>
-                                    </select>
-                                </label>
-
-                                <label class="min-w-0 cursor-pointer">
-                                    <span class="text-sm font-bold text-slate-700">Choose file</span>
-                                    <span class="mt-2 flex min-h-11 items-center gap-2 rounded-md border border-dashed border-slate-400 bg-white px-3 py-2.5 text-sm text-slate-700 transition hover:border-slate-500 hover:bg-slate-50">
-                                        <i class="fa-solid fa-paperclip text-xs text-slate-500" aria-hidden="true"></i>
-                                        <span :class="['min-w-0 flex-1 truncate font-semibold', preparedFile ? 'text-slate-900' : 'text-slate-400']">
-                                            {{ preparedFile?.name || 'Select from your device' }}
-                                        </span>
-                                        <span class="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
-                                            Browse
-                                        </span>
-                                    </span>
-                                    <input
-                                        ref="preparedFileInput"
-                                        type="file"
-                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                        class="sr-only"
-                                        @change="handlePreparedFileChange"
-                                    >
-                                </label>
-
-                                <button
-                                    type="button"
-                                    :disabled="isUploadingPrepared"
-                                    class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 lg:min-w-[9.5rem]"
-                                    @click="uploadPreparedDocument"
-                                >
-                                    <i :class="[isUploadingPrepared ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-upload', 'text-xs']" aria-hidden="true"></i>
-                                    {{ isUploadingPrepared ? 'Saving...' : 'Save document' }}
-                                </button>
-                            </div>
-
-                            <div v-if="availableDocumentOptions.length" class="px-5 pb-5">
-                                <TermsAgreement
-                                    v-model="preparedDocumentTermsAccepted"
-                                    context="document"
-                                />
-                            </div>
-                            <div v-else class="flex items-start gap-3 p-5 text-sm">
-                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700">
-                                    <i class="fa-solid fa-check" aria-hidden="true"></i>
+                        <div id="upload-document" class="scroll-mt-5 border-b border-slate-200 bg-slate-50 px-5 py-4">
+                            <div class="flex items-start gap-3">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
                                 </span>
                                 <div>
-                                    <p class="font-bold text-slate-950">All available document types are saved</p>
-                                    <p class="mt-1 leading-6 text-slate-500">Use the Update button beside a saved file when you need to replace it.</p>
+                                    <p class="text-sm font-bold text-slate-950">Upload common files once</p>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">
+                                        These files can be reused when a scholarship asks for the same requirement. Provider forms, essays, recommendation templates, and special certificates belong in that scholarship's application.
+                                    </p>
+                                    <p class="mt-1 text-xs font-semibold text-slate-500">Accepted: PDF, JPG, PNG, DOC or DOCX up to 5 MB.</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="flex flex-col gap-1 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <h3 class="text-base font-bold text-slate-950">Saved files</h3>
-                                <p class="mt-1 text-xs text-slate-500">View, download, replace, or remove files from your reusable library.</p>
-                            </div>
-                            <p v-if="preparedDocuments.length" class="text-xs font-bold text-slate-500">
-                                Showing {{ paginationSummary(preparedDocuments.length, preparedDocumentsPage, preparedDocumentsPerPage) }}
-                            </p>
+                        <div class="border-b border-slate-200 px-5 py-4">
+                            <TermsAgreement
+                                v-model="preparedDocumentTermsAccepted"
+                                context="document"
+                            />
+                            <p class="mt-2 text-xs text-slate-500">Agree once, then click Upload beside the file you want to prepare.</p>
                         </div>
 
-                        <div v-if="preparedDocuments.length" class="divide-y divide-slate-200">
+                        <div class="divide-y divide-slate-200">
                             <article
-                                v-for="document in paginatedPreparedDocuments"
-                                :key="document.id"
-                                class="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+                                v-for="row in commonDocumentRows"
+                                :key="row.name"
+                                class="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between"
                             >
                                 <div class="flex min-w-0 items-start gap-3">
-                                    <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-100 text-xs font-black text-slate-600">
-                                        {{ fileExtension(document.original_name) }}
+                                    <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm', row.document ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500']">
+                                        <i :class="row.document ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file-lines'" aria-hidden="true"></i>
                                     </span>
                                     <div class="min-w-0">
-                                        <h4 class="truncate text-sm font-bold text-slate-950">{{ document.document_name }}</h4>
-                                        <p class="mt-1 truncate text-xs text-slate-500">{{ document.original_name }}</p>
-                                        <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                                            <span>{{ formatFileSize(document.size) }}</span>
-                                            <span>{{ document.uploaded_at }}</span>
-                                            <span class="font-semibold text-slate-700">{{ documentReuseLabel(document) }}</span>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h3 class="text-sm font-bold text-slate-950">{{ row.name }}</h3>
+                                            <span :class="['rounded px-2 py-0.5 text-[10px] font-bold uppercase', row.document ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500']">
+                                                {{ row.document ? 'Ready' : 'Not uploaded' }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ row.description }}</p>
+                                        <div v-if="row.document" class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                                            <span class="max-w-xs truncate">{{ row.document.original_name }}</span>
+                                            <span>{{ formatFileSize(row.document.size) }}</span>
+                                            <span class="font-semibold text-slate-700">{{ documentReuseLabel(row.document) }}</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
                                     <button
+                                        v-if="row.document"
                                         type="button"
                                         class="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                        @click="openDocumentPreview(document)"
+                                        @click="openDocumentPreview(row.document)"
                                     >
                                         <i class="fa-solid fa-eye" aria-hidden="true"></i>
                                         View
                                     </button>
-                                    <a
-                                        :href="document.download_url"
-                                        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
-                                        title="Download document"
-                                        aria-label="Download document"
-                                    >
-                                        <i class="fa-solid fa-download text-xs" aria-hidden="true"></i>
-                                    </a>
                                     <label
                                         :class="[
-                                            'inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50',
-                                            updatingPreparedId === document.id ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+                                            'inline-flex h-9 cursor-pointer items-center gap-2 rounded-md px-3 text-xs font-bold transition',
+                                            row.document ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'bg-slate-900 text-white hover:bg-slate-800',
+                                            !preparedDocumentTermsAccepted || uploadingPreparedName === row.name || updatingPreparedId === row.document?.id ? 'pointer-events-none opacity-60' : '',
                                         ]"
                                     >
                                         <input
                                             type="file"
                                             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                                             class="sr-only"
-                                            :disabled="updatingPreparedId === document.id"
-                                            @change="updatePreparedDocument(document, $event)"
+                                            :disabled="!preparedDocumentTermsAccepted || uploadingPreparedName === row.name || updatingPreparedId === row.document?.id"
+                                            @change="row.document ? updatePreparedDocument(row.document, $event) : uploadPreparedDocument(row.name, $event)"
                                         >
-                                        <i :class="[updatingPreparedId === document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-rotate', 'text-xs']" aria-hidden="true"></i>
-                                        {{ updatingPreparedId === document.id ? 'Updating...' : 'Update' }}
+                                        <i :class="[
+                                            uploadingPreparedName === row.name || updatingPreparedId === row.document?.id ? 'fa-solid fa-spinner fa-spin' : (row.document ? 'fa-solid fa-rotate' : 'fa-solid fa-upload'),
+                                        ]" aria-hidden="true"></i>
+                                        {{ uploadingPreparedName === row.name || updatingPreparedId === row.document?.id ? 'Saving...' : (row.document ? 'Replace' : 'Upload') }}
                                     </label>
                                     <button
+                                        v-if="row.document"
                                         type="button"
-                                        :disabled="removingPreparedId === document.id"
+                                        :disabled="removingPreparedId === row.document.id"
                                         class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-rose-200 bg-white text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
-                                        title="Remove document"
-                                        aria-label="Remove document"
-                                        @click="deletePreparedDocument(document)"
+                                        :aria-label="`Remove ${row.name}`"
+                                        @click="deletePreparedDocument(row.document)"
                                     >
-                                        <i :class="[removingPreparedId === document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can', 'text-xs']" aria-hidden="true"></i>
+                                        <i :class="[removingPreparedId === row.document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can', 'text-xs']" aria-hidden="true"></i>
                                     </button>
                                 </div>
                             </article>
                         </div>
 
-                        <div v-else class="flex flex-col items-center px-5 py-9 text-center">
-                            <span class="grid h-12 w-12 place-items-center rounded-md bg-slate-100 text-slate-500">
-                                <i class="fa-regular fa-file-lines text-lg" aria-hidden="true"></i>
-                            </span>
-                            <h3 class="mt-3 text-sm font-bold text-slate-950">No saved files yet</h3>
-                            <p class="mt-1 max-w-xl text-sm leading-6 text-slate-500">
-                                Start with a school ID, latest grades, certificate of enrollment, or proof of income.
-                            </p>
-                            <a href="#upload-document" class="mt-3 text-sm font-bold text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950">
-                                Choose your first file
-                            </a>
+                        <div v-if="otherPreparedDocuments.length" class="border-t border-slate-200">
+                            <div class="bg-slate-50 px-5 py-3">
+                                <h3 class="text-sm font-bold text-slate-900">Other saved files</h3>
+                                <p class="mt-1 text-xs text-slate-500">Existing files that are not part of the common list remain available here.</p>
+                            </div>
+                            <div class="divide-y divide-slate-200">
+                                <article
+                                    v-for="document in otherPreparedDocuments"
+                                    :key="document.id"
+                                    class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                    <div class="flex min-w-0 items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-[11px] font-black text-slate-600">
+                                            {{ fileExtension(document.original_name) }}
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="truncate text-sm font-bold text-slate-950">{{ document.document_name }}</p>
+                                            <p class="mt-1 truncate text-xs text-slate-500">{{ document.original_name }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <button type="button" class="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" @click="openDocumentPreview(document)">
+                                            <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                                            View
+                                        </button>
+                                        <label :class="['inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700', !preparedDocumentTermsAccepted || updatingPreparedId === document.id ? 'pointer-events-none opacity-60' : '']">
+                                            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="sr-only" :disabled="!preparedDocumentTermsAccepted || updatingPreparedId === document.id" @change="updatePreparedDocument(document, $event)">
+                                            <i :class="[updatingPreparedId === document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-rotate', 'text-xs']" aria-hidden="true"></i>
+                                            Replace
+                                        </label>
+                                        <button type="button" :disabled="removingPreparedId === document.id" class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-rose-200 bg-white text-rose-700 disabled:opacity-60" :aria-label="`Remove ${document.document_name}`" @click="deletePreparedDocument(document)">
+                                            <i :class="[removingPreparedId === document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can', 'text-xs']" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </article>
+                            </div>
                         </div>
-
-                        <footer v-if="preparedDocumentTotalPages > 1" class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
-                            <button
-                                type="button"
-                                :disabled="preparedDocumentsPage <= 1"
-                                class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                @click="setPreparedDocumentsPage(preparedDocumentsPage - 1)"
-                            >
-                                <i class="fa-solid fa-chevron-left text-[10px]" aria-hidden="true"></i>
-                                Previous
-                            </button>
-                            <span class="text-xs font-bold text-slate-500">Page {{ preparedDocumentsPage }} of {{ preparedDocumentTotalPages }}</span>
-                            <button
-                                type="button"
-                                :disabled="preparedDocumentsPage >= preparedDocumentTotalPages"
-                                class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                @click="setPreparedDocumentsPage(preparedDocumentsPage + 1)"
-                            >
-                                Next
-                                <i class="fa-solid fa-chevron-right text-[10px]" aria-hidden="true"></i>
-                            </button>
-                        </footer>
                     </section>
 
                     <section class="student-card overflow-hidden">

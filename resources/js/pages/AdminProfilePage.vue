@@ -6,7 +6,6 @@ import AdminSidebar from '../components/AdminSidebar.vue';
 const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
-const statusMessage = ref('');
 const validationErrors = ref({});
 const user = ref(null);
 const form = reactive({
@@ -40,7 +39,6 @@ function fieldError(field) {
 async function loadProfile() {
     isLoading.value = true;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
         const response = await window.axios.get('/admin/profile/data');
@@ -56,17 +54,14 @@ async function loadProfile() {
 async function saveProfile() {
     isSaving.value = true;
     errorMessage.value = '';
-    statusMessage.value = '';
     validationErrors.value = {};
 
     try {
         const response = await window.axios.patch('/admin/profile', { ...form });
 
         applyUser(response.data.user);
-        statusMessage.value = response.data.message ?? 'Admin profile updated.';
     } catch (error) {
         validationErrors.value = error.response?.data?.errors ?? {};
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update admin profile.';
     } finally {
         isSaving.value = false;
     }
@@ -101,10 +96,6 @@ onMounted(loadProfile);
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
-                    <p v-if="statusMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 shadow-sm">
-                        {{ statusMessage }}
-                    </p>
-
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div>

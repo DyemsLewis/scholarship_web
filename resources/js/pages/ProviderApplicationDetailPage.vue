@@ -16,7 +16,6 @@ const isLoading = ref(true);
 const updatingId = ref(null);
 const documentUpdatingId = ref(null);
 const errorMessage = ref('');
-const statusMessage = ref('');
 const application = ref(null);
 const activeSection = ref('review');
 const showRubricDetails = ref(false);
@@ -397,14 +396,6 @@ function formatAwardAmount(value) {
     }).format(Number(value));
 }
 
-function apiErrorMessage(error, fallback) {
-    const validationMessage = Object.values(error.response?.data?.errors ?? {})
-        .flat()
-        .find(Boolean);
-
-    return validationMessage ?? error.response?.data?.message ?? fallback;
-}
-
 async function saveScheduleTracking(schedule) {
     if (['completed', 'cancelled'].includes(schedule.status)) {
         const confirmed = await requestConfirmation({
@@ -424,7 +415,6 @@ async function saveScheduleTracking(schedule) {
 
     scheduleTrackingId.value = schedule.id;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
         const response = await window.axios.patch(`/provider/applications/${application.value.id}/schedules/${schedule.id}`, {
@@ -434,9 +424,7 @@ async function saveScheduleTracking(schedule) {
         });
 
         applyApplication(response.data.application);
-        statusMessage.value = response.data.message ?? 'Schedule tracking updated.';
-    } catch (error) {
-        errorMessage.value = apiErrorMessage(error, 'Unable to update schedule tracking.');
+    } catch {
         await loadApplication();
     } finally {
         scheduleTrackingId.value = null;
@@ -657,7 +645,6 @@ async function updateStatus() {
     }
 
     updatingId.value = application.value.id;
-    statusMessage.value = '';
     errorMessage.value = '';
 
     try {
@@ -679,9 +666,8 @@ async function updateStatus() {
             });
 
         applyApplication(response.data.application);
-        statusMessage.value = response.data.message ?? 'Application status updated.';
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update application status.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         updatingId.value = null;
     }
@@ -711,7 +697,6 @@ async function updateDocumentStatus(review) {
     }
 
     documentUpdatingId.value = document.id;
-    statusMessage.value = '';
     errorMessage.value = '';
     documentReviewError.value = '';
 
@@ -722,12 +707,9 @@ async function updateDocumentStatus(review) {
         });
 
         applyApplication(response.data.application);
-        statusMessage.value = response.data.message ?? 'Document status updated.';
         closeDocumentReview();
-    } catch (error) {
-        documentReviewError.value = error.response?.data?.errors?.review_notes?.[0]
-            ?? error.response?.data?.message
-            ?? 'Unable to update document status.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         documentUpdatingId.value = null;
     }
@@ -787,10 +769,6 @@ onMounted(loadApplication);
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
-                    <p v-if="statusMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 shadow-sm">
-                        {{ statusMessage }}
-                    </p>
-
                     <nav class="flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Application detail sections">
                         <button
                             v-for="section in detailSections"

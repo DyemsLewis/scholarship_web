@@ -9,7 +9,6 @@ import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
-const statusMessage = ref('');
 const user = ref(null);
 const scholarships = ref([]);
 const selectedMapScholarship = ref(null);
@@ -155,15 +154,13 @@ async function duplicateProgram(scholarship) {
 
     duplicatingId.value = scholarship.id;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
-        const response = await window.axios.post(`/provider/scholarships/${scholarship.id}/duplicate`);
+        await window.axios.post(`/provider/scholarships/${scholarship.id}/duplicate`);
 
-        statusMessage.value = response.data.message ?? 'Program duplicated as a draft.';
         await loadProviderData();
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to duplicate this program.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         duplicatingId.value = null;
     }
@@ -224,10 +221,6 @@ onMounted(loadProviderData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <div v-if="statusMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 shadow-sm">
-                        {{ statusMessage }}
-                    </div>
-
                     <div
                         v-if="!canPostScholarships"
                         class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm"

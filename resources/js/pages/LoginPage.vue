@@ -17,8 +17,6 @@ const primaryButtonClass = 'w-full rounded-md bg-slate-900 px-4 py-3 text-sm fon
 
 const showPassword = ref(false);
 const isSubmitting = ref(false);
-const statusMessage = ref('');
-const errorMessage = ref('');
 const toast = ref({
     show: false,
     type: 'success',
@@ -55,9 +53,6 @@ function closeToast() {
 }
 
 async function submitForm() {
-    statusMessage.value = '';
-    errorMessage.value = '';
-
     if (!formElement.value?.reportValidity()) {
         return;
     }
@@ -72,20 +67,20 @@ async function submitForm() {
         });
 
         const isEmailVerified = response.data.email_verified !== false;
+        const message = response.data.message ?? 'Login successful.';
 
-        statusMessage.value = response.data.message ?? 'Login successful.';
         showToast(
             'success',
             isEmailVerified ? 'Login successful' : 'Email verification reminder',
-            statusMessage.value,
+            message,
         );
 
         redirectTimer = window.setTimeout(() => {
             window.location.href = response.data.redirect ?? '/';
         }, isEmailVerified ? 900 : 1400);
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Login failed. Check your details and try again.';
-        showToast('error', 'Login failed', errorMessage.value);
+        const message = error.response?.data?.message ?? 'Login failed. Check your details and try again.';
+        showToast('error', 'Login failed', message);
     } finally {
         isSubmitting.value = false;
     }
@@ -95,8 +90,7 @@ onMounted(() => {
     const params = new URLSearchParams(window.location.search);
 
     if (params.get('verified') === '1') {
-        statusMessage.value = 'Email verified successfully. You can now sign in.';
-        showToast('success', 'Email verified', statusMessage.value);
+        showToast('success', 'Email verified', 'Email verified successfully. You can now sign in.');
         window.history.replaceState({}, '', window.location.pathname);
     }
 });
@@ -209,12 +203,5 @@ onBeforeUnmount(() => {
             </button>
         </form>
 
-        <p v-if="statusMessage" class="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-700">
-            {{ statusMessage }}
-        </p>
-
-        <p v-if="errorMessage" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
-            {{ errorMessage }}
-        </p>
     </AuthShell>
 </template>

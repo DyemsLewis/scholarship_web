@@ -46,8 +46,6 @@ const isRegistered = ref(false);
 const emailVerified = ref(false);
 const emailVerificationSent = ref(false);
 const nextUrl = ref('/');
-const statusMessage = ref('');
-const errorMessage = ref('');
 const showPassword = ref(false);
 const toast = ref({
     show: false,
@@ -126,9 +124,6 @@ function handleNumberInput(event) {
 }
 
 async function submitForm() {
-    statusMessage.value = '';
-    errorMessage.value = '';
-
     if (!formElement.value?.reportValidity()) {
         return;
     }
@@ -136,11 +131,11 @@ async function submitForm() {
     const numberDigits = form.value.number.replace(/\D/g, '');
 
     if (numberDigits.length < 10) {
-        errorMessage.value = 'Enter at least 10 digits in your contact number.';
-        showToast('error', 'Registration failed', errorMessage.value);
+        const message = 'Enter at least 10 digits in your contact number.';
+        showToast('error', 'Registration failed', message);
         formElement.value
             ?.querySelector('#number')
-            ?.setCustomValidity(errorMessage.value);
+            ?.setCustomValidity(message);
         formElement.value?.reportValidity();
         return;
     }
@@ -148,11 +143,11 @@ async function submitForm() {
     formElement.value?.querySelector('#number')?.setCustomValidity('');
 
     if (form.value.password !== form.value.passwordConfirmation) {
-        errorMessage.value = 'Passwords must match.';
-        showToast('error', 'Registration failed', errorMessage.value);
+        const message = 'Passwords must match.';
+        showToast('error', 'Registration failed', message);
         formElement.value
             ?.querySelector('#password-confirmation')
-            ?.setCustomValidity(errorMessage.value);
+            ?.setCustomValidity(message);
         formElement.value?.reportValidity();
         return;
     }
@@ -160,8 +155,7 @@ async function submitForm() {
     formElement.value?.querySelector('#password-confirmation')?.setCustomValidity('');
 
     if (!form.value.termsAccepted) {
-        errorMessage.value = 'Please accept the Terms and Privacy Notice before creating an account.';
-        showToast('error', 'Registration failed', errorMessage.value);
+        showToast('error', 'Registration failed', 'Please accept the Terms and Privacy Notice before creating an account.');
         return;
     }
 
@@ -192,16 +186,16 @@ async function submitForm() {
 
     try {
         const response = await window.axios.post('/register', payload);
+        const message = response.data.message ?? 'Registration complete.';
 
-        statusMessage.value = response.data.message ?? 'Registration complete.';
         nextUrl.value = response.data.redirect ?? '/';
         emailVerified.value = Boolean(response.data.email_verified);
         emailVerificationSent.value = Boolean(response.data.email_verification_sent);
         isRegistered.value = true;
-        showToast('success', 'Registration complete', statusMessage.value);
+        showToast('success', 'Registration complete', message);
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Registration failed. Check your details and try again.';
-        showToast('error', 'Registration failed', errorMessage.value);
+        const message = error.response?.data?.message ?? 'Registration failed. Check your details and try again.';
+        showToast('error', 'Registration failed', message);
     } finally {
         isSubmitting.value = false;
     }
@@ -209,18 +203,17 @@ async function submitForm() {
 
 async function resendVerificationEmail() {
     isResendingVerification.value = true;
-    errorMessage.value = '';
 
     try {
         const response = await window.axios.post('/email/verification-notification');
+        const message = response.data.message ?? 'Verification email sent.';
 
-        statusMessage.value = response.data.message ?? 'Verification email sent.';
         emailVerified.value = Boolean(response.data.email_verified);
         emailVerificationSent.value = Boolean(response.data.email_verification_sent);
-        showToast(emailVerified.value || emailVerificationSent.value ? 'success' : 'error', 'Email verification', statusMessage.value);
+        showToast(emailVerified.value || emailVerificationSent.value ? 'success' : 'error', 'Email verification', message);
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to resend the verification email.';
-        showToast('error', 'Email verification failed', errorMessage.value);
+        const message = error.response?.data?.message ?? 'Unable to resend the verification email.';
+        showToast('error', 'Email verification failed', message);
     } finally {
         isResendingVerification.value = false;
     }
@@ -255,10 +248,6 @@ onBeforeUnmount(() => {
         />
 
         <div v-if="isRegistered" class="space-y-4">
-            <p class="rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-700">
-                {{ statusMessage }}
-            </p>
-
             <div v-if="!emailVerified" class="rounded-md border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-slate-700">
                 <p class="font-bold text-slate-950">
                     Verify your email address
@@ -557,8 +546,5 @@ onBeforeUnmount(() => {
             </button>
         </form>
 
-        <p v-if="errorMessage" class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
-            {{ errorMessage }}
-        </p>
     </AuthShell>
 </template>

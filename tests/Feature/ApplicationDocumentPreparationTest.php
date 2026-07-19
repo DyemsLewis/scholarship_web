@@ -16,6 +16,44 @@ class ApplicationDocumentPreparationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_documents_page_lists_common_reusable_files_instead_of_provider_specific_papers(): void
+    {
+        Mail::fake();
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Provider Paper Test',
+            'description' => 'Uses a paper that only applies to this provider.',
+            'requirements' => "Latest report card or grades\nProvider-specific essay form",
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+
+        $documentOptions = $this->actingAs($applicant)
+            ->getJson('/dashboard/documents/data')
+            ->assertOk()
+            ->json('document_options');
+
+        $this->assertSame([
+            'Latest report card or grades',
+            'Certificate of enrollment',
+            'School ID',
+            'Proof of income',
+            'Certificate of indigency',
+            'Birth certificate',
+            'Parent or guardian valid ID',
+            'Transcript of records',
+            'Good moral certificate',
+            'Barangay certificate of residency',
+            'Government-issued ID',
+            'Recent 2x2 ID photo',
+            'Admission or acceptance letter',
+        ], $documentOptions);
+        $this->assertNotContains('Provider-specific essay form', $documentOptions);
+    }
+
     public function test_applicant_uploads_required_files_before_submitting_and_can_access_them_in_the_wizard(): void
     {
         Mail::fake();

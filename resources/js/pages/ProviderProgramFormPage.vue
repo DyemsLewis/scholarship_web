@@ -12,7 +12,6 @@ const isEditMode = computed(() => Boolean(scholarshipId));
 const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
-const formMessage = ref('');
 const formError = ref('');
 const user = ref(null);
 const scholarshipFormElement = ref(null);
@@ -40,7 +39,7 @@ const wideFieldStackClass = `${fieldStackClass} xl:col-span-2`;
 const formGridClass = 'grid items-stretch gap-4 md:grid-cols-2';
 const formSections = [
     { id: 'basics', label: 'Basics', help: 'Name, logo, amount, and review action.' },
-    { id: 'workflow', label: 'Process', help: 'Selection stages, contact, renewal, and service contract.' },
+    { id: 'workflow', label: 'Process', help: 'Selection stages, planned dates, contact, and award terms.' },
     { id: 'target', label: 'Target', help: 'Who can match with this program.' },
     { id: 'location', label: 'Location', help: 'Address and map pin.' },
     { id: 'documents', label: 'Docs', help: 'Required files.' },
@@ -83,6 +82,12 @@ const selectionStageOptions = [
         icon: 'fa-solid fa-hand-holding-dollar',
         required: true,
     },
+];
+const scheduleModeOptions = [
+    { value: 'onsite', label: 'On-site' },
+    { value: 'online', label: 'Online' },
+    { value: 'hybrid', label: 'Hybrid' },
+    { value: 'provider_managed', label: 'Provider managed' },
 ];
 const gradeScaleOptions = [
     {
@@ -152,6 +157,9 @@ const documentRequirementOptions = [
     'Certificate of indigency',
     'Parent or guardian valid ID',
     'Proof of income',
+    'Government-issued ID',
+    'Recent 2x2 ID photo',
+    'Admission or acceptance letter',
     'Recommendation letter',
 ];
 const targetApplicantPresets = [
@@ -612,7 +620,17 @@ const workflowSummary = computed(() => [
     hasText(scholarshipForm.value.returnServiceContract) ? 'Return service listed' : 'No return service listed',
     hasText(scholarshipForm.value.otherContractTerms) ? 'Other contract terms listed' : 'No other contract terms',
     `${scholarshipForm.value.selectionStages.length} selection stages`,
+    scheduledProgramEventCount.value
+        ? `${scheduledProgramEventCount.value} date${scheduledProgramEventCount.value === 1 ? '' : 's'} announced`
+        : 'Dates not announced',
 ]);
+const schedulableSelectionStages = computed(() => selectionStageOptions.filter((stage) => (
+    stage.value !== 'screening'
+    && scholarshipForm.value.selectionStages.includes(stage.value)
+)));
+const scheduledProgramEventCount = computed(() => schedulableSelectionStages.value
+    .filter((stage) => hasText(scholarshipForm.value.programEvents[stage.value]?.scheduledAt))
+    .length);
 const statusOptions = computed(() => {
     const options = [
         { value: 'draft', label: 'Save as draft', help: 'Only provider can see it.' },
@@ -758,6 +776,29 @@ function defaultReviewRubric() {
     ];
 }
 
+function emptyProgramEvent(type) {
+    return {
+        id: null,
+        type,
+        title: '',
+        scheduledAt: '',
+        mode: 'onsite',
+        venue: '',
+        locationAddress: '',
+        latitude: '',
+        longitude: '',
+        onlineUrl: '',
+        instructions: '',
+    };
+}
+
+function emptyProgramEvents() {
+    return Object.fromEntries(selectionStageOptions.map((stage) => [
+        stage.value,
+        emptyProgramEvent(stage.value),
+    ]));
+}
+
 function emptyScholarshipForm() {
     return {
         title: '',
@@ -783,6 +824,7 @@ function emptyScholarshipForm() {
         slotsAvailable: '',
         applicationMode: '',
         selectionStages: ['screening', 'distribution'],
+        programEvents: emptyProgramEvents(),
         renewalPolicy: '',
         returnServiceContract: '',
         otherContractTerms: '',
@@ -793,6 +835,32 @@ function emptyScholarshipForm() {
         imageUrl: '/uploads/scholarship-default.jpg',
         termsAccepted: false,
     };
+}
+
+function fillProgramEvents(events) {
+    const programEvents = emptyProgramEvents();
+
+    (Array.isArray(events) ? events : []).forEach((event) => {
+        if (!programEvents[event.type]) {
+            return;
+        }
+
+        programEvents[event.type] = {
+            id: event.id ?? null,
+            type: event.type,
+            title: event.title ?? '',
+            scheduledAt: event.scheduled_at ?? '',
+            mode: event.mode ?? 'onsite',
+            venue: event.venue ?? '',
+            locationAddress: event.location_address ?? '',
+            latitude: event.latitude ?? '',
+            longitude: event.longitude ?? '',
+            onlineUrl: event.online_url ?? '',
+            instructions: event.instructions ?? '',
+        };
+    });
+
+    return programEvents;
 }
 
 function splitRequirementText(requirements) {
@@ -851,6 +919,56 @@ function toggleSelectionStage(stage) {
     scholarshipForm.value.selectionStages = selectionStageOptions
         .map((optionItem) => optionItem.value)
         .filter((optionValue) => selected.includes(optionValue) || ['screening', 'distribution'].includes(optionValue));
+}
+
+function scheduleModeNeedsVenue(mode) {
+    return ['onsite', 'hybrid'].includes(mode);
+}
+
+function scheduleModeNeedsOnlineUrl(mode) {
+    return ['online', 'hybrid'].includes(mode);
+}
+
+function programEventsPayload() {
+    return schedulableSelectionStages.value
+        .map((stage) => scholarshipForm.value.programEvents[stage.value])
+        .filter((event) => hasText(event?.scheduledAt))
+        .map((event) => ({
+            type: event.type,
+            title: event.title,
+            scheduled_at: event.scheduledAt,
+            mode: event.mode,
+            venue: event.venue,
+            location_address: event.locationAddress,
+            latitude: event.latitude || null,
+            longitude: event.longitude || null,
+            online_url: event.onlineUrl,
+            instructions: event.instructions,
+        }));
+}
+
+function programEventValidationMessage() {
+    for (const stage of schedulableSelectionStages.value) {
+        const event = scholarshipForm.value.programEvents[stage.value];
+
+        if (!hasText(event?.scheduledAt)) {
+            continue;
+        }
+
+        if (scheduleModeNeedsVenue(event.mode) && !hasText(event.venue)) {
+            return `Add a venue for the ${stage.label.toLowerCase()} schedule.`;
+        }
+
+        if (scheduleModeNeedsOnlineUrl(event.mode) && !hasText(event.onlineUrl)) {
+            return `Add the online link for the ${stage.label.toLowerCase()} schedule.`;
+        }
+
+        if (!hasText(event.instructions)) {
+            return `Add instructions for applicants who reach the ${stage.label.toLowerCase()} stage.`;
+        }
+    }
+
+    return '';
 }
 
 function selectAllOptions(field, options) {
@@ -928,6 +1046,7 @@ function fillScholarshipForm(scholarship) {
         selectionStages: selectionStageOptions
             .map((option) => option.value)
             .filter((value) => (scholarship.selection_stages ?? ['screening', 'distribution']).includes(value)),
+        programEvents: fillProgramEvents(scholarship.program_events),
         renewalPolicy: scholarship.renewal_policy ?? '',
         returnServiceContract: scholarship.return_service_contract ?? '',
         otherContractTerms: scholarship.other_contract_terms ?? '',
@@ -1062,7 +1181,6 @@ function resetScholarshipForm() {
     scholarshipForm.value = emptyScholarshipForm();
     imageFile.value = null;
     imagePreviewUrl.value = '';
-    formMessage.value = '';
     formError.value = '';
     providerLocationMessage.value = '';
 
@@ -1105,7 +1223,6 @@ async function loadFormData() {
 }
 
 async function saveScholarship() {
-    formMessage.value = '';
     formError.value = '';
 
     if (!hasText(scholarshipForm.value.title) || !hasText(scholarshipForm.value.description)) {
@@ -1116,6 +1233,14 @@ async function saveScholarship() {
 
     if (!scholarshipForm.value.termsAccepted) {
         formError.value = 'Please accept the provider scholarship terms before saving.';
+        return;
+    }
+
+    const scheduleError = programEventValidationMessage();
+
+    if (scheduleError) {
+        activeFormSection.value = 'workflow';
+        formError.value = scheduleError;
         return;
     }
 
@@ -1177,6 +1302,7 @@ async function saveScholarship() {
         slots_available: scholarshipForm.value.slotsAvailable || '',
         application_mode: scholarshipForm.value.applicationMode || '',
         selection_stages: JSON.stringify(scholarshipForm.value.selectionStages),
+        program_events: JSON.stringify(programEventsPayload()),
         renewal_policy: scholarshipForm.value.renewalPolicy || '',
         return_service_contract: scholarshipForm.value.returnServiceContract || '',
         other_contract_terms: scholarshipForm.value.otherContractTerms || '',
@@ -1204,16 +1330,13 @@ async function saveScholarship() {
             ? await window.axios.post(`/provider/scholarships/${scholarshipId}`, payload)
             : await window.axios.post('/provider/scholarships', payload);
 
-        formMessage.value = response.data.message ?? 'Scholarship saved successfully.';
-
         if (isEditMode.value) {
             fillScholarshipForm(response.data.scholarship);
         } else {
             resetScholarshipForm();
-            formMessage.value = response.data.message ?? 'Scholarship created successfully.';
         }
-    } catch (error) {
-        formError.value = error.response?.data?.message ?? 'Unable to save scholarship.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         isSaving.value = false;
     }
@@ -1566,7 +1689,7 @@ onMounted(loadFormData);
                                     Application workflow
                                 </legend>
                                 <p class="mt-1 text-xs leading-5 text-slate-500">
-                                    Choose the stages once. Dates and instructions can be announced later to every eligible applicant from the program page.
+                                    Choose the stages once. Add shared dates now when they are known, or announce them later.
                                 </p>
 
                                 <div class="mt-3 flex flex-wrap gap-2">
@@ -1587,7 +1710,7 @@ onMounted(loadFormData);
                                                 Providers approve or reject applicants at each review gate. The system moves approved applicants to the next stage automatically.
                                             </p>
                                         </div>
-                                        <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Schedule later</span>
+                                        <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Shared workflow</span>
                                     </div>
 
                                     <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1621,6 +1744,135 @@ onMounted(loadFormData);
                                             </span>
                                         </button>
                                     </div>
+                                </div>
+
+                                <div :class="['mt-4', fieldCardClass]">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">Planned stage dates</p>
+                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                                                Optional. Applicants can see the date, mode, and general venue before applying. Private links and detailed instructions appear only after they reach that stage.
+                                            </p>
+                                        </div>
+                                        <span class="w-fit rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-200">
+                                            {{ scheduledProgramEventCount }} scheduled
+                                        </span>
+                                    </div>
+
+                                    <div class="mt-4 grid gap-3">
+                                        <details
+                                            v-for="stage in schedulableSelectionStages"
+                                            :key="`schedule-${stage.value}`"
+                                            :open="Boolean(scholarshipForm.programEvents[stage.value].scheduledAt)"
+                                            class="rounded-md border border-slate-200 bg-slate-50 p-3 open:bg-white"
+                                        >
+                                            <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
+                                                <span class="flex min-w-0 items-center gap-3">
+                                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
+                                                        <i :class="stage.icon" aria-hidden="true"></i>
+                                                    </span>
+                                                    <span>
+                                                        <span class="block text-sm font-bold text-slate-900">{{ stage.label }} schedule</span>
+                                                        <span class="block text-xs text-slate-500">
+                                                            {{ scholarshipForm.programEvents[stage.value].scheduledAt ? 'Date will be visible before application.' : 'Open to add an optional date.' }}
+                                                        </span>
+                                                    </span>
+                                                </span>
+                                                <span class="shrink-0 rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                                                    {{ scholarshipForm.programEvents[stage.value].scheduledAt ? 'Date added' : 'Optional' }}
+                                                </span>
+                                            </summary>
+
+                                            <div class="mt-4 grid gap-4 border-t border-slate-200 pt-4 md:grid-cols-2">
+                                                <div>
+                                                    <label :class="labelClass" :for="`program-event-date-${stage.value}`">Date and time</label>
+                                                    <input
+                                                        :id="`program-event-date-${stage.value}`"
+                                                        v-model="scholarshipForm.programEvents[stage.value].scheduledAt"
+                                                        type="datetime-local"
+                                                        :class="inputClass"
+                                                    >
+                                                </div>
+
+                                                <div>
+                                                    <label :class="labelClass" :for="`program-event-mode-${stage.value}`">Mode</label>
+                                                    <select
+                                                        :id="`program-event-mode-${stage.value}`"
+                                                        v-model="scholarshipForm.programEvents[stage.value].mode"
+                                                        :class="inputClass"
+                                                    >
+                                                        <option v-for="option in scheduleModeOptions" :key="option.value" :value="option.value">
+                                                            {{ option.label }}
+                                                        </option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="md:col-span-2">
+                                                    <label :class="labelClass" :for="`program-event-title-${stage.value}`">Public schedule title</label>
+                                                    <input
+                                                        :id="`program-event-title-${stage.value}`"
+                                                        v-model="scholarshipForm.programEvents[stage.value].title"
+                                                        type="text"
+                                                        :placeholder="`${stage.label} schedule`"
+                                                        :class="inputClass"
+                                                    >
+                                                </div>
+
+                                                <div v-if="scheduleModeNeedsVenue(scholarshipForm.programEvents[stage.value].mode)">
+                                                    <label :class="labelClass" :for="`program-event-venue-${stage.value}`">Venue</label>
+                                                    <input
+                                                        :id="`program-event-venue-${stage.value}`"
+                                                        v-model="scholarshipForm.programEvents[stage.value].venue"
+                                                        type="text"
+                                                        placeholder="Example: Community hall or provider office"
+                                                        :class="inputClass"
+                                                    >
+                                                </div>
+
+                                                <div v-if="scheduleModeNeedsVenue(scholarshipForm.programEvents[stage.value].mode)">
+                                                    <label :class="labelClass" :for="`program-event-address-${stage.value}`">Address</label>
+                                                    <input
+                                                        :id="`program-event-address-${stage.value}`"
+                                                        v-model="scholarshipForm.programEvents[stage.value].locationAddress"
+                                                        type="text"
+                                                        placeholder="General venue address"
+                                                        :class="inputClass"
+                                                    >
+                                                </div>
+
+                                                <div
+                                                    v-if="scheduleModeNeedsOnlineUrl(scholarshipForm.programEvents[stage.value].mode)"
+                                                    class="md:col-span-2"
+                                                >
+                                                    <label :class="labelClass" :for="`program-event-url-${stage.value}`">Private online link</label>
+                                                    <input
+                                                        :id="`program-event-url-${stage.value}`"
+                                                        v-model="scholarshipForm.programEvents[stage.value].onlineUrl"
+                                                        type="url"
+                                                        placeholder="https://..."
+                                                        :class="inputClass"
+                                                    >
+                                                    <p class="mt-2 text-xs leading-5 text-slate-500">This link is not shown before application.</p>
+                                                </div>
+
+                                                <div class="md:col-span-2">
+                                                    <label :class="labelClass" :for="`program-event-instructions-${stage.value}`">Instructions for qualified applicants</label>
+                                                    <textarea
+                                                        :id="`program-event-instructions-${stage.value}`"
+                                                        v-model="scholarshipForm.programEvents[stage.value].instructions"
+                                                        rows="3"
+                                                        placeholder="What should applicants bring, prepare, or do?"
+                                                        :class="inputClass"
+                                                    ></textarea>
+                                                    <p class="mt-2 text-xs leading-5 text-slate-500">Required only when a date is added. These instructions stay private until the applicant reaches this stage.</p>
+                                                </div>
+                                            </div>
+                                        </details>
+                                    </div>
+
+                                    <p v-if="scholarshipForm.selectionStages.includes('exam')" class="mt-3 text-xs leading-5 text-slate-500">
+                                        An exam date can be published after an active assessment is configured on the <a href="/provider/exams" class="font-bold text-slate-800 underline decoration-slate-300 underline-offset-2">Exams page</a>.
+                                    </p>
                                 </div>
 
                                 <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
@@ -2238,9 +2490,6 @@ onMounted(loadFormData);
 
                         <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                             <div class="min-h-5">
-                                <p v-if="formMessage" class="text-sm font-semibold text-emerald-700">
-                                    {{ formMessage }}
-                                </p>
                                 <p v-if="formError" class="text-sm font-semibold text-rose-700">
                                     {{ formError }}
                                 </p>

@@ -45,6 +45,11 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
         ]);
 
         $this->actingAs($applicant)
+            ->getJson("/dashboard/scholarships/{$scholarship->id}/data")
+            ->assertOk()
+            ->assertJsonPath('scholarship.is_accepting_applications', false);
+
+        $this->actingAs($applicant)
             ->postJson('/dashboard/applications', [
                 'scholarship_id' => $scholarship->id,
                 'terms_accepted' => true,

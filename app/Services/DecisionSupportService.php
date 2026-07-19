@@ -7,6 +7,7 @@ use App\Models\DssCalculationSnapshot;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Support\AcademicRequirement;
+use App\Support\ScholarshipSelectionPlan;
 
 class DecisionSupportService
 {
@@ -155,69 +156,44 @@ class DecisionSupportService
 
     public function statusProgress(ScholarshipApplication $application): array
     {
-        $application->loadMissing('statusHistories');
+        $application->loadMissing(['statusHistories', 'scholarship']);
 
         $status = $application->status ?: 'submitted';
-        $examStatuses = ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed'];
-        $usesExamFlow = in_array($status, $examStatuses, true)
-            || $application->statusHistories->contains(
-                fn ($history): bool => in_array($history->to_status, $examStatuses, true)
-            );
-        $flow = $usesExamFlow ? [
-            ['key' => 'submitted', 'label' => 'Submitted'],
-            ['key' => 'under_review', 'label' => 'Under review'],
-            ['key' => 'exam_qualified', 'label' => 'Qualified for exam'],
-            ['key' => 'exam_scheduled', 'label' => 'Exam scheduled'],
-            ['key' => 'exam_taken', 'label' => 'Exam taken'],
-            ['key' => 'exam_result', 'label' => 'Exam result'],
-            ['key' => 'approved', 'label' => 'Approved'],
-            ['key' => 'awarded', 'label' => 'Awarded'],
-            ['key' => 'distribution_scheduled', 'label' => 'Distribution scheduled'],
-            ['key' => 'disbursed', 'label' => 'Distributed'],
-        ] : [
-            ['key' => 'submitted', 'label' => 'Submitted'],
-            ['key' => 'under_review', 'label' => 'Under review'],
-            ['key' => 'qualified', 'label' => 'Qualified'],
-            ['key' => 'shortlisted', 'label' => 'Shortlisted'],
-            ['key' => 'interview', 'label' => 'Interview'],
-            ['key' => 'approved', 'label' => 'Approved'],
-            ['key' => 'awarded', 'label' => 'Awarded'],
-            ['key' => 'distribution_scheduled', 'label' => 'Distribution scheduled'],
-            ['key' => 'disbursed', 'label' => 'Distributed'],
-        ];
-        $stageIndex = $usesExamFlow
-            ? match ($status) {
-                'under_review' => 1,
-                'qualified', 'shortlisted', 'exam_qualified' => 2,
-                'interview', 'exam_scheduled' => 3,
-                'exam_taken' => 4,
-                'exam_passed', 'exam_failed' => 5,
-                'approved' => 6,
-                'awarded', 'not_awarded' => 7,
-                'distribution_scheduled' => 8,
-                'disbursed', 'renewed' => 9,
-                'rejected' => 1,
-                default => 0,
-            }
-            : match ($status) {
-                'under_review' => 1,
-                'qualified' => 2,
-                'shortlisted' => 3,
-                'interview' => 4,
-                'approved' => 5,
-                'awarded', 'not_awarded' => 6,
-                'distribution_scheduled' => 7,
-                'disbursed', 'renewed' => 8,
-                'rejected' => 1,
-                default => 0,
-            };
+        $selectionStages = ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages);
+        $flow = collect([[
+            'key' => 'submitted',
+            'label' => 'Submitted',
+            'description' => 'Application received',
+        ]])->concat(collect($selectionStages)->map(fn (string $stage): array => [
+            'key' => $stage,
+            'label' => match ($stage) {
+                'screening' => 'Screening',
+                'exam' => 'Exam',
+                'interview' => 'Interview',
+                'distribution' => 'Reward distribution',
+                default => str($stage)->headline()->toString(),
+            },
+            'description' => match ($stage) {
+                'screening' => 'Eligibility and file review',
+                'exam' => 'Provider assessment',
+                'interview' => 'Provider conversation',
+                'distribution' => 'Scholarship release',
+                default => 'Provider-managed stage',
+            },
+        ]))->values();
+        $currentStage = $this->progressStage($application, $selectionStages);
+        $stageIndex = $flow->search(fn (array $step): bool => $step['key'] === $currentStage);
+        $stageIndex = $stageIndex === false ? 0 : $stageIndex;
         $isClosedWithoutAward = in_array($status, ['rejected', 'not_awarded', 'exam_failed'], true);
-        $steps = collect($flow)
-            ->map(function (array $step, int $index) use ($stageIndex, $isClosedWithoutAward): array {
+        $isComplete = in_array($status, ['disbursed', 'renewed'], true);
+        $steps = $flow
+            ->map(function (array $step, int $index) use ($stageIndex, $isClosedWithoutAward, $isComplete): array {
                 return [
                     ...$step,
                     'state' => match (true) {
+                        $isComplete => 'complete',
                         $isClosedWithoutAward && $index > $stageIndex => 'skipped',
+                        $isClosedWithoutAward && $index === $stageIndex => 'stopped',
                         $index < $stageIndex => 'complete',
                         $index === $stageIndex => 'current',
                         default => 'upcoming',
@@ -226,15 +202,62 @@ class DecisionSupportService
             })
             ->values()
             ->all();
+        $completedSteps = collect($steps)->where('state', 'complete')->count();
+        $currentStageLabel = collect($steps)->firstWhere('key', $currentStage)['label'] ?? 'Submitted';
 
         return [
             'current' => $status,
             'label' => $this->statusLabel($status),
-            'percent' => (int) round(($stageIndex / (count($flow) - 1)) * 100),
+            'current_stage' => $currentStage,
+            'current_stage_label' => $currentStageLabel,
+            'configured_stages' => $selectionStages,
+            'completed_steps' => $completedSteps,
+            'total_steps' => count($steps),
+            'percent' => (int) round(($completedSteps / max(count($steps), 1)) * 100),
             'tone' => $this->statusTone($status),
-            'next_action' => $this->statusNextAction($status),
+            'next_action' => $this->statusNextAction($status, $selectionStages),
             'steps' => $steps,
         ];
+    }
+
+    private function progressStage(ScholarshipApplication $application, array $selectionStages): string
+    {
+        $status = $application->status ?: 'submitted';
+
+        if ($status === 'rejected') {
+            $rejectionHistory = $application->statusHistories
+                ->sortByDesc('changed_at')
+                ->first(fn ($history): bool => $history->to_status === 'rejected');
+            $stage = $this->stageForStatus($rejectionHistory?->from_status ?? 'under_review');
+
+            return in_array($stage, $selectionStages, true) ? $stage : 'screening';
+        }
+
+        if ($status === 'not_awarded') {
+            return collect($selectionStages)->reject(fn (string $stage): bool => $stage === 'distribution')->last()
+                ?? 'screening';
+        }
+
+        $stage = $this->stageForStatus($status);
+
+        if ($stage === 'submitted' || in_array($stage, $selectionStages, true)) {
+            return $stage;
+        }
+
+        return collect($selectionStages)->reject(fn (string $candidate): bool => $candidate === 'distribution')->last()
+            ?? 'screening';
+    }
+
+    private function stageForStatus(?string $status): string
+    {
+        return match ($status) {
+            null, '', 'submitted' => 'submitted',
+            'under_review', 'qualified', 'shortlisted', 'other' => 'screening',
+            'exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed' => 'exam',
+            'interview' => 'interview',
+            'approved', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed' => 'distribution',
+            default => 'screening',
+        };
     }
 
     private function captureSnapshot(
@@ -724,26 +747,41 @@ class DecisionSupportService
         };
     }
 
-    private function statusNextAction(string $status): string
+    private function statusNextAction(string $status, array $selectionStages = []): string
     {
+        $nextAfterScreening = $this->nextStageLabel('screening', $selectionStages);
+        $nextAfterExam = $this->nextStageLabel('exam', $selectionStages);
+
         return match ($status) {
-            'submitted' => 'Waiting for the provider to start review.',
-            'under_review' => 'Provider is checking eligibility, documents, and notes.',
-            'qualified' => 'Application is qualified; wait for shortlist or approval.',
-            'shortlisted' => 'Applicant may be contacted for the next screening step.',
-            'interview' => 'Applicant should complete the interview or follow-up requirement.',
-            'exam_qualified' => 'Initial screening is complete; wait for the exam schedule or instructions.',
-            'exam_scheduled' => 'Take the scholarship exam as instructed by the provider.',
-            'exam_taken' => 'Exam is recorded as taken; wait for the provider to post the result.',
-            'exam_passed' => 'Exam passed; wait for final provider award review.',
-            'exam_failed' => 'Application is closed after the exam result; check review notes for context.',
-            'approved' => 'Provider can now schedule reward distribution.',
-            'awarded' => 'Award is recorded; provider should set the distribution schedule.',
+            'submitted' => 'Your application is waiting for the provider to check eligibility and required files.',
+            'under_review', 'qualified', 'shortlisted', 'other' => "The provider is reviewing your application. If approved, you will move to {$nextAfterScreening}.",
+            'interview' => 'Follow the shared interview details when posted. The provider will approve or reject after review.',
+            'exam_qualified' => 'You passed screening. Wait for the provider to post the shared exam schedule.',
+            'exam_scheduled' => 'Review and confirm the posted exam schedule, then follow its instructions.',
+            'exam_taken' => "Your exam participation is recorded. Wait for the provider decision for {$nextAfterExam}.",
+            'exam_passed' => "You passed the exam. Wait for the provider decision for {$nextAfterExam}.",
+            'exam_failed' => 'This application did not advance after the exam. Check the provider note for context.',
+            'approved' => 'You passed the configured selection stages. Wait for the shared reward distribution schedule.',
+            'awarded' => 'Your award is recorded. Wait for the provider to post reward distribution details.',
             'distribution_scheduled' => 'Reward distribution is scheduled; follow the provider instructions.',
             'disbursed' => 'Scholarship support has been released.',
             'renewed' => 'Scholarship renewal has been recorded.',
-            'rejected', 'not_awarded' => 'Application is closed; check review notes for context.',
+            'rejected', 'not_awarded' => 'This application did not advance. Check the provider note for the decision.',
             default => 'Continue monitoring this application.',
+        };
+    }
+
+    private function nextStageLabel(string $currentStage, array $selectionStages): string
+    {
+        $stages = ScholarshipSelectionPlan::normalize($selectionStages);
+        $currentIndex = array_search($currentStage, $stages, true);
+        $nextStage = $currentIndex === false ? null : ($stages[$currentIndex + 1] ?? null);
+
+        return match ($nextStage) {
+            'exam' => 'the exam stage',
+            'interview' => 'the interview stage',
+            'distribution' => 'final approval and reward distribution',
+            default => 'the next provider review',
         };
     }
 

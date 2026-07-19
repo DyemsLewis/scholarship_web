@@ -8,7 +8,6 @@ import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
-const statusMessage = ref('');
 const savingId = ref(null);
 const user = ref(null);
 const scholarships = ref([]);
@@ -690,7 +689,6 @@ function resetFilters() {
 async function toggleSave(scholarship) {
     savingId.value = scholarship.id;
     errorMessage.value = '';
-    statusMessage.value = '';
 
     try {
         const response = scholarship.is_saved
@@ -698,9 +696,8 @@ async function toggleSave(scholarship) {
             : await window.axios.post(`/dashboard/scholarships/${scholarship.id}/save`);
 
         scholarships.value = scholarships.value.map((item) => (item.id === scholarship.id ? response.data.scholarship : item));
-        statusMessage.value = response.data.message ?? 'Saved scholarships updated.';
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update saved scholarship.';
+    } catch (handledError) {
+        void handledError;
     } finally {
         savingId.value = null;
     }
@@ -867,10 +864,6 @@ onMounted(loadScholarships);
                     </section>
 
                     <section class="space-y-4">
-                        <div v-if="statusMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 shadow-sm">
-                            {{ statusMessage }}
-                        </div>
-
                         <div v-if="scholarships.length === 0" class="student-card p-6">
                             <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
                                 <p class="text-sm font-bold text-slate-900">

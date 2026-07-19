@@ -38,6 +38,45 @@ class AdminAccessTest extends TestCase
             ->assertOk();
     }
 
+    public function test_admin_can_access_role_specific_review_pages(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($admin)
+            ->get("/admin/providers/{$provider->id}/review")
+            ->assertOk();
+
+        $this->actingAs($admin)
+            ->getJson("/admin/providers/{$provider->id}/review/data")
+            ->assertOk()
+            ->assertJsonPath('provider.id', $provider->id)
+            ->assertJsonPath('provider.role', 'provider');
+
+        $this->actingAs($admin)
+            ->get("/admin/applicants/{$applicant->id}/review")
+            ->assertOk();
+
+        $this->actingAs($admin)
+            ->getJson("/admin/applicants/{$applicant->id}/review/data")
+            ->assertOk()
+            ->assertJsonPath('applicant.id', $applicant->id)
+            ->assertJsonPath('applicant.role', 'applicant');
+
+        $this->actingAs($admin)
+            ->get("/admin/providers/{$applicant->id}/review")
+            ->assertNotFound();
+
+        $this->actingAs($admin)
+            ->get("/admin/applicants/{$provider->id}/review")
+            ->assertNotFound();
+
+        $this->actingAs($provider)
+            ->get("/admin/providers/{$provider->id}/review")
+            ->assertForbidden();
+    }
+
     public function test_provider_area_requires_provider_role(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);

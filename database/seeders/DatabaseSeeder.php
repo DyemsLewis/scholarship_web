@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\ProviderAssessment;
 use App\Models\Scholarship;
 use App\Models\User;
+use App\Services\ScholarshipEventService;
 use App\Support\ReviewRubric;
 use App\Support\Terms;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -163,12 +164,12 @@ class DatabaseSeeder extends Seeder
 
     private function seedScholarships(User $tulayAral, User $bukasKinabukasan): void
     {
+        $deadline = now()->addDays(60)->startOfDay();
         $common = [
-            'image_path' => '/uploads/scholarship-default.jpg',
             'review_rubric' => ReviewRubric::DEFAULT,
             'application_mode' => 'online',
             'selection_stages' => ['screening', 'distribution'],
-            'deadline' => now()->addDays(60)->toDateString(),
+            'deadline' => $deadline->toDateString(),
             'status' => 'published',
             'views_count' => 0,
             'provider_terms_accepted_at' => now(),
@@ -181,6 +182,7 @@ class DatabaseSeeder extends Seeder
                 'title' => 'Tulay Aral Senior High Support Grant',
                 'data' => [
                     ...$common,
+                    'image_path' => '/images/programs/tulay-aral-logo.png',
                     'category' => 'Financial assistance',
                     'description' => 'A practical school support grant for Grade 11 and Grade 12 learners who need help with transportation, supplies, and connectivity.',
                     'eligibility' => 'Currently enrolled senior high school learner from Metro Manila or Rizal with a general average of at least 80% and a household income within the listed bracket.',
@@ -211,15 +213,30 @@ class DatabaseSeeder extends Seeder
                     'contact_email' => 'tulayaral@scholarship.test',
                     'contact_number' => '09171234567',
                 ],
+                'events' => [
+                    [
+                        'type' => 'distribution',
+                        'title' => 'Senior High Grant Release and Orientation',
+                        'scheduled_at' => $deadline->copy()->addDays(20)->setTime(9, 0),
+                        'mode' => 'onsite',
+                        'venue' => 'Tulay Aral Community Desk',
+                        'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
+                        'latitude' => 14.6255000,
+                        'longitude' => 121.1245000,
+                        'instructions' => 'Awarded learners should bring their school ID and enrollment proof. A parent or guardian may accompany a minor learner during orientation and release.',
+                    ],
+                ],
             ],
             [
                 'provider' => $tulayAral,
                 'title' => 'Tulay Aral College Starter Grant',
                 'data' => [
                     ...$common,
+                    'selection_stages' => ['screening', 'interview', 'distribution'],
+                    'image_path' => '/images/programs/tulay-aral-logo.png',
                     'category' => 'Community grant',
                     'description' => 'A one-time starter grant that helps incoming first-year college students pay for enrollment, books, and basic school materials.',
-                    'eligibility' => 'Incoming first-year college learner from Metro Manila or Rizal with proof of admission and a general average of at least 85%.',
+                    'eligibility' => 'Incoming first-year college learner from Metro Manila or Rizal with proof of admission, a general average of at least 85%, and availability for a short finalist interview.',
                     'eligible_education_levels' => "senior_high_school\ncollege",
                     'eligible_courses' => 'Any course',
                     'eligible_school_types' => "state_university\nlocal_college\nprivate",
@@ -247,12 +264,37 @@ class DatabaseSeeder extends Seeder
                     'contact_email' => 'tulayaral@scholarship.test',
                     'contact_number' => '09171234567',
                 ],
+                'events' => [
+                    [
+                        'type' => 'interview',
+                        'title' => 'College Starter Finalist Interview',
+                        'scheduled_at' => $deadline->copy()->addDays(8)->setTime(9, 0),
+                        'mode' => 'onsite',
+                        'venue' => 'Tulay Aral Community Desk',
+                        'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
+                        'latitude' => 14.6255000,
+                        'longitude' => 121.1245000,
+                        'instructions' => 'Shortlisted applicants should bring proof of admission and be ready to discuss their college plan and intended use of the grant.',
+                    ],
+                    [
+                        'type' => 'distribution',
+                        'title' => 'College Starter Grant Release',
+                        'scheduled_at' => $deadline->copy()->addDays(25)->setTime(10, 0),
+                        'mode' => 'onsite',
+                        'venue' => 'Tulay Aral Community Desk',
+                        'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
+                        'latitude' => 14.6255000,
+                        'longitude' => 121.1245000,
+                        'instructions' => 'Awarded applicants should bring a valid school ID, current enrollment proof, and the signed grant acknowledgment form.',
+                    ],
+                ],
             ],
             [
                 'provider' => $bukasKinabukasan,
                 'title' => 'Bukas Kinabukasan School Essentials Grant',
                 'data' => [
                     ...$common,
+                    'image_path' => '/images/programs/bukas-kinabukasan-logo.png',
                     'category' => 'Community grant',
                     'description' => 'School supply and learning-material assistance for elementary and junior high school learners from nearby communities.',
                     'eligibility' => 'Currently enrolled elementary or junior high school learner from Laguna or Metro Manila whose parent or guardian can complete the application.',
@@ -282,16 +324,30 @@ class DatabaseSeeder extends Seeder
                     'contact_email' => 'bukasfoundation@scholarship.test',
                     'contact_number' => '09172345678',
                 ],
+                'events' => [
+                    [
+                        'type' => 'distribution',
+                        'title' => 'School Essentials Family Release Day',
+                        'scheduled_at' => $deadline->copy()->addDays(18)->setTime(10, 0),
+                        'mode' => 'onsite',
+                        'venue' => 'Bukas Kinabukasan Learning Hub',
+                        'location_address' => 'Barangay Nueva, San Pedro City, Laguna',
+                        'latitude' => 14.3595000,
+                        'longitude' => 121.0473000,
+                        'instructions' => 'The parent or guardian should attend with a valid ID and the learner school ID or enrollment certificate to receive the school materials.',
+                    ],
+                ],
             ],
             [
                 'provider' => $bukasKinabukasan,
                 'title' => 'Bukas Kinabukasan STEM Pathways Grant',
                 'data' => [
                     ...$common,
-                    'selection_stages' => ['screening', 'exam', 'distribution'],
+                    'image_path' => '/images/programs/bukas-kinabukasan-logo.png',
+                    'selection_stages' => ['screening', 'exam', 'interview', 'distribution'],
                     'category' => 'STEM scholarship',
                     'description' => 'A small competitive grant for senior high school STEM learners preparing for science, engineering, computing, or technology studies.',
-                    'eligibility' => 'Grade 11 or Grade 12 STEM learner from Laguna or Metro Manila with at least an 85% general average and willingness to complete a short qualifying activity.',
+                    'eligibility' => 'Grade 11 or Grade 12 STEM learner from Laguna or Metro Manila with at least an 85% general average and availability for a qualifying exam and finalist interview.',
                     'eligible_education_levels' => 'senior_high_school',
                     'eligible_courses' => 'STEM',
                     'eligible_school_types' => "public\nprivate",
@@ -315,18 +371,68 @@ class DatabaseSeeder extends Seeder
                     'slots_available' => 20,
                     'renewal_policy' => 'Renewal for the next school year depends on continued STEM enrollment, satisfactory progress, and available funding.',
                     'return_service_contract' => null,
-                    'other_contract_terms' => 'Finalists complete the provider-managed qualifying activity. Recipients join one community learning session during the award period.',
+                    'other_contract_terms' => 'Finalists complete the provider-managed qualifying exam and interview. Recipients join one community learning session during the award period.',
                     'contact_email' => 'bukasfoundation@scholarship.test',
                     'contact_number' => '09172345678',
+                ],
+                'events' => [
+                    [
+                        'type' => 'exam',
+                        'title' => 'STEM Pathways Qualifying Exam',
+                        'scheduled_at' => $deadline->copy()->addDays(7)->setTime(9, 0),
+                        'mode' => 'onsite',
+                        'venue' => 'Bukas Kinabukasan Learning Hub',
+                        'location_address' => 'Barangay Nueva, San Pedro City, Laguna',
+                        'latitude' => 14.3595000,
+                        'longitude' => 121.0473000,
+                        'instructions' => 'Qualified applicants should bring a school ID, pencil, and the exam schedule notice. Arrive at least 20 minutes before the exam.',
+                    ],
+                    [
+                        'type' => 'interview',
+                        'title' => 'STEM Pathways Finalist Interview',
+                        'scheduled_at' => $deadline->copy()->addDays(14)->setTime(13, 0),
+                        'mode' => 'onsite',
+                        'venue' => 'Bukas Kinabukasan Learning Hub',
+                        'location_address' => 'Barangay Nueva, San Pedro City, Laguna',
+                        'latitude' => 14.3595000,
+                        'longitude' => 121.0473000,
+                        'instructions' => 'Applicants who pass the exam should be ready to discuss their STEM goals, school plans, and community interests.',
+                    ],
+                    [
+                        'type' => 'distribution',
+                        'title' => 'STEM Pathways Award Release',
+                        'scheduled_at' => $deadline->copy()->addDays(30)->setTime(10, 0),
+                        'mode' => 'onsite',
+                        'venue' => 'Bukas Kinabukasan Learning Hub',
+                        'location_address' => 'Barangay Nueva, San Pedro City, Laguna',
+                        'latitude' => 14.3595000,
+                        'longitude' => 121.0473000,
+                        'instructions' => 'Awardees should bring a valid school ID, enrollment proof, and the signed scholarship acknowledgment form for release orientation.',
+                    ],
                 ],
             ],
         ];
 
         foreach ($programs as $program) {
-            Scholarship::query()->updateOrCreate([
+            $scholarship = Scholarship::query()->updateOrCreate([
                 'provider_id' => $program['provider']->id,
                 'title' => $program['title'],
             ], $program['data']);
+
+            foreach ($program['events'] ?? [] as $eventData) {
+                $event = $scholarship->events()->updateOrCreate([
+                    'type' => $eventData['type'],
+                ], [
+                    ...$eventData,
+                    'status' => 'scheduled',
+                    'created_by' => $program['provider']->id,
+                    'updated_by' => $program['provider']->id,
+                ]);
+
+                if ($event->wasRecentlyCreated || $event->wasChanged()) {
+                    app(ScholarshipEventService::class)->syncEligibleApplications($event);
+                }
+            }
         }
     }
 

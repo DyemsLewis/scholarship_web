@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { showPortalToast } from '../support/portalToast';
 
 const props = defineProps({
     mode: {
@@ -11,8 +12,6 @@ const props = defineProps({
 const isLoading = ref(true);
 const isSending = ref(false);
 const isVisible = ref(false);
-const statusMessage = ref('');
-const errorMessage = ref('');
 
 const isDark = computed(() => props.mode === 'dark');
 
@@ -32,7 +31,6 @@ const buttonClass = computed(() => [
 
 async function checkVerificationReminder() {
     isLoading.value = true;
-    errorMessage.value = '';
 
     try {
         const response = await window.axios.get('/notifications');
@@ -47,8 +45,6 @@ async function checkVerificationReminder() {
 
 async function resendVerificationEmail() {
     isSending.value = true;
-    statusMessage.value = '';
-    errorMessage.value = '';
 
     try {
         const response = await window.axios.post('/email/verification-notification');
@@ -57,9 +53,13 @@ async function resendVerificationEmail() {
             isVisible.value = false;
         }
 
-        statusMessage.value = response.data.message ?? 'Verification email sent.';
+        showPortalToast({ message: response.data.message ?? 'Verification email sent.' });
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to resend the verification email.';
+        showPortalToast({
+            type: 'error',
+            title: 'Email verification failed',
+            message: error.response?.data?.message ?? 'Unable to resend the verification email.',
+        });
     } finally {
         isSending.value = false;
     }
@@ -86,11 +86,5 @@ onMounted(checkVerificationReminder);
             {{ isSending ? 'Sending...' : 'Resend link' }}
         </button>
 
-        <p v-if="statusMessage" :class="['mt-2 text-xs', isDark ? 'text-emerald-100' : 'text-emerald-700']">
-            {{ statusMessage }}
-        </p>
-        <p v-if="errorMessage" :class="['mt-2 text-xs', isDark ? 'text-rose-100' : 'text-rose-700']">
-            {{ errorMessage }}
-        </p>
     </div>
 </template>

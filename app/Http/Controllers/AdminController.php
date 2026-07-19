@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Services\PasswordResetLinkService;
 use App\Support\AcademicRequirement;
+use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
@@ -134,6 +135,34 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         return view('admin-reviews');
+    }
+
+    public function providerReview(Request $request, User $provider): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isAdmin(), 403);
+        abort_unless($provider->isProvider(), 404);
+
+        return view('admin-provider-review', [
+            'provider' => $provider,
+        ]);
+    }
+
+    public function applicantReview(Request $request, User $applicant): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isAdmin(), 403);
+        abort_unless($applicant->isApplicant(), 404);
+
+        return view('admin-applicant-review', [
+            'applicant' => $applicant,
+        ]);
     }
 
     public function scholarshipReview(Request $request, Scholarship $scholarship): View|RedirectResponse
@@ -315,6 +344,30 @@ class AdminController extends Controller
         ]);
     }
 
+    public function providerReviewData(Request $request, User $provider): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($provider->isProvider(), 404);
+
+        $provider->loadMissing(['providerProfile', 'providerVerificationDocuments']);
+
+        return response()->json([
+            'provider' => $this->providerReviewPayload($provider),
+        ]);
+    }
+
+    public function applicantReviewData(Request $request, User $applicant): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($applicant->isApplicant(), 404);
+
+        $applicant->loadMissing(['studentProfile', 'applicantVerificationDocuments']);
+
+        return response()->json([
+            'applicant' => $this->applicantReviewPayload($applicant),
+        ]);
+    }
+
     public function reviewsData(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
@@ -324,19 +377,18 @@ class AdminController extends Controller
             ->where('role', 'provider')
             ->latest()
             ->get(['id', 'email', 'username', 'role', 'created_at']);
-        $applications = ScholarshipApplication::query()
-            ->with(['applicant.studentProfile', 'documents.reviewer', 'scholarship.provider.providerProfile'])
-            ->latest('submitted_at')
-            ->limit(8)
-            ->get();
+        $applicants = User::query()
+            ->with(['studentProfile', 'applicantVerificationDocuments'])
+            ->where('role', 'applicant')
+            ->latest()
+            ->get(['id', 'email', 'username', 'role', 'created_at']);
         $scholarships = Scholarship::query()
-            ->with('provider.providerProfile')
+            ->with(['provider.providerProfile', 'events'])
             ->withCount('bookmarks')
             ->whereIn('status', ['pending_review', 'rejected', 'published'])
             ->latest('updated_at')
             ->limit(12)
             ->get();
-        $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
 
         return response()->json([
             'stats' => [
@@ -344,51 +396,19 @@ class AdminController extends Controller
                 'pending_providers' => $providers->filter(fn (User $user) => $user->providerProfile?->verification_status === 'pending')->count(),
                 'approved_providers' => $providers->filter(fn (User $user) => $user->providerProfile?->verification_status === 'approved')->count(),
                 'rejected_providers' => $providers->filter(fn (User $user) => $user->providerProfile?->verification_status === 'rejected')->count(),
-                'recent_applications' => $applications->count(),
-                'average_match_score' => round((float) $applications->avg('eligibility_score'), 1),
-                'average_dss_score' => round((float) $applications->avg('dss_score'), 1),
-                'pending_documents' => $applications->flatMap(fn (ScholarshipApplication $application) => $application->documents)->where('status', 'pending')->count(),
+                'applicants' => $applicants->count(),
+                'pending_applicants' => $applicants->filter(fn (User $user) => $user->applicantVerificationDocuments->isNotEmpty()
+                    && ! in_array($user->studentProfile?->verification_status, ['approved', 'rejected'], true))->count(),
+                'approved_applicants' => $applicants->filter(fn (User $user) => $user->studentProfile?->verification_status === 'approved')->count(),
+                'rejected_applicants' => $applicants->filter(fn (User $user) => $user->studentProfile?->verification_status === 'rejected')->count(),
+                'unsubmitted_applicants' => $applicants->filter(fn (User $user) => $user->applicantVerificationDocuments->isEmpty())->count(),
+                'applicant_proofs' => $applicants->sum(fn (User $user) => $user->applicantVerificationDocuments->count()),
                 'pending_programs' => $scholarships->where('status', 'pending_review')->count(),
                 'published_programs' => $scholarships->where('status', 'published')->count(),
                 'rejected_programs' => $scholarships->where('status', 'rejected')->count(),
             ],
-            'providers' => $providers->map(fn (User $user) => [
-                ...$user->publicPayload(),
-                'verification_documents' => $user->providerVerificationDocuments
-                    ->sortByDesc('created_at')
-                    ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))
-                    ->values(),
-                'created_at' => $user->created_at?->format('M d, Y'),
-            ])->values(),
-            'applications' => $applications->map(fn (ScholarshipApplication $application) => [
-                'id' => $application->id,
-                'applicant' => $application->applicant?->name,
-                'scholarship_id' => $application->scholarship?->id,
-                'scholarship' => $application->scholarship?->title,
-                'scholarship_image_url' => $application->scholarship
-                    ? $this->scholarshipImageUrl($application->scholarship)
-                    : asset('uploads/scholarship-default.jpg'),
-                'provider' => $application->scholarship?->provider?->name,
-                'status' => $application->status,
-                'dss_score' => $application->dss_score,
-                'dss_recommendation' => $application->dss_recommendation,
-                'dss_explanation' => app(DecisionSupportService::class)->explainApplication($application),
-                'status_progress' => app(DecisionSupportService::class)->statusProgress($application),
-                'eligibility_score' => $application->eligibility_score,
-                'decision_reason' => $application->decision_reason,
-                'awarded_amount' => $application->awarded_amount,
-                'distribution_scheduled_for' => $application->distribution_scheduled_for?->format('M d, Y'),
-                'distribution_instructions' => $application->distribution_instructions,
-                'outcome_notes' => $application->outcome_notes,
-                'outcome_at' => $application->outcome_at?->format('M d, Y'),
-                'documents_uploaded' => $application->documents->count(),
-                'documents_pending' => $application->documents->where('status', 'pending')->count(),
-                'documents' => $application->documents
-                    ->map(fn (ApplicationDocument $document) => $this->documentPayload($document))
-                    ->values(),
-                'review_notes' => $application->review_notes,
-                'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
-            ])->values(),
+            'providers' => $providers->map(fn (User $user) => $this->providerReviewPayload($user))->values(),
+            'applicants' => $applicants->map(fn (User $user) => $this->applicantReviewPayload($user))->values(),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipReviewPayload($scholarship))->values(),
         ]);
     }
@@ -397,7 +417,7 @@ class AdminController extends Controller
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
-        $scholarship->loadMissing('provider.providerProfile');
+        $scholarship->loadMissing(['provider.providerProfile', 'events']);
         $scholarship->loadCount('bookmarks');
 
         return response()->json([
@@ -448,7 +468,9 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'Scholarship review updated.',
-            'scholarship' => $this->scholarshipReviewPayload($scholarship->fresh('provider.providerProfile')),
+            'scholarship' => $this->scholarshipReviewPayload(
+                $scholarship->fresh(['provider.providerProfile', 'events']),
+            ),
         ]);
     }
 
@@ -495,7 +517,9 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'Provider verification updated.',
-            'provider' => $provider->fresh('providerProfile')->publicPayload(),
+            'provider' => $this->providerReviewPayload(
+                $provider->fresh(['providerProfile', 'providerVerificationDocuments']),
+            ),
         ]);
     }
 
@@ -578,7 +602,10 @@ class AdminController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
-        return Storage::disk('local')->response($document->path, $document->original_name);
+        return Storage::disk('local')->response($document->path, $document->original_name, [
+            'Cache-Control' => 'no-store, private',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function downloadProviderVerificationDocument(Request $request, ProviderVerificationDocument $document)
@@ -1124,6 +1151,10 @@ class AdminController extends Controller
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
             'selection_stages' => ScholarshipSelectionPlan::normalize($scholarship->selection_stages),
+            'program_events' => $scholarship->events
+                ->sortBy('scheduled_at')
+                ->map(fn ($event) => ScholarshipEventPayload::make($event))
+                ->values(),
             'renewal_policy' => $scholarship->renewal_policy,
             'contact_email' => $scholarship->contact_email,
             'contact_number' => $scholarship->contact_number,
@@ -1169,6 +1200,30 @@ class AdminController extends Controller
             'reviewed_at' => $document->reviewed_at?->format('M d, Y h:i A'),
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'download_url' => route('documents.download', $document),
+        ];
+    }
+
+    private function providerReviewPayload(User $provider): array
+    {
+        return [
+            ...$provider->publicPayload(),
+            'verification_documents' => $provider->providerVerificationDocuments
+                ->sortByDesc('created_at')
+                ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))
+                ->values(),
+            'created_at' => $provider->created_at?->format('M d, Y'),
+        ];
+    }
+
+    private function applicantReviewPayload(User $applicant): array
+    {
+        return [
+            ...$applicant->publicPayload(),
+            'verification_documents' => $applicant->applicantVerificationDocuments
+                ->sortByDesc('uploaded_at')
+                ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
+                ->values(),
+            'created_at' => $applicant->created_at?->format('M d, Y'),
         ];
     }
 
