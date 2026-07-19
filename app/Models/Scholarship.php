@@ -34,6 +34,7 @@ class Scholarship extends Model
         'minimum_grade_scale',
         'slots_available',
         'application_mode',
+        'selection_stages',
         'renewal_policy',
         'return_service_contract',
         'other_contract_terms',
@@ -56,6 +57,7 @@ class Scholarship extends Model
             'longitude' => 'decimal:7',
             'deadline' => 'date',
             'review_rubric' => 'array',
+            'selection_stages' => 'array',
             'views_count' => 'integer',
             'provider_terms_accepted_at' => 'datetime',
         ];
@@ -69,6 +71,11 @@ class Scholarship extends Model
     public function applications(): HasMany
     {
         return $this->hasMany(ScholarshipApplication::class);
+    }
+
+    public function events(): HasMany
+    {
+        return $this->hasMany(ScholarshipEvent::class);
     }
 
     public function bookmarks(): HasMany

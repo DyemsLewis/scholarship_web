@@ -167,6 +167,7 @@ class DatabaseSeeder extends Seeder
             'image_path' => '/uploads/scholarship-default.jpg',
             'review_rubric' => ReviewRubric::DEFAULT,
             'application_mode' => 'online',
+            'selection_stages' => ['screening', 'distribution'],
             'deadline' => now()->addDays(60)->toDateString(),
             'status' => 'published',
             'views_count' => 0,
@@ -287,6 +288,7 @@ class DatabaseSeeder extends Seeder
                 'title' => 'Bukas Kinabukasan STEM Pathways Grant',
                 'data' => [
                     ...$common,
+                    'selection_stages' => ['screening', 'exam', 'distribution'],
                     'category' => 'STEM scholarship',
                     'description' => 'A small competitive grant for senior high school STEM learners preparing for science, engineering, computing, or technology studies.',
                     'eligibility' => 'Grade 11 or Grade 12 STEM learner from Laguna or Metro Manila with at least an 85% general average and willingness to complete a short qualifying activity.',

@@ -54,7 +54,7 @@ const tone = computed(() => {
         >
             <div
                 v-if="show"
-                class="fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm"
+                class="fixed right-4 top-4 z-[100] w-[calc(100%-2rem)] max-w-sm"
                 :role="type === 'error' ? 'alert' : 'status'"
             >
                 <div

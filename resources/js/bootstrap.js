@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { installAxiosToastInterceptors } from './support/portalToast';
+
 window.axios = axios;
 
 function resolveAppBaseUrl() {
@@ -30,3 +32,5 @@ const token = document.head.querySelector('meta[name="csrf-token"]');
 if (token) {
     window.axios.defaults.headers.common['X-CSRF-TOKEN'] = token.content;
 }
+
+installAxiosToastInterceptors(window.axios);

@@ -1,5 +1,6 @@
 import './bootstrap';
 import { createApp } from 'vue';
+import GlobalToastHost from './components/GlobalToastHost.vue';
 
 function loadIconCdn() {
     if (document.querySelector('link[data-icon-cdn="fontawesome"]')) {
@@ -47,8 +48,20 @@ const pages = {
     resetPassword: () => import('./pages/ResetPasswordPage.vue'),
 };
 
+function mountGlobalToastHost() {
+    if (document.getElementById('portal-toast-host')) {
+        return;
+    }
+
+    const toastHost = document.createElement('div');
+    toastHost.id = 'portal-toast-host';
+    document.body.appendChild(toastHost);
+    createApp(GlobalToastHost).mount(toastHost);
+}
+
 if (appElement) {
     loadIconCdn();
+    mountGlobalToastHost();
 
     const page = appElement.dataset.page ?? 'landing';
     const loadPage = pages[page] ?? pages.landing;

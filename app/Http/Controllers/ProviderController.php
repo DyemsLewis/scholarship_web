@@ -2,23 +2,27 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ApplicationSchedule;
 use App\Models\ActivityLog;
 use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
+use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
 use App\Models\ProviderAssessment;
 use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\ScholarshipEvent;
 use App\Models\ScholarshipFunnelEvent;
 use App\Models\User;
 use App\Services\DecisionSupportService;
+use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationDecisionReason;
 use App\Support\ApplicationSchedulePayload;
 use App\Support\ReviewRubric;
+use App\Support\ScholarshipEventPayload;
+use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -504,6 +508,12 @@ class ProviderController extends Controller
             'selected_scholarship' => $selectedScholarship
                 ? $this->scholarshipPayload($selectedScholarship)
                 : null,
+            'program_events' => $selectedScholarship
+                ? $selectedScholarship->events
+                    ->sortBy('scheduled_at')
+                    ->map(fn (ScholarshipEvent $event) => ScholarshipEventPayload::make($event))
+                    ->values()
+                : [],
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
             'status_counts' => [
                 'submitted' => $statusCounts['submitted'] ?? 0,
@@ -606,6 +616,171 @@ class ProviderController extends Controller
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
             'application' => $this->applicationPayload($application, true),
+        ]);
+    }
+
+    public function upsertScholarshipEvent(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+
+        $validated = $request->validate([
+            'type' => ['required', Rule::in(ScholarshipSelectionPlan::STAGES)],
+            'title' => ['nullable', 'string', 'max:255'],
+            'scheduled_at' => ['required', 'date', 'after_or_equal:now'],
+            'mode' => ['required', Rule::in(['onsite', 'online', 'hybrid', 'provider_managed'])],
+            'venue' => [
+                Rule::requiredIf(in_array($request->input('mode'), ['onsite', 'hybrid'], true)),
+                'nullable',
+                'string',
+                'max:500',
+            ],
+            'location_address' => ['nullable', 'string', 'max:1000'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
+            'online_url' => [
+                Rule::requiredIf(in_array($request->input('mode'), ['online', 'hybrid'], true)),
+                'nullable',
+                'url:http,https',
+                'max:2000',
+            ],
+            'instructions' => ['required', 'string', 'max:3000'],
+        ]);
+
+        $selectionStages = ScholarshipSelectionPlan::normalize($scholarship->selection_stages);
+
+        if (! in_array($validated['type'], $selectionStages, true)) {
+            throw ValidationException::withMessages([
+                'type' => 'Add this stage to the scholarship selection plan before publishing its schedule.',
+            ]);
+        }
+
+        $scholarship->loadMissing('providerAssessment');
+
+        if ($validated['type'] === 'exam' && $scholarship->providerAssessment?->status !== 'active') {
+            throw ValidationException::withMessages([
+                'type' => 'Configure an active provider assessment before publishing the exam schedule.',
+            ]);
+        }
+
+        $scheduledAt = CarbonImmutable::parse($validated['scheduled_at']);
+        $eventLabel = ScholarshipSelectionPlan::label($validated['type']);
+        $event = $scholarship->events()->firstOrNew(['type' => $validated['type']]);
+        $event->fill([
+            'title' => filled($validated['title'] ?? null) ? trim($validated['title']) : ucfirst($eventLabel).' schedule',
+            'scheduled_at' => $scheduledAt,
+            'mode' => $validated['mode'],
+            'venue' => $validated['venue'] ?? null,
+            'location_address' => $validated['location_address'] ?? null,
+            'latitude' => $validated['latitude'] ?? null,
+            'longitude' => $validated['longitude'] ?? null,
+            'online_url' => $validated['online_url'] ?? null,
+            'instructions' => $validated['instructions'],
+            'status' => 'scheduled',
+            'updated_by' => $request->user()->id,
+        ]);
+
+        if (! $event->exists) {
+            $event->created_by = $request->user()->id;
+        }
+
+        $event->save();
+        $audienceCount = app(ScholarshipEventService::class)->syncEligibleApplications($event);
+
+        ActivityLog::record(
+            $request->user(),
+            'scholarship_event_published',
+            "{$request->user()->name} published the {$eventLabel} schedule for {$scholarship->title}.",
+            $request,
+            [
+                'scholarship_id' => $scholarship->id,
+                'scholarship_event_id' => $event->id,
+                'schedule_type' => $event->type,
+                'scheduled_at' => $scheduledAt->toIso8601String(),
+                'audience_count' => $audienceCount,
+            ],
+        );
+
+        return response()->json([
+            'message' => $audienceCount > 0
+                ? ucfirst($eventLabel)." schedule published to {$audienceCount} eligible applicant(s)."
+                : ucfirst($eventLabel).' schedule saved. Eligible applicants will receive it when they reach this stage.',
+            'event' => ScholarshipEventPayload::make($event->fresh()),
+            'audience_count' => $audienceCount,
+        ]);
+    }
+
+    public function decideApplication(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+
+        $validated = $request->validate([
+            'decision' => ['required', Rule::in(['approve', 'reject'])],
+            'decision_reason' => [
+                Rule::requiredIf($request->input('decision') === 'reject'),
+                'nullable',
+                'string',
+                Rule::in(ApplicationDecisionReason::acceptedValues()),
+            ],
+            'review_notes' => ['nullable', 'string', 'max:1500'],
+            'rubric_scores' => ['sometimes', 'array'],
+            'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
+        ]);
+
+        $selectionStages = ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages);
+        $nextStatus = $validated['decision'] === 'approve'
+            ? ScholarshipSelectionPlan::nextApprovalStatus($application->status, $selectionStages)
+            : ScholarshipSelectionPlan::rejectionStatus($application->status);
+
+        if ($nextStatus === null) {
+            throw ValidationException::withMessages([
+                'decision' => 'This stage must be completed or tracked before another applicant decision can be recorded.',
+            ]);
+        }
+
+        $decisionReason = $validated['decision_reason'] ?? match ($nextStatus) {
+            'exam_qualified' => 'for_exam',
+            'interview' => 'for_interview',
+            'approved' => 'approved_for_award',
+            default => null,
+        };
+
+        $decisionUpdate = [
+            'status' => $nextStatus,
+            'decision_reason' => $decisionReason,
+            'review_notes' => $validated['review_notes'] ?? $application->review_notes,
+        ];
+
+        if (array_key_exists('rubric_scores', $validated)) {
+            $decisionUpdate['rubric_scores'] = $validated['rubric_scores'];
+        }
+
+        $request->merge($decisionUpdate);
+
+        $this->updateApplicationStatus($request, $application);
+
+        $freshApplication = $application->fresh()->load([
+            'applicant.studentProfile',
+            'documents.reviewer',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.events',
+        ]);
+        app(ScholarshipEventService::class)->syncApplication($freshApplication);
+        $freshApplication = $freshApplication->fresh()->load([
+            'applicant.studentProfile',
+            'documents.reviewer',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship',
+        ]);
+
+        return response()->json([
+            'message' => $validated['decision'] === 'approve'
+                ? 'Applicant approved for the next configured stage.'
+                : 'Applicant decision recorded as rejected.',
+            'application' => $this->applicationPayload($freshApplication, true),
         ]);
     }
 
@@ -1342,6 +1517,7 @@ class ProviderController extends Controller
         unset($validated['image_file'], $validated['terms_accepted']);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
+        $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
         $validated['status'] = $validated['status'] === 'draft' ? 'draft' : 'pending_review';
         $validated['provider_terms_accepted_at'] = now();
         $validated['provider_terms_version'] = Terms::VERSION;
@@ -1384,6 +1560,7 @@ class ProviderController extends Controller
         unset($validated['image_file'], $validated['terms_accepted']);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
+        $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
         $validated['provider_terms_accepted_at'] = now();
         $validated['provider_terms_version'] = Terms::VERSION;
 
@@ -1393,6 +1570,9 @@ class ProviderController extends Controller
 
         $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status'], $validated);
         $scholarship->update($validated);
+        $scholarship->events()
+            ->whereNotIn('type', ScholarshipSelectionPlan::normalize($scholarship->selection_stages))
+            ->delete();
 
         if ($scholarship->status === 'pending_review') {
             $this->notifyAdminsScholarshipSubmitted($request, $scholarship);
@@ -1440,6 +1620,7 @@ class ProviderController extends Controller
             'minimum_grade_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
             'slots_available' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'application_mode' => ['nullable', Rule::in(['online', 'onsite', 'hybrid', 'provider_review'])],
+            'selection_stages' => ['nullable', 'string', 'max:500', 'json'],
             'renewal_policy' => ['nullable', 'string', 'max:2000'],
             'return_service_contract' => ['nullable', 'string', 'max:3000'],
             'other_contract_terms' => ['nullable', 'string', 'max:3000'],
@@ -1487,6 +1668,22 @@ class ProviderController extends Controller
         return $validated;
     }
 
+    private function normalizeScholarshipSelectionStages(
+        array $validated,
+        Request $request,
+        ?Scholarship $scholarship = null,
+    ): array {
+        if ($request->has('selection_stages')) {
+            $validated['selection_stages'] = ScholarshipSelectionPlan::normalize($validated['selection_stages'] ?? null);
+        } elseif ($scholarship) {
+            $validated['selection_stages'] = $scholarship->selection_stages;
+        } else {
+            $validated['selection_stages'] = ScholarshipSelectionPlan::DEFAULT;
+        }
+
+        return $validated;
+    }
+
     private function providerScholarshipStatus(Scholarship $scholarship, string $requestedStatus, array $validated): string
     {
         if ($requestedStatus === 'published' && $scholarship->status === 'published') {
@@ -1527,6 +1724,7 @@ class ProviderController extends Controller
             'minimum_grade_scale',
             'slots_available',
             'application_mode',
+            'selection_stages',
             'renewal_policy',
             'return_service_contract',
             'other_contract_terms',
@@ -1664,7 +1862,8 @@ class ProviderController extends Controller
             'scholarship' => $application->scholarship
                 ? $this->scholarshipPayload($application->scholarship)
                 : null,
-            'exam' => $application->scholarship?->providerAssessment
+            'exam' => in_array('exam', ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages), true)
+                && $application->scholarship?->providerAssessment
                 ? $this->assessmentPayload($application->scholarship->providerAssessment)
                 : null,
         ];
@@ -1814,6 +2013,7 @@ class ProviderController extends Controller
             'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
+            'selection_stages' => ScholarshipSelectionPlan::normalize($scholarship->selection_stages),
             'renewal_policy' => $scholarship->renewal_policy,
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,

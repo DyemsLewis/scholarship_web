@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Services\PasswordResetLinkService;
 use App\Support\AcademicRequirement;
+use App\Support\ScholarshipSelectionPlan;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -1122,6 +1123,7 @@ class AdminController extends Controller
             'map_url' => $this->mapUrl($scholarship),
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
+            'selection_stages' => ScholarshipSelectionPlan::normalize($scholarship->selection_stages),
             'renewal_policy' => $scholarship->renewal_policy,
             'contact_email' => $scholarship->contact_email,
             'contact_number' => $scholarship->contact_number,

@@ -207,6 +207,7 @@ function documentStatusClass(status) {
 
 function scheduleTypeLabel(type) {
     return {
+        screening: 'Application screening',
         exam: 'Scholarship exam',
         interview: 'Interview',
         distribution: 'Award distribution',
@@ -215,6 +216,7 @@ function scheduleTypeLabel(type) {
 
 function scheduleTypeIcon(type) {
     return {
+        screening: 'fa-solid fa-list-check',
         exam: 'fa-solid fa-clipboard-check',
         interview: 'fa-solid fa-comments',
         distribution: 'fa-solid fa-hand-holding-heart',

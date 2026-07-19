@@ -17,8 +17,10 @@ use App\Models\StudentDocument;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
+use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationSchedulePayload;
+use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -31,9 +33,7 @@ use Illuminate\View\View;
 
 class ApplicantDashboardController extends Controller
 {
-    public function __construct(private readonly ScholarshipEligibilityService $eligibilityService)
-    {
-    }
+    public function __construct(private readonly ScholarshipEligibilityService $eligibilityService) {}
 
     public function index(Request $request): View|RedirectResponse
     {
@@ -210,6 +210,13 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
 
         $scholarships = $this->publishedScholarships()->get();
+        $preparedDocuments = StudentDocument::query()
+            ->where('user_id', $request->user()->id)
+            ->latest('uploaded_at')
+            ->get()
+            ->filter(fn (StudentDocument $document): bool => Storage::disk('local')->exists($document->path))
+            ->values();
+        $request->user()->setRelation('studentDocuments', $preparedDocuments);
         $applications = ScholarshipApplication::query()
             ->with(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile'])
             ->where('applicant_id', $request->user()->id)
@@ -222,6 +229,9 @@ class ApplicantDashboardController extends Controller
             'profile_readiness' => $request->user()->applicantProfileReadiness(),
             'stats' => $this->statsPayload($request),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))->values(),
+            'prepared_documents' => $preparedDocuments
+                ->map(fn (StudentDocument $document) => $this->studentDocumentPayload($document))
+                ->values(),
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
         ]);
     }
@@ -295,7 +305,7 @@ class ApplicantDashboardController extends Controller
             Storage::disk('local')->delete($existing->path);
         }
 
-        $path = $file->store("student-documents/{$request->user()->id}");
+        $path = $file->store("student-documents/{$request->user()->id}", 'local');
         $document = StudentDocument::query()->updateOrCreate([
             'user_id' => $request->user()->id,
             'document_name' => $documentName,
@@ -674,12 +684,35 @@ class ApplicantDashboardController extends Controller
             ], 422);
         }
 
+        $requiredDocuments = collect($this->documentRequirements($scholarship))
+            ->unique()
+            ->values()
+            ->all();
+        $preparedDocumentNames = $requiredDocuments === []
+            ? collect()
+            : $request->user()->studentDocuments()
+                ->whereIn('document_name', $requiredDocuments)
+                ->get()
+                ->filter(fn (StudentDocument $document): bool => Storage::disk('local')->exists($document->path))
+                ->pluck('document_name');
+        $missingDocuments = collect($requiredDocuments)
+            ->reject(fn (string $requirement): bool => $preparedDocumentNames->contains($requirement))
+            ->values()
+            ->all();
+
+        if ($missingDocuments !== []) {
+            return response()->json([
+                'message' => 'Upload every required document before continuing with your application.',
+                'missing_documents' => $missingDocuments,
+            ], 422);
+        }
+
         $acceptedAt = now();
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => $request->user()->id,
             'status' => 'submitted',
-            'document_checklist' => $validated['document_checklist'] ?? [],
+            'document_checklist' => $requiredDocuments,
             'eligibility_score' => $eligibilityMatch['score'],
             'eligibility_breakdown' => $eligibilityMatch,
             'review_rubric_snapshot' => $scholarship->review_rubric ?? [],
@@ -698,8 +731,9 @@ class ApplicantDashboardController extends Controller
             'changed_at' => now(),
         ]);
 
-        $this->attachPreparedDocumentsToApplication($request->user(), $application, $validated['document_checklist'] ?? []);
+        $this->attachPreparedDocumentsToApplication($request->user(), $application, $requiredDocuments);
         app(DecisionSupportService::class)->syncApplication($application, 'web_application_submitted');
+        app(ScholarshipEventService::class)->syncApplication($application->fresh());
 
         ScholarshipFunnelEvent::record(
             $request->user(),
@@ -1067,6 +1101,7 @@ class ApplicantDashboardController extends Controller
             'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
+            'selection_stages' => ScholarshipSelectionPlan::normalize($scholarship->selection_stages),
             'renewal_policy' => $scholarship->renewal_policy,
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,
@@ -1286,9 +1321,9 @@ class ApplicantDashboardController extends Controller
             return;
         }
 
-        $user->loadMissing('studentDocuments');
-        $preparedDocuments = $user->studentDocuments
-            ->filter(fn (StudentDocument $document) => in_array($document->document_name, $requirements, true));
+        $preparedDocuments = $user->studentDocuments()
+            ->whereIn('document_name', $requirements)
+            ->get();
 
         foreach ($preparedDocuments as $studentDocument) {
             if (! Storage::disk('local')->exists($studentDocument->path)) {

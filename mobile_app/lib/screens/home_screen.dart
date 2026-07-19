@@ -4427,6 +4427,7 @@ String applicationModeLabel(Object? value) {
 
 String applicationScheduleTypeLabel(Object? value) {
   return switch (stringValue(value)) {
+    'screening' => 'APPLICATION SCREENING',
     'exam' => 'SCHOLARSHIP EXAM',
     'interview' => 'INTERVIEW',
     'distribution' => 'AWARD DISTRIBUTION',

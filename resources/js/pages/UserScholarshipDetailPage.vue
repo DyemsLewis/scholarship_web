@@ -28,12 +28,23 @@ const applicationModeOptions = [
     { value: 'hybrid', label: 'Online and on-site' },
     { value: 'provider_review', label: 'Provider review only' },
 ];
+const selectionStageOptions = [
+    { value: 'screening', label: 'Screening', icon: 'fa-solid fa-list-check' },
+    { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question' },
+    { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments' },
+    { value: 'distribution', label: 'Distribution', icon: 'fa-solid fa-hand-holding-dollar' },
+];
 
 const documentItems = computed(() => documentRequirements(scholarship.value?.requirements));
 const hasDocumentRequirements = computed(() => !(documentItems.value.length === 1 && documentItems.value[0] === 'Not listed yet'));
 const documentRequirementSummary = computed(() => hasDocumentRequirements.value
     ? `${documentItems.value.length} requirement${documentItems.value.length === 1 ? '' : 's'}`
     : 'No documents listed');
+const selectionPlan = computed(() => {
+    const selected = scholarship.value?.selection_stages ?? ['screening', 'distribution'];
+
+    return selectionStageOptions.filter((stage) => selected.includes(stage.value));
+});
 const canApply = computed(() => profileReadiness.value.complete);
 const isEligible = computed(() => scholarship.value?.eligibility_match?.is_eligible !== false);
 const canStartApplication = computed(() => {
@@ -536,6 +547,27 @@ onMounted(loadScholarship);
                                             <p class="mt-1 break-words font-bold text-slate-950">
                                                 {{ contactLabel(scholarship) }}
                                             </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                    <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">Selection process</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">The provider posts shared dates after applications reach each stage.</p>
+                                        </div>
+                                        <span class="text-xs font-bold text-slate-500">{{ selectionPlan.length }} stages</span>
+                                    </div>
+                                    <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                        <div v-for="(stage, index) in selectionPlan" :key="stage.value" class="flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3">
+                                            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-900 text-xs text-white">
+                                                <i :class="stage.icon" aria-hidden="true"></i>
+                                            </span>
+                                            <div>
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Step {{ index + 1 }}</p>
+                                                <p class="text-sm font-bold text-slate-800">{{ stage.label }}</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

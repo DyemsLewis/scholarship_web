@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 
@@ -15,9 +16,36 @@ const selectedScholarshipContext = ref(initialScholarshipId ? {
 } : null);
 const selectedQueueFilter = ref('all');
 const selectedQueueSort = ref('priority');
+const programEvents = ref([]);
+const scheduleEditorType = ref('');
+const scheduleSaving = ref(false);
+const scheduleMessage = ref('');
+const scheduleError = ref('');
+const scheduleForm = ref(emptyScheduleForm());
+const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+
+const scheduleTypeCatalog = [
+    { value: 'screening', label: 'Screening', icon: 'fa-solid fa-list-check', help: 'Eligibility and document review' },
+    { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question', help: 'Shared assessment details' },
+    { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments', help: 'Shared interview instructions' },
+    { value: 'distribution', label: 'Distribution', icon: 'fa-solid fa-hand-holding-dollar', help: 'Award release announcement' },
+];
+const scheduleModeOptions = [
+    { value: 'onsite', label: 'On-site' },
+    { value: 'online', label: 'Online' },
+    { value: 'hybrid', label: 'Hybrid' },
+    { value: 'provider_managed', label: 'Provider managed' },
+];
 
 const selectedScholarshipId = computed(() => selectedScholarshipContext.value?.id || initialScholarshipId);
 const hasProgramContext = computed(() => Boolean(selectedScholarshipId.value));
+const configuredScheduleTypes = computed(() => {
+    const configured = selectedScholarshipContext.value?.selection_stages ?? ['screening', 'distribution'];
+
+    return scheduleTypeCatalog.filter((type) => configured.includes(type.value));
+});
 const exportApplicationsUrl = computed(() => {
     if (!hasProgramContext.value) {
         return '/provider/export/applications';
@@ -209,8 +237,134 @@ function reviewPriorityClass(application) {
     return 'bg-slate-200 text-slate-700';
 }
 
-async function loadProviderData() {
-    isLoading.value = true;
+function emptyScheduleForm(type = '') {
+    return {
+        type,
+        title: '',
+        scheduledAt: '',
+        mode: 'onsite',
+        venue: '',
+        locationAddress: '',
+        latitude: '',
+        longitude: '',
+        onlineUrl: '',
+        instructions: '',
+    };
+}
+
+function scheduleTypeLabel(type) {
+    return scheduleTypeCatalog.find((option) => option.value === type)?.label ?? type;
+}
+
+function scheduleEvent(type) {
+    return programEvents.value.find((event) => event.type === type) ?? null;
+}
+
+function defaultScheduleDetails(type) {
+    const scholarship = selectedScholarshipContext.value ?? {};
+
+    return {
+        title: `${scheduleTypeLabel(type)} schedule`,
+        mode: 'onsite',
+        venue: scholarship.location_name ?? '',
+        locationAddress: scholarship.location_address ?? '',
+        latitude: scholarship.latitude ?? '',
+        longitude: scholarship.longitude ?? '',
+        instructions: {
+            screening: 'Keep your profile and submitted requirements complete while the provider reviews your application.',
+            exam: 'Review the assessment instructions and arrive or sign in at least 15 minutes before the scheduled time.',
+            interview: 'Bring a valid school ID and be ready to discuss your application and scholarship goals.',
+            distribution: 'Bring a valid school ID and any release documents required by the provider.',
+        }[type] ?? '',
+    };
+}
+
+function openScheduleEditor(type) {
+    const existing = scheduleEvent(type);
+    const defaults = defaultScheduleDetails(type);
+
+    scheduleForm.value = existing
+        ? {
+            type: existing.type,
+            title: existing.title ?? '',
+            scheduledAt: existing.scheduled_at ?? '',
+            mode: existing.mode ?? 'onsite',
+            venue: existing.venue ?? '',
+            locationAddress: existing.location_address ?? '',
+            latitude: existing.latitude ?? '',
+            longitude: existing.longitude ?? '',
+            onlineUrl: existing.online_url ?? '',
+            instructions: existing.instructions ?? '',
+        }
+        : { ...emptyScheduleForm(type), ...defaults, type };
+    scheduleEditorType.value = type;
+    scheduleError.value = '';
+    scheduleMessage.value = '';
+}
+
+function closeScheduleEditor() {
+    scheduleEditorType.value = '';
+    scheduleForm.value = emptyScheduleForm();
+}
+
+function handleSchedulePinPicked(location) {
+    scheduleForm.value.latitude = location.latitude;
+    scheduleForm.value.longitude = location.longitude;
+
+    if (location.displayName) {
+        scheduleForm.value.locationAddress = location.displayName;
+    }
+}
+
+function apiErrorMessage(error, fallback) {
+    return Object.values(error.response?.data?.errors ?? {}).flat().find(Boolean)
+        ?? error.response?.data?.message
+        ?? fallback;
+}
+
+async function saveProgramSchedule() {
+    if (!scheduleForm.value.scheduledAt || !scheduleForm.value.instructions.trim()) {
+        scheduleError.value = 'Add the date, time, and applicant instructions.';
+        return;
+    }
+
+    scheduleSaving.value = true;
+    scheduleError.value = '';
+    scheduleMessage.value = '';
+
+    try {
+        const response = await window.axios.post(`/provider/scholarships/${selectedScholarshipId.value}/events`, {
+            type: scheduleForm.value.type,
+            title: scheduleForm.value.title || null,
+            scheduled_at: scheduleForm.value.scheduledAt,
+            mode: scheduleForm.value.mode,
+            venue: scheduleForm.value.venue || null,
+            location_address: scheduleForm.value.locationAddress || null,
+            latitude: scheduleForm.value.latitude || null,
+            longitude: scheduleForm.value.longitude || null,
+            online_url: scheduleForm.value.onlineUrl || null,
+            instructions: scheduleForm.value.instructions,
+        });
+        const eventIndex = programEvents.value.findIndex((event) => event.type === response.data.event.type);
+
+        if (eventIndex >= 0) {
+            programEvents.value.splice(eventIndex, 1, response.data.event);
+        } else {
+            programEvents.value.push(response.data.event);
+        }
+
+        scheduleMessage.value = response.data.message ?? 'Program schedule published.';
+        closeScheduleEditor();
+        await loadProviderData(false);
+    } catch (error) {
+        scheduleError.value = apiErrorMessage(error, 'Unable to publish this program schedule.');
+    } finally {
+        scheduleSaving.value = false;
+    }
+}
+
+async function loadProviderData(showLoading = true) {
+    isLoading.value = showLoading;
     errorMessage.value = '';
 
     try {
@@ -220,6 +374,7 @@ async function loadProviderData() {
 
         applications.value = response.data.applications;
         selectedScholarshipContext.value = response.data.selected_scholarship ?? selectedScholarshipContext.value;
+        programEvents.value = response.data.program_events ?? [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider applications.';
     } finally {
@@ -275,6 +430,119 @@ onMounted(loadProviderData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
+                    <section v-if="hasProgramContext" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program Schedule</p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">One announcement for each stage</h3>
+                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+                                    Set a date once. Applicants receive it automatically when your approval moves them into that stage.
+                                </p>
+                            </div>
+                            <a :href="`/provider/programs/${selectedScholarshipId}/edit`" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
+                                Edit selection plan
+                            </a>
+                        </div>
+
+                        <p v-if="scheduleMessage" class="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{{ scheduleMessage }}</p>
+                        <p v-if="scheduleError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{{ scheduleError }}</p>
+
+                        <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            <button
+                                v-for="type in configuredScheduleTypes"
+                                :key="type.value"
+                                type="button"
+                                :class="[
+                                    'flex min-h-32 flex-col rounded-md border p-3 text-left transition',
+                                    scheduleEditorType === type.value
+                                        ? 'border-slate-900 bg-slate-900 text-white'
+                                        : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white',
+                                ]"
+                                @click="openScheduleEditor(type.value)"
+                            >
+                                <span class="flex items-start justify-between gap-3">
+                                    <span :class="['grid h-9 w-9 place-items-center rounded-md', scheduleEditorType === type.value ? 'bg-white/10' : 'bg-white text-slate-700 ring-1 ring-slate-200']">
+                                        <i :class="type.icon" aria-hidden="true"></i>
+                                    </span>
+                                    <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', scheduleEvent(type.value) ? 'bg-emerald-100 text-emerald-800' : (scheduleEditorType === type.value ? 'bg-white/10 text-white' : 'bg-slate-200 text-slate-600')]">
+                                        {{ scheduleEvent(type.value) ? 'Scheduled' : 'Not set' }}
+                                    </span>
+                                </span>
+                                <span class="mt-3 font-bold">{{ type.label }}</span>
+                                <span :class="['mt-1 text-xs leading-5', scheduleEditorType === type.value ? 'text-slate-300' : 'text-slate-500']">
+                                    {{ scheduleEvent(type.value)?.scheduled_label || type.help }}
+                                </span>
+                            </button>
+                        </div>
+
+                        <form v-if="scheduleEditorType" class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4" @submit.prevent="saveProgramSchedule">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{{ scheduleTypeLabel(scheduleForm.type) }}</p>
+                                    <h4 class="mt-1 font-bold text-slate-950">Publish shared instructions</h4>
+                                </div>
+                                <button type="button" class="text-sm font-bold text-slate-500 hover:text-slate-900" @click="closeScheduleEditor">Close</button>
+                            </div>
+
+                            <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                <div>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Title</label>
+                                    <input v-model="scheduleForm.title" type="text" maxlength="255" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                </div>
+                                <div>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Date and time</label>
+                                    <input v-model="scheduleForm.scheduledAt" type="datetime-local" :min="minimumScheduleDateTime" required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                </div>
+                                <div>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Mode</label>
+                                    <select v-model="scheduleForm.mode" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                        <option v-for="mode in scheduleModeOptions" :key="mode.value" :value="mode.value">{{ mode.label }}</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div v-if="['onsite', 'hybrid'].includes(scheduleForm.mode)" class="mt-4 grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Venue</label>
+                                    <input v-model="scheduleForm.venue" type="text" maxlength="500" required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                </div>
+                                <div>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Full address</label>
+                                    <input v-model="scheduleForm.locationAddress" type="text" maxlength="1000" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                </div>
+                                <div class="overflow-hidden rounded-md md:col-span-2">
+                                    <LeafletMapPreview
+                                        :address="scheduleForm.locationAddress"
+                                        :latitude="scheduleForm.latitude"
+                                        :longitude="scheduleForm.longitude"
+                                        :title="scheduleForm.venue || 'Program activity location'"
+                                        :marker-text="scheduleForm.venue || scheduleForm.title"
+                                        height="14rem"
+                                        picker
+                                        auto-geocode
+                                        @picked="handleSchedulePinPicked"
+                                    />
+                                </div>
+                            </div>
+
+                            <div v-if="['online', 'hybrid'].includes(scheduleForm.mode)" class="mt-4">
+                                <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Online link</label>
+                                <input v-model="scheduleForm.onlineUrl" type="url" maxlength="2000" placeholder="https://..." required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                            </div>
+
+                            <div class="mt-4">
+                                <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Applicant instructions</label>
+                                <textarea v-model="scheduleForm.instructions" rows="3" maxlength="3000" required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600"></textarea>
+                            </div>
+
+                            <div class="mt-4 flex justify-end">
+                                <button type="submit" :disabled="scheduleSaving" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60">
+                                    {{ scheduleSaving ? 'Publishing...' : 'Publish to eligible applicants' }}
+                                </button>
+                            </div>
+                        </form>
+                    </section>
+
                     <details class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm shadow-sm">
                         <summary class="cursor-pointer font-bold text-slate-950">
                             DSS queue guide

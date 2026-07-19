@@ -27,13 +27,7 @@ const selectedProfileProof = ref(null);
 const selectedReviewActionKey = ref('');
 const documentReviewError = ref('');
 const rubricScores = ref({});
-const scheduleSaving = ref(false);
 const scheduleTrackingId = ref(null);
-const showScheduleEditor = ref(false);
-const scheduleForm = ref(emptyScheduleForm());
-const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
 const {
     confirmation,
     requestConfirmation,
@@ -49,6 +43,7 @@ const detailSections = [
     { key: 'history', label: 'History' },
 ];
 const scheduleTypeCatalog = [
+    { value: 'screening', label: 'Screening', icon: 'fa-solid fa-list-check' },
     { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question' },
     { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments' },
     { value: 'distribution', label: 'Distribution', icon: 'fa-solid fa-hand-holding-dollar' },
@@ -59,147 +54,7 @@ const scheduleModeOptions = [
     { value: 'hybrid', label: 'Hybrid' },
     { value: 'provider_managed', label: 'Provider managed' },
 ];
-const statusGroups = [
-    {
-        label: 'Screening',
-        options: [
-            { value: 'submitted', label: 'Submitted' },
-            { value: 'under_review', label: 'Under review' },
-            { value: 'qualified', label: 'Qualified' },
-            { value: 'shortlisted', label: 'Shortlisted' },
-            { value: 'interview', label: 'For interview' },
-        ],
-    },
-    {
-        label: 'Exam',
-        options: [
-            { value: 'exam_qualified', label: 'Qualified for exam' },
-            { value: 'exam_scheduled', label: 'Exam scheduled' },
-            { value: 'exam_taken', label: 'Exam taken' },
-            { value: 'exam_passed', label: 'Passed exam' },
-            { value: 'exam_failed', label: 'Failed exam' },
-        ],
-    },
-    {
-        label: 'Decision',
-        options: [
-            { value: 'approved', label: 'Approved' },
-            { value: 'awarded', label: 'Awarded' },
-            { value: 'not_awarded', label: 'Not awarded' },
-            { value: 'rejected', label: 'Rejected' },
-        ],
-    },
-    {
-        label: 'Distribution',
-        options: [
-            { value: 'distribution_scheduled', label: 'Distribution scheduled' },
-            { value: 'disbursed', label: 'Distributed' },
-            { value: 'renewed', label: 'Renewed' },
-        ],
-    },
-];
 const reviewActionCatalog = {
-    start_review: {
-        key: 'start_review',
-        status: 'under_review',
-        label: 'Start review',
-        description: 'Begin checking the profile and submitted files.',
-        confirmLabel: 'Start review',
-        reason: '',
-        note: 'Application review started.',
-        icon: 'fa-solid fa-magnifying-glass',
-    },
-    request_documents: {
-        key: 'request_documents',
-        status: 'under_review',
-        label: 'Request document updates',
-        description: 'Ask the applicant to replace or complete a file.',
-        confirmLabel: 'Send document request',
-        reason: 'missing_documents',
-        note: 'Please review the document checklist and replace any files marked for correction.',
-        icon: 'fa-solid fa-file-circle-exclamation',
-    },
-    qualify: {
-        key: 'qualify',
-        status: 'qualified',
-        label: 'Mark qualified',
-        description: 'The applicant meets the initial requirements.',
-        confirmLabel: 'Mark qualified',
-        reason: 'complete_requirements',
-        note: 'Applicant meets the initial scholarship requirements.',
-        icon: 'fa-solid fa-circle-check',
-    },
-    shortlist: {
-        key: 'shortlist',
-        status: 'shortlisted',
-        label: 'Add to shortlist',
-        description: 'Keep the applicant for final comparison.',
-        confirmLabel: 'Shortlist applicant',
-        reason: 'complete_requirements',
-        note: 'Applicant shortlisted for the next review step.',
-        icon: 'fa-solid fa-list-check',
-    },
-    interview: {
-        key: 'interview',
-        status: 'interview',
-        label: 'Invite to interview',
-        description: 'Move the applicant to interview or follow-up screening.',
-        confirmLabel: 'Set interview stage',
-        reason: 'for_interview',
-        note: 'Applicant selected for interview or follow-up screening.',
-        icon: 'fa-solid fa-comments',
-    },
-    exam_qualify: {
-        key: 'exam_qualify',
-        status: 'exam_qualified',
-        label: 'Send to exam',
-        description: 'The applicant passed screening and may take the exam.',
-        confirmLabel: 'Qualify for exam',
-        reason: 'for_exam',
-        note: 'Applicant passed eligibility screening and is qualified to take the scholarship exam.',
-        icon: 'fa-solid fa-clipboard-question',
-    },
-    exam_schedule: {
-        key: 'exam_schedule',
-        status: 'exam_scheduled',
-        label: 'Schedule exam',
-        description: 'Confirm that exam instructions are ready for the applicant.',
-        confirmLabel: 'Confirm exam schedule',
-        reason: 'exam_scheduled',
-        note: 'Scholarship exam is scheduled. Check provider instructions for the date, venue, or online access details.',
-        icon: 'fa-solid fa-calendar-check',
-    },
-    exam_taken: {
-        key: 'exam_taken',
-        status: 'exam_taken',
-        label: 'Mark exam completed',
-        description: 'Record that the applicant finished the assessment.',
-        confirmLabel: 'Mark exam completed',
-        reason: 'exam_completed',
-        note: 'Scholarship exam was marked as taken.',
-        icon: 'fa-solid fa-pen-to-square',
-    },
-    exam_pass: {
-        key: 'exam_pass',
-        status: 'exam_passed',
-        label: 'Record pass',
-        description: 'Move the applicant to final award review.',
-        confirmLabel: 'Record exam pass',
-        reason: 'passed_exam',
-        note: 'Applicant passed the scholarship exam and may proceed to final award review.',
-        icon: 'fa-solid fa-check',
-    },
-    exam_fail: {
-        key: 'exam_fail',
-        status: 'exam_failed',
-        label: 'Record not passed',
-        description: 'Close the exam stage with a clear result.',
-        confirmLabel: 'Record exam result',
-        reason: 'failed_exam',
-        note: 'Applicant did not pass the scholarship exam.',
-        icon: 'fa-solid fa-xmark',
-        tone: 'danger',
-    },
     approve: {
         key: 'approve',
         status: 'approved',
@@ -209,27 +64,6 @@ const reviewActionCatalog = {
         reason: 'approved_for_award',
         note: 'Application approved after provider review.',
         icon: 'fa-solid fa-award',
-    },
-    award: {
-        key: 'award',
-        status: 'awarded',
-        label: 'Confirm award',
-        description: 'Record the final scholarship award.',
-        confirmLabel: 'Confirm scholarship award',
-        reason: 'approved_for_award',
-        note: 'Scholarship award confirmed by the provider.',
-        icon: 'fa-solid fa-trophy',
-    },
-    not_award: {
-        key: 'not_award',
-        status: 'not_awarded',
-        label: 'Do not award',
-        description: 'Record a final non-award decision with a reason.',
-        confirmLabel: 'Record non-award decision',
-        reason: '',
-        note: 'Application was not selected for a scholarship award.',
-        icon: 'fa-solid fa-ban',
-        tone: 'danger',
     },
     reject: {
         key: 'reject',
@@ -241,26 +75,6 @@ const reviewActionCatalog = {
         note: 'Application was not selected after provider review.',
         icon: 'fa-solid fa-ban',
         tone: 'danger',
-    },
-    reopen: {
-        key: 'reopen',
-        status: 'under_review',
-        label: 'Reopen review',
-        description: 'Return the application to active review.',
-        confirmLabel: 'Reopen application',
-        reason: '',
-        note: 'Application returned to provider review.',
-        icon: 'fa-solid fa-arrow-rotate-left',
-    },
-    renew: {
-        key: 'renew',
-        status: 'renewed',
-        label: 'Record renewal',
-        description: 'Confirm another period of scholarship support.',
-        confirmLabel: 'Confirm renewal',
-        reason: 'renewed_support',
-        note: 'Scholarship support renewed by the provider.',
-        icon: 'fa-solid fa-rotate',
     },
 };
 const negativeDecisionReasonOptions = decisionReasonOptions.filter((option) => [
@@ -334,49 +148,65 @@ const hasGuardianDetails = computed(() => {
     );
 });
 const usesDetailSidebar = computed(() => activeSection.value === 'history');
-const showsOutcomeNote = computed(() => ['approved', 'awarded', 'not_awarded', 'disbursed', 'renewed', 'rejected', 'exam_passed', 'exam_failed'].includes(reviewForm.value.status));
-const suggestedReviewActions = computed(() => {
-    const hasExam = Boolean(application.value?.exam);
-    const actionKeys = (() => {
-        switch (application.value?.status) {
-            case 'submitted':
-                return ['start_review', 'reject'];
-            case 'under_review':
-                return ['request_documents', 'qualify', 'reject'];
-            case 'qualified':
-                return hasExam
-                    ? ['exam_qualify', 'shortlist', 'reject']
-                    : ['shortlist', 'approve', 'reject'];
-            case 'shortlisted':
-                return hasExam
-                    ? ['exam_qualify', 'interview', 'reject']
-                    : ['interview', 'approve', 'reject'];
-            case 'interview':
-                return hasExam
-                    ? ['exam_qualify', 'approve', 'reject']
-                    : ['approve', 'reject'];
-            case 'exam_qualified':
-                return [];
-            case 'exam_scheduled':
-                return ['exam_taken'];
-            case 'exam_taken':
-                return ['exam_pass', 'exam_fail'];
-            case 'exam_passed':
-                return ['approve', 'not_award'];
-            case 'approved':
-                return ['award', 'not_award'];
-            case 'disbursed':
-                return ['renew'];
-            case 'rejected':
-            case 'not_awarded':
-            case 'exam_failed':
-                return ['reopen'];
-            default:
-                return [];
-        }
-    })();
+const selectionStages = computed(() => application.value?.scholarship?.selection_stages ?? ['screening', 'distribution']);
+const nextApprovalStatus = computed(() => {
+    const currentStatus = application.value?.status;
 
-    return actionKeys.map((key) => reviewActionCatalog[key]);
+    if (['submitted', 'under_review', 'qualified', 'shortlisted'].includes(currentStatus)) {
+        if (selectionStages.value.includes('exam')) {
+            return 'exam_qualified';
+        }
+
+        return selectionStages.value.includes('interview') ? 'interview' : 'approved';
+    }
+
+    if (['exam_taken', 'exam_passed'].includes(currentStatus)) {
+        return selectionStages.value.includes('interview') ? 'interview' : 'approved';
+    }
+
+    return currentStatus === 'interview' ? 'approved' : null;
+});
+const nextRejectionStatus = computed(() => (
+    ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed'].includes(application.value?.status)
+        ? 'exam_failed'
+        : (['submitted', 'under_review', 'qualified', 'shortlisted', 'interview'].includes(application.value?.status) ? 'rejected' : null)
+));
+const suggestedReviewActions = computed(() => {
+    const actions = [];
+
+    if (nextApprovalStatus.value) {
+        const nextLabel = statusLabel(nextApprovalStatus.value);
+        actions.push({
+            ...reviewActionCatalog.approve,
+            key: 'approve_next_stage',
+            decision: 'approve',
+            status: nextApprovalStatus.value,
+            reason: {
+                exam_qualified: 'for_exam',
+                interview: 'for_interview',
+                approved: 'approved_for_award',
+            }[nextApprovalStatus.value] ?? '',
+            note: nextApprovalStatus.value === 'approved'
+                ? 'Application approved after eligibility, requirement, and provider review.'
+                : `Applicant approved to proceed to ${nextLabel.toLowerCase()}.`,
+            label: nextApprovalStatus.value === 'approved' ? 'Approve applicant' : `Approve for ${nextLabel.replace(/^Qualified for /, '')}`,
+            description: nextApprovalStatus.value === 'approved'
+                ? 'Complete the provider review and approve this application.'
+                : `Move this applicant to the configured ${nextLabel.toLowerCase()} stage.`,
+            confirmLabel: nextApprovalStatus.value === 'approved' ? 'Approve applicant' : `Approve for ${nextLabel.toLowerCase()}`,
+        });
+    }
+
+    if (nextRejectionStatus.value) {
+        actions.push({
+            ...reviewActionCatalog.reject,
+            key: 'reject_applicant',
+            decision: 'reject',
+            status: nextRejectionStatus.value,
+        });
+    }
+
+    return actions;
 });
 const selectedReviewAction = computed(() => (
     suggestedReviewActions.value.find((action) => action.key === selectedReviewActionKey.value) ?? null
@@ -398,11 +228,13 @@ const reviewSubmitLabel = computed(() => {
     return 'Save notes and scores';
 });
 const completedStageMessage = computed(() => ({
-    exam_qualified: 'Initial screening is complete. Use Schedule to publish the exam details.',
-    awarded: 'The award is confirmed. Use Schedule to announce its release details.',
-    distribution_scheduled: 'Distribution is scheduled. Use Schedule to record when it is released.',
-    renewed: 'The renewal is recorded. You can still update notes or correct the status manually.',
-}[application.value?.status] ?? 'No guided action is needed at this stage. You can still save notes or correct the status manually.'));
+    exam_qualified: 'The applicant is waiting for the shared exam schedule. You may still reject the application if screening needs to be closed.',
+    exam_scheduled: 'Track exam attendance in Schedule. Approve or reject after the exam is completed.',
+    approved: 'The applicant is approved. Publish distribution details once from the program applicant page.',
+    awarded: 'The award is confirmed. Publish distribution details once from the program applicant page.',
+    distribution_scheduled: 'Distribution is scheduled. Use Schedule only to record this applicant\'s release result.',
+    disbursed: 'The scholarship release is complete for this applicant.',
+}[application.value?.status] ?? 'No applicant decision is needed at this stage. You can still save review notes and rubric scores.'));
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
 const applicationRequirements = computed(() => {
@@ -466,28 +298,7 @@ function emptyReviewForm() {
     return {
         status: 'submitted',
         decisionReason: '',
-        awardedAmount: '',
-        outcomeNotes: '',
-        outcomeAt: '',
-        distributionScheduledFor: '',
-        distributionInstructions: '',
         reviewNotes: '',
-    };
-}
-
-function emptyScheduleForm(type = 'interview') {
-    return {
-        type,
-        title: '',
-        scheduledAt: '',
-        mode: 'onsite',
-        venue: '',
-        locationAddress: '',
-        latitude: '',
-        longitude: '',
-        onlineUrl: '',
-        instructions: '',
-        awardedAmount: '',
     };
 }
 
@@ -586,128 +397,12 @@ function formatAwardAmount(value) {
     }).format(Number(value));
 }
 
-function canPublishSchedule(type) {
-    const status = application.value?.status;
-
-    if (type === 'exam') {
-        return Boolean(application.value?.exam)
-            && ['qualified', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled'].includes(status);
-    }
-
-    if (type === 'interview') {
-        return ['under_review', 'qualified', 'shortlisted', 'interview'].includes(status);
-    }
-
-    return ['approved', 'awarded', 'distribution_scheduled'].includes(status);
-}
-
-function defaultScheduleDetails(type) {
-    const scholarship = application.value?.scholarship ?? {};
-    const exam = application.value?.exam ?? {};
-
-    if (type === 'exam') {
-        return {
-            title: exam.title || 'Scholarship exam',
-            mode: exam.delivery_mode || 'onsite',
-            venue: exam.venue || '',
-            instructions: exam.instructions || '',
-        };
-    }
-
-    return {
-        title: type === 'distribution' ? 'Scholarship reward distribution' : 'Applicant interview',
-        mode: 'onsite',
-        venue: scholarship.location_name || '',
-        locationAddress: scholarship.location_address || '',
-        latitude: scholarship.latitude || '',
-        longitude: scholarship.longitude || '',
-        instructions: type === 'distribution'
-            ? 'Bring a valid school ID and any release documents listed by the provider.'
-            : 'Bring a valid school ID and arrive at least 15 minutes before the schedule.',
-        awardedAmount: type === 'distribution' ? application.value?.awarded_amount ?? '' : '',
-    };
-}
-
-function openScheduleEditor(type) {
-    const existing = schedules.value.find((schedule) => schedule.type === type);
-    const defaults = defaultScheduleDetails(type);
-
-    scheduleForm.value = existing
-        ? {
-            type: existing.type,
-            title: existing.title ?? '',
-            scheduledAt: existing.scheduled_at ?? '',
-            mode: existing.mode ?? 'onsite',
-            venue: existing.venue ?? '',
-            locationAddress: existing.location_address ?? '',
-            latitude: existing.latitude ?? '',
-            longitude: existing.longitude ?? '',
-            onlineUrl: existing.online_url ?? '',
-            instructions: existing.instructions ?? '',
-            awardedAmount: type === 'distribution' ? application.value?.awarded_amount ?? '' : '',
-        }
-        : { ...emptyScheduleForm(type), ...defaults, type };
-    showScheduleEditor.value = true;
-    errorMessage.value = '';
-}
-
-function closeScheduleEditor() {
-    showScheduleEditor.value = false;
-    scheduleForm.value = emptyScheduleForm();
-}
-
-function handleSchedulePinPicked(location) {
-    scheduleForm.value.latitude = location.latitude;
-    scheduleForm.value.longitude = location.longitude;
-
-    if (location.displayName) {
-        scheduleForm.value.locationAddress = location.displayName;
-    }
-}
-
 function apiErrorMessage(error, fallback) {
     const validationMessage = Object.values(error.response?.data?.errors ?? {})
         .flat()
         .find(Boolean);
 
     return validationMessage ?? error.response?.data?.message ?? fallback;
-}
-
-async function saveSchedule() {
-    if (!application.value || !scheduleForm.value.scheduledAt || !scheduleForm.value.instructions.trim()) {
-        errorMessage.value = 'Add the schedule date, time, and applicant instructions.';
-        return;
-    }
-
-    scheduleSaving.value = true;
-    errorMessage.value = '';
-    statusMessage.value = '';
-
-    try {
-        const response = await window.axios.post(`/provider/applications/${application.value.id}/schedules`, {
-            type: scheduleForm.value.type,
-            title: scheduleForm.value.title,
-            scheduled_at: scheduleForm.value.scheduledAt,
-            mode: scheduleForm.value.mode,
-            venue: scheduleForm.value.venue || null,
-            location_address: scheduleForm.value.locationAddress || null,
-            latitude: scheduleForm.value.latitude || null,
-            longitude: scheduleForm.value.longitude || null,
-            online_url: scheduleForm.value.onlineUrl || null,
-            instructions: scheduleForm.value.instructions,
-            awarded_amount: scheduleForm.value.type === 'distribution'
-                ? scheduleForm.value.awardedAmount || null
-                : null,
-        });
-
-        applyApplication(response.data.application);
-        statusMessage.value = response.data.message ?? 'Schedule published.';
-        closeScheduleEditor();
-    } catch (error) {
-        errorMessage.value = apiErrorMessage(error, 'Unable to publish this schedule.');
-    } finally {
-        scheduleSaving.value = false;
-    }
 }
 
 async function saveScheduleTracking(schedule) {
@@ -848,11 +543,6 @@ function applyApplication(payload) {
     reviewForm.value = {
         status: payload?.status ?? 'submitted',
         decisionReason: payload?.decision_reason ?? '',
-        awardedAmount: payload?.awarded_amount ?? '',
-        outcomeNotes: payload?.outcome_notes ?? '',
-        outcomeAt: payload?.outcome_at ?? '',
-        distributionScheduledFor: payload?.distribution_scheduled_for ?? '',
-        distributionInstructions: payload?.distribution_instructions ?? '',
         reviewNotes: payload?.review_notes ?? '',
     };
     rubricScores.value = Object.fromEntries(
@@ -886,20 +576,11 @@ function selectReviewAction(action) {
     errorMessage.value = '';
 }
 
-function selectManualStatus() {
-    selectedReviewActionKey.value = '';
-    reviewForm.value.decisionReason = reviewForm.value.status === application.value?.status
-        ? application.value?.decision_reason ?? ''
-        : '';
-    errorMessage.value = '';
-}
-
 function clearReviewAction() {
     selectedReviewActionKey.value = '';
     reviewForm.value.status = application.value?.status ?? 'submitted';
     reviewForm.value.decisionReason = application.value?.decision_reason ?? '';
     reviewForm.value.reviewNotes = application.value?.review_notes ?? '';
-    reviewForm.value.outcomeNotes = application.value?.outcome_notes ?? '';
     errorMessage.value = '';
 }
 
@@ -915,15 +596,10 @@ function statusConfirmation(status) {
             message: `${applicantName} will see the assessment details and receive a status notification.`,
             confirmLabel: 'Qualify for exam',
         },
-        exam_scheduled: {
-            title: 'Confirm exam schedule?',
-            message: `${applicantName} will be notified that the exam is scheduled. Make sure the review note contains the date and access details.`,
-            confirmLabel: 'Schedule exam',
-        },
-        exam_passed: {
-            title: 'Record a passing exam result?',
-            message: `${applicantName} will be notified and moved to final award review.`,
-            confirmLabel: 'Record pass',
+        interview: {
+            title: 'Approve applicant for interview?',
+            message: `${applicantName} will move to the interview stage and receive the shared schedule when it is available.`,
+            confirmLabel: 'Approve for interview',
         },
         exam_failed: {
             title: 'Record a failed exam result?',
@@ -935,32 +611,6 @@ function statusConfirmation(status) {
             title: 'Approve this application?',
             message: `${applicantName} will be notified that the provider approved the application.`,
             confirmLabel: 'Approve application',
-        },
-        awarded: {
-            title: 'Record this scholarship award?',
-            message: `${applicantName} will see the award outcome and amount entered in this review.`,
-            confirmLabel: 'Record award',
-        },
-        distribution_scheduled: {
-            title: 'Schedule reward distribution?',
-            message: `${applicantName} will be notified of the distribution date and instructions.`,
-            confirmLabel: 'Schedule distribution',
-        },
-        disbursed: {
-            title: 'Mark the reward as distributed?',
-            message: 'This records that the provider has released the scholarship reward to the applicant.',
-            confirmLabel: 'Mark distributed',
-        },
-        renewed: {
-            title: 'Confirm scholarship renewal?',
-            message: `${applicantName} will be notified that scholarship support was renewed.`,
-            confirmLabel: 'Confirm renewal',
-        },
-        not_awarded: {
-            title: 'Record a not-awarded outcome?',
-            message: `${applicantName} will receive this final outcome and its reason.`,
-            confirmLabel: 'Record outcome',
-            tone: 'danger',
         },
         rejected: {
             title: 'Reject this application?',
@@ -1014,17 +664,19 @@ async function updateStatus() {
         const completedRubricScores = Object.fromEntries(
             Object.entries(rubricScores.value).filter(([, score]) => score !== '' && score !== null),
         );
-        const response = await window.axios.patch(`/provider/applications/${application.value.id}/status`, {
-            status: reviewForm.value.status,
-            decision_reason: reviewForm.value.decisionReason,
-            review_notes: reviewForm.value.reviewNotes,
-            awarded_amount: reviewForm.value.awardedAmount,
-            outcome_notes: reviewForm.value.outcomeNotes,
-            outcome_at: reviewForm.value.outcomeAt,
-            distribution_scheduled_for: reviewForm.value.distributionScheduledFor,
-            distribution_instructions: reviewForm.value.distributionInstructions,
-            rubric_scores: completedRubricScores,
-        });
+        const response = selectedReviewAction.value?.decision
+            ? await window.axios.patch(`/provider/applications/${application.value.id}/decision`, {
+                decision: selectedReviewAction.value.decision,
+                decision_reason: reviewForm.value.decisionReason || null,
+                review_notes: reviewForm.value.reviewNotes,
+                rubric_scores: completedRubricScores,
+            })
+            : await window.axios.patch(`/provider/applications/${application.value.id}/status`, {
+                status: application.value.status,
+                decision_reason: application.value.decision_reason,
+                review_notes: reviewForm.value.reviewNotes,
+                rubric_scores: completedRubricScores,
+            });
 
         applyApplication(response.data.application);
         statusMessage.value = response.data.message ?? 'Application status updated.';
@@ -1209,10 +861,10 @@ onMounted(loadApplication);
                                             Provider Review
                                         </p>
                                         <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                            Choose the next action
+                                            Review applicant
                                         </h3>
                                         <p class="mt-1 text-sm leading-6 text-slate-600">
-                                            Select one clear next step, add a note if needed, then confirm.
+                                            Check eligibility, requirements, profile proof, and the review rubric. Then approve or reject the applicant.
                                         </p>
                                     </div>
                                     <div class="shrink-0 sm:text-right">
@@ -1224,8 +876,8 @@ onMounted(loadApplication);
                                 </div>
 
                                 <div class="mt-5">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Recommended next steps</p>
-                                    <div v-if="suggestedReviewActions.length" class="mt-3 grid gap-3 md:grid-cols-3">
+                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Decision</p>
+                                    <div v-if="suggestedReviewActions.length" class="mt-3 grid gap-3 md:grid-cols-2">
                                         <button
                                             v-for="action in suggestedReviewActions"
                                             :key="action.key"
@@ -1265,23 +917,6 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <details class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-                                    <summary class="cursor-pointer text-sm font-bold text-slate-700">Correct status manually</summary>
-                                    <div class="mt-3">
-                                        <label :class="labelClass">Application stage</label>
-                                        <select v-model="reviewForm.status" :class="inputClass" @change="selectManualStatus">
-                                            <optgroup v-for="group in statusGroups" :key="group.label" :label="group.label">
-                                                <option v-for="option in group.options" :key="option.value" :value="option.value">
-                                                    {{ option.label }}
-                                                </option>
-                                            </optgroup>
-                                        </select>
-                                        <p class="mt-2 text-xs leading-5 text-slate-500">
-                                            Use this only to fix a previous status or handle an unusual workflow.
-                                        </p>
-                                    </div>
-                                </details>
-
                                 <div class="mt-5 grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2">
                                     <div v-if="negativeDecisionStatuses.includes(reviewForm.status)">
                                         <label :class="labelClass">
@@ -1292,10 +927,6 @@ onMounted(loadApplication);
                                                 {{ option.label }}
                                             </option>
                                         </select>
-                                    </div>
-                                    <div v-if="showsOutcomeNote" :class="negativeDecisionStatuses.includes(reviewForm.status) ? '' : 'md:col-span-2'">
-                                        <label :class="labelClass">Outcome message <span class="font-medium normal-case tracking-normal text-slate-400">(optional)</span></label>
-                                        <input v-model="reviewForm.outcomeNotes" type="text" maxlength="2000" placeholder="Award, release, renewal, or closure note" :class="inputClass">
                                     </div>
                                     <div class="md:col-span-2">
                                         <label :class="labelClass">Note for the applicant</label>
@@ -1308,14 +939,11 @@ onMounted(loadApplication);
                                             <p v-if="selectedReviewAction" class="font-semibold text-slate-800">
                                                 Selected: {{ selectedReviewAction.label }}
                                             </p>
-                                            <p v-else-if="reviewStatusChanged" class="font-semibold text-slate-800">
-                                                Manual change: {{ statusLabel(reviewForm.status) }}
-                                            </p>
                                             <p v-else>Save without changing the current stage.</p>
                                         </div>
                                         <div class="flex flex-col-reverse gap-2 sm:flex-row">
                                             <button
-                                                v-if="selectedReviewAction || reviewStatusChanged"
+                                                v-if="selectedReviewAction"
                                                 type="button"
                                                 :disabled="updatingId === application.id"
                                                 class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
@@ -1570,105 +1198,17 @@ onMounted(loadApplication);
                                     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                                         <div>
                                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant schedule</p>
-                                            <h3 class="mt-2 text-xl font-bold text-slate-950">Announcements and attendance</h3>
+                                            <h3 class="mt-2 text-xl font-bold text-slate-950">Attendance and results</h3>
                                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                                Publish the date, site, link, and instructions here. The activity itself stays provider-managed.
+                                                Shared dates and instructions are managed once from the program applicant page. Use this tab only for this applicant's acknowledgement, attendance, and result.
                                             </p>
                                         </div>
-                                        <div class="flex flex-wrap gap-2">
-                                            <button
-                                                v-for="type in scheduleTypeCatalog"
-                                                :key="type.value"
-                                                type="button"
-                                                :disabled="!canPublishSchedule(type.value)"
-                                                class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                                                @click="openScheduleEditor(type.value)"
-                                            >
-                                                <i :class="type.icon" aria-hidden="true"></i>
-                                                {{ schedules.some((schedule) => schedule.type === type.value) ? `Edit ${type.label}` : `Add ${type.label}` }}
-                                            </button>
-                                        </div>
+                                        <a :href="`/provider/programs/${application.scholarship.id}/applications`" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                            Program schedule
+                                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                        </a>
                                     </div>
-                                    <p class="mt-3 text-xs leading-5 text-slate-500">
-                                        Exam and interview announcements become available during screening. Distribution becomes available after approval.
-                                    </p>
                                 </div>
-
-                                <form v-if="showScheduleEditor" class="rounded-lg border border-slate-300 bg-white p-5 shadow-sm" @submit.prevent="saveSchedule">
-                                    <div class="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">{{ scheduleTypeLabel(scheduleForm.type) }}</p>
-                                            <h3 class="mt-1 text-lg font-bold text-slate-950">Publish applicant instructions</h3>
-                                        </div>
-                                        <button type="button" class="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50" @click="closeScheduleEditor">
-                                            Close
-                                        </button>
-                                    </div>
-
-                                    <div class="mt-5 grid gap-4 md:grid-cols-2">
-                                        <div>
-                                            <label :class="labelClass">Announcement title</label>
-                                            <input v-model="scheduleForm.title" type="text" maxlength="255" placeholder="Example: Final applicant interview" :class="inputClass">
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass">Date and time</label>
-                                            <input v-model="scheduleForm.scheduledAt" type="datetime-local" :min="minimumScheduleDateTime" required :class="inputClass">
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass">Delivery mode</label>
-                                            <select v-model="scheduleForm.mode" :class="inputClass">
-                                                <option v-for="option in scheduleModeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                            </select>
-                                        </div>
-                                        <div v-if="scheduleForm.type === 'distribution'">
-                                            <label :class="labelClass">Award amount</label>
-                                            <input v-model="scheduleForm.awardedAmount" type="number" min="0" step="0.01" placeholder="Optional" :class="inputClass">
-                                        </div>
-                                    </div>
-
-                                    <div v-if="['onsite', 'hybrid'].includes(scheduleForm.mode)" class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                        <div class="grid gap-4 md:grid-cols-2">
-                                            <div>
-                                                <label :class="labelClass">Venue or site</label>
-                                                <input v-model="scheduleForm.venue" type="text" maxlength="500" placeholder="Building, office, or testing center" required :class="inputClass">
-                                            </div>
-                                            <div>
-                                                <label :class="labelClass">Full address</label>
-                                                <input v-model="scheduleForm.locationAddress" type="text" maxlength="1000" placeholder="Street, barangay, city, province" :class="inputClass">
-                                            </div>
-                                        </div>
-                                        <div class="mt-4 overflow-hidden rounded-md">
-                                            <LeafletMapPreview
-                                                :address="scheduleForm.locationAddress"
-                                                :latitude="scheduleForm.latitude"
-                                                :longitude="scheduleForm.longitude"
-                                                :title="scheduleForm.venue || 'Schedule location'"
-                                                :marker-text="scheduleForm.venue || scheduleForm.title"
-                                                height="16rem"
-                                                picker
-                                                auto-geocode
-                                                @picked="handleSchedulePinPicked"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div v-if="['online', 'hybrid'].includes(scheduleForm.mode)" class="mt-5">
-                                        <label :class="labelClass">Online meeting or access link</label>
-                                        <input v-model="scheduleForm.onlineUrl" type="url" maxlength="2000" placeholder="https://..." required :class="inputClass">
-                                    </div>
-
-                                    <div class="mt-5">
-                                        <label :class="labelClass">Instructions for the applicant</label>
-                                        <textarea v-model="scheduleForm.instructions" rows="4" maxlength="3000" required placeholder="What to bring, arrival time, contact person, permitted materials, or release requirements" :class="inputClass"></textarea>
-                                    </div>
-
-                                    <div class="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-                                        <button type="button" class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="closeScheduleEditor">Cancel</button>
-                                        <button type="submit" :disabled="scheduleSaving" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
-                                            {{ scheduleSaving ? 'Publishing...' : 'Publish and notify applicant' }}
-                                        </button>
-                                    </div>
-                                </form>
 
                                 <div v-if="schedules.length" class="grid gap-4 xl:grid-cols-2">
                                     <article v-for="schedule in schedules" :key="schedule.id" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -1731,7 +1271,6 @@ onMounted(loadApplication);
                                             </div>
                                             <textarea v-model="schedule.attendance_notes" rows="2" maxlength="1500" placeholder="Optional attendance or release note" :class="['mt-3', inputClass]"></textarea>
                                             <div class="mt-3 flex flex-wrap justify-end gap-2">
-                                                <button type="button" :disabled="!canPublishSchedule(schedule.type)" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40" @click="openScheduleEditor(schedule.type)">Edit announcement</button>
                                                 <button type="button" :disabled="scheduleTrackingId === schedule.id" class="rounded-md bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60" @click="saveScheduleTracking(schedule)">
                                                     {{ scheduleTrackingId === schedule.id ? 'Saving...' : 'Save tracking' }}
                                                 </button>
@@ -1742,7 +1281,7 @@ onMounted(loadApplication);
 
                                 <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
                                     <p class="text-sm font-bold text-slate-800">No schedule announced yet</p>
-                                    <p class="mt-1 text-sm text-slate-500">Use an available activity button when the applicant reaches that stage.</p>
+                                    <p class="mt-1 text-sm text-slate-500">Publish the shared stage from this program's applicant page.</p>
                                 </div>
                             </section>
 

@@ -172,6 +172,12 @@ const eligibilityReviewChecks = computed(() => {
 });
 const workflowFields = computed(() => [
     { label: 'Application mode', value: applicationModeLabel(scholarship.value?.application_mode) },
+    {
+        label: 'Selection process',
+        value: (scholarship.value?.selection_stages ?? ['screening', 'distribution'])
+            .map(labelFromKey)
+            .join(' -> '),
+    },
     { label: 'Available slots', value: scholarship.value?.slots_available ?? 'Not listed' },
     { label: 'Contact email', value: scholarship.value?.contact_email || 'Not listed' },
     { label: 'Contact number', value: scholarship.value?.contact_number || 'Not listed' },

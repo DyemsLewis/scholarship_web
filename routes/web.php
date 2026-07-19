@@ -120,11 +120,13 @@ Route::middleware(['auth', 'provider'])
             ->name('applications.profile-proofs.view');
         Route::post('/applications/{application}/schedules', [ProviderController::class, 'upsertApplicationSchedule'])->name('applications.schedules.upsert');
         Route::patch('/applications/{application}/schedules/{schedule}', [ProviderController::class, 'updateApplicationScheduleTracking'])->name('applications.schedules.tracking');
+        Route::patch('/applications/{application}/decision', [ProviderController::class, 'decideApplication'])->name('applications.decision');
         Route::patch('/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->name('applications.status');
         Route::patch('/documents/{document}/status', [ProviderController::class, 'updateDocumentStatus'])->name('documents.status');
         Route::get('/export/applications', [ProviderController::class, 'exportApplications'])->name('export.applications');
         Route::get('/scholarships', [ProviderController::class, 'scholarships'])->name('scholarships');
         Route::post('/scholarships', [ProviderController::class, 'storeScholarship'])->name('scholarships.store');
+        Route::post('/scholarships/{scholarship}/events', [ProviderController::class, 'upsertScholarshipEvent'])->name('scholarships.events.upsert');
         Route::get('/scholarships/{scholarship}', [ProviderController::class, 'showScholarship'])->name('scholarships.show');
         Route::put('/scholarships/{scholarship}', [ProviderController::class, 'updateScholarship'])->name('scholarships.update');
         Route::post('/scholarships/{scholarship}/duplicate', [ProviderController::class, 'duplicateScholarship'])->name('scholarships.duplicate');

@@ -9,8 +9,10 @@ import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const isSubmitting = ref(false);
+const isUploadingDocument = ref(false);
 const errorMessage = ref('');
 const submitMessage = ref('');
+const documentUploadMessage = ref('');
 const user = ref(null);
 const stats = ref({
     available_scholarships: 0,
@@ -19,6 +21,7 @@ const stats = ref({
 });
 const scholarships = ref([]);
 const applications = ref([]);
+const preparedDocuments = ref([]);
 const profileReadiness = ref({
     complete: false,
     completed: 0,
@@ -31,11 +34,14 @@ const selectedScholarshipId = ref('');
 const documentChecklist = ref([]);
 const notes = ref('');
 const applicationTermsAccepted = ref(false);
+const documentTermsAccepted = ref(false);
+const documentFileInput = ref(null);
+const activeUploadRequirement = ref('');
 
 const steps = [
     { label: 'Program', detail: 'Selected scholarship' },
     { label: 'Details', detail: 'Quick review' },
-    { label: 'Documents', detail: 'Checklist' },
+    { label: 'Documents', detail: 'Upload files' },
     { label: 'Submit', detail: 'Final check' },
 ];
 const applicationGuideItems = [
@@ -45,8 +51,8 @@ const applicationGuideItems = [
         icon: 'fa-solid fa-graduation-cap',
     },
     {
-        title: 'Confirm documents',
-        text: 'Use prepared files.',
+        title: 'Upload requirements',
+        text: 'Add or replace files.',
         icon: 'fa-solid fa-folder-tree',
     },
     {
@@ -117,9 +123,16 @@ const selectedEligibilityMessage = computed(() => {
         ? `Your profile does not meet: ${labels.join(', ')}.`
         : 'Your profile does not meet this scholarship eligibility.';
 });
-const selectedPreparedDocuments = computed(() => selectedScholarship.value?.prepared_documents?.matched ?? []);
-const selectedMissingPreparedDocuments = computed(() => selectedScholarship.value?.prepared_documents?.missing ?? selectedRequirements.value);
-const selectedDocumentReadiness = computed(() => selectedScholarship.value?.prepared_documents?.percent ?? (selectedRequirements.value.length === 0 ? 100 : 0));
+const preparedDocumentsByName = computed(() => new Map(
+    preparedDocuments.value.map((document) => [document.document_name, document]),
+));
+const selectedPreparedDocuments = computed(() => selectedRequirements.value
+    .filter((requirement) => preparedDocumentsByName.value.has(requirement)));
+const selectedMissingPreparedDocuments = computed(() => selectedRequirements.value
+    .filter((requirement) => !preparedDocumentsByName.value.has(requirement)));
+const selectedDocumentReadiness = computed(() => selectedRequirements.value.length === 0
+    ? 100
+    : Math.round((selectedPreparedDocuments.value.length / selectedRequirements.value.length) * 100));
 const selectedApplicationMode = computed(() => applicationModeLabel(selectedScholarship.value?.application_mode));
 const selectedSlotsLabel = computed(() => selectedScholarship.value?.slots_available ?? 'Not listed');
 const readyApplicationCount = computed(() => applications.value.filter((application) => Number(application.document_readiness?.accepted_percent ?? application.document_readiness?.uploaded_percent ?? 0) >= 100).length);
@@ -190,18 +203,11 @@ const wizardReadinessItems = computed(() => [
             : 'Choose from Scholarships first.',
     },
     {
-        label: 'Documents prepared',
+        label: 'Required files uploaded',
         complete: selectedRequirements.value.length === 0 || selectedMissingPreparedDocuments.value.length === 0,
         detail: selectedRequirements.value.length === 0
             ? 'No document requirements listed.'
-            : `${selectedPreparedDocuments.value.length} of ${selectedRequirements.value.length} already uploaded in Documents.`,
-    },
-    {
-        label: 'Checklist confirmed',
-        complete: selectedRequirements.value.length === 0 || allDocumentsChecked.value,
-        detail: selectedRequirements.value.length === 0
-            ? 'No checklist needed.'
-            : `${checkedDocumentCount.value} of ${selectedRequirements.value.length} confirmed.`,
+            : `${selectedPreparedDocuments.value.length} of ${selectedRequirements.value.length} files ready.`,
     },
 ]);
 const wizardReadinessPercent = computed(() => Math.round((wizardReadinessItems.value.filter((item) => item.complete).length / wizardReadinessItems.value.length) * 100));
@@ -359,6 +365,7 @@ function hasDistributionSchedule(application) {
 
 function scheduleTypeLabel(type) {
     return {
+        screening: 'Application screening',
         exam: 'Scholarship exam',
         interview: 'Interview',
         distribution: 'Award distribution',
@@ -367,6 +374,7 @@ function scheduleTypeLabel(type) {
 
 function scheduleTypeIcon(type) {
     return {
+        screening: 'fa-solid fa-list-check',
         exam: 'fa-solid fa-clipboard-check',
         interview: 'fa-solid fa-comments',
         distribution: 'fa-solid fa-hand-holding-heart',
@@ -461,6 +469,28 @@ function documentRequirements(requirements) {
         .filter(Boolean);
 }
 
+function preparedDocumentFor(requirement) {
+    return preparedDocumentsByName.value.get(requirement) ?? null;
+}
+
+function formatFileSize(size) {
+    const bytes = Number(size ?? 0);
+
+    if (!bytes) {
+        return 'Size unavailable';
+    }
+
+    if (bytes < 1024 * 1024) {
+        return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    }
+
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function syncDocumentChecklist() {
+    documentChecklist.value = [...selectedPreparedDocuments.value];
+}
+
 function nextStep() {
     if (currentStep.value < steps.length - 1 && canGoNext.value) {
         currentStep.value += 1;
@@ -478,6 +508,9 @@ function resetWizard() {
     documentChecklist.value = [];
     notes.value = '';
     applicationTermsAccepted.value = false;
+    documentTermsAccepted.value = false;
+    documentUploadMessage.value = '';
+    activeUploadRequirement.value = '';
     errorMessage.value = '';
     submitMessage.value = '';
     currentStep.value = 0;
@@ -487,16 +520,71 @@ function resetWizard() {
     }
 }
 
-function applyPreparedDocuments() {
-    documentChecklist.value = [...new Set([...documentChecklist.value, ...selectedPreparedDocuments.value])];
+function openDocumentUpload(requirement) {
+    errorMessage.value = '';
+    documentUploadMessage.value = '';
+
+    if (!documentTermsAccepted.value) {
+        errorMessage.value = 'Accept the document upload terms before choosing a file.';
+        return;
+    }
+
+    activeUploadRequirement.value = requirement;
+
+    if (documentFileInput.value) {
+        documentFileInput.value.value = '';
+        documentFileInput.value.click();
+    }
 }
 
-function selectAllDocuments() {
-    documentChecklist.value = [...selectedRequirements.value];
-}
+async function handleDocumentFileChange(event) {
+    const file = event.target.files?.[0] ?? null;
+    const requirement = activeUploadRequirement.value;
 
-function clearDocumentChecklist() {
-    documentChecklist.value = [];
+    if (!file || !requirement) {
+        activeUploadRequirement.value = '';
+        return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+        errorMessage.value = 'Choose a file that is 5 MB or smaller.';
+        event.target.value = '';
+        activeUploadRequirement.value = '';
+        return;
+    }
+
+    isUploadingDocument.value = true;
+    errorMessage.value = '';
+    documentUploadMessage.value = '';
+
+    const payload = new FormData();
+    payload.append('document_name', requirement);
+    payload.append('document_file', file);
+    payload.append('terms_accepted', '1');
+
+    try {
+        const response = await window.axios.post('/dashboard/student-documents', payload, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        const savedDocument = response.data.document;
+
+        preparedDocuments.value = [
+            savedDocument,
+            ...preparedDocuments.value.filter((document) => document.document_name !== savedDocument.document_name),
+        ];
+        syncDocumentChecklist();
+        documentUploadMessage.value = `${requirement} is ready for this application.`;
+    } catch (error) {
+        errorMessage.value = error.response?.data?.errors?.document_file?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to save the document.';
+    } finally {
+        isUploadingDocument.value = false;
+        activeUploadRequirement.value = '';
+        event.target.value = '';
+    }
 }
 
 async function loadApplications() {
@@ -511,6 +599,7 @@ async function loadApplications() {
         stats.value = response.data.stats;
         scholarships.value = response.data.scholarships;
         applications.value = response.data.applications;
+        preparedDocuments.value = response.data.prepared_documents ?? [];
 
         const requestedScholarshipId = new URLSearchParams(window.location.search).get('scholarship');
 
@@ -613,10 +702,12 @@ onMounted(loadApplications);
 watch(selectedScholarship, (scholarship) => {
     if (!scholarship) {
         documentChecklist.value = [];
+        documentUploadMessage.value = '';
         return;
     }
 
-    documentChecklist.value = [...(scholarship.prepared_documents?.matched ?? [])];
+    syncDocumentChecklist();
+    documentUploadMessage.value = '';
     applicationTermsAccepted.value = false;
     trackApplicationStart(scholarship);
 });
@@ -1039,10 +1130,10 @@ watch(selectedScholarship, (scholarship) => {
                                             Document Checklist
                                         </p>
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                            Confirm prepared documents
+                                            Upload required files
                                         </h3>
                                         <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                            Mark the files you already have.
+                                            Add each requirement here. Uploaded files are also saved in Documents for reuse.
                                         </p>
                                     </div>
                                     <div class="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
@@ -1055,15 +1146,23 @@ watch(selectedScholarship, (scholarship) => {
                                     </div>
                                 </div>
 
-                                <div v-if="selectedRequirements.length" class="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+                                <input
+                                    ref="documentFileInput"
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                    class="hidden"
+                                    @change="handleDocumentFileChange"
+                                >
+
+                                <div v-if="selectedRequirements.length" class="space-y-3">
                                     <div class="rounded-lg border border-slate-200 bg-white p-4">
                                         <div class="flex items-center justify-between gap-3">
                                             <div>
                                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                    Document Library Match
+                                                    File readiness
                                                 </p>
                                                 <p class="mt-1 text-sm font-bold text-slate-950">
-                                                    {{ selectedPreparedDocuments.length }} of {{ selectedRequirements.length }} already uploaded
+                                                    {{ selectedPreparedDocuments.length }} of {{ selectedRequirements.length }} required files ready
                                                 </p>
                                             </div>
                                             <span class="font-display text-2xl font-bold text-slate-950">
@@ -1073,94 +1172,111 @@ watch(selectedScholarship, (scholarship) => {
                                         <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
                                             <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${selectedDocumentReadiness}%` }"></div>
                                         </div>
-                                        <button
-                                            type="button"
-                                            class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                            @click="applyPreparedDocuments"
-                                        >
-                                            Confirm uploaded documents
-                                        </button>
-                                    </div>
-
-                                    <div class="rounded-lg border border-slate-200 bg-white p-4">
-                                        <p class="text-sm font-bold text-slate-950">
-                                            Missing from Documents
-                                        </p>
-                                        <div v-if="selectedMissingPreparedDocuments.length" class="mt-3 flex flex-wrap gap-2">
-                                            <span
-                                                v-for="requirement in selectedMissingPreparedDocuments"
-                                                :key="requirement"
-                                                class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
+                                        <div class="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <TermsAgreement
+                                                    v-model="documentTermsAccepted"
+                                                    context="document"
+                                                />
+                                                <p class="mt-1 text-xs leading-5 text-slate-500">
+                                                    Accept once to upload or replace files during this step.
+                                                </p>
+                                            </div>
+                                            <a
+                                                href="/dashboard/documents"
+                                                class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                                             >
-                                                {{ requirement }}
-                                            </span>
-                                        </div>
-                                        <p v-else class="mt-2 text-sm text-slate-600">
-                                            All listed requirements already have a matching prepared document.
-                                        </p>
-                                        <a
-                                            href="/dashboard/documents"
-                                            class="mt-3 inline-flex rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                        >
-                                            Upload missing documents
-                                        </a>
-                                    </div>
-                                </div>
-
-                                <div v-if="selectedRequirements.length === 0" class="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-                                    This scholarship has no listed document requirements, so you can continue to review.
-                                </div>
-
-                                <div v-else class="space-y-3">
-                                    <div class="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p class="text-sm font-semibold text-slate-700">
-                                            Checklist progress: {{ checkedDocumentCount }} prepared, {{ selectedRequirements.length - checkedDocumentCount }} remaining.
-                                        </p>
-                                        <div class="flex gap-2">
-                                            <button
-                                                type="button"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                                @click="selectAllDocuments"
-                                            >
-                                                Mark all prepared
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                                @click="clearDocumentChecklist"
-                                            >
-                                                Clear
-                                            </button>
+                                                <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+                                                Open Documents
+                                            </a>
                                         </div>
                                     </div>
 
-                                    <div class="grid gap-2 md:grid-cols-2">
-                                        <label
+                                    <div v-if="documentUploadMessage" class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+                                        {{ documentUploadMessage }}
+                                    </div>
+
+                                    <div class="grid gap-2">
+                                        <article
                                             v-for="requirement in selectedRequirements"
                                             :key="requirement"
                                             :class="[
-                                                'flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition',
-                                                documentChecklist.includes(requirement)
-                                                    ? 'border-slate-900 bg-white shadow-sm ring-1 ring-slate-300'
-                                                    : 'border-slate-200 bg-white hover:border-slate-300',
+                                                'flex flex-col gap-3 rounded-lg border bg-white p-3 sm:flex-row sm:items-center sm:justify-between',
+                                                preparedDocumentFor(requirement)
+                                                    ? 'border-slate-300'
+                                                    : 'border-amber-200',
                                             ]"
                                         >
-                                            <input
-                                                v-model="documentChecklist"
-                                                type="checkbox"
-                                                :value="requirement"
-                                                class="mt-1 rounded border-slate-300 text-slate-900 focus:ring-slate-200"
-                                            >
-                                            <span class="flex-1">
-                                                <span class="block font-semibold text-slate-800">
-                                                    {{ requirement }}
+                                            <div class="flex min-w-0 items-start gap-3">
+                                                <span
+                                                    :class="[
+                                                        'grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm',
+                                                        preparedDocumentFor(requirement)
+                                                            ? 'bg-slate-900 text-white'
+                                                            : 'bg-amber-50 text-amber-700',
+                                                    ]"
+                                                >
+                                                    <i :class="preparedDocumentFor(requirement) ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file'" aria-hidden="true"></i>
                                                 </span>
-                                                <span :class="['mt-1 inline-flex rounded-md px-2 py-0.5 text-xs font-bold', documentChecklist.includes(requirement) ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500']">
-                                                    {{ selectedPreparedDocuments.includes(requirement) ? 'Uploaded in Documents' : documentChecklist.includes(requirement) ? 'Confirmed manually' : 'Needed' }}
+                                                <div class="min-w-0">
+                                                    <p class="font-bold text-slate-900">
+                                                        {{ requirement }}
+                                                    </p>
+                                                    <p v-if="preparedDocumentFor(requirement)" class="mt-1 truncate text-xs text-slate-500">
+                                                        {{ preparedDocumentFor(requirement).original_name }} - {{ formatFileSize(preparedDocumentFor(requirement).size) }}
+                                                    </p>
+                                                    <p v-else class="mt-1 text-xs font-semibold text-amber-700">
+                                                        Upload this file before continuing.
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div class="flex shrink-0 items-center gap-2">
+                                                <span :class="['rounded-md px-2 py-1 text-[0.68rem] font-bold uppercase', preparedDocumentFor(requirement) ? 'bg-slate-100 text-slate-700' : 'bg-amber-50 text-amber-700']">
+                                                    {{ preparedDocumentFor(requirement) ? 'Ready' : 'Missing' }}
                                                 </span>
-                                            </span>
-                                        </label>
+                                                <a
+                                                    v-if="preparedDocumentFor(requirement)?.view_url"
+                                                    :href="preparedDocumentFor(requirement).view_url"
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                                >
+                                                    View
+                                                </a>
+                                                <button
+                                                    type="button"
+                                                    :disabled="isUploadingDocument"
+                                                    class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                                    @click="openDocumentUpload(requirement)"
+                                                >
+                                                    <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>
+                                                    {{ isUploadingDocument && activeUploadRequirement === requirement
+                                                        ? 'Uploading...'
+                                                        : preparedDocumentFor(requirement) ? 'Replace' : 'Upload' }}
+                                                </button>
+                                            </div>
+                                        </article>
                                     </div>
+
+                                    <div
+                                        v-if="selectedMissingPreparedDocuments.length === 0"
+                                        class="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+                                    >
+                                        <i class="fa-solid fa-circle-check mt-0.5" aria-hidden="true"></i>
+                                        <div>
+                                            <p class="font-bold">
+                                                All required files are ready
+                                            </p>
+                                            <p class="mt-1 leading-5">
+                                                Continue when ready. You can replace a file from the application record after submitting.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+                                    This scholarship has no listed document requirements, so you can continue to review.
                                 </div>
 
                                 <div class="rounded-lg border border-slate-200 bg-white p-4">
@@ -1205,7 +1321,7 @@ watch(selectedScholarship, (scholarship) => {
                                         </div>
                                         <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
-                                                Documents confirmed
+                                                Required files
                                             </p>
                                             <p class="mt-1 font-bold text-slate-950">
                                                 {{ documentChecklist.length }} of {{ selectedRequirements.length }}
@@ -1213,10 +1329,10 @@ watch(selectedScholarship, (scholarship) => {
                                         </div>
                                         <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
-                                                Uploaded from Documents
+                                                File updates
                                             </p>
                                             <p class="mt-1 font-bold text-slate-950">
-                                                {{ selectedPreparedDocuments.length }} of {{ selectedRequirements.length }}
+                                                Available after submission
                                             </p>
                                         </div>
                                         <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -1243,7 +1359,7 @@ watch(selectedScholarship, (scholarship) => {
                                         Notes
                                     </p>
                                     <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
-                                        Prepared documents that match this checklist will be attached automatically after submission. You can still upload or replace files from the application record below.
+                                        These prepared files will be attached automatically. You can still view or replace them from the application record after submitting.
                                     </div>
                                     <p class="mt-3 rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-600">
                                         {{ notes || 'No note added.' }}

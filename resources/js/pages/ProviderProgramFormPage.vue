@@ -40,7 +40,7 @@ const wideFieldStackClass = `${fieldStackClass} xl:col-span-2`;
 const formGridClass = 'grid items-stretch gap-4 md:grid-cols-2';
 const formSections = [
     { id: 'basics', label: 'Basics', help: 'Name, logo, amount, and review action.' },
-    { id: 'workflow', label: 'Apply', help: 'Submission, contact, renewal, and service contract.' },
+    { id: 'workflow', label: 'Process', help: 'Selection stages, contact, renewal, and service contract.' },
     { id: 'target', label: 'Target', help: 'Who can match with this program.' },
     { id: 'location', label: 'Location', help: 'Address and map pin.' },
     { id: 'documents', label: 'Docs', help: 'Required files.' },
@@ -53,6 +53,36 @@ const applicationModeOptions = [
     { value: 'onsite', label: 'On-site submission' },
     { value: 'hybrid', label: 'Online and on-site' },
     { value: 'provider_review', label: 'Provider review only' },
+];
+const selectionStageOptions = [
+    {
+        value: 'screening',
+        label: 'Screening',
+        description: 'Review eligibility, profile details, and submitted requirements.',
+        icon: 'fa-solid fa-list-check',
+        required: true,
+    },
+    {
+        value: 'exam',
+        label: 'Exam',
+        description: 'Use a provider assessment before the final decision.',
+        icon: 'fa-solid fa-clipboard-question',
+        required: false,
+    },
+    {
+        value: 'interview',
+        label: 'Interview',
+        description: 'Meet shortlisted applicants before approval.',
+        icon: 'fa-solid fa-comments',
+        required: false,
+    },
+    {
+        value: 'distribution',
+        label: 'Distribution',
+        description: 'Announce award release details to approved applicants.',
+        icon: 'fa-solid fa-hand-holding-dollar',
+        required: true,
+    },
 ];
 const gradeScaleOptions = [
     {
@@ -581,6 +611,7 @@ const workflowSummary = computed(() => [
     hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber) ? 'Contact available' : 'No contact channel',
     hasText(scholarshipForm.value.returnServiceContract) ? 'Return service listed' : 'No return service listed',
     hasText(scholarshipForm.value.otherContractTerms) ? 'Other contract terms listed' : 'No other contract terms',
+    `${scholarshipForm.value.selectionStages.length} selection stages`,
 ]);
 const statusOptions = computed(() => {
     const options = [
@@ -751,6 +782,7 @@ function emptyScholarshipForm() {
         minimumGradeScale: '',
         slotsAvailable: '',
         applicationMode: '',
+        selectionStages: ['screening', 'distribution'],
         renewalPolicy: '',
         returnServiceContract: '',
         otherContractTerms: '',
@@ -803,6 +835,22 @@ function toggleSelection(field, value) {
     scholarshipForm.value[field] = selected.includes(value)
         ? selected.filter((item) => item !== value)
         : [...selected, value];
+}
+
+function toggleSelectionStage(stage) {
+    const option = selectionStageOptions.find((item) => item.value === stage);
+
+    if (option?.required) {
+        return;
+    }
+
+    const selected = scholarshipForm.value.selectionStages.includes(stage)
+        ? scholarshipForm.value.selectionStages.filter((item) => item !== stage)
+        : [...scholarshipForm.value.selectionStages, stage];
+
+    scholarshipForm.value.selectionStages = selectionStageOptions
+        .map((optionItem) => optionItem.value)
+        .filter((optionValue) => selected.includes(optionValue) || ['screening', 'distribution'].includes(optionValue));
 }
 
 function selectAllOptions(field, options) {
@@ -877,6 +925,9 @@ function fillScholarshipForm(scholarship) {
         minimumGradeScale: scholarship.minimum_grade_scale ?? inferGradeScale(scholarship.minimum_gwa),
         slotsAvailable: scholarship.slots_available ?? '',
         applicationMode: scholarship.application_mode ?? '',
+        selectionStages: selectionStageOptions
+            .map((option) => option.value)
+            .filter((value) => (scholarship.selection_stages ?? ['screening', 'distribution']).includes(value)),
         renewalPolicy: scholarship.renewal_policy ?? '',
         returnServiceContract: scholarship.return_service_contract ?? '',
         otherContractTerms: scholarship.other_contract_terms ?? '',
@@ -1125,6 +1176,7 @@ async function saveScholarship() {
         minimum_grade_scale: scholarshipForm.value.minimumGradeScale || '',
         slots_available: scholarshipForm.value.slotsAvailable || '',
         application_mode: scholarshipForm.value.applicationMode || '',
+        selection_stages: JSON.stringify(scholarshipForm.value.selectionStages),
         renewal_policy: scholarshipForm.value.renewalPolicy || '',
         return_service_contract: scholarshipForm.value.returnServiceContract || '',
         other_contract_terms: scholarshipForm.value.otherContractTerms || '',
@@ -1514,7 +1566,7 @@ onMounted(loadFormData);
                                     Application workflow
                                 </legend>
                                 <p class="mt-1 text-xs leading-5 text-slate-500">
-                                    Add the practical details students need after they decide a scholarship fits them.
+                                    Choose the stages once. Dates and instructions can be announced later to every eligible applicant from the program page.
                                 </p>
 
                                 <div class="mt-3 flex flex-wrap gap-2">
@@ -1525,6 +1577,50 @@ onMounted(loadFormData);
                                     >
                                         {{ summary }}
                                     </span>
+                                </div>
+
+                                <div :class="['mt-4', fieldCardClass]">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">Selection plan</p>
+                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                                                Providers approve or reject applicants at each review gate. The system moves approved applicants to the next stage automatically.
+                                            </p>
+                                        </div>
+                                        <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Schedule later</span>
+                                    </div>
+
+                                    <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                        <button
+                                            v-for="(stage, index) in selectionStageOptions"
+                                            :key="stage.value"
+                                            type="button"
+                                            :aria-pressed="scholarshipForm.selectionStages.includes(stage.value)"
+                                            :disabled="stage.required"
+                                            :class="[
+                                                'flex min-h-36 flex-col rounded-md border p-3 text-left transition',
+                                                scholarshipForm.selectionStages.includes(stage.value)
+                                                    ? 'border-slate-900 bg-slate-900 text-white'
+                                                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white',
+                                                stage.required ? 'cursor-default' : 'cursor-pointer',
+                                            ]"
+                                            @click="toggleSelectionStage(stage.value)"
+                                        >
+                                            <span class="flex items-center justify-between gap-2">
+                                                <span :class="['grid h-8 w-8 place-items-center rounded-md', scholarshipForm.selectionStages.includes(stage.value) ? 'bg-white/10' : 'bg-white ring-1 ring-slate-200']">
+                                                    <i :class="stage.icon" aria-hidden="true"></i>
+                                                </span>
+                                                <span class="text-[11px] font-bold uppercase tracking-[0.12em]">{{ index + 1 }}</span>
+                                            </span>
+                                            <span class="mt-3 font-bold">{{ stage.label }}</span>
+                                            <span :class="['mt-1 text-xs leading-5', scholarshipForm.selectionStages.includes(stage.value) ? 'text-slate-300' : 'text-slate-500']">
+                                                {{ stage.description }}
+                                            </span>
+                                            <span class="mt-auto pt-2 text-[11px] font-bold uppercase tracking-[0.1em]">
+                                                {{ stage.required ? 'Required' : (scholarshipForm.selectionStages.includes(stage.value) ? 'Included' : 'Optional') }}
+                                            </span>
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
