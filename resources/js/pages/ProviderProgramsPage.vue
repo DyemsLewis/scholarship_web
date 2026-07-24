@@ -13,6 +13,8 @@ const user = ref(null);
 const scholarships = ref([]);
 const selectedMapScholarship = ref(null);
 const duplicatingId = ref(null);
+const searchQuery = ref('');
+const statusFilter = ref('all');
 const {
     confirmation,
     requestConfirmation,
@@ -22,6 +24,40 @@ const {
 
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
+const statusFilterOptions = computed(() => {
+    const options = [
+        { value: 'all', label: 'All programs', count: scholarships.value.length },
+        { value: 'draft', label: 'Drafts' },
+        { value: 'pending_review', label: 'In review' },
+        { value: 'published', label: 'Published' },
+        { value: 'rejected', label: 'Needs changes' },
+        { value: 'closed', label: 'Closed' },
+    ];
+
+    return options
+        .map((option) => ({
+            ...option,
+            count: option.value === 'all'
+                ? scholarships.value.length
+                : scholarships.value.filter((scholarship) => scholarship.status === option.value).length,
+        }))
+        .filter((option) => option.value === 'all' || option.count > 0);
+});
+const filteredScholarships = computed(() => {
+    const query = searchQuery.value.trim().toLowerCase();
+
+    return scholarships.value.filter((scholarship) => {
+        const matchesStatus = statusFilter.value === 'all' || scholarship.status === statusFilter.value;
+        const searchableText = [
+            scholarship.title,
+            scholarship.category,
+            scholarship.description,
+            scholarship.eligible_education_levels,
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        return matchesStatus && (!query || searchableText.includes(query));
+    });
+});
 const verificationMessage = computed(() => {
     if (!user.value?.email_verified) {
         return verificationDocumentCount.value
@@ -64,32 +100,6 @@ function hasScholarshipMapPreview(scholarship) {
     );
 }
 
-function statusLabel(status) {
-    return String(status ?? 'draft')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function statusClass(status) {
-    if (status === 'published') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'pending_review') {
-        return 'bg-slate-100 text-slate-700';
-    }
-
-    if (status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (status === 'closed') {
-        return 'bg-slate-200 text-slate-700';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
 function targetApplicantLabel(scholarship) {
     const levels = String(scholarship.eligible_education_levels ?? '')
         .split(/\r?\n|,/)
@@ -107,38 +117,34 @@ function targetApplicantLabel(scholarship) {
     return levels.slice(0, 2).map(labelFromKey).join(', ') + (levels.length > 2 ? ` +${levels.length - 2}` : '');
 }
 
-function formatAmount(amount) {
-    if (amount === null || amount === undefined || amount === '') {
-        return 'Not set';
-    }
-
-    return new Intl.NumberFormat('en-PH', {
-        style: 'currency',
-        currency: 'PHP',
-        maximumFractionDigits: 2,
-    }).format(Number(amount));
+function programStatusLabel(status) {
+    return {
+        draft: 'Draft',
+        pending_review: 'In admin review',
+        published: 'Published',
+        rejected: 'Needs changes',
+        closed: 'Closed',
+    }[status] ?? labelFromKey(status || 'draft');
 }
 
-function inferGradeScale(value) {
-    if (value === null || value === undefined || value === '') {
-        return '';
+function programStatusClass(status) {
+    if (status === 'published') {
+        return 'bg-emerald-100 text-emerald-800';
     }
 
-    return Number(value) <= 5 ? 'grade_point' : 'percentage';
-}
-
-function academicRequirementLabel(scholarship) {
-    if (scholarship?.minimum_grade_label) {
-        return scholarship.minimum_grade_label;
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
     }
 
-    if (!scholarship?.minimum_gwa) {
-        return 'No academic minimum';
+    if (status === 'pending_review') {
+        return 'bg-sky-100 text-sky-800';
     }
 
-    return inferGradeScale(scholarship.minimum_gwa) === 'grade_point'
-        ? `Max GWA/GPA ${scholarship.minimum_gwa}`
-        : `Min average ${scholarship.minimum_gwa}%`;
+    if (status === 'closed') {
+        return 'bg-slate-200 text-slate-700';
+    }
+
+    return 'bg-amber-100 text-amber-800';
 }
 
 async function loadProviderData() {
@@ -198,7 +204,7 @@ onMounted(loadProviderData);
         />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+            <div class="mx-auto max-w-6xl">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -213,21 +219,13 @@ onMounted(loadProviderData);
                             </p>
                         </div>
 
-                        <div class="flex flex-col gap-2 sm:flex-row">
-                            <a
-                                v-if="canPostScholarships"
-                                href="/provider/programs/create"
-                                class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                            >
-                                Create program
-                            </a>
-                            <a
-                                href="/provider"
-                                class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
-                            >
-                                Back to Dashboard
-                            </a>
-                        </div>
+                        <a
+                            v-if="canPostScholarships"
+                            href="/provider/programs/create"
+                            class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                        >
+                            Create program
+                        </a>
                     </div>
                 </header>
 
@@ -267,20 +265,15 @@ onMounted(loadProviderData);
                         <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Saved Programs
+                                    Your Programs
                                 </p>
                                 <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                    Created scholarships
+                                    Scholarship directory
                                 </h3>
                             </div>
-
-                            <a
-                                v-if="canPostScholarships"
-                                href="/provider/programs/create"
-                                class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
-                            >
-                                New program
-                            </a>
+                            <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+                                {{ scholarships.length }} {{ scholarships.length === 1 ? 'program' : 'programs' }}
+                            </span>
                         </div>
 
                         <div v-if="scholarships.length === 0" class="p-6 text-sm text-slate-500">
@@ -289,101 +282,78 @@ onMounted(loadProviderData);
                                 : 'No scholarships yet. Complete provider verification to unlock program creation.' }}
                         </div>
 
-                        <div v-else class="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+                        <div v-else class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="grid flex-1 gap-2 sm:grid-cols-[minmax(0,1fr)_12rem]">
+                                <label class="relative">
+                                    <span class="sr-only">Search programs</span>
+                                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
+                                    <input
+                                        v-model="searchQuery"
+                                        type="search"
+                                        placeholder="Search programs"
+                                        class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                                    >
+                                </label>
+                                <label>
+                                    <span class="sr-only">Filter program status</span>
+                                    <select v-model="statusFilter" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-500">
+                                        <option v-for="option in statusFilterOptions" :key="option.value" :value="option.value">
+                                            {{ option.label }} ({{ option.count }})
+                                        </option>
+                                    </select>
+                                </label>
+                            </div>
+                            <p class="shrink-0 text-xs font-semibold text-slate-500">
+                                Showing {{ filteredScholarships.length }} of {{ scholarships.length }}
+                            </p>
+                        </div>
+
+                        <div v-if="filteredScholarships.length" class="divide-y divide-slate-200">
                             <article
-                                v-for="scholarship in scholarships"
+                                v-for="scholarship in filteredScholarships"
                                 :key="scholarship.id"
-                                class="flex flex-col rounded-lg border border-slate-200 bg-slate-50 p-3"
+                                class="flex flex-col gap-3 p-4 transition hover:bg-slate-50 lg:flex-row lg:items-center"
                             >
-                                <img
-                                    :src="scholarship.image_url"
-                                    :alt="scholarship.title"
-                                    class="mb-3 h-14 w-14 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
-                                >
-
-                                <div class="flex items-start justify-between gap-3">
-                                    <div class="min-w-0">
-                                        <h4 class="truncate text-base font-bold text-slate-950">
-                                            {{ scholarship.title }}
-                                        </h4>
-                                        <p class="mt-1 truncate text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                            {{ scholarship.category || 'Uncategorized' }}
-                                        </p>
-                                        <p class="mt-2 inline-flex items-center rounded-md bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
-                                            <i class="fa-solid fa-users mr-1.5"></i>
-                                            {{ targetApplicantLabel(scholarship) }}
-                                        </p>
-                                    </div>
-
-                                    <span :class="['shrink-0 rounded-md px-2 py-1 text-[11px] font-bold uppercase', statusClass(scholarship.status)]">
-                                        {{ statusLabel(scholarship.status) }}
-                                    </span>
-                                </div>
-
-                                <p class="mt-3 line-clamp-1 text-sm leading-5 text-slate-600">
-                                    {{ scholarship.description }}
-                                </p>
-
-                                <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-                                    <div class="rounded-md bg-white px-3 py-2">
-                                        <p class="font-semibold text-slate-500">
-                                            Award
-                                        </p>
-                                        <p class="mt-1 truncate font-bold text-slate-950">
-                                            {{ formatAmount(scholarship.award_amount) }}
-                                        </p>
-                                    </div>
-
-                                    <div class="rounded-md bg-white px-3 py-2">
-                                        <p class="font-semibold text-slate-500">
-                                            Deadline
-                                        </p>
-                                        <p class="mt-1 truncate font-bold text-slate-950">
-                                            {{ scholarship.deadline || 'Not set' }}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-600">
-                                    <span class="rounded-md bg-white px-2.5 py-1">
-                                        {{ academicRequirementLabel(scholarship) }}
-                                    </span>
-                                    <span
-                                        v-if="scholarship.return_service_contract"
-                                        class="rounded-md bg-white px-2.5 py-1"
+                                <div class="flex min-w-0 flex-1 items-center gap-3">
+                                    <img
+                                        :src="scholarship.image_url"
+                                        :alt="scholarship.title"
+                                        class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                     >
-                                        Return service
-                                    </span>
-                                    <span
-                                        v-if="scholarship.other_contract_terms"
-                                        class="rounded-md bg-white px-2.5 py-1"
-                                    >
-                                        Contract terms
-                                    </span>
-                                    <span class="rounded-md bg-white px-2.5 py-1">
-                                        {{ scholarship.bookmarks_count || 0 }} saved
-                                    </span>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex min-w-0 flex-wrap items-center gap-2">
+                                            <h4 class="min-w-0 truncate text-sm font-bold leading-5 text-slate-950">
+                                                {{ scholarship.title }}
+                                            </h4>
+                                            <span :class="['shrink-0 rounded-md px-2 py-1 text-[9px] font-bold uppercase', programStatusClass(scholarship.status)]">
+                                                {{ programStatusLabel(scholarship.status) }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-1 truncate text-xs text-slate-500">
+                                            {{ scholarship.category || 'Uncategorized' }} - {{ targetApplicantLabel(scholarship) }}
+                                        </p>
+                                    </div>
                                 </div>
 
-                                <div class="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+                                <div class="flex shrink-0 flex-wrap gap-2 lg:justify-end">
                                     <a
-                                        :href="`/provider/programs/${scholarship.id}/edit`"
-                                        class="min-w-24 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+                                        :href="`/provider/programs/${scholarship.id}/applications`"
+                                        class="min-w-24 rounded-md bg-slate-900 px-3 py-2 text-center text-xs font-bold text-white transition hover:bg-slate-800"
                                     >
-                                        Edit
+                                        Workspace
                                     </a>
 
                                     <a
-                                        :href="`/provider/programs/${scholarship.id}/applications`"
-                                        class="min-w-24 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+                                        :href="`/provider/programs/${scholarship.id}/edit`"
+                                        class="min-w-20 rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
                                     >
-                                        Applicants
+                                        Edit
                                     </a>
 
                                     <button
                                         type="button"
                                         :disabled="duplicatingId === scholarship.id"
-                                        class="min-w-24 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                        class="min-w-20 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                                         @click="duplicateProgram(scholarship)"
                                     >
                                         {{ duplicatingId === scholarship.id ? 'Duplicating...' : 'Duplicate' }}
@@ -392,13 +362,25 @@ onMounted(loadProviderData);
                                     <button
                                         v-if="hasScholarshipMapPreview(scholarship)"
                                         type="button"
-                                        class="min-w-24 flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                                        class="min-w-16 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                                         @click="openMapModal(scholarship)"
                                     >
                                         Map
                                     </button>
                                 </div>
                             </article>
+                        </div>
+
+                        <div v-else class="p-6 text-center">
+                            <p class="text-sm font-bold text-slate-900">No matching programs</p>
+                            <p class="mt-1 text-sm text-slate-500">Try another search or program status.</p>
+                            <button
+                                type="button"
+                                class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                @click="searchQuery = ''; statusFilter = 'all'"
+                            >
+                                Clear filters
+                            </button>
                         </div>
                     </section>
                 </div>

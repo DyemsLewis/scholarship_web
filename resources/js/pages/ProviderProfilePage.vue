@@ -284,8 +284,8 @@ onMounted(loadProviderProfile);
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                                <p class="text-sm font-semibold text-slate-500">
-                                    Organization
+                                <p class="text-sm font-semibold uppercase tracking-[0.16em] text-amber-700">
+                                    Provider preview
                                 </p>
                                 <h3 class="mt-2 font-display text-2xl font-bold text-slate-950">
                                     {{ user?.provider_name || user?.name || 'Provider' }}
@@ -296,6 +296,20 @@ onMounted(loadProviderProfile);
                                 <p class="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                                     {{ providerTypeLabels[user?.provider_type] || 'Provider type not set' }}
                                 </p>
+                                <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-slate-500">
+                                    <span v-if="user?.provider_address" class="inline-flex items-center gap-2">
+                                        <i class="fa-solid fa-location-dot text-amber-700" aria-hidden="true"></i>
+                                        {{ user.provider_address }}
+                                    </span>
+                                    <span v-if="user?.provider_website" class="inline-flex items-center gap-2">
+                                        <i class="fa-solid fa-globe text-amber-700" aria-hidden="true"></i>
+                                        {{ user.provider_website }}
+                                    </span>
+                                    <span v-if="user?.contact_number" class="inline-flex items-center gap-2">
+                                        <i class="fa-solid fa-phone text-amber-700" aria-hidden="true"></i>
+                                        {{ user.contact_number }}
+                                    </span>
+                                </div>
                             </div>
                             <span :class="['w-fit rounded-md px-3 py-1.5 text-xs font-bold uppercase', verificationClass(user?.verification_status)]">
                                 {{ verificationLabel(user?.verification_status) }}

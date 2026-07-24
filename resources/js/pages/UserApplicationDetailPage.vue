@@ -4,9 +4,10 @@ import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
-import { programEventForStage, progressStateLabel, progressStepIcon } from '../support/selectionPlan';
+import { progressStateLabel, progressStepIcon } from '../support/selectionPlan';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
@@ -90,7 +91,7 @@ const applicationSections = computed(() => [
     { key: 'history', label: 'History', count: timeline.value.length },
 ]);
 const nextActionButton = computed(() => {
-    if (currentSchedule.value && !currentSchedule.value.applicant_acknowledged) {
+    if (scheduleNeedsAcknowledgment(currentSchedule.value)) {
         return { label: 'Review schedule', section: 'overview', target: 'application-schedules' };
     }
 
@@ -119,10 +120,6 @@ const hasMapPreview = computed(() => Boolean(
     || applicationScholarship.value?.location_name,
 ));
 const hasUserMapLocation = computed(() => hasCoordinates(user.value?.latitude, user.value?.longitude));
-
-function progressStepEvent(step) {
-    return programEventForStage(applicationScholarship.value, step?.key);
-}
 
 function statusLabel(status) {
     const labels = {
@@ -315,13 +312,25 @@ function hasCoordinates(latitude, longitude) {
         && longitude !== '';
 }
 
+function scheduleRequiresAcknowledgment(schedule) {
+    return schedule?.requires_applicant_acknowledgment !== false;
+}
+
+function scheduleNeedsAcknowledgment(schedule) {
+    return Boolean(
+        schedule?.status === 'scheduled'
+        && scheduleRequiresAcknowledgment(schedule)
+        && !schedule.applicant_acknowledged,
+    );
+}
+
 function applicantNextAction(current) {
     if (!current) {
         return 'Wait for provider review and document feedback.';
     }
 
     const activeSchedule = current.schedules?.find((schedule) => schedule.status === 'scheduled');
-    const unacknowledgedSchedule = activeSchedule && !activeSchedule.applicant_acknowledged
+    const unacknowledgedSchedule = scheduleNeedsAcknowledgment(activeSchedule)
         ? activeSchedule
         : null;
 
@@ -536,7 +545,7 @@ async function deleteDocument(document) {
 }
 
 async function acknowledgeSchedule(schedule) {
-    if (!application.value || schedule.status !== 'scheduled' || schedule.applicant_acknowledged) {
+    if (!application.value || !scheduleNeedsAcknowledgment(schedule)) {
         return;
     }
 
@@ -685,7 +694,7 @@ onMounted(loadApplication);
                         </div>
                     </nav>
 
-                    <div :class="['grid gap-4', activeSection === 'files' ? '' : 'lg:grid-cols-[minmax(0,1fr)_21rem]']">
+                    <div :class="['grid gap-4', ['overview', 'files'].includes(activeSection) ? '' : 'lg:grid-cols-[minmax(0,1fr)_21rem]']">
                         <div class="space-y-4">
                             <section v-if="activeSection === 'overview' && application.status_progress" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -718,9 +727,6 @@ onMounted(loadApplication);
                                                 <p class="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] opacity-70">{{ progressStateLabel(step.state) }}</p>
                                             </div>
                                         </div>
-                                        <p v-if="progressStepEvent(step)" class="mt-2 border-t border-current/10 pt-2 text-[11px] font-semibold leading-4">
-                                            {{ progressStepEvent(step).scheduled_label }}
-                                        </p>
                                     </div>
                                 </div>
                                 <p class="mt-3 rounded-md bg-slate-50 px-3 py-2.5 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
@@ -733,103 +739,96 @@ onMounted(loadApplication);
                                     <div>
                                         <p class="student-kicker">Schedule</p>
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">Dates and instructions</h3>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">Review each posted activity and confirm active schedules after reading the details.</p>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">Open an activity when you need its complete location and instructions.</p>
                                     </div>
                                     <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                         {{ schedules.length }} {{ schedules.length === 1 ? 'activity' : 'activities' }}
                                     </span>
                                 </div>
 
-                                <div class="divide-y divide-slate-200">
-                                    <article v-for="schedule in schedules" :key="schedule.id" class="p-4">
-                                        <div class="flex items-start gap-3">
-                                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
+                                <div class="grid gap-2 p-3">
+                                    <details v-for="schedule in schedules" :key="schedule.id" class="group overflow-hidden rounded-md border border-slate-200 bg-white">
+                                        <summary class="flex cursor-pointer list-none items-center gap-3 p-3 [&::-webkit-details-marker]:hidden">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-white">
                                                 <i :class="scheduleTypeIcon(schedule.type)" aria-hidden="true"></i>
                                             </span>
                                             <div class="min-w-0 flex-1">
-                                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                                    <div>
-                                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(schedule.type) }}</p>
-                                                        <h4 class="mt-1 font-bold text-slate-950">{{ schedule.title }}</h4>
-                                                    </div>
-                                                    <span :class="['w-fit rounded-md px-2 py-1 text-[11px] font-bold uppercase', scheduleStatusClass(schedule.status)]">
-                                                        {{ labelFromKey(schedule.status) }}
-                                                    </span>
+                                                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                                    <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(schedule.type) }}</p>
+                                                    <h4 class="truncate text-sm font-bold text-slate-950">{{ schedule.title }}</h4>
                                                 </div>
+                                                <p class="mt-1 text-xs text-slate-500">{{ schedule.scheduled_label }} - {{ scheduleModeLabel(schedule.mode) }}</p>
+                                            </div>
+                                            <span :class="['hidden w-fit rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', scheduleStatusClass(schedule.status)]">
+                                                {{ labelFromKey(schedule.status) }}
+                                            </span>
+                                            <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                        </summary>
 
-                                                <div class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                                                    <div class="rounded-md bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
-                                                        <p class="text-xs font-semibold text-slate-500">Date and time</p>
-                                                        <p class="mt-1 font-bold text-slate-800">{{ schedule.scheduled_label }}</p>
+                                        <div class="border-t border-slate-200 p-3 text-sm">
+                                            <div v-if="schedule.type === 'distribution'" class="rounded-md bg-emerald-50 px-3 py-2.5 ring-1 ring-emerald-200">
+                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-emerald-800">Benefit package</p>
+                                                <ScholarshipBenefitsPanel
+                                                    v-if="application.scholarship?.benefits?.length || application.awarded_amount != null"
+                                                    class="mt-2"
+                                                    :benefits="application.scholarship?.benefits"
+                                                    :cash-amount="application.awarded_amount"
+                                                    compact
+                                                />
+                                                <p v-else class="mt-1 text-sm text-emerald-800">
+                                                    {{ application.scholarship?.benefit_summary || 'Benefit details have not been listed yet.' }}
+                                                </p>
+                                            </div>
+
+                                            <div v-if="schedule.venue || schedule.location_address" :class="['rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5', schedule.type === 'distribution' ? 'mt-3' : '']">
+                                                <div class="flex items-start gap-2.5">
+                                                    <i class="fa-solid fa-location-dot mt-0.5 shrink-0 text-sm text-amber-700" aria-hidden="true"></i>
+                                                    <div class="min-w-0">
+                                                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Address</p>
+                                                        <p class="mt-0.5 text-sm font-bold leading-5 text-slate-800">{{ schedule.location_address || schedule.venue }}</p>
+                                                        <p v-if="schedule.location_address && schedule.venue" class="mt-0.5 text-xs text-slate-500">{{ schedule.venue }}</p>
                                                     </div>
-                                                    <div class="rounded-md bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
-                                                        <p class="text-xs font-semibold text-slate-500">Mode</p>
-                                                        <p class="mt-1 font-bold text-slate-800">{{ scheduleModeLabel(schedule.mode) }}</p>
-                                                    </div>
-                                                    <div v-if="schedule.type === 'distribution'" class="rounded-md bg-emerald-50 px-3 py-2.5 ring-1 ring-emerald-200 sm:col-span-2">
-                                                        <p class="text-xs font-semibold text-emerald-700">Award amount</p>
-                                                        <p class="mt-1 font-bold text-emerald-900">{{ formatAwardAmount(application.awarded_amount) }}</p>
-                                                    </div>
-                                                </div>
-
-                                                <div v-if="schedule.venue || schedule.location_address" class="mt-3 text-sm leading-6 text-slate-600">
-                                                    <p v-if="schedule.venue"><span class="font-bold text-slate-800">Site:</span> {{ schedule.venue }}</p>
-                                                    <p v-if="schedule.location_address">{{ schedule.location_address }}</p>
-                                                </div>
-
-                                                <a
-                                                    v-if="schedule.online_url"
-                                                    :href="schedule.online_url"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    class="mt-3 inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100"
-                                                >
-                                                    Open access link
-                                                    <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
-                                                </a>
-
-                                                <p class="mt-3 whitespace-pre-line rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">{{ schedule.instructions }}</p>
-
-                                                <details
-                                                    v-if="schedule.status !== 'cancelled' && (hasCoordinates(schedule.latitude, schedule.longitude) || schedule.location_address || schedule.venue)"
-                                                    class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"
-                                                >
-                                                    <summary class="cursor-pointer text-sm font-bold text-slate-700">View schedule map</summary>
-                                                    <div class="mt-3 overflow-hidden rounded-md">
-                                                        <LeafletMapPreview
-                                                            :address="schedule.location_address || schedule.venue"
-                                                            :latitude="schedule.latitude"
-                                                            :longitude="schedule.longitude"
-                                                            :title="schedule.venue || schedule.title"
-                                                            :marker-text="schedule.venue || schedule.title"
-                                                            height="11rem"
-                                                            auto-geocode
-                                                        />
-                                                    </div>
-                                                </details>
-
-                                                <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                                    <div class="flex flex-wrap gap-2 text-xs font-bold">
-                                                        <span v-if="schedule.applicant_acknowledged" class="rounded-md bg-emerald-50 px-2.5 py-1.5 text-emerald-800 ring-1 ring-emerald-200">
-                                                            Confirmed {{ schedule.applicant_acknowledged_at }}
-                                                        </span>
-                                                        <span v-if="schedule.attendance_status !== 'pending'" class="rounded-md bg-slate-100 px-2.5 py-1.5 text-slate-700">
-                                                            {{ schedule.type === 'distribution' ? 'Release' : 'Participation' }}: {{ labelFromKey(schedule.attendance_status) }}
-                                                        </span>
-                                                    </div>
-                                                    <button
-                                                        v-if="schedule.status === 'scheduled' && !schedule.applicant_acknowledged"
-                                                        type="button"
-                                                        :disabled="acknowledgingScheduleId === schedule.id"
-                                                        class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                                        @click="acknowledgeSchedule(schedule)"
-                                                    >
-                                                        {{ acknowledgingScheduleId === schedule.id ? 'Confirming...' : 'I have seen this schedule' }}
-                                                    </button>
                                                 </div>
                                             </div>
+
+                                            <a
+                                                v-if="schedule.online_url"
+                                                :href="schedule.online_url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="mt-3 inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100"
+                                            >
+                                                Open access link
+                                                <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
+                                            </a>
+
+                                            <p class="mt-3 whitespace-pre-line rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">{{ schedule.instructions }}</p>
+
+                                            <details
+                                                v-if="schedule.status !== 'cancelled' && (hasCoordinates(schedule.latitude, schedule.longitude) || schedule.location_address || schedule.venue)"
+                                                class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"
+                                            >
+                                                <summary class="cursor-pointer text-sm font-bold text-slate-700">View schedule map</summary>
+                                                <div class="mt-3 overflow-hidden rounded-md">
+                                                    <LeafletMapPreview
+                                                        :address="schedule.location_address || schedule.venue"
+                                                        :latitude="schedule.latitude"
+                                                        :longitude="schedule.longitude"
+                                                        :title="schedule.venue || schedule.title"
+                                                        :marker-text="schedule.venue || schedule.title"
+                                                        height="10rem"
+                                                        auto-geocode
+                                                    />
+                                                </div>
+                                            </details>
+
+                                            <div v-if="schedule.attendance_status !== 'pending'" class="mt-3 flex flex-wrap gap-2 text-xs font-bold">
+                                                <span class="rounded-md bg-slate-100 px-2.5 py-1.5 text-slate-700">
+                                                    {{ schedule.type === 'distribution' ? 'Release' : 'Participation' }}: {{ labelFromKey(schedule.attendance_status) }}
+                                                </span>
+                                            </div>
                                         </div>
-                                    </article>
+                                    </details>
                                 </div>
                             </section>
 
@@ -889,8 +888,8 @@ onMounted(loadApplication);
                                 </p>
                                 <div class="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
                                     <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
-                                        <p class="text-xs font-semibold text-slate-500">Award</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ formatAwardAmount(application.scholarship?.award_amount) }}</p>
+                                        <p class="text-xs font-semibold text-slate-500">Benefits</p>
+                                        <p class="mt-1 font-bold text-slate-950">{{ application.scholarship?.benefit_summary || formatAwardAmount(application.scholarship?.award_amount) }}</p>
                                     </div>
                                     <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
                                         <p class="text-xs font-semibold text-slate-500">Deadline</p>
@@ -1275,10 +1274,20 @@ onMounted(loadApplication);
                                 <h3 class="mt-1 text-lg font-bold text-slate-950">
                                     {{ application.status === 'disbursed' ? 'Reward distributed' : 'Provider-managed schedule' }}
                                 </h3>
-                                <div class="mt-3 grid gap-2 text-sm">
-                                    <p class="rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-700 ring-1 ring-slate-200">
-                                        Amount: {{ application.awarded_amount || 'Not listed' }}
+                                <div class="mt-3 rounded-md bg-emerald-50 p-3 ring-1 ring-emerald-200">
+                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-emerald-800">Benefit package</p>
+                                    <ScholarshipBenefitsPanel
+                                        v-if="application.scholarship?.benefits?.length || application.awarded_amount != null"
+                                        class="mt-2"
+                                        :benefits="application.scholarship?.benefits"
+                                        :cash-amount="application.awarded_amount"
+                                        compact
+                                    />
+                                    <p v-else class="mt-1 text-sm text-emerald-800">
+                                        {{ application.scholarship?.benefit_summary || 'Benefit details have not been listed yet.' }}
                                     </p>
+                                </div>
+                                <div class="mt-3 grid gap-2 text-sm">
                                     <p class="rounded-md bg-slate-50 px-3 py-2 font-bold text-slate-700 ring-1 ring-slate-200">
                                         Scheduled date: {{ application.distribution_scheduled_for || 'Provider will set this later' }}
                                     </p>

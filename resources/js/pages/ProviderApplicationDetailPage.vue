@@ -6,6 +6,7 @@ import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { decisionReasonOptions, negativeDecisionStatuses } from '../support/applicationDecisionReasons';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
@@ -383,17 +384,6 @@ function handleScheduleStatusChange(schedule) {
     if (schedule.status === 'cancelled' && ['attended', 'absent', 'received'].includes(schedule.attendance_status)) {
         schedule.attendance_status = 'pending';
     }
-}
-
-function formatAwardAmount(value) {
-    if (value === null || value === undefined || value === '') {
-        return 'Not listed';
-    }
-
-    return new Intl.NumberFormat('en-PH', {
-        style: 'currency',
-        currency: 'PHP',
-    }).format(Number(value));
 }
 
 async function saveScheduleTracking(schedule) {
@@ -1178,7 +1168,7 @@ onMounted(loadApplication);
                                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant schedule</p>
                                             <h3 class="mt-2 text-xl font-bold text-slate-950">Attendance and results</h3>
                                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                                Shared dates and instructions are managed once from the program applicant page. Use this tab only for this applicant's acknowledgement, attendance, and result.
+                                                Shared dates are managed from the program applicant page. Expand an activity to record attendance or release results.
                                             </p>
                                         </div>
                                         <a :href="`/provider/programs/${application.scholarship.id}/applications`" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
@@ -1188,29 +1178,41 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <div v-if="schedules.length" class="grid gap-4 xl:grid-cols-2">
-                                    <article v-for="schedule in schedules" :key="schedule.id" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                        <div class="flex items-start gap-3 border-b border-slate-200 p-4">
-                                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
+                                <div v-if="schedules.length" class="grid gap-3">
+                                    <details
+                                        v-for="schedule in schedules"
+                                        :key="schedule.id"
+                                        class="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                                    >
+                                        <summary class="flex cursor-pointer list-none items-center gap-3 p-3.5 [&::-webkit-details-marker]:hidden">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-white">
                                                 <i :class="scheduleTypeIcon(schedule.type)" aria-hidden="true"></i>
                                             </span>
                                             <div class="min-w-0 flex-1">
-                                                <div class="flex flex-wrap items-start justify-between gap-2">
-                                                    <div>
-                                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{{ scheduleTypeLabel(schedule.type) }}</p>
-                                                        <h3 class="mt-1 text-base font-bold text-slate-950">{{ schedule.title }}</h3>
-                                                    </div>
-                                                    <span :class="['rounded-md px-2 py-1 text-[11px] font-bold uppercase', scheduleStatusClass(schedule.status)]">{{ labelFromKey(schedule.status) }}</span>
+                                                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                                    <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(schedule.type) }}</p>
+                                                    <h3 class="truncate text-sm font-bold text-slate-950">{{ schedule.title }}</h3>
                                                 </div>
-                                                <p class="mt-2 text-sm font-bold text-slate-700">{{ schedule.scheduled_label }}</p>
-                                                <p class="mt-1 text-xs text-slate-500">{{ scheduleModeLabel(schedule.mode) }}</p>
-                                                <p v-if="schedule.type === 'distribution'" class="mt-1 text-xs font-bold text-emerald-700">
-                                                    {{ formatAwardAmount(application.awarded_amount) }} award
+                                                <p class="mt-1 text-xs text-slate-500">{{ schedule.scheduled_label }} - {{ scheduleModeLabel(schedule.mode) }}</p>
+                                            </div>
+                                            <span :class="['hidden rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', scheduleStatusClass(schedule.status)]">{{ labelFromKey(schedule.status) }}</span>
+                                            <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                        </summary>
+
+                                        <div class="grid gap-3 border-t border-slate-200 p-3 text-sm lg:grid-cols-2">
+                                            <div v-if="schedule.type === 'distribution'" class="rounded-md bg-emerald-50 px-3 py-2.5 ring-1 ring-emerald-200 lg:col-span-2">
+                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-emerald-800">Benefit package</p>
+                                                <ScholarshipBenefitsPanel
+                                                    v-if="application.scholarship?.benefits?.length || application.awarded_amount != null"
+                                                    class="mt-2"
+                                                    :benefits="application.scholarship?.benefits"
+                                                    :cash-amount="application.awarded_amount"
+                                                    compact
+                                                />
+                                                <p v-else class="mt-1 text-sm text-emerald-800">
+                                                    {{ application.scholarship?.benefit_summary || 'Benefit details have not been listed yet.' }}
                                                 </p>
                                             </div>
-                                        </div>
-
-                                        <div class="space-y-3 p-4 text-sm">
                                             <div v-if="schedule.venue || schedule.location_address" class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
                                                 <p class="font-bold text-slate-800">{{ schedule.venue || 'Activity site' }}</p>
                                                 <p v-if="schedule.location_address" class="mt-1 leading-5 text-slate-600">{{ schedule.location_address }}</p>
@@ -1219,23 +1221,24 @@ onMounted(loadApplication);
                                                 Open online access link
                                                 <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                             </a>
-                                            <p class="whitespace-pre-line rounded-md bg-slate-50 p-3 leading-6 text-slate-600 ring-1 ring-slate-200">{{ schedule.instructions }}</p>
+                                            <p class="whitespace-pre-line rounded-md bg-slate-50 p-3 leading-6 text-slate-600 ring-1 ring-slate-200 lg:col-span-2">{{ schedule.instructions }}</p>
 
                                             <LeafletMapPreview
                                                 v-if="schedule.latitude && schedule.longitude"
+                                                class="lg:col-span-2"
                                                 :latitude="schedule.latitude"
                                                 :longitude="schedule.longitude"
                                                 :title="schedule.venue || schedule.title"
                                                 :marker-text="schedule.venue || schedule.title"
-                                                height="12rem"
+                                                height="10rem"
                                             />
 
-                                            <div :class="['rounded-md px-3 py-2.5 text-xs font-bold', schedule.applicant_acknowledged ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200' : 'bg-amber-50 text-amber-800 ring-1 ring-amber-200']">
-                                                {{ schedule.applicant_acknowledged ? `Applicant acknowledged ${schedule.applicant_acknowledged_at}` : 'Waiting for applicant acknowledgment' }}
+                                            <div class="rounded-md bg-sky-50 px-3 py-2.5 text-xs font-bold text-sky-800 ring-1 ring-sky-200 lg:col-span-2">
+                                                Applicant notified through the portal and email.
                                             </div>
                                         </div>
 
-                                        <div class="border-t border-slate-200 bg-slate-50 p-4">
+                                        <div class="border-t border-slate-200 bg-slate-50 p-3">
                                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Provider tracking</p>
                                             <div class="mt-3 grid gap-3 sm:grid-cols-2">
                                                 <select v-model="schedule.status" :class="inputClass" @change="handleScheduleStatusChange(schedule)">
@@ -1254,7 +1257,7 @@ onMounted(loadApplication);
                                                 </button>
                                             </div>
                                         </div>
-                                    </article>
+                                    </details>
                                 </div>
 
                                 <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">

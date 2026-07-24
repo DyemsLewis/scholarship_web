@@ -1128,6 +1128,8 @@ class AdminController extends Controller
             'provider_verification_status' => $scholarship->provider?->providerProfile?->verification_status,
             'status' => $scholarship->status,
             'image_url' => $this->scholarshipImageUrl($scholarship),
+            'benefits' => $scholarship->benefitPayload(),
+            'benefit_summary' => $scholarship->benefitSummary(),
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
             'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),

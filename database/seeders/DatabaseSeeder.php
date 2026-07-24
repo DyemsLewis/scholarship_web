@@ -182,7 +182,7 @@ class DatabaseSeeder extends Seeder
                     ...$common,
                     'image_path' => '/images/programs/tulay-aral-logo.png',
                     'category' => 'Financial assistance',
-                    'description' => 'A practical school support grant for Grade 11 and Grade 12 learners who need help with transportation, supplies, and connectivity.',
+                    'description' => 'A combined support package for Grade 11 and Grade 12 learners that includes a PHP 10,000 one-time cash grant and school supplies for transportation, learning materials, and connectivity.',
                     'eligibility' => 'Currently enrolled senior high school learner from Metro Manila or Rizal with a general average of at least 80% and a household income within the listed bracket.',
                     'eligible_education_levels' => 'senior_high_school',
                     'eligible_courses' => 'Any strand',
@@ -211,17 +211,32 @@ class DatabaseSeeder extends Seeder
                     'contact_email' => 'tulayaral@scholarship.test',
                     'contact_number' => '09171234567',
                 ],
+                'benefits' => [
+                    [
+                        'type' => 'cash_grant',
+                        'title' => 'School support grant',
+                        'amount' => 10000,
+                        'frequency' => 'one_time',
+                        'description' => 'Flexible assistance for transportation, supplies, and connectivity during the school year.',
+                    ],
+                    [
+                        'type' => 'school_supplies',
+                        'title' => 'School supplies support',
+                        'frequency' => 'one_time',
+                        'description' => 'Basic learning materials are provided during the release orientation, subject to availability.',
+                    ],
+                ],
                 'events' => [
                     [
                         'type' => 'distribution',
-                        'title' => 'Senior High Grant Release and Orientation',
+                        'title' => 'Senior High Benefit Release and Orientation',
                         'scheduled_at' => $deadline->copy()->addDays(20)->setTime(9, 0),
                         'mode' => 'onsite',
                         'venue' => 'Tulay Aral Community Desk',
                         'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
                         'latitude' => 14.6255000,
                         'longitude' => 121.1245000,
-                        'instructions' => 'Awarded learners should bring their school ID and enrollment proof. A parent or guardian may accompany a minor learner during orientation and release.',
+                        'instructions' => 'Approved learners should bring their school ID and enrollment proof to receive the cash grant and school supplies. A parent or guardian may accompany a minor learner during orientation and release.',
                     ],
                 ],
             ],
@@ -233,7 +248,7 @@ class DatabaseSeeder extends Seeder
                     'selection_stages' => ['screening', 'interview', 'distribution'],
                     'image_path' => '/images/programs/tulay-aral-logo.png',
                     'category' => 'Community grant',
-                    'description' => 'A one-time starter grant that helps incoming first-year college students pay for enrollment, books, and basic school materials.',
+                    'description' => 'A college-entry support package that combines a PHP 15,000 one-time cash grant with transition mentoring for enrollment, books, school materials, and first-year preparation.',
                     'eligibility' => 'Incoming first-year college learner from Metro Manila or Rizal with proof of admission, a general average of at least 85%, and availability for a short finalist interview.',
                     'eligible_education_levels' => "senior_high_school\ncollege",
                     'eligible_courses' => 'Any course',
@@ -262,6 +277,21 @@ class DatabaseSeeder extends Seeder
                     'contact_email' => 'tulayaral@scholarship.test',
                     'contact_number' => '09171234567',
                 ],
+                'benefits' => [
+                    [
+                        'type' => 'cash_grant',
+                        'title' => 'College starter grant',
+                        'amount' => 15000,
+                        'frequency' => 'one_time',
+                        'description' => 'One-time support for enrollment, books, and essential school materials.',
+                    ],
+                    [
+                        'type' => 'mentorship',
+                        'title' => 'College transition mentoring',
+                        'frequency' => 'one_time',
+                        'description' => 'Recipients join a short orientation and college-transition mentoring session.',
+                    ],
+                ],
                 'events' => [
                     [
                         'type' => 'interview',
@@ -272,18 +302,18 @@ class DatabaseSeeder extends Seeder
                         'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
                         'latitude' => 14.6255000,
                         'longitude' => 121.1245000,
-                        'instructions' => 'Shortlisted applicants should bring proof of admission and be ready to discuss their college plan and intended use of the grant.',
+                        'instructions' => 'Shortlisted applicants should bring proof of admission and be ready to discuss their college plan and intended use of the support package.',
                     ],
                     [
                         'type' => 'distribution',
-                        'title' => 'College Starter Grant Release',
+                        'title' => 'College Starter Benefit Release',
                         'scheduled_at' => $deadline->copy()->addDays(25)->setTime(10, 0),
                         'mode' => 'onsite',
                         'venue' => 'Tulay Aral Community Desk',
                         'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
                         'latitude' => 14.6255000,
                         'longitude' => 121.1245000,
-                        'instructions' => 'Awarded applicants should bring a valid school ID, current enrollment proof, and the signed grant acknowledgment form.',
+                        'instructions' => 'Approved applicants should bring a valid school ID, current enrollment proof, and the signed benefit acknowledgment form for the cash grant and mentoring orientation.',
                     ],
                 ],
             ],
@@ -294,7 +324,7 @@ class DatabaseSeeder extends Seeder
                     ...$common,
                     'image_path' => '/images/programs/bukas-kinabukasan-logo.png',
                     'category' => 'Community grant',
-                    'description' => 'School supply and learning-material assistance for elementary and junior high school learners from nearby communities.',
+                    'description' => 'A non-cash support package that provides school supplies, learning materials, and shared learning-device access for elementary and junior high school learners from nearby communities.',
                     'eligibility' => 'Currently enrolled elementary or junior high school learner from Laguna or Metro Manila whose parent or guardian can complete the application.',
                     'eligible_education_levels' => "elementary\njunior_high_school",
                     'eligible_courses' => 'Any',
@@ -312,27 +342,41 @@ class DatabaseSeeder extends Seeder
                         'Latest report card or grades',
                         'Parent or guardian valid ID',
                     ]),
-                    'award_amount' => 5000,
+                    'award_amount' => null,
                     'minimum_gwa' => null,
                     'minimum_grade_scale' => null,
                     'slots_available' => 40,
-                    'renewal_policy' => 'Assistance covers one school year. Families may apply again during the next intake.',
+                    'renewal_policy' => 'The non-cash support package covers one school year. Families may apply again during the next intake.',
                     'return_service_contract' => null,
                     'other_contract_terms' => 'A parent or guardian attends the release orientation and confirms receipt of school materials.',
                     'contact_email' => 'bukasfoundation@scholarship.test',
                     'contact_number' => '09172345678',
                 ],
+                'benefits' => [
+                    [
+                        'type' => 'school_supplies',
+                        'title' => 'School essentials package',
+                        'frequency' => 'one_time',
+                        'description' => 'A provider-prepared package of school supplies and learning materials for the current school year.',
+                    ],
+                    [
+                        'type' => 'device_support',
+                        'title' => 'Shared learning-device access',
+                        'frequency' => 'entire_program',
+                        'description' => 'Selected families may use learning devices at the community hub during scheduled hours.',
+                    ],
+                ],
                 'events' => [
                     [
                         'type' => 'distribution',
-                        'title' => 'School Essentials Family Release Day',
+                        'title' => 'School Essentials Package Release',
                         'scheduled_at' => $deadline->copy()->addDays(18)->setTime(10, 0),
                         'mode' => 'onsite',
                         'venue' => 'Bukas Kinabukasan Learning Hub',
                         'location_address' => 'Barangay Nueva, San Pedro City, Laguna',
                         'latitude' => 14.3595000,
                         'longitude' => 121.0473000,
-                        'instructions' => 'The parent or guardian should attend with a valid ID and the learner school ID or enrollment certificate to receive the school materials.',
+                        'instructions' => 'The parent or guardian should attend with a valid ID and the learner school ID or enrollment certificate to receive the school essentials package and device-access instructions.',
                     ],
                 ],
             ],
@@ -346,7 +390,7 @@ class DatabaseSeeder extends Seeder
                     'exam_duration_minutes' => 60,
                     'exam_passing_score' => 75,
                     'category' => 'STEM scholarship',
-                    'description' => 'A small competitive grant for senior high school STEM learners preparing for science, engineering, computing, or technology studies.',
+                    'description' => 'A competitive STEM support package combining a PHP 12,000 learning grant, an enrichment session, and pathway mentoring for senior high school learners preparing for science, engineering, computing, or technology studies.',
                     'eligibility' => 'Grade 11 or Grade 12 STEM learner from Laguna or Metro Manila with at least an 85% general average and availability for a qualifying exam and finalist interview.',
                     'eligible_education_levels' => 'senior_high_school',
                     'eligible_courses' => 'STEM',
@@ -369,11 +413,32 @@ class DatabaseSeeder extends Seeder
                     'minimum_gwa' => 85,
                     'minimum_grade_scale' => 'percentage',
                     'slots_available' => 20,
-                    'renewal_policy' => 'Renewal for the next school year depends on continued STEM enrollment, satisfactory progress, and available funding.',
+                    'renewal_policy' => 'Renewal of the support package for the next school year depends on continued STEM enrollment, satisfactory progress, and available funding.',
                     'return_service_contract' => null,
                     'other_contract_terms' => 'Finalists complete the provider-managed qualifying exam and interview. Recipients join one community learning session during the award period.',
                     'contact_email' => 'bukasfoundation@scholarship.test',
                     'contact_number' => '09172345678',
+                ],
+                'benefits' => [
+                    [
+                        'type' => 'cash_grant',
+                        'title' => 'STEM learning grant',
+                        'amount' => 12000,
+                        'frequency' => 'one_time',
+                        'description' => 'Financial support for STEM learning materials, projects, and school-related expenses.',
+                    ],
+                    [
+                        'type' => 'training',
+                        'title' => 'STEM enrichment session',
+                        'frequency' => 'one_time',
+                        'description' => 'Recipients join a provider-led STEM learning and career orientation session.',
+                    ],
+                    [
+                        'type' => 'mentorship',
+                        'title' => 'STEM pathway mentoring',
+                        'frequency' => 'entire_program',
+                        'description' => 'Recipients receive guidance on STEM study pathways during the award period.',
+                    ],
                 ],
                 'events' => [
                     [
@@ -400,14 +465,14 @@ class DatabaseSeeder extends Seeder
                     ],
                     [
                         'type' => 'distribution',
-                        'title' => 'STEM Pathways Award Release',
+                        'title' => 'STEM Pathways Benefit Package Release',
                         'scheduled_at' => $deadline->copy()->addDays(30)->setTime(10, 0),
                         'mode' => 'onsite',
                         'venue' => 'Bukas Kinabukasan Learning Hub',
                         'location_address' => 'Barangay Nueva, San Pedro City, Laguna',
                         'latitude' => 14.3595000,
                         'longitude' => 121.0473000,
-                        'instructions' => 'Awardees should bring a valid school ID, enrollment proof, and the signed scholarship acknowledgment form for release orientation.',
+                        'instructions' => 'Approved recipients should bring a valid school ID, enrollment proof, and the signed scholarship acknowledgment form for the learning grant, enrichment session, and mentoring orientation.',
                     ],
                 ],
             ],
@@ -418,6 +483,13 @@ class DatabaseSeeder extends Seeder
                 'provider_id' => $program['provider']->id,
                 'title' => $program['title'],
             ], $program['data']);
+
+            $scholarship->benefits()->delete();
+            $scholarship->benefits()->createMany(
+                collect($program['benefits'] ?? [])->values()->map(
+                    fn (array $benefit, int $index): array => [...$benefit, 'sort_order' => $index]
+                )->all()
+            );
 
             foreach ($program['events'] ?? [] as $eventData) {
                 $event = $scholarship->events()->updateOrCreate([

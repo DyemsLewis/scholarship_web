@@ -965,6 +965,12 @@ class ApplicantDashboardController extends Controller
         abort_unless($application->applicant_id === $request->user()->id, 403);
         abort_unless($schedule->scholarship_application_id === $application->id, 404);
 
+        if (! ApplicationSchedulePayload::requiresApplicantAcknowledgment($schedule)) {
+            return response()->json([
+                'message' => 'Schedules are delivered through portal and email notifications and do not require applicant acknowledgment.',
+            ], 422);
+        }
+
         if ($schedule->status !== 'scheduled') {
             return response()->json([
                 'message' => 'Only an active schedule can be acknowledged.',
@@ -1097,6 +1103,8 @@ class ApplicantDashboardController extends Controller
             'distance_km' => $distanceKm,
             'distance_label' => $distanceKm === null ? null : number_format($distanceKm, 1).' km away',
             'requirements' => $scholarship->requirements,
+            'benefits' => $scholarship->benefitPayload(),
+            'benefit_summary' => $scholarship->benefitSummary(),
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
             'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
@@ -1237,6 +1245,10 @@ class ApplicantDashboardController extends Controller
             'review_notes' => $application->review_notes,
             'decision_reason' => $application->decision_reason,
             'awarded_amount' => $application->awarded_amount,
+            'display_award_amount' => $application->awarded_amount ?? $application->scholarship?->award_amount,
+            'award_amount_source' => $application->awarded_amount !== null
+                ? 'application'
+                : ($application->scholarship?->award_amount !== null ? 'program' : null),
             'outcome_notes' => $application->outcome_notes,
             'outcome_at' => $application->outcome_at?->format('M d, Y'),
             'distribution_scheduled_for' => $application->distribution_scheduled_for?->format('M d, Y'),

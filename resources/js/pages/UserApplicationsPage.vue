@@ -6,7 +6,7 @@ import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { labelFromKey } from '../support/display';
-import { programEventForStage, progressStateLabel, selectionPlanFor } from '../support/selectionPlan';
+import { progressStateLabel, selectionPlanFor } from '../support/selectionPlan';
 
 const isLoading = ref(true);
 const isSubmitting = ref(false);
@@ -145,7 +145,7 @@ const activeApplicationCount = computed(() => applications.value.filter((applica
 ].includes(application.status ?? 'submitted')).length);
 const pendingScheduleCount = computed(() => applications.value.reduce(
     (total, application) => total + applicationSchedules(application)
-        .filter((schedule) => schedule.status === 'scheduled' && !schedule.applicant_acknowledged)
+        .filter((schedule) => scheduleNeedsAcknowledgmentValue(schedule))
         .length,
     0,
 ));
@@ -343,10 +343,22 @@ function applicationSchedules(application) {
     return Array.isArray(application?.schedules) ? application.schedules : [];
 }
 
+function scheduleRequiresAcknowledgment(schedule) {
+    return schedule?.requires_applicant_acknowledgment !== false;
+}
+
+function scheduleNeedsAcknowledgmentValue(schedule) {
+    return Boolean(
+        schedule?.status === 'scheduled'
+        && scheduleRequiresAcknowledgment(schedule)
+        && !schedule.applicant_acknowledged,
+    );
+}
+
 function primarySchedule(application) {
     const schedules = applicationSchedules(application);
     const unacknowledged = schedules.find(
-        (schedule) => schedule.status === 'scheduled' && !schedule.applicant_acknowledged,
+        (schedule) => scheduleNeedsAcknowledgmentValue(schedule),
     );
     const active = schedules.find((schedule) => schedule.status === 'scheduled');
 
@@ -356,7 +368,7 @@ function primarySchedule(application) {
 function scheduleNeedsAcknowledgment(application) {
     const schedule = primarySchedule(application);
 
-    return Boolean(schedule?.status === 'scheduled' && !schedule.applicant_acknowledged);
+    return scheduleNeedsAcknowledgmentValue(schedule);
 }
 
 function hasDistributionSchedule(application) {
@@ -404,10 +416,6 @@ function timelineStepClass(state) {
     }
 
     return 'border-slate-200 bg-white text-slate-500';
-}
-
-function applicationStepEvent(application, step) {
-    return programEventForStage(application?.scholarship, step?.key);
 }
 
 function matchClass(score) {
@@ -909,8 +917,8 @@ watch(selectedScholarship, (scholarship) => {
                                         </div>
                                         <div class="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
                                             <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
-                                                <p class="font-semibold text-slate-500">Award</p>
-                                                <p class="mt-1 font-bold text-slate-950">{{ formatAmount(selectedScholarship.award_amount) }}</p>
+                                                <p class="font-semibold text-slate-500">Benefits</p>
+                                                <p class="mt-1 font-bold text-slate-950">{{ selectedScholarship.benefit_summary || formatAmount(selectedScholarship.award_amount) }}</p>
                                             </div>
                                             <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                                 <p class="font-semibold text-slate-500">Deadline</p>
@@ -979,10 +987,10 @@ watch(selectedScholarship, (scholarship) => {
                                         </div>
                                         <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
                                             <p class="font-semibold text-slate-500">
-                                                Award
+                                                Benefits
                                             </p>
                                             <p class="mt-1 font-bold text-slate-950">
-                                                {{ formatAmount(selectedScholarship.award_amount) }}
+                                                {{ selectedScholarship.benefit_summary || formatAmount(selectedScholarship.award_amount) }}
                                             </p>
                                         </div>
                                         <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -1085,9 +1093,6 @@ watch(selectedScholarship, (scholarship) => {
                                                 <div class="min-w-0">
                                                     <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Step {{ index + 1 }}</p>
                                                     <p class="text-sm font-bold text-slate-800">{{ stage.label }}</p>
-                                                    <p :class="['mt-0.5 text-[11px] font-semibold', stage.event ? 'text-amber-700' : 'text-slate-400']">
-                                                        {{ stage.event?.scheduled_label || 'Date to be announced' }}
-                                                    </p>
                                                 </div>
                                             </div>
                                         </div>
@@ -1576,7 +1581,7 @@ watch(selectedScholarship, (scholarship) => {
                                                     </template>
                                                 </p>
                                                 <p v-if="primarySchedule(application).type === 'distribution'" class="mt-1 text-xs font-bold text-emerald-700">
-                                                    Award: {{ formatAmount(application.awarded_amount) }}
+                                                    Award: {{ formatAmount(application.display_award_amount ?? application.awarded_amount ?? application.scholarship?.award_amount) }}
                                                 </p>
                                             </div>
                                             <a
@@ -1634,9 +1639,6 @@ watch(selectedScholarship, (scholarship) => {
                                             >
                                                 <p>{{ step.label }}</p>
                                                 <p class="mt-0.5 text-[9px] uppercase tracking-[0.08em] opacity-70">{{ progressStateLabel(step.state) }}</p>
-                                                <p v-if="applicationStepEvent(application, step)" class="mt-1 text-[9px] font-semibold leading-3">
-                                                    {{ applicationStepEvent(application, step).scheduled_label }}
-                                                </p>
                                             </div>
                                         </div>
                                     </div>

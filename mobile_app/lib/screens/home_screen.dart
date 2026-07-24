@@ -2137,8 +2137,11 @@ class _ScholarshipCard extends StatelessWidget {
               runSpacing: 8,
               children: [
                 _InfoChip(
-                  icon: Icons.payments,
-                  label: moneyValue(scholarship['award_amount']),
+                  icon: Icons.card_giftcard,
+                  label: stringValue(
+                    scholarship['benefit_summary'],
+                    fallback: moneyValue(scholarship['award_amount']),
+                  ),
                 ),
                 _InfoChip(
                   icon: Icons.grade,
@@ -2440,8 +2443,11 @@ class _ScholarshipDetailScreenState extends State<_ScholarshipDetailScreen> {
                   runSpacing: 8,
                   children: [
                     _InfoChip(
-                      icon: Icons.payments,
-                      label: moneyValue(scholarship['award_amount']),
+                      icon: Icons.card_giftcard,
+                      label: stringValue(
+                        scholarship['benefit_summary'],
+                        fallback: moneyValue(scholarship['award_amount']),
+                      ),
                     ),
                     _InfoChip(
                       icon: Icons.grade,
@@ -2750,7 +2756,7 @@ class _ApplicationCard extends StatelessWidget {
         !schedules.any(
           (schedule) => stringValue(schedule['type']) == 'distribution',
         ) &&
-        (stringValue(application['awarded_amount']).isNotEmpty ||
+        (stringValue(application['display_award_amount']).isNotEmpty ||
             stringValue(application['distribution_scheduled_for']).isNotEmpty ||
             stringValue(application['distribution_instructions']).isNotEmpty ||
             [
@@ -2889,6 +2895,8 @@ class _ApplicationCard extends StatelessWidget {
                   initiallyExpanded: schedules.any(
                     (schedule) =>
                         stringValue(schedule['status']) == 'scheduled' &&
+                        schedule['requires_applicant_acknowledgment'] !=
+                            false &&
                         schedule['applicant_acknowledged'] != true,
                   ),
                   leading: const Icon(Icons.event_note_outlined),
@@ -2906,7 +2914,7 @@ class _ApplicationCard extends StatelessWidget {
                         padding: const EdgeInsets.only(top: 10),
                         child: _ApplicationScheduleCard(
                           schedule: schedule,
-                          awardedAmount: application['awarded_amount'],
+                          awardedAmount: application['display_award_amount'],
                           isAcknowledging:
                               acknowledgingScheduleId ==
                               intValue(schedule['id']),
@@ -2946,7 +2954,7 @@ class _ApplicationCard extends StatelessWidget {
                         _InfoChip(
                           icon: Icons.payments_outlined,
                           label: stringValue(
-                            application['awarded_amount'],
+                            application['display_award_amount'],
                             fallback: 'Amount not listed',
                           ),
                         ),
@@ -3039,6 +3047,8 @@ class _ApplicationScheduleCard extends StatelessWidget {
       fallback: 'pending',
     );
     final isAcknowledged = schedule['applicant_acknowledged'] == true;
+    final requiresAcknowledgment =
+        schedule['requires_applicant_acknowledgment'] != false;
     final mapUrl = stringValue(schedule['map_url']);
     final onlineUrl = stringValue(schedule['online_url']);
     final venue = stringValue(schedule['venue']);
@@ -3129,18 +3139,65 @@ class _ApplicationScheduleCard extends StatelessWidget {
           ),
           if (venue.isNotEmpty || address.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text(
-              venue.isNotEmpty ? venue : 'Activity site',
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-            if (address.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 3),
-                child: Text(
-                  address,
-                  style: const TextStyle(color: Color(0xFF64748B)),
-                ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(top: 1),
+                    child: Icon(
+                      Icons.location_on,
+                      color: Color(0xFFB45309),
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'ADDRESS',
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.7,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          address.isNotEmpty ? address : venue,
+                          style: const TextStyle(
+                            color: Color(0xFF1E293B),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            height: 1.3,
+                          ),
+                        ),
+                        if (address.isNotEmpty && venue.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            venue,
+                            style: const TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
           if (instructions.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -3171,7 +3228,7 @@ class _ApplicationScheduleCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 10),
-          if (isAcknowledged)
+          if (requiresAcknowledgment && isAcknowledged)
             Row(
               children: [
                 const Icon(
@@ -3191,6 +3248,36 @@ class _ApplicationScheduleCard extends StatelessWidget {
                   ),
                 ),
               ],
+            )
+          else if (!requiresAcknowledgment)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F9FF),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: const Color(0xFFBAE6FD)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.mark_email_read_outlined,
+                    color: Color(0xFF0369A1),
+                    size: 19,
+                  ),
+                  SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'Sent by email and portal. No confirmation is required.',
+                      style: TextStyle(
+                        color: Color(0xFF075985),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             )
           else if (status == 'scheduled')
             SizedBox(

@@ -15,6 +15,7 @@ use App\Models\ScholarshipEvent;
 use App\Models\ScholarshipFunnelEvent;
 use App\Models\User;
 use App\Services\DecisionSupportService;
+use App\Services\ScholarshipBenefitService as SB;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationDecisionReason;
@@ -1423,6 +1424,7 @@ class ProviderController extends Controller
         $duplicate->provider_terms_accepted_at = now();
         $duplicate->provider_terms_version = Terms::VERSION;
         $duplicate->save();
+        app(SB::class)->copy($scholarship, $duplicate);
         $duplicate->loadCount('bookmarks');
 
         ActivityLog::record(
@@ -1449,6 +1451,7 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
         $validated = $this->normalizeScholarshipExamDetails($validated);
+        [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request);
         $imagePath = $this->storeScholarshipImage($request);
 
@@ -1457,7 +1460,7 @@ class ProviderController extends Controller
         $validated['provider_terms_accepted_at'] = now();
         $validated['provider_terms_version'] = Terms::VERSION;
 
-        $scholarship = DB::transaction(function () use ($validated, $imagePath, $programEvents, $request): Scholarship {
+        $scholarship = DB::transaction(function () use ($validated, $imagePath, $programEvents, $benefits, $request): Scholarship {
             $scholarship = Scholarship::create([
                 ...$validated,
                 'image_path' => $imagePath,
@@ -1467,6 +1470,8 @@ class ProviderController extends Controller
             foreach ($programEvents ?? [] as $programEvent) {
                 $this->persistScholarshipEvent($scholarship, $programEvent, $request->user());
             }
+
+            app(SB::class)->sync($scholarship, $benefits);
 
             return $scholarship;
         });
@@ -1502,6 +1507,7 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipExamDetails($validated);
+        [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request, $scholarship);
         $imagePath = $this->storeScholarshipImage($request, $scholarship);
 
@@ -1513,8 +1519,9 @@ class ProviderController extends Controller
             $validated['image_path'] = $imagePath;
         }
 
-        $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status'], $validated);
-        DB::transaction(function () use ($scholarship, $validated, $programEvents, $request): void {
+        $benefitsChanged = $benefits !== null && app(SB::class)->changed($scholarship, $benefits);
+        $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status'], $validated, $benefitsChanged);
+        DB::transaction(function () use ($scholarship, $validated, $programEvents, $benefits, $request): void {
             $scholarship->update($validated);
             $scholarship->events()
                 ->whereNotIn('type', ScholarshipSelectionPlan::normalize($scholarship->selection_stages))
@@ -1523,6 +1530,8 @@ class ProviderController extends Controller
             foreach ($programEvents ?? [] as $programEvent) {
                 $this->persistScholarshipEvent($scholarship, $programEvent, $request->user());
             }
+
+            app(SB::class)->sync($scholarship, $benefits);
         });
 
         if ($scholarship->status === 'pending_review') {
@@ -1567,6 +1576,7 @@ class ProviderController extends Controller
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'requirements' => ['nullable', 'string', 'max:5000'],
             'award_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
+            'benefits' => ['nullable', 'string', 'max:20000', 'json'],
             'minimum_gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'minimum_grade_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
             'slots_available' => ['nullable', 'integer', 'min:0', 'max:1000000'],
@@ -1749,10 +1759,10 @@ class ProviderController extends Controller
         ];
     }
 
-    private function providerScholarshipStatus(Scholarship $scholarship, string $requestedStatus, array $validated): string
+    private function providerScholarshipStatus(Scholarship $scholarship, string $requestedStatus, array $validated, bool $benefitsChanged = false): string
     {
         if ($requestedStatus === 'published' && $scholarship->status === 'published') {
-            return $this->scholarshipHasReviewableChanges($scholarship, $validated)
+            return $benefitsChanged || $this->scholarshipHasReviewableChanges($scholarship, $validated)
                 ? 'pending_review'
                 : 'published';
         }
@@ -2076,6 +2086,8 @@ class ProviderController extends Controller
             'embed_map_url' => $this->embedMapUrl($scholarship),
             'requirements' => $scholarship->requirements,
             'review_rubric' => $scholarship->review_rubric ?? [],
+            'benefits' => $scholarship->benefitPayload(),
+            'benefit_summary' => $scholarship->benefitSummary(),
             'award_amount' => $scholarship->award_amount,
             'minimum_gwa' => $scholarship->minimum_gwa,
             'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),

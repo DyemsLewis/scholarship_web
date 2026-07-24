@@ -4,6 +4,7 @@ import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import { labelFromKey } from '../support/display';
 import { selectionPlanFor } from '../support/selectionPlan';
 
@@ -132,10 +133,10 @@ const keyFacts = computed(() => {
 
     return [
         {
-            icon: 'fa-solid fa-peso-sign',
-            label: 'Award',
-            value: formatAmount(current.award_amount),
-            detail: 'Financial support listed by the provider',
+            icon: 'fa-solid fa-gift',
+            label: 'Benefits',
+            value: current.benefit_summary || formatAmount(current.award_amount),
+            detail: 'Cash and non-cash support listed by the provider',
         },
         {
             icon: 'fa-regular fa-calendar',
@@ -577,6 +578,13 @@ onMounted(loadScholarship);
 
                     <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
                         <section class="space-y-5">
+                            <article v-if="scholarship.benefits?.length" class="student-card p-5 sm:p-6">
+                                <p class="student-kicker">Support package</p>
+                                <h2 class="mt-1 text-xl font-bold text-slate-950">What recipients receive</h2>
+                                <p class="mt-1 text-sm text-slate-500">Financial and non-cash support included by the provider.</p>
+                                <ScholarshipBenefitsPanel class="mt-5" :benefits="scholarship.benefits" />
+                            </article>
+
                             <article id="eligibility" class="student-card scroll-mt-6 p-5 sm:p-6">
                                 <div class="student-section-head">
                                     <div class="flex items-start gap-3">

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import { labelFromKey } from '../support/display';
 
 const appElement = document.getElementById('app');
@@ -75,7 +76,7 @@ const summaryFacts = computed(() => {
     const current = scholarship.value ?? {};
 
     return [
-        { label: 'Award', value: formatAmount(current.award_amount) },
+        { label: 'Benefits', value: current.benefit_summary || formatAmount(current.award_amount) },
         { label: 'Deadline', value: current.deadline || 'Not specified' },
         { label: 'Available slots', value: current.slots_available ?? 'Not specified' },
         { label: 'Application', value: applicationModeLabel(current.application_mode) },
@@ -443,6 +444,13 @@ onMounted(loadScholarship);
                                     <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ fact.value }}</dd>
                                 </div>
                             </dl>
+                        </article>
+
+                        <article v-if="scholarship.benefits?.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Benefit package</p>
+                            <h3 class="mt-1 text-xl font-bold text-slate-950">Support offered to recipients</h3>
+                            <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that every cash and non-cash benefit is clear before publishing.</p>
+                            <ScholarshipBenefitsPanel class="mt-4" :benefits="scholarship.benefits" />
                         </article>
 
                         <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

@@ -86,8 +86,6 @@ class AuthController extends Controller
             $user->studentProfile()->create($profile);
         }
 
-        Auth::login($user);
-        $request->session()->regenerate();
         $emailVerificationSent = $this->sendVerificationEmail($user, $request);
         $this->syncEmailVerificationReminder($user, $emailVerificationSent);
         ActivityLog::record(
@@ -99,12 +97,11 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => $emailVerificationSent
-                ? 'Registration complete. We sent a verification link to your email.'
-                : 'Registration complete. You are signed in, but the verification email could not be sent yet.',
-            'redirect' => $user->isProvider() ? '/provider' : '/dashboard',
+                ? 'Registration complete. Check your email for the verification link, then sign in.'
+                : 'Registration complete. Sign in to resend the verification email.',
+            'redirect' => '/login?registered=1&verification_sent='.($emailVerificationSent ? '1' : '0'),
             'email_verified' => $user->hasVerifiedEmail(),
             'email_verification_sent' => $emailVerificationSent,
-            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ], 201);
     }
 

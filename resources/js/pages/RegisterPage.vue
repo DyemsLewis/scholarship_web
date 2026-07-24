@@ -38,14 +38,8 @@ const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py
 const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-center text-slate-900 uppercase outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const toggleButtonClass = 'absolute inset-y-0 right-2 my-auto h-9 rounded-md px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900';
 const primaryButtonClass = 'w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80';
-const secondaryButtonClass = 'rounded-md border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100';
 
 const isSubmitting = ref(false);
-const isResendingVerification = ref(false);
-const isRegistered = ref(false);
-const emailVerified = ref(false);
-const emailVerificationSent = ref(false);
-const nextUrl = ref('/');
 const showPassword = ref(false);
 const toast = ref({
     show: false,
@@ -95,7 +89,7 @@ const shellCopy = computed(() => {
                 'Keep one contact person connected to the account.',
                 'Manage programs from a separate provider dashboard.',
             ],
-            panelNote: 'After registration, provider accounts continue directly to the provider workspace.',
+            panelNote: 'After registration, return to login and sign in with the provider account.',
         };
     }
 
@@ -109,9 +103,9 @@ const shellCopy = computed(() => {
         panelHighlights: [
             'Create a scholarship applicant account.',
             'Keep your basic profile details ready.',
-            'Continue setup or browse the web after registration.',
+            'Continue setup or browse the web after signing in.',
         ],
-        panelNote: 'After registration, you can finish account setup or check out the web while signed in.',
+        panelNote: 'After registration, return to login and sign in with the applicant account.',
     };
 });
 
@@ -186,36 +180,12 @@ async function submitForm() {
 
     try {
         const response = await window.axios.post('/register', payload);
-        const message = response.data.message ?? 'Registration complete.';
-
-        nextUrl.value = response.data.redirect ?? '/';
-        emailVerified.value = Boolean(response.data.email_verified);
-        emailVerificationSent.value = Boolean(response.data.email_verification_sent);
-        isRegistered.value = true;
-        showToast('success', 'Registration complete', message);
+        window.location.href = response.data.redirect ?? '/login?registered=1';
     } catch (error) {
         const message = error.response?.data?.message ?? 'Registration failed. Check your details and try again.';
         showToast('error', 'Registration failed', message);
     } finally {
         isSubmitting.value = false;
-    }
-}
-
-async function resendVerificationEmail() {
-    isResendingVerification.value = true;
-
-    try {
-        const response = await window.axios.post('/email/verification-notification');
-        const message = response.data.message ?? 'Verification email sent.';
-
-        emailVerified.value = Boolean(response.data.email_verified);
-        emailVerificationSent.value = Boolean(response.data.email_verification_sent);
-        showToast(emailVerified.value || emailVerificationSent.value ? 'success' : 'error', 'Email verification', message);
-    } catch (error) {
-        const message = error.response?.data?.message ?? 'Unable to resend the verification email.';
-        showToast('error', 'Email verification failed', message);
-    } finally {
-        isResendingVerification.value = false;
     }
 }
 
@@ -248,50 +218,7 @@ onBeforeUnmount(() => {
             @close="closeToast"
         />
 
-        <div v-if="isRegistered" class="space-y-4">
-            <div v-if="!emailVerified" class="rounded-md border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-slate-700">
-                <p class="font-bold text-slate-950">
-                    Verify your email address
-                </p>
-                <p class="mt-1 leading-6">
-                    Check the inbox for {{ form.email }} and open the verification link. You can still explore the portal, but verification helps secure the account and future notifications.
-                </p>
-                <button
-                    type="button"
-                    :disabled="isResendingVerification"
-                    class="mt-3 rounded-md border border-amber-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-70"
-                    @click="resendVerificationEmail"
-                >
-                    {{ isResendingVerification ? 'Sending...' : 'Resend verification email' }}
-                </button>
-            </div>
-
-            <div v-if="isProviderRegistration">
-                <a
-                    :href="nextUrl"
-                    class="block rounded-md bg-slate-900 px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                >
-                    Open provider dashboard
-                </a>
-            </div>
-
-            <div v-else class="grid gap-3 sm:grid-cols-2">
-                <a
-                    href="/account/setup"
-                    class="rounded-md bg-slate-900 px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                >
-                    Finish account setup
-                </a>
-                <a
-                    :href="nextUrl"
-                    :class="secondaryButtonClass"
-                >
-                    Check out the web
-                </a>
-            </div>
-        </div>
-
-        <form v-else ref="formElement" class="space-y-5" @submit.prevent="submitForm">
+        <form ref="formElement" class="space-y-5" @submit.prevent="submitForm">
             <div v-if="isProviderRegistration" class="rounded-md border border-slate-200 bg-slate-50 p-4">
                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                     Provider Details

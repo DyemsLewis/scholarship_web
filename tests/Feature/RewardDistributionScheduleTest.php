@@ -21,6 +21,7 @@ class RewardDistributionScheduleTest extends TestCase
             'provider_id' => $provider->id,
             'title' => 'Scheduled Reward Scholarship',
             'description' => 'Used to verify provider-managed reward distribution.',
+            'award_amount' => 25000,
             'status' => 'published',
         ]);
         $application = ScholarshipApplication::create([
@@ -29,6 +30,13 @@ class RewardDistributionScheduleTest extends TestCase
             'status' => 'approved',
             'submitted_at' => now(),
         ]);
+
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.awarded_amount', null)
+            ->assertJsonPath('application.display_award_amount', '25000.00')
+            ->assertJsonPath('application.award_amount_source', 'program');
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/status", [
@@ -69,6 +77,8 @@ class RewardDistributionScheduleTest extends TestCase
             ->getJson("/dashboard/applications/{$application->id}/data")
             ->assertOk()
             ->assertJsonPath('application.status', 'distribution_scheduled')
+            ->assertJsonPath('application.display_award_amount', '40000.00')
+            ->assertJsonPath('application.award_amount_source', 'application')
             ->assertJsonPath('application.requires_student_response', false)
             ->assertJsonPath('application.can_respond', false)
             ->assertJsonPath('application.distribution_scheduled_for', now()->addWeek()->format('M d, Y'));

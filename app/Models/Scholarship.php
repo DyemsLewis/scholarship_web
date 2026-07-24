@@ -81,6 +81,50 @@ class Scholarship extends Model
         return $this->hasMany(ScholarshipEvent::class);
     }
 
+    public function benefits(): HasMany
+    {
+        return $this->hasMany(ScholarshipBenefit::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function benefitPayload(): array
+    {
+        $this->loadMissing('benefits');
+        $benefits = $this->benefits
+            ->map(fn (ScholarshipBenefit $benefit): array => $benefit->programPayload())
+            ->values()
+            ->all();
+
+        if ($benefits !== [] || $this->award_amount === null) {
+            return $benefits;
+        }
+
+        return [ScholarshipBenefit::payloadFromValues(
+            'cash_grant',
+            'Cash grant',
+            $this->award_amount,
+            null,
+            'one_time',
+            null,
+        )];
+    }
+
+    public function benefitSummary(): string
+    {
+        $benefits = collect($this->benefitPayload());
+
+        if ($benefits->isEmpty()) {
+            return 'Benefits not specified';
+        }
+
+        $summary = $benefits
+            ->take(2)
+            ->pluck('display_summary')
+            ->implode(' + ');
+        $remaining = $benefits->count() - 2;
+
+        return $remaining > 0 ? $summary.' + '.$remaining.' more' : $summary;
+    }
+
     public function bookmarks(): HasMany
     {
         return $this->hasMany(ScholarshipBookmark::class);

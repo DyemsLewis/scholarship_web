@@ -36,8 +36,8 @@ const scheduledActivities = computed(() => applications.value
         .filter((schedule) => schedule.status === 'scheduled')
         .map((schedule) => ({ application, schedule })))
     .sort((first, second) => {
-        const firstNeedsConfirmation = Number(!first.schedule.applicant_acknowledged);
-        const secondNeedsConfirmation = Number(!second.schedule.applicant_acknowledged);
+        const firstNeedsConfirmation = Number(scheduleNeedsAcknowledgment(first.schedule));
+        const secondNeedsConfirmation = Number(scheduleNeedsAcknowledgment(second.schedule));
 
         if (firstNeedsConfirmation !== secondNeedsConfirmation) {
             return secondNeedsConfirmation - firstNeedsConfirmation;
@@ -69,7 +69,7 @@ const priorityAction = computed(() => {
         const { application, schedule } = entry;
         const scholarshipTitle = application.scholarship?.title || 'Scholarship application';
         const providerName = application.scholarship?.provider?.name || 'Scholarship provider';
-        const requiresAttention = !schedule.applicant_acknowledged;
+        const requiresAttention = scheduleNeedsAcknowledgment(schedule);
         const meta = [
             { icon: 'fa-regular fa-calendar', label: schedule.scheduled_label || 'Date pending' },
             { icon: 'fa-solid fa-location-dot', label: scheduleModeLabel(schedule.mode) },
@@ -80,7 +80,12 @@ const priorityAction = computed(() => {
         }
 
         if (schedule.type === 'distribution') {
-            meta.push({ icon: 'fa-solid fa-peso-sign', label: formatAwardAmount(application.awarded_amount) });
+            meta.push({
+                icon: 'fa-solid fa-peso-sign',
+                label: formatAwardAmount(application.display_award_amount
+                    ?? application.awarded_amount
+                    ?? application.scholarship?.award_amount),
+            });
         }
 
         return {
@@ -90,7 +95,9 @@ const priorityAction = computed(() => {
             detail: `${scholarshipTitle} from ${providerName}.`,
             prompt: requiresAttention
                 ? 'Read the instructions and confirm that you saw the schedule.'
-                : 'Your confirmation is recorded. Keep the schedule details available.',
+                : (scheduleRequiresAcknowledgment(schedule)
+                    ? 'Your confirmation is recorded. Keep the schedule details available.'
+                    : 'This update was sent through the portal and email. Keep the schedule details available.'),
             href: application.detail_url || `/dashboard/applications/${application.id}`,
             button: requiresAttention ? 'Review and confirm' : 'View schedule',
             icon: scheduleTypeIcon(schedule.type),
@@ -214,7 +221,7 @@ const reminders = computed(() => {
     const currentScheduleId = nextScheduledActivity.value?.schedule.id;
 
     scheduledActivities.value
-        .filter((entry) => !entry.schedule.applicant_acknowledged && entry.schedule.id !== currentScheduleId)
+        .filter((entry) => scheduleNeedsAcknowledgment(entry.schedule) && entry.schedule.id !== currentScheduleId)
         .slice(0, 2)
         .forEach((entry) => items.push({
             key: `schedule-${entry.schedule.id}`,
@@ -281,10 +288,22 @@ function applicationSchedules(application) {
     return Array.isArray(application?.schedules) ? application.schedules : [];
 }
 
+function scheduleRequiresAcknowledgment(schedule) {
+    return schedule?.requires_applicant_acknowledgment !== false;
+}
+
+function scheduleNeedsAcknowledgment(schedule) {
+    return Boolean(
+        schedule?.status === 'scheduled'
+        && scheduleRequiresAcknowledgment(schedule)
+        && !schedule.applicant_acknowledged,
+    );
+}
+
 function activeSchedule(application) {
     const schedules = applicationSchedules(application);
     const unacknowledged = schedules.find(
-        (schedule) => schedule.status === 'scheduled' && !schedule.applicant_acknowledged,
+        (schedule) => scheduleNeedsAcknowledgment(schedule),
     );
 
     return unacknowledged ?? schedules.find((schedule) => schedule.status === 'scheduled') ?? null;
@@ -297,7 +316,7 @@ function isClosedApplication(application) {
 function applicationPriority(application) {
     const schedule = activeSchedule(application);
 
-    if (schedule && !schedule.applicant_acknowledged) {
+    if (scheduleNeedsAcknowledgment(schedule)) {
         return 100;
     }
 
@@ -331,9 +350,9 @@ function applicationNextAction(application) {
     const schedule = activeSchedule(application);
 
     if (schedule) {
-        return schedule.applicant_acknowledged
-            ? `Follow the ${scheduleTypeLabel(schedule.type).toLowerCase()} instructions for ${schedule.scheduled_label}.`
-            : `Review and confirm the ${scheduleTypeLabel(schedule.type).toLowerCase()} schedule.`;
+        return scheduleNeedsAcknowledgment(schedule)
+            ? `Review and confirm the ${scheduleTypeLabel(schedule.type).toLowerCase()} schedule.`
+            : `Follow the ${scheduleTypeLabel(schedule.type).toLowerCase()} instructions for ${schedule.scheduled_label}.`;
     }
 
     const missingDocuments = application?.document_readiness?.missing?.length ?? 0;
@@ -626,9 +645,9 @@ onMounted(loadDashboard);
                                             v-if="activeSchedule(application)"
                                             :class="[
                                                 'mt-3 flex flex-col gap-2 rounded-md border px-3 py-2.5 text-xs sm:flex-row sm:items-center sm:justify-between',
-                                                activeSchedule(application).applicant_acknowledged
-                                                    ? 'border-slate-200 bg-white text-slate-700'
-                                                    : 'border-amber-200 bg-amber-50 text-amber-900',
+                                                scheduleNeedsAcknowledgment(activeSchedule(application))
+                                                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                                    : 'border-slate-200 bg-white text-slate-700',
                                             ]"
                                         >
                                             <div class="flex min-w-0 items-center gap-2">
@@ -638,7 +657,9 @@ onMounted(loadDashboard);
                                                 </span>
                                             </div>
                                             <span class="shrink-0 font-bold">
-                                                {{ activeSchedule(application).applicant_acknowledged ? 'Confirmed' : 'Confirmation needed' }}
+                                                {{ scheduleNeedsAcknowledgment(activeSchedule(application))
+                                                    ? 'Confirmation needed'
+                                                    : (scheduleRequiresAcknowledgment(activeSchedule(application)) ? 'Confirmed' : 'Notification sent') }}
                                             </span>
                                         </div>
 

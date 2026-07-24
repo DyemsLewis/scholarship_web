@@ -24,7 +24,7 @@ class ApplicationScheduleWorkflowTest extends TestCase
         $this->seed();
     }
 
-    public function test_provider_can_announce_interview_and_applicant_can_acknowledge_it(): void
+    public function test_provider_can_announce_interview_without_applicant_acknowledgment(): void
     {
         $provider = User::query()->where('email', 'tulayaral@scholarship.test')->firstOrFail();
         $applicant = User::query()->where('email', 'student@scholarship.test')->firstOrFail();
@@ -52,6 +52,7 @@ class ApplicationScheduleWorkflowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('application.status', 'interview')
             ->assertJsonPath('application.schedules.0.type', 'interview')
+            ->assertJsonPath('application.schedules.0.requires_applicant_acknowledgment', false)
             ->assertJsonPath('application.schedules.0.applicant_acknowledged', false);
 
         $schedule = ApplicationSchedule::query()->firstOrFail();
@@ -60,6 +61,7 @@ class ApplicationScheduleWorkflowTest extends TestCase
             ->getJson('/dashboard/data')
             ->assertOk()
             ->assertJsonPath('applications.0.schedules.0.id', $schedule->id)
+            ->assertJsonPath('applications.0.schedules.0.requires_applicant_acknowledgment', false)
             ->assertJsonPath('applications.0.schedules.0.applicant_acknowledged', false);
 
         $this->actingAs($applicant)
@@ -74,12 +76,14 @@ class ApplicationScheduleWorkflowTest extends TestCase
 
         $this->actingAs($applicant)
             ->patchJson("/dashboard/applications/{$application->id}/schedules/{$schedule->id}/acknowledge")
-            ->assertOk()
-            ->assertJsonPath('schedule.applicant_acknowledged', true)
-            ->assertJsonPath('application.schedules.0.applicant_acknowledged', true);
+            ->assertUnprocessable()
+            ->assertJsonPath(
+                'message',
+                'Schedules are delivered through portal and email notifications and do not require applicant acknowledgment.',
+            );
 
-        $this->assertNotNull($schedule->fresh()->applicant_acknowledged_at);
-        $this->assertTrue(PortalNotification::query()
+        $this->assertNull($schedule->fresh()->applicant_acknowledged_at);
+        $this->assertFalse(PortalNotification::query()
             ->where('user_id', $provider->id)
             ->where('type', 'schedule_acknowledged')
             ->exists());
@@ -182,13 +186,20 @@ class ApplicationScheduleWorkflowTest extends TestCase
             ->postJson("/provider/applications/{$application->id}/schedules", $payload)
             ->assertOk()
             ->assertJsonPath('application.status', 'distribution_scheduled')
-            ->assertJsonPath('application.awarded_amount', '10000.00');
+            ->assertJsonPath('application.awarded_amount', '10000.00')
+            ->assertJsonPath('schedule.requires_applicant_acknowledgment', false);
 
         $schedule = ApplicationSchedule::query()->firstOrFail();
 
         $this->actingAs($applicant)
             ->patchJson("/dashboard/applications/{$application->id}/schedules/{$schedule->id}/acknowledge")
-            ->assertOk();
+            ->assertUnprocessable()
+            ->assertJsonPath(
+                'message',
+                'Schedules are delivered through portal and email notifications and do not require applicant acknowledgment.',
+            );
+
+        $this->assertNull($schedule->fresh()->applicant_acknowledged_at);
 
         $payload['awarded_amount'] = 12000;
 
@@ -196,6 +207,7 @@ class ApplicationScheduleWorkflowTest extends TestCase
             ->postJson("/provider/applications/{$application->id}/schedules", $payload)
             ->assertOk()
             ->assertJsonPath('application.awarded_amount', '12000.00')
+            ->assertJsonPath('schedule.requires_applicant_acknowledgment', false)
             ->assertJsonPath('schedule.applicant_acknowledged', false);
 
         $this->actingAs($otherProvider)
@@ -223,7 +235,7 @@ class ApplicationScheduleWorkflowTest extends TestCase
         ]);
     }
 
-    public function test_mobile_app_receives_and_acknowledges_an_active_schedule(): void
+    public function test_mobile_app_receives_an_active_schedule_without_acknowledgment(): void
     {
         $provider = User::query()->where('email', 'tulayaral@scholarship.test')->firstOrFail();
         $applicant = User::query()->where('email', 'student@scholarship.test')->firstOrFail();
@@ -261,14 +273,17 @@ class ApplicationScheduleWorkflowTest extends TestCase
             ->getJson('/api/mobile/profile')
             ->assertOk()
             ->assertJsonPath('applications.0.schedules.0.id', $schedule->id)
+            ->assertJsonPath('applications.0.schedules.0.requires_applicant_acknowledgment', false)
             ->assertJsonPath('applications.0.schedules.0.applicant_acknowledged', false);
 
         $this->withToken($plainToken)
             ->patchJson("/api/mobile/applications/{$application->id}/schedules/{$schedule->id}/acknowledge")
-            ->assertOk()
-            ->assertJsonPath('schedule.applicant_acknowledged', true)
-            ->assertJsonPath('application.schedules.0.applicant_acknowledged', true);
+            ->assertUnprocessable()
+            ->assertJsonPath(
+                'message',
+                'Schedules are delivered through portal and email notifications and do not require applicant acknowledgment.',
+            );
 
-        $this->assertNotNull($schedule->fresh()->applicant_acknowledged_at);
+        $this->assertNull($schedule->fresh()->applicant_acknowledged_at);
     }
 }

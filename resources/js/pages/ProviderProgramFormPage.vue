@@ -1,11 +1,13 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import ProgramBenefitsEditor from '../components/ProgramBenefitsEditor.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import { cashGrantAmount, normalizeScholarshipBenefits as normalizeBenefits } from '../support/scholarshipBenefits';
 
 const scholarshipId = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit$/)?.[1] ?? null;
 const isEditMode = computed(() => Boolean(scholarshipId));
@@ -20,7 +22,14 @@ const imageFile = ref(null);
 const imagePreviewUrl = ref('');
 const providerLocationMessage = ref('');
 const providerAddressLookupTrigger = ref(0);
-const activeFormSection = ref('basics');
+const activeFormSection = ref('overview');
+const showAudienceDetails = ref(false);
+const showProcessSchedules = ref(false);
+const showProgramTerms = ref(false);
+const showLocationMap = ref(false);
+const showDocumentChooser = ref(false);
+const customizeRubric = ref(false);
+const selectedTargetPresetKey = ref('');
 const {
     confirmation,
     requestConfirmation,
@@ -30,19 +39,21 @@ const {
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full min-w-0 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
-const sectionCardClass = 'rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5';
-const fieldCardClass = 'min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm';
+const sectionCardClass = 'rounded-lg border border-slate-200 bg-slate-50/70 p-4 sm:p-5';
+const fieldCardClass = 'min-w-0 rounded-md border border-slate-200 bg-white p-4';
 const fieldStackClass = `${fieldCardClass} flex flex-col`;
-const basicFieldStackClass = `${fieldStackClass} min-h-32`;
+const basicFieldStackClass = fieldStackClass;
 const wideFieldStackClass = `${fieldStackClass} xl:col-span-2`;
 const formGridClass = 'grid items-stretch gap-4 md:grid-cols-2';
 const formSections = [
-    { id: 'basics', label: 'Basics', help: 'Name, logo, amount, and review action.' },
-    { id: 'workflow', label: 'Process', help: 'Selection stages, planned dates, contact, and award terms.' },
-    { id: 'target', label: 'Target', help: 'Who can match with this program.' },
-    { id: 'location', label: 'Location', help: 'Address and map pin.' },
-    { id: 'documents', label: 'Docs', help: 'Required files.' },
-    { id: 'rubric', label: 'Review', help: 'Consistent provider scoring criteria.' },
+    { id: 'overview', label: 'Overview', help: 'Name and describe the program.' },
+    { id: 'offer', label: 'Offer', help: 'Set the benefits, deadline, and submission method.' },
+    { id: 'audience', label: 'Applicants', help: 'Choose who the program is intended for.' },
+    { id: 'process', label: 'Process', help: 'Choose the review stages and contact channel.' },
+    { id: 'location', label: 'Location', help: 'Add an address and optional map pin.' },
+    { id: 'documents', label: 'Documents', help: 'Start with common files, then adjust if needed.' },
+    { id: 'scoring', label: 'Scoring', help: 'Use the standard rubric or customize it.' },
+    { id: 'finish', label: 'Finish', help: 'Review readiness and choose what happens next.' },
 ];
 const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
 const incomeOptions = ['Any', 'Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
@@ -443,6 +454,9 @@ const allDocumentRequirements = computed(() => [...new Set([
 const selectedRequirementCount = computed(() => allDocumentRequirements.value.length);
 const rubricWeightTotal = computed(() => scholarshipForm.value.reviewRubric
     .reduce((total, criterion) => total + Number(criterion.weight || 0), 0));
+const reviewRubricReady = computed(() => scholarshipForm.value.reviewRubric.length > 0
+    && scholarshipForm.value.reviewRubric.every((criterion) => hasText(criterion.label))
+    && rubricWeightTotal.value === 100);
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 const scholarshipImagePreview = computed(() => imagePreviewUrl.value || scholarshipForm.value.imageUrl || '/uploads/scholarship-default.jpg');
 const scholarshipFormMapAddress = computed(() => {
@@ -476,16 +490,24 @@ const academicRequirementInputMax = computed(() => scholarshipForm.value.minimum
 const academicRequirementInputStep = computed(() => scholarshipForm.value.minimumGradeScale === 'grade_point' ? '0.01' : '0.01');
 const programReadinessItems = computed(() => [
     {
-        label: 'Basic program details',
+        label: 'Program overview',
+        section: 'overview',
         complete: hasText(scholarshipForm.value.title)
             && hasText(scholarshipForm.value.category)
-            && hasText(scholarshipForm.value.description)
-            && hasText(scholarshipForm.value.awardAmount)
-            && hasText(scholarshipForm.value.deadline),
-        help: 'Title, category, award amount, deadline, and description.',
+            && hasText(scholarshipForm.value.description),
+        help: 'Title, category, and a clear description.',
+    },
+    {
+        label: 'Offer details',
+        section: 'offer',
+        complete: scholarshipForm.value.benefits.length > 0
+            && hasText(scholarshipForm.value.deadline)
+            && hasText(scholarshipForm.value.applicationMode),
+        help: 'At least one benefit, the deadline, and submission method.',
     },
     {
         label: 'Eligibility and matching rules',
+        section: 'audience',
         complete: hasText(scholarshipForm.value.eligibility)
             && (
                 scholarshipForm.value.eligibleEducationLevels.length > 0
@@ -498,23 +520,26 @@ const programReadinessItems = computed(() => [
                 || scholarshipForm.value.minimumGradeScale === 'other'
                 || hasText(scholarshipForm.value.minimumGwa)
             ),
-        help: 'Eligibility text plus at least one finder rule or clear open-to-all intent.',
+        help: 'Eligibility text and at least one finder rule.',
     },
     {
         label: 'Document checklist',
+        section: 'documents',
         complete: selectedRequirementCount.value > 0,
         help: 'Documents applicants must prepare before submission.',
     },
     {
-        label: 'Map location',
+        label: 'Program location',
+        section: 'location',
         complete: hasText(scholarshipForm.value.locationName)
             && hasText(scholarshipForm.value.locationAddress)
             && hasText(scholarshipForm.value.latitude)
             && hasText(scholarshipForm.value.longitude),
-        help: 'Address and map pin for distance visualization.',
+        help: 'Address and map pin for distance estimates.',
     },
     {
         label: 'Application workflow',
+        section: 'process',
         complete: hasText(scholarshipForm.value.applicationMode)
             && (
                 hasText(scholarshipForm.value.contactEmail)
@@ -524,14 +549,16 @@ const programReadinessItems = computed(() => [
     },
     ...(scholarshipForm.value.selectionStages.includes('exam') ? [{
         label: 'Exam details',
+        section: 'process',
         complete: hasText(scholarshipForm.value.examDurationMinutes)
             && hasText(scholarshipForm.value.examPassingScore),
         help: 'Provider-managed exam duration and passing score for this program.',
     }] : []),
     {
-        label: 'Return service contract',
-        complete: hasText(scholarshipForm.value.returnServiceContract),
-        help: 'Any required service obligation, teaching placement, or post-award commitment.',
+        label: 'Review scoring',
+        section: 'scoring',
+        complete: reviewRubricReady.value,
+        help: 'A complete rubric with weights totaling 100%.',
     },
 ]);
 const missingProgramReadinessItems = computed(() => programReadinessItems.value.filter((item) => !item.complete));
@@ -539,13 +566,13 @@ const activeFormSectionIndex = computed(() => formSections.findIndex((section) =
 const activeFormSectionMeta = computed(() => formSections[activeFormSectionIndex.value] ?? formSections[0]);
 const formSectionProgress = computed(() => {
     const sectionChecks = {
-        basics: hasText(scholarshipForm.value.title)
-            && hasText(scholarshipForm.value.description)
-            && hasText(scholarshipForm.value.awardAmount)
-            && hasText(scholarshipForm.value.deadline),
-        workflow: hasText(scholarshipForm.value.applicationMode)
-            && (hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber)),
-        target: hasText(scholarshipForm.value.eligibility)
+        overview: hasText(scholarshipForm.value.title)
+            && hasText(scholarshipForm.value.category)
+            && hasText(scholarshipForm.value.description),
+        offer: scholarshipForm.value.benefits.length > 0
+            && hasText(scholarshipForm.value.deadline)
+            && hasText(scholarshipForm.value.applicationMode),
+        audience: hasText(scholarshipForm.value.eligibility)
             && (
                 scholarshipForm.value.eligibleEducationLevels.length > 0
                 || hasText(scholarshipForm.value.eligibleCourses)
@@ -553,16 +580,26 @@ const formSectionProgress = computed(() => {
                 || hasText(scholarshipForm.value.eligibleYearLevels)
                 || hasText(scholarshipForm.value.eligibleLocations)
             ),
+        process: scholarshipForm.value.selectionStages.includes('screening')
+            && scholarshipForm.value.selectionStages.includes('distribution')
+            && (hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber))
+            && (!scholarshipForm.value.selectionStages.includes('exam') || (
+                hasText(scholarshipForm.value.examDurationMinutes)
+                && hasText(scholarshipForm.value.examPassingScore)
+            )),
         location: hasText(scholarshipForm.value.locationName)
             && hasText(scholarshipForm.value.locationAddress)
             && hasText(scholarshipForm.value.latitude)
             && hasText(scholarshipForm.value.longitude),
         documents: selectedRequirementCount.value > 0,
-        rubric: scholarshipForm.value.reviewRubric.length > 0 && rubricWeightTotal.value === 100,
+        scoring: reviewRubricReady.value,
+        finish: scholarshipForm.value.termsAccepted,
     };
 
     return Object.fromEntries(formSections.map((section) => [section.id, Boolean(sectionChecks[section.id])]));
 });
+const completedFormSectionCount = computed(() => Object.values(formSectionProgress.value).filter(Boolean).length);
+const formProgressPercent = computed(() => Math.round((completedFormSectionCount.value / formSections.length) * 100));
 const publishWarnings = computed(() => {
     if (!['pending_review', 'rejected'].includes(scholarshipForm.value.status)) {
         return [];
@@ -618,22 +655,14 @@ const targetApplicantSummary = computed(() => {
     ];
 });
 const workflowSummary = computed(() => [
-    scholarshipForm.value.applicationMode
-        ? applicationModeOptions.find((option) => option.value === scholarshipForm.value.applicationMode)?.label ?? scholarshipForm.value.applicationMode
-        : 'Application mode not set',
-    hasText(scholarshipForm.value.slotsAvailable) ? `${scholarshipForm.value.slotsAvailable} available slot${Number(scholarshipForm.value.slotsAvailable) === 1 ? '' : 's'}` : 'Slots not listed',
-    hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber) ? 'Contact available' : 'No contact channel',
-    hasText(scholarshipForm.value.returnServiceContract) ? 'Return service listed' : 'No return service listed',
-    hasText(scholarshipForm.value.otherContractTerms) ? 'Other contract terms listed' : 'No other contract terms',
     `${scholarshipForm.value.selectionStages.length} selection stages`,
-    ...(scholarshipForm.value.selectionStages.includes('exam')
-        ? [hasText(scholarshipForm.value.examDurationMinutes)
-            ? `${scholarshipForm.value.examDurationMinutes}-minute provider exam`
-            : 'Exam duration not set']
-        : []),
+    hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber) ? 'Contact available' : 'No contact channel',
     scheduledProgramEventCount.value
         ? `${scheduledProgramEventCount.value} date${scheduledProgramEventCount.value === 1 ? '' : 's'} announced`
         : 'Dates not announced',
+    hasText(scholarshipForm.value.returnServiceContract) || hasText(scholarshipForm.value.otherContractTerms)
+        ? 'Additional terms added'
+        : 'No additional terms',
 ]);
 const schedulableSelectionStages = computed(() => selectionStageOptions.filter((stage) => (
     stage.value !== 'screening'
@@ -685,8 +714,10 @@ const submitButtonLabel = computed(() => {
         : 'Submit for review';
 });
 
-function openFormSection(sectionId) {
+async function openFormSection(sectionId) {
     activeFormSection.value = sectionId;
+    await nextTick();
+    scholarshipFormElement.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function goToPreviousFormSection() {
@@ -826,14 +857,20 @@ function emptyScholarshipForm() {
         locationAddress: '',
         latitude: '',
         longitude: '',
-        requirements: [],
+        requirements: [
+            'Completed application form',
+            'Certificate of enrollment',
+            'Latest report card or grades',
+            'School ID',
+            'Proof of income',
+        ],
         customRequirements: '',
         reviewRubric: defaultReviewRubric(),
-        awardAmount: '',
+        benefits: [],
         minimumGwa: '',
         minimumGradeScale: '',
         slotsAvailable: '',
-        applicationMode: '',
+        applicationMode: 'online',
         selectionStages: ['screening', 'distribution'],
         examDurationMinutes: '',
         examPassingScore: '',
@@ -1030,6 +1067,15 @@ function applyTargetApplicantPreset(preset) {
     }
 }
 
+function applyTargetApplicantPresetByKey(event) {
+    selectedTargetPresetKey.value = event.target.value;
+    const preset = targetApplicantPresets.find((item) => item.key === event.target.value);
+
+    if (preset) {
+        applyTargetApplicantPreset(preset);
+    }
+}
+
 function fillScholarshipForm(scholarship) {
     scholarshipForm.value = {
         title: scholarship.title ?? '',
@@ -1051,7 +1097,7 @@ function fillScholarshipForm(scholarship) {
         reviewRubric: Array.isArray(scholarship.review_rubric) && scholarship.review_rubric.length
             ? scholarship.review_rubric.map((criterion) => ({ ...criterion }))
             : defaultReviewRubric(),
-        awardAmount: scholarship.award_amount ?? '',
+        benefits: normalizeBenefits(scholarship),
         minimumGwa: scholarship.minimum_gwa ?? '',
         minimumGradeScale: scholarship.minimum_grade_scale ?? inferGradeScale(scholarship.minimum_gwa),
         slotsAvailable: scholarship.slots_available ?? '',
@@ -1074,6 +1120,7 @@ function fillScholarshipForm(scholarship) {
     };
     imageFile.value = null;
     imagePreviewUrl.value = '';
+    selectedTargetPresetKey.value = inferTargetFormKey(scholarshipForm.value.eligibleEducationLevels);
 }
 
 function isRequirementSelected(requirement) {
@@ -1156,6 +1203,14 @@ function lookupScholarshipAddress() {
     providerAddressLookupTrigger.value += 1;
 }
 
+function toggleLocationMap() {
+    showLocationMap.value = !showLocationMap.value;
+
+    if (showLocationMap.value && scholarshipFormMapAddress.value && !scholarshipForm.value.latitude) {
+        lookupScholarshipAddress();
+    }
+}
+
 function handleScholarshipLocationResolved(location) {
     scholarshipForm.value.latitude = Number(location.latitude).toFixed(7);
     scholarshipForm.value.longitude = Number(location.longitude).toFixed(7);
@@ -1194,6 +1249,14 @@ function handleScholarshipLocationError(message) {
 
 function resetScholarshipForm() {
     scholarshipForm.value = emptyScholarshipForm();
+    activeFormSection.value = 'overview';
+    showAudienceDetails.value = false;
+    showProcessSchedules.value = false;
+    showProgramTerms.value = false;
+    showLocationMap.value = false;
+    showDocumentChooser.value = false;
+    customizeRubric.value = false;
+    selectedTargetPresetKey.value = '';
     imageFile.value = null;
     imagePreviewUrl.value = '';
     formError.value = '';
@@ -1241,12 +1304,19 @@ async function saveScholarship() {
     formError.value = '';
 
     if (!hasText(scholarshipForm.value.title) || !hasText(scholarshipForm.value.description)) {
-        activeFormSection.value = 'basics';
+        await openFormSection('overview');
         formError.value = 'Add a scholarship title and description before saving.';
         return;
     }
 
+    if (scholarshipForm.value.status !== 'draft' && scholarshipForm.value.benefits.length === 0) {
+        await openFormSection('offer');
+        formError.value = 'Add at least one benefit before submitting the program for review.';
+        return;
+    }
+
     if (!scholarshipForm.value.termsAccepted) {
+        await openFormSection('finish');
         formError.value = 'Please accept the provider scholarship terms before saving.';
         return;
     }
@@ -1254,7 +1324,8 @@ async function saveScholarship() {
     const scheduleError = programEventValidationMessage();
 
     if (scheduleError) {
-        activeFormSection.value = 'workflow';
+        showProcessSchedules.value = true;
+        await openFormSection('process');
         formError.value = scheduleError;
         return;
     }
@@ -1263,7 +1334,8 @@ async function saveScholarship() {
         scholarshipForm.value.reviewRubric.some((criterion) => !hasText(criterion.label))
         || rubricWeightTotal.value !== 100
     ) {
-        activeFormSection.value = 'rubric';
+        customizeRubric.value = true;
+        await openFormSection('scoring');
         formError.value = 'Add a label for every review criterion and make the weights total 100%.';
         return;
     }
@@ -1311,7 +1383,8 @@ async function saveScholarship() {
         longitude: scholarshipForm.value.longitude || '',
         requirements: allDocumentRequirements.value.join('\n'),
         review_rubric: JSON.stringify(scholarshipForm.value.reviewRubric),
-        award_amount: scholarshipForm.value.awardAmount || '',
+        benefits: JSON.stringify(scholarshipForm.value.benefits),
+        award_amount: cashGrantAmount(scholarshipForm.value.benefits),
         minimum_gwa: academicRequirementNeedsValue.value ? scholarshipForm.value.minimumGwa || '' : '',
         minimum_grade_scale: scholarshipForm.value.minimumGradeScale || '',
         slots_available: scholarshipForm.value.slotsAvailable || '',
@@ -1377,7 +1450,7 @@ onMounted(loadFormData);
         />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-6xl">
+            <div class="mx-auto max-w-7xl">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -1388,7 +1461,7 @@ onMounted(loadFormData);
                                 {{ isEditMode ? 'Edit scholarship program' : 'Create scholarship program' }}
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Add the program details students need for matching, review, and application guidance.
+                                Complete one short step at a time. Optional settings stay hidden until you need them.
                             </p>
                         </div>
 
@@ -1424,58 +1497,114 @@ onMounted(loadFormData);
 
                     <form
                         ref="scholarshipFormElement"
-                        class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+                        class="scroll-mt-4 grid items-start gap-5 xl:grid-cols-[14.5rem_minmax(0,1fr)]"
                         novalidate
                         @submit.prevent="saveScholarship"
                     >
-                        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    {{ isEditMode ? 'Edit Scholarship' : 'Create Scholarship' }}
-                                </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    {{ activeFormSectionMeta.label }}
-                                </h3>
-                                <p class="mt-1 text-sm text-slate-500">
-                                    {{ activeFormSectionMeta.help }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                            <div class="grid gap-3">
-                                <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                                        Sections
+                        <aside class="hidden xl:block">
+                            <div class="sticky top-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="bg-slate-950 p-4 text-white">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">
+                                        Program setup
                                     </p>
-                                    <p class="mt-1 text-sm text-slate-500">
-                                        Move through each page to complete the scholarship setup.
+                                    <p class="mt-2 line-clamp-2 text-sm font-bold leading-5">
+                                        {{ scholarshipForm.title || 'Untitled scholarship' }}
+                                    </p>
+                                    <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-white/15">
+                                        <div class="h-full rounded-full bg-amber-300 transition-all" :style="{ width: `${formProgressPercent}%` }"></div>
+                                    </div>
+                                    <p class="mt-2 text-xs text-slate-300">
+                                        {{ completedFormSectionCount }} of {{ formSections.length }} sections ready
                                     </p>
                                 </div>
 
-                                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                                <nav class="space-y-1 p-2" aria-label="Program form sections">
                                     <button
-                                        v-for="section in formSections"
+                                        v-for="(section, index) in formSections"
                                         :key="section.id"
                                         type="button"
+                                        :aria-current="activeFormSection === section.id ? 'step' : undefined"
                                         :class="[
-                                            'flex min-h-11 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition',
+                                            'group flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition',
                                             activeFormSection === section.id
-                                                ? 'border-slate-900 bg-white text-slate-950 shadow-sm'
-                                                : 'border-slate-200 bg-white/70 text-slate-600 hover:bg-white',
+                                                ? 'bg-slate-100 text-slate-950'
+                                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
                                         ]"
                                         @click="openFormSection(section.id)"
                                     >
-                                        <span class="font-bold">{{ section.label }}</span>
-                                        <span :class="['h-2.5 w-2.5 rounded-full', formSectionProgress[section.id] ? 'bg-emerald-500' : 'bg-amber-400']"></span>
+                                        <span
+                                            :class="[
+                                                'grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-bold',
+                                                activeFormSection === section.id
+                                                    ? 'bg-slate-950 text-white'
+                                                    : (formSectionProgress[section.id] ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'),
+                                            ]"
+                                        >
+                                            <i v-if="formSectionProgress[section.id]" class="fa-solid fa-check text-[10px]" aria-hidden="true"></i>
+                                            <span v-else>{{ index + 1 }}</span>
+                                        </span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="block text-sm font-bold">{{ section.label }}</span>
+                                            <span class="mt-0.5 block text-xs leading-4 text-slate-500">{{ section.help }}</span>
+                                        </span>
                                     </button>
+                                </nav>
+                            </div>
+                        </aside>
+
+                        <div class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <div class="border-b border-slate-200 p-4 sm:p-5">
+                                <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="flex min-w-0 items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">
+                                            {{ activeFormSectionIndex + 1 }}
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">
+                                                Step {{ activeFormSectionIndex + 1 }} of {{ formSections.length }}
+                                            </p>
+                                            <h3 class="mt-1 text-xl font-bold text-slate-950">
+                                                {{ activeFormSectionMeta.label }}
+                                            </h3>
+                                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                                                {{ activeFormSectionMeta.help }}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <span
+                                        :class="[
+                                            'w-fit rounded-md px-2.5 py-1 text-xs font-bold',
+                                            formSectionProgress[activeFormSection]
+                                                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                                                : 'bg-slate-100 text-slate-600',
+                                        ]"
+                                    >
+                                        {{ formSectionProgress[activeFormSection] ? 'Section ready' : 'In progress' }}
+                                    </span>
+                                </div>
+
+                                <div class="mt-4 h-1 overflow-hidden rounded-full bg-slate-100 xl:hidden">
+                                    <div class="h-full rounded-full bg-amber-500 transition-all" :style="{ width: `${formProgressPercent}%` }"></div>
+                                </div>
+
+                                <div class="mt-4 xl:hidden">
+                                    <label for="mobile-form-section" class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                                        Go to section
+                                    </label>
+                                    <select id="mobile-form-section" v-model="activeFormSection" :class="inputClass">
+                                        <option v-for="(section, index) in formSections" :key="section.id" :value="section.id">
+                                            {{ index + 1 }}. {{ section.label }}{{ formSectionProgress[section.id] ? ' - Ready' : '' }}
+                                        </option>
+                                    </select>
                                 </div>
                             </div>
-                        </div>
+
+                            <div class="p-4 sm:p-5">
 
                         <div
-                            v-if="publishWarnings.length"
-                            class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+                            v-if="activeFormSection === 'finish' && publishWarnings.length"
+                            class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
                         >
                             <p class="font-bold">
                                 Review before submitting
@@ -1485,46 +1614,69 @@ onMounted(loadFormData);
                             </p>
                         </div>
 
-                        <div v-show="activeFormSection === 'basics'" :class="['mt-5 grid gap-4', sectionCardClass]">
-                            <div :class="fieldStackClass">
-                                <label :class="labelClass" for="scholarship-title">
-                                    Scholarship title
-                                </label>
-                                <input
-                                    id="scholarship-title"
-                                    v-model="scholarshipForm.title"
-                                    type="text"
-                                    placeholder="Scholarship title"
-                                    :class="inputClass"
-                                >
-                            </div>
-
-                            <div :class="[fieldCardClass, 'grid gap-4 sm:grid-cols-[5rem_1fr] sm:items-center']">
-                                <img
-                                    :src="scholarshipImagePreview"
-                                    alt="Scholarship program preview"
-                                    class="h-16 w-16 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200"
-                                >
-                                <div>
-                                    <label :class="labelClass" for="scholarship-image">
-                                        Program logo
+                        <div v-show="['overview', 'offer', 'audience', 'finish'].includes(activeFormSection)" :class="['mt-5 grid gap-4', sectionCardClass]">
+                            <div v-show="activeFormSection === 'overview'" class="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
+                                <div :class="fieldStackClass">
+                                    <label :class="labelClass" for="scholarship-title">
+                                        Scholarship title
                                     </label>
                                     <input
-                                        id="scholarship-image"
-                                        ref="imageInputElement"
-                                        type="file"
-                                        accept="image/jpeg,image/png,image/webp"
-                                        class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-slate-800"
-                                        @change="handleImageFile"
+                                        id="scholarship-title"
+                                        v-model="scholarshipForm.title"
+                                        type="text"
+                                        placeholder="Scholarship title"
+                                        :class="inputClass"
                                     >
                                     <p class="mt-2 text-xs leading-5 text-slate-500">
-                                        Optional. JPG, PNG, or WebP up to 4MB. If no logo is uploaded, the default scholarship logo will be used.
+                                        Use the official program name applicants will recognize.
                                     </p>
+                                </div>
+
+                                <div :class="[fieldCardClass, 'grid gap-3 sm:grid-cols-[4rem_1fr] sm:items-center']">
+                                    <img
+                                        :src="scholarshipImagePreview"
+                                        alt="Scholarship program preview"
+                                        class="h-14 w-14 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200"
+                                    >
+                                    <div class="min-w-0">
+                                        <label :class="labelClass" for="scholarship-image">
+                                            Program logo
+                                        </label>
+                                        <input
+                                            id="scholarship-image"
+                                            ref="imageInputElement"
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp"
+                                            class="w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 file:mr-2 file:rounded file:border-0 file:bg-slate-900 file:px-2.5 file:py-1.5 file:text-xs file:font-bold file:text-white hover:file:bg-slate-800"
+                                            @change="handleImageFile"
+                                        >
+                                        <p class="mt-1.5 text-xs leading-5 text-slate-500">
+                                            Optional JPG, PNG, or WebP up to 4MB.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
 
+                            <div v-show="activeFormSection === 'audience'" :class="fieldStackClass">
+                                <label :class="labelClass" for="target-applicant-preset">Who is this program for?</label>
+                                <select
+                                    id="target-applicant-preset"
+                                    :value="selectedTargetPresetKey"
+                                    :class="inputClass"
+                                    @change="applyTargetApplicantPresetByKey"
+                                >
+                                    <option value="" disabled>Choose an applicant group</option>
+                                    <option v-for="preset in targetApplicantPresets" :key="preset.key" :value="preset.key">
+                                        {{ preset.label }}
+                                    </option>
+                                </select>
+                                <p class="mt-2 text-xs leading-5 text-slate-500">
+                                    This fills suitable matching rules and common documents. You can adjust them below.
+                                </p>
+                            </div>
+
                             <div :class="formGridClass">
-                                <div :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'overview'" :class="[basicFieldStackClass, 'md:col-span-2']">
                                     <label :class="labelClass" for="scholarship-category">
                                         Category
                                     </label>
@@ -1542,22 +1694,12 @@ onMounted(loadFormData);
                                     </select>
                                 </div>
 
-                                <div :class="basicFieldStackClass">
-                                    <label :class="labelClass" for="scholarship-amount">
-                                        Award amount
-                                    </label>
-                                    <input
-                                        id="scholarship-amount"
-                                        v-model="scholarshipForm.awardAmount"
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        :class="inputClass"
-                                    >
-                                </div>
+                                <ProgramBenefitsEditor
+                                    v-show="activeFormSection === 'offer'"
+                                    v-model="scholarshipForm.benefits"
+                                />
 
-                                <div :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'audience'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-grade-scale">
                                         Academic basis
                                     </label>
@@ -1580,7 +1722,7 @@ onMounted(loadFormData);
                                     </p>
                                 </div>
 
-                                <div v-if="academicRequirementNeedsValue" :class="basicFieldStackClass">
+                                <div v-if="activeFormSection === 'audience' && academicRequirementNeedsValue" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-minimum-gwa">
                                         {{ selectedGradeScaleOption.inputLabel }}
                                     </label>
@@ -1599,7 +1741,7 @@ onMounted(loadFormData);
                                     </p>
                                 </div>
 
-                                <div v-else :class="basicFieldStackClass">
+                                <div v-else-if="activeFormSection === 'audience'" :class="basicFieldStackClass">
                                     <p class="text-sm font-semibold text-slate-500">
                                         Academic cutoff
                                     </p>
@@ -1611,7 +1753,7 @@ onMounted(loadFormData);
                                     </p>
                                 </div>
 
-                                <div :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'offer'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-slots">
                                         Available slots
                                     </label>
@@ -1626,7 +1768,7 @@ onMounted(loadFormData);
                                     >
                                 </div>
 
-                                <div :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'offer'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-mode">
                                         Application mode
                                     </label>
@@ -1644,7 +1786,7 @@ onMounted(loadFormData);
                                     </select>
                                 </div>
 
-                                <div :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'offer'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-deadline">
                                         Deadline
                                     </label>
@@ -1656,7 +1798,7 @@ onMounted(loadFormData);
                                     >
                                 </div>
 
-                                <div :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'finish'" :class="[basicFieldStackClass, 'md:col-span-2']">
                                     <label :class="labelClass" for="scholarship-status">
                                         Review action
                                     </label>
@@ -1676,7 +1818,7 @@ onMounted(loadFormData);
                                 </div>
                             </div>
 
-                            <div :class="fieldStackClass">
+                            <div v-show="activeFormSection === 'overview'" :class="fieldStackClass">
                                 <label :class="labelClass" for="scholarship-description">
                                     Description
                                 </label>
@@ -1690,7 +1832,7 @@ onMounted(loadFormData);
                             </div>
                         </div>
 
-                        <div v-show="activeFormSection === 'target'" :class="['mt-5', sectionCardClass]">
+                        <div v-show="activeFormSection === 'audience'" :class="['mt-5', sectionCardClass]">
                             <div :class="fieldStackClass">
                                 <label :class="labelClass" for="scholarship-eligibility">
                                     Eligibility
@@ -1705,7 +1847,7 @@ onMounted(loadFormData);
                             </div>
                         </div>
 
-                            <fieldset v-show="activeFormSection === 'workflow'" :class="['mt-5', sectionCardClass]">
+                            <fieldset v-show="activeFormSection === 'process'" :class="['mt-5', sectionCardClass]">
                                 <legend class="text-sm font-semibold text-slate-700">
                                     Application workflow
                                 </legend>
@@ -1783,7 +1925,7 @@ onMounted(loadFormData);
                                         <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Shared workflow</span>
                                     </div>
 
-                                    <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="mt-4 grid gap-3 md:grid-cols-2">
                                         <button
                                             v-for="(stage, index) in selectionStageOptions"
                                             :key="stage.value"
@@ -1791,7 +1933,7 @@ onMounted(loadFormData);
                                             :aria-pressed="scholarshipForm.selectionStages.includes(stage.value)"
                                             :disabled="stage.required"
                                             :class="[
-                                                'flex min-h-36 flex-col rounded-md border p-3 text-left transition',
+                                                'flex items-start gap-3 rounded-md border p-3 text-left transition',
                                                 scholarshipForm.selectionStages.includes(stage.value)
                                                     ? 'border-slate-900 bg-slate-900 text-white'
                                                     : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white',
@@ -1799,24 +1941,41 @@ onMounted(loadFormData);
                                             ]"
                                             @click="toggleSelectionStage(stage.value)"
                                         >
-                                            <span class="flex items-center justify-between gap-2">
-                                                <span :class="['grid h-8 w-8 place-items-center rounded-md', scholarshipForm.selectionStages.includes(stage.value) ? 'bg-white/10' : 'bg-white ring-1 ring-slate-200']">
-                                                    <i :class="stage.icon" aria-hidden="true"></i>
+                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', scholarshipForm.selectionStages.includes(stage.value) ? 'bg-white/10' : 'bg-white ring-1 ring-slate-200']">
+                                                <i :class="stage.icon" aria-hidden="true"></i>
+                                            </span>
+                                            <span class="min-w-0 flex-1">
+                                                <span class="flex items-center justify-between gap-2">
+                                                    <span class="font-bold">{{ stage.label }}</span>
+                                                    <span class="text-[10px] font-bold uppercase tracking-[0.1em]">
+                                                        {{ stage.required ? 'Required' : (scholarshipForm.selectionStages.includes(stage.value) ? 'Included' : 'Optional') }}
+                                                    </span>
                                                 </span>
-                                                <span class="text-[11px] font-bold uppercase tracking-[0.12em]">{{ index + 1 }}</span>
-                                            </span>
-                                            <span class="mt-3 font-bold">{{ stage.label }}</span>
-                                            <span :class="['mt-1 text-xs leading-5', scholarshipForm.selectionStages.includes(stage.value) ? 'text-slate-300' : 'text-slate-500']">
-                                                {{ stage.description }}
-                                            </span>
-                                            <span class="mt-auto pt-2 text-[11px] font-bold uppercase tracking-[0.1em]">
-                                                {{ stage.required ? 'Required' : (scholarshipForm.selectionStages.includes(stage.value) ? 'Included' : 'Optional') }}
+                                                <span :class="['mt-1 block text-xs leading-5', scholarshipForm.selectionStages.includes(stage.value) ? 'text-slate-300' : 'text-slate-500']">
+                                                    {{ stage.description }}
+                                                </span>
                                             </span>
                                         </button>
                                     </div>
                                 </div>
 
-                                <div :class="['mt-4', fieldCardClass]">
+                                <div class="mt-4 flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-950">Stage dates</p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            Optional. Add dates only when your exam, interview, or distribution schedule is confirmed.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                        @click="showProcessSchedules = !showProcessSchedules"
+                                    >
+                                        {{ showProcessSchedules ? 'Hide dates' : (scheduledProgramEventCount ? `Edit ${scheduledProgramEventCount} date${scheduledProgramEventCount === 1 ? '' : 's'}` : 'Add dates') }}
+                                    </button>
+                                </div>
+
+                                <div v-if="showProcessSchedules" :class="['mt-4', fieldCardClass]">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
                                             <p class="text-sm font-bold text-slate-950">Planned stage dates</p>
@@ -1968,7 +2127,21 @@ onMounted(loadFormData);
                                         >
                                     </div>
 
-                                    <div :class="[fieldStackClass, 'lg:col-span-2']">
+                                    <div class="lg:col-span-2 flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">Renewal and contract terms</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">Optional. Add these only when the award has continuation rules or obligations.</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                            @click="showProgramTerms = !showProgramTerms"
+                                        >
+                                            {{ showProgramTerms ? 'Hide terms' : ((scholarshipForm.renewalPolicy || scholarshipForm.returnServiceContract || scholarshipForm.otherContractTerms) ? 'Edit terms' : 'Add terms') }}
+                                        </button>
+                                    </div>
+
+                                    <div v-if="showProgramTerms" :class="[fieldStackClass, 'lg:col-span-2']">
                                         <label :class="labelClass" for="scholarship-renewal">
                                             Renewal or continuation policy
                                         </label>
@@ -1981,7 +2154,7 @@ onMounted(loadFormData);
                                         ></textarea>
                                     </div>
 
-                                    <div :class="[fieldStackClass, 'lg:col-span-2']">
+                                    <div v-if="showProgramTerms" :class="[fieldStackClass, 'lg:col-span-2']">
                                         <label :class="labelClass" for="scholarship-return-service-contract">
                                             Return service contract
                                         </label>
@@ -1997,7 +2170,7 @@ onMounted(loadFormData);
                                         </p>
                                     </div>
 
-                                    <div :class="[fieldStackClass, 'lg:col-span-2']">
+                                    <div v-if="showProgramTerms" :class="[fieldStackClass, 'lg:col-span-2']">
                                         <label :class="labelClass" for="scholarship-other-contract-terms">
                                             Other contract terms
                                         </label>
@@ -2015,7 +2188,7 @@ onMounted(loadFormData);
                                 </div>
                             </fieldset>
 
-                            <fieldset v-show="activeFormSection === 'target'" :class="['mt-4', sectionCardClass]">
+                            <fieldset v-show="activeFormSection === 'audience'" :class="['mt-4', sectionCardClass]">
                                 <legend class="text-sm font-semibold text-slate-700">
                                     Matching criteria
                                 </legend>
@@ -2033,50 +2206,21 @@ onMounted(loadFormData);
                                     </span>
                                 </div>
 
-                                <div :class="['mt-4', fieldCardClass]">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">
-                                                Target applicant presets
-                                            </p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">
-                                                Pick the closest target group first. The form will fill matching rules and recommended documents, then you can edit anything below.
-                                            </p>
-                                        </div>
-                                        <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
-                                            Optional helper
-                                        </span>
+                                <div class="mt-4 flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-950">Detailed matching rules</p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">Optional. Limit school type, course, year level, location, or household income only when needed.</p>
                                     </div>
-
-                                    <div class="mt-4 grid items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3">
-                                        <button
-                                            v-for="preset in targetApplicantPresets"
-                                            :key="preset.key"
-                                            type="button"
-                                            :class="[
-                                                'group flex h-full flex-col rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-sm',
-                                                activeTargetKey === preset.key
-                                                    ? 'border-slate-900 bg-white shadow-sm ring-2 ring-slate-200'
-                                                    : 'border-slate-200 bg-slate-50',
-                                            ]"
-                                            @click="applyTargetApplicantPreset(preset)"
-                                        >
-                                            <span class="flex items-center gap-3">
-                                                <span class="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
-                                                    <i :class="[preset.icon, 'text-sm']"></i>
-                                                </span>
-                                                <span class="font-bold text-slate-950">
-                                                    {{ preset.label }}
-                                                </span>
-                                            </span>
-                                            <span class="mt-2 block text-xs leading-5 text-slate-500">
-                                                {{ preset.description }}
-                                            </span>
-                                        </button>
-                                    </div>
+                                    <button
+                                        type="button"
+                                        class="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                        @click="showAudienceDetails = !showAudienceDetails"
+                                    >
+                                        {{ showAudienceDetails ? 'Hide detailed rules' : 'Adjust detailed rules' }}
+                                    </button>
                                 </div>
 
-                                <div :class="['mt-4', fieldCardClass]">
+                                <div v-if="showAudienceDetails" :class="['mt-4', fieldCardClass]">
                                     <p class="text-sm font-bold text-slate-950">
                                         Current target applicant summary
                                     </p>
@@ -2096,7 +2240,7 @@ onMounted(loadFormData);
                                     </div>
                                 </div>
 
-                                <div :class="['mt-4', fieldCardClass]">
+                                <div v-if="showAudienceDetails" :class="['mt-4', fieldCardClass]">
                                     <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                         <div class="flex gap-3">
                                             <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
@@ -2132,7 +2276,7 @@ onMounted(loadFormData);
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
+                                <div v-if="showAudienceDetails" class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
                                     <div :class="[fieldStackClass, 'lg:col-span-2']">
                                         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                             <label class="text-sm font-semibold text-slate-700">
@@ -2307,9 +2451,9 @@ onMounted(loadFormData);
                                     <button
                                         type="button"
                                         class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                        @click="lookupScholarshipAddress"
+                                        @click="toggleLocationMap"
                                     >
-                                        Find address on map
+                                        {{ showLocationMap ? 'Hide map' : (scholarshipForm.latitude ? 'Review map pin' : 'Set map pin') }}
                                     </button>
                                 </div>
 
@@ -2344,6 +2488,7 @@ onMounted(loadFormData);
                                 </div>
 
                                 <LeafletMapPreview
+                                    v-if="showLocationMap"
                                     class="mt-4"
                                     :address="scholarshipFormMapAddress"
                                     :latitude="scholarshipForm.latitude"
@@ -2377,21 +2522,31 @@ onMounted(loadFormData);
                                         <button
                                             type="button"
                                             class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-slate-400 hover:bg-slate-100"
-                                            @click="selectCommonRequirements"
+                                            @click="showDocumentChooser = !showDocumentChooser"
                                         >
-                                            Select common
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
-                                            @click="clearRequirements"
-                                        >
-                                            Clear
+                                            {{ showDocumentChooser ? 'Hide options' : 'Change requirements' }}
                                         </button>
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                <div v-if="showDocumentChooser" class="mt-4 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
+                                    <button
+                                        type="button"
+                                        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100"
+                                        @click="selectCommonRequirements"
+                                    >
+                                        Use common set
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
+                                        @click="clearRequirements"
+                                    >
+                                        Clear all
+                                    </button>
+                                </div>
+
+                                <div v-if="showDocumentChooser" class="mt-4 grid items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-3">
                                     <label
                                         v-for="requirement in documentRequirementOptions"
                                         :key="requirement"
@@ -2424,7 +2579,7 @@ onMounted(loadFormData);
                                     </label>
                                 </div>
 
-                                <div :class="['mt-4', fieldCardClass]">
+                                <div v-if="showDocumentChooser" :class="['mt-4', fieldCardClass]">
                                     <label :class="labelClass" for="scholarship-custom-requirements">
                                         Custom document requirements
                                     </label>
@@ -2460,7 +2615,7 @@ onMounted(loadFormData);
                                 </div>
                             </fieldset>
 
-                            <fieldset v-show="activeFormSection === 'rubric'" :class="['mt-5', sectionCardClass]">
+                            <fieldset v-show="activeFormSection === 'scoring'" :class="['mt-5', sectionCardClass]">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
@@ -2477,11 +2632,20 @@ onMounted(loadFormData);
                                         <button
                                             type="button"
                                             class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                            @click="customizeRubric = !customizeRubric"
+                                        >
+                                            {{ customizeRubric ? 'Hide editor' : 'Customize scoring' }}
+                                        </button>
+                                        <button
+                                            v-if="customizeRubric"
+                                            type="button"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                                             @click="resetReviewRubric"
                                         >
                                             Use defaults
                                         </button>
                                         <button
+                                            v-if="customizeRubric"
                                             type="button"
                                             :disabled="scholarshipForm.reviewRubric.length >= 6"
                                             class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
@@ -2492,7 +2656,18 @@ onMounted(loadFormData);
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid gap-3">
+                                <div v-if="!customizeRubric" class="mt-4 grid gap-2 sm:grid-cols-2">
+                                    <div
+                                        v-for="criterion in scholarshipForm.reviewRubric"
+                                        :key="`rubric-summary-${criterion.key}`"
+                                        class="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                                    >
+                                        <span class="font-semibold text-slate-700">{{ criterion.label }}</span>
+                                        <span class="shrink-0 font-bold text-slate-950">{{ criterion.weight }}%</span>
+                                    </div>
+                                </div>
+
+                                <div v-if="customizeRubric" class="mt-4 grid gap-3">
                                     <div
                                         v-for="(criterion, index) in scholarshipForm.reviewRubric"
                                         :key="criterion.key"
@@ -2542,57 +2717,118 @@ onMounted(loadFormData);
                                     </div>
                                 </div>
 
-                                <p v-if="rubricWeightTotal !== 100" class="mt-3 text-xs font-semibold text-amber-800">
+                                <p v-if="customizeRubric && rubricWeightTotal !== 100" class="mt-3 text-xs font-semibold text-amber-800">
                                     Adjust the weights until they total exactly 100%.
                                 </p>
                             </fieldset>
 
-                        <div class="mt-5 border-t border-slate-200 pt-4">
+                        <section v-show="activeFormSection === 'finish'" :class="['mt-5', sectionCardClass]">
+                            <div class="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div class="flex min-w-0 items-center gap-3">
+                                    <img
+                                        :src="scholarshipImagePreview"
+                                        alt="Program logo"
+                                        class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200"
+                                    >
+                                    <div class="min-w-0">
+                                        <p class="truncate font-bold text-slate-950">{{ scholarshipForm.title || 'Untitled scholarship' }}</p>
+                                        <p class="mt-1 text-xs text-slate-500">
+                                            {{ scholarshipForm.category || 'No category' }} | {{ scholarshipForm.deadline || 'No deadline' }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <span class="w-fit rounded-md bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
+                                    {{ scholarshipForm.status === 'draft' ? 'Draft' : statusOptions.find((option) => option.value === scholarshipForm.status)?.label }}
+                                </span>
+                            </div>
+
+                            <div class="mt-4">
+                                <p class="text-sm font-bold text-slate-950">Readiness check</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Drafts may be incomplete. Complete these items before sending the program to admin review.</p>
+                            </div>
+
+                            <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                                <button
+                                    v-for="item in programReadinessItems"
+                                    :key="item.label"
+                                    type="button"
+                                    class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3 text-left"
+                                    @click="!item.complete && openFormSection(item.section)"
+                                >
+                                    <span :class="['mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px]', item.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']">
+                                        <i :class="item.complete ? 'fa-solid fa-check' : 'fa-solid fa-arrow-right'" aria-hidden="true"></i>
+                                    </span>
+                                    <span>
+                                        <span class="block text-sm font-bold text-slate-900">{{ item.label }}</span>
+                                        <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ item.help }}</span>
+                                    </span>
+                                </button>
+                            </div>
+                        </section>
+
+                        <div v-show="activeFormSection === 'finish'" class="mt-5 border-t border-slate-200 pt-4">
                             <TermsAgreement
                                 v-model="scholarshipForm.termsAccepted"
                                 context="scholarship"
                             />
                         </div>
-
-                        <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="min-h-5">
-                                <p v-if="formError" class="text-sm font-semibold text-rose-700">
-                                    {{ formError }}
-                                </p>
                             </div>
 
-                            <div class="grid gap-2 sm:grid-cols-2 lg:flex lg:items-center">
-                                <button
-                                    type="button"
-                                    :disabled="activeFormSectionIndex === 0"
-                                    class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                    @click="goToPreviousFormSection"
-                                >
-                                    Previous
-                                </button>
-                                <button
-                                    type="button"
-                                    :disabled="activeFormSectionIndex === formSections.length - 1"
-                                    class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                    @click="goToNextFormSection"
-                                >
-                                    Next
-                                </button>
-                                <button
-                                    v-if="!isEditMode"
-                                    type="button"
-                                    class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
-                                    @click="resetScholarshipForm"
-                                >
-                                    Clear
-                                </button>
-                                <button
-                                    type="submit"
-                                    :disabled="isSaving || !canPostScholarships"
-                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80"
-                                >
-                                    {{ submitButtonLabel }}
-                                </button>
+                            <div class="sticky bottom-3 z-20 m-3 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:m-4">
+                                <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                                    <div class="min-w-0">
+                                        <p v-if="formError" class="text-sm font-semibold text-rose-700">
+                                            {{ formError }}
+                                        </p>
+                                        <p v-else class="text-xs font-semibold text-slate-500">
+                                            {{ activeFormSectionMeta.label }} - {{ completedFormSectionCount }} of {{ formSections.length }} sections ready
+                                        </p>
+                                    </div>
+
+                                    <div :class="['grid shrink-0 grid-cols-2 gap-2', isEditMode ? 'sm:grid-cols-3' : 'sm:grid-cols-4']">
+                                        <button
+                                            type="button"
+                                            :disabled="activeFormSectionIndex === 0"
+                                            class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                            @click="goToPreviousFormSection"
+                                        >
+                                            Previous
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="activeFormSectionIndex === formSections.length - 1"
+                                            class="rounded-md border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                            @click="goToNextFormSection"
+                                        >
+                                            Next
+                                        </button>
+                                        <button
+                                            v-if="!isEditMode"
+                                            type="button"
+                                            class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+                                            @click="resetScholarshipForm"
+                                        >
+                                            Clear
+                                        </button>
+                                        <button
+                                            v-if="activeFormSection !== 'finish'"
+                                            type="button"
+                                            :disabled="!canPostScholarships"
+                                            class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                            @click="openFormSection('finish')"
+                                        >
+                                            Review and save
+                                        </button>
+                                        <button
+                                            v-else
+                                            type="submit"
+                                            :disabled="isSaving || !canPostScholarships"
+                                            class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                        >
+                                            {{ submitButtonLabel }}
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </form>

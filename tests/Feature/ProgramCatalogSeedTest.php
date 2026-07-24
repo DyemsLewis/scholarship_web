@@ -70,6 +70,17 @@ class ProgramCatalogSeedTest extends TestCase
         $this->assertSame(['screening', 'interview', 'distribution'], $collegeProgram->selection_stages);
         $this->assertSame(['screening', 'distribution'], $schoolEssentialsProgram->selection_stages);
         $this->assertSame(['screening', 'exam', 'interview', 'distribution'], $stemProgram->selection_stages);
+        $this->assertTrue($programs->every(fn (Scholarship $program): bool => $program->benefits()->exists()));
+        $this->assertNull($schoolEssentialsProgram->award_amount);
+        $this->assertSame(
+            ['school_supplies', 'device_support'],
+            $schoolEssentialsProgram->benefits()->orderBy('sort_order')->pluck('type')->all(),
+        );
+        $this->assertSame(3, $stemProgram->benefits()->count());
+        $this->assertStringContainsString('STEM learning grant', $stemProgram->benefitSummary());
+        $this->assertStringContainsString('support package', strtolower($collegeProgram->description));
+        $this->assertStringContainsString('non-cash support package', strtolower($schoolEssentialsProgram->description));
+        $this->assertStringContainsString('enrichment session', strtolower($stemProgram->description));
         $this->assertSame(60, $stemProgram->exam_duration_minutes);
         $this->assertSame('75.00', $stemProgram->exam_passing_score);
         $this->assertNull($collegeProgram->exam_duration_minutes);

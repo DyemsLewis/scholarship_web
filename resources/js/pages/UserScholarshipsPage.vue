@@ -390,7 +390,7 @@ function criterionReasonText(criterion) {
 
 function scholarshipSnapshot(scholarship) {
     return [
-        { label: 'Award', value: formatAmount(scholarship.award_amount) },
+        { label: 'Benefits', value: scholarship.benefit_summary || formatAmount(scholarship.award_amount) },
         { label: 'For', value: targetApplicantLabel(scholarship) },
         { label: 'Docs', value: requirementsLabel(scholarship.requirements) },
     ];
@@ -433,9 +433,9 @@ function compactDeadlineLabel(scholarship) {
 function scholarshipHighlights(scholarship) {
     return [
         {
-            icon: 'fa-solid fa-peso-sign',
-            label: 'Award',
-            value: formatAmount(scholarship.award_amount),
+            icon: 'fa-solid fa-gift',
+            label: 'Benefits',
+            value: scholarship.benefit_summary || formatAmount(scholarship.award_amount),
         },
         {
             icon: 'fa-solid fa-users',

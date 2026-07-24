@@ -25,12 +25,18 @@ class ApplicationSchedulePayload
             'status' => $schedule->status,
             'attendance_status' => $schedule->attendance_status,
             'attendance_notes' => $schedule->attendance_notes,
+            'requires_applicant_acknowledgment' => self::requiresApplicantAcknowledgment($schedule),
             'applicant_acknowledged' => $schedule->applicant_acknowledged_at !== null,
             'applicant_acknowledged_at' => $schedule->applicant_acknowledged_at?->format('M d, Y h:i A'),
             'completed_at' => $schedule->completed_at?->format('M d, Y h:i A'),
             'cancelled_at' => $schedule->cancelled_at?->format('M d, Y h:i A'),
             'updated_at' => $schedule->updated_at?->format('M d, Y h:i A'),
         ];
+    }
+
+    public static function requiresApplicantAcknowledgment(ApplicationSchedule $schedule): bool
+    {
+        return false;
     }
 
     private static function mapUrl(ApplicationSchedule $schedule): ?string

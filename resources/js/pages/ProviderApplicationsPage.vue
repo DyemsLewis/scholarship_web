@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
@@ -16,6 +16,9 @@ const selectedScholarshipContext = ref(initialScholarshipId ? {
 } : null);
 const selectedQueueFilter = ref('all');
 const selectedQueueSort = ref('priority');
+const applicationSearch = ref('');
+const applicationPage = ref(1);
+const applicationsPerPage = 10;
 const programEvents = ref([]);
 const scheduleEditorType = ref('');
 const scheduleSaving = ref(false);
@@ -52,13 +55,14 @@ const exportApplicationsUrl = computed(() => {
 
     return `/provider/export/applications?scholarship_id=${encodeURIComponent(selectedScholarshipId.value)}`;
 });
-const pageKicker = computed(() => (hasProgramContext.value ? 'Program Applicants' : 'Application Review'));
+const pageKicker = computed(() => (hasProgramContext.value ? 'Program Workspace' : 'Application Review'));
 const pageTitle = computed(() => (hasProgramContext.value
-    ? `Applicants for ${selectedScholarshipContext.value?.title || 'this program'}`
+    ? selectedScholarshipContext.value?.title || 'Scholarship program'
     : 'Applicant activity queue'));
 const pageDescription = computed(() => (hasProgramContext.value
-    ? 'Review only the applicants who submitted for this scholarship program.'
+    ? 'Manage this program schedule and review its submitted applicants in one place.'
     : 'Review submitted applications, document status, and DSS guidance for your programs.'));
+const programStageSummary = computed(() => configuredScheduleTypes.value.map((stage) => stage.label).join(', '));
 const reviewFilterOptions = computed(() => [
     { value: 'all', label: 'All', count: applications.value.length },
     {
@@ -78,7 +82,18 @@ const reviewFilterOptions = computed(() => [
     },
 ]);
 const rankedApplications = computed(() => {
+    const query = applicationSearch.value.trim().toLowerCase();
     const filteredApplications = applications.value.filter((application) => {
+        const matchesSearch = !query || [
+            application.applicant?.name,
+            application.applicant?.email,
+            application.scholarship?.title,
+        ].filter(Boolean).join(' ').toLowerCase().includes(query);
+
+        if (!matchesSearch) {
+            return false;
+        }
+
         if (selectedQueueFilter.value === 'pending_review') {
             return ['submitted', 'under_review'].includes(application.status ?? 'submitted');
         }
@@ -105,6 +120,22 @@ const rankedApplications = computed(() => {
 
         return reviewPriorityScore(second) - reviewPriorityScore(first) || Number(second.dss_score ?? 0) - Number(first.dss_score ?? 0);
     });
+});
+const totalApplicationPages = computed(() => Math.max(1, Math.ceil(rankedApplications.value.length / applicationsPerPage)));
+const visibleApplications = computed(() => {
+    const start = (applicationPage.value - 1) * applicationsPerPage;
+
+    return rankedApplications.value.slice(start, start + applicationsPerPage);
+});
+const visibleApplicationRange = computed(() => {
+    if (rankedApplications.value.length === 0) {
+        return '0 applications';
+    }
+
+    const start = (applicationPage.value - 1) * applicationsPerPage + 1;
+    const end = Math.min(applicationPage.value * applicationsPerPage, rankedApplications.value.length);
+
+    return `${start}-${end} of ${rankedApplications.value.length}`;
 });
 const customStatusLabels = {
     exam_qualified: 'Qualified for exam',
@@ -140,6 +171,22 @@ function statusClass(status) {
 
     if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled'].includes(status)) {
         return 'bg-slate-100 text-slate-700';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
+function programStatusClass(status) {
+    if (status === 'published') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (status === 'closed') {
+        return 'bg-slate-200 text-slate-700';
     }
 
     return 'bg-amber-100 text-amber-800';
@@ -372,6 +419,16 @@ async function loadProviderData(showLoading = true) {
     }
 }
 
+watch([selectedQueueFilter, selectedQueueSort, applicationSearch], () => {
+    applicationPage.value = 1;
+});
+
+watch(totalApplicationPages, (totalPages) => {
+    if (applicationPage.value > totalPages) {
+        applicationPage.value = totalPages;
+    }
+});
+
 onMounted(loadProviderData);
 </script>
 
@@ -396,6 +453,12 @@ onMounted(loadProviderData);
                         </div>
                         <div v-if="hasProgramContext" class="flex flex-wrap gap-2">
                             <a
+                                :href="`/provider/programs/${selectedScholarshipId}/edit`"
+                                class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                            >
+                                Edit program
+                            </a>
+                            <a
                                 href="/provider/applications"
                                 class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                             >
@@ -403,7 +466,7 @@ onMounted(loadProviderData);
                             </a>
                             <a
                                 href="/provider/programs"
-                                class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                             >
                                 Programs
                             </a>
@@ -420,6 +483,40 @@ onMounted(loadProviderData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
+                    <section v-if="hasProgramContext" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex min-w-0 items-center gap-3">
+                                <img
+                                    :src="selectedScholarshipContext?.image_url || '/uploads/scholarship-default.jpg'"
+                                    :alt="selectedScholarshipContext?.title || 'Scholarship program'"
+                                    class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                >
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-bold text-slate-950">{{ selectedScholarshipContext?.title }}</p>
+                                    <p class="mt-0.5 text-xs text-slate-500">{{ selectedScholarshipContext?.category || 'Scholarship program' }}</p>
+                                </div>
+                            </div>
+                            <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', programStatusClass(selectedScholarshipContext?.status)]">
+                                {{ statusLabel(selectedScholarshipContext?.status) }}
+                            </span>
+                        </div>
+
+                        <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-3 sm:divide-x sm:divide-slate-200">
+                            <div class="p-3">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Benefits</dt>
+                                <dd class="mt-1 line-clamp-2 text-sm font-bold leading-5 text-slate-900">{{ selectedScholarshipContext?.benefit_summary || 'Not specified' }}</dd>
+                            </div>
+                            <div class="border-t border-slate-200 p-3 sm:border-t-0">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Deadline</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedScholarshipContext?.deadline || 'Not set' }}</dd>
+                            </div>
+                            <div class="border-t border-slate-200 p-3 sm:border-t-0">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Selection stages</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ programStageSummary || 'Screening' }}</dd>
+                            </div>
+                        </dl>
+                    </section>
+
                     <section v-if="hasProgramContext" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
@@ -549,6 +646,16 @@ onMounted(loadProviderData);
                             {{ hasProgramContext ? 'Submitted applicants' : 'Submitted applications' }}
                         </h3>
                         <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <label class="relative w-full sm:max-w-sm">
+                                <span class="sr-only">Search applicants</span>
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
+                                <input
+                                    v-model="applicationSearch"
+                                    type="search"
+                                    placeholder="Search applicant or program"
+                                    class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                                >
+                            </label>
                             <a
                                 :href="exportApplicationsUrl"
                                 class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
@@ -634,73 +741,93 @@ onMounted(loadProviderData);
                             No applications match this review filter.
                         </div>
 
-                        <div v-else class="mt-5 grid gap-3 xl:grid-cols-2">
+                        <div v-else class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <div class="hidden grid-cols-[minmax(0,1.35fr)_minmax(0,1.1fr)_7rem_6rem_8rem_auto] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 xl:grid">
+                                <span>Applicant</span>
+                                <span>Program</span>
+                                <span>Scores</span>
+                                <span>Files</span>
+                                <span>Status</span>
+                                <span class="text-right">Action</span>
+                            </div>
+
                             <article
-                                v-for="application in rankedApplications"
+                                v-for="application in visibleApplications"
                                 :key="application.id"
-                                class="overflow-hidden rounded-lg border border-slate-200 bg-white"
+                                class="grid gap-3 border-b border-slate-200 p-3 last:border-b-0 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1.1fr)_7rem_6rem_8rem_auto] xl:items-center xl:px-4"
                             >
-                                <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
-                                    <div class="min-w-0">
-                                        <p class="truncate text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                            {{ application.scholarship?.title || 'Scholarship' }}
-                                        </p>
-                                        <div class="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-                                            <h4 class="min-w-0 truncate text-lg font-bold text-slate-950">
-                                                {{ application.applicant?.name || 'Applicant' }}
-                                            </h4>
-                                            <span
-                                                v-if="application.applicant?.profile_verification_status === 'approved'"
-                                                class="shrink-0 rounded-md bg-emerald-100 px-2 py-1 text-[11px] font-bold text-emerald-800"
-                                            >
-                                                <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
-                                                Verified
-                                            </span>
-                                        </div>
-                                        <p class="mt-1 text-xs text-slate-500">
-                                            Submitted {{ application.submitted_at || 'recently' }}
-                                        </p>
-                                    </div>
-                                    <div class="flex shrink-0 flex-wrap gap-2 sm:justify-end">
-                                        <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', reviewPriorityClass(application)]">
+                                <div class="min-w-0">
+                                    <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                                        <h4 class="min-w-0 truncate text-sm font-bold text-slate-950">
+                                            {{ application.applicant?.name || 'Applicant' }}
+                                        </h4>
+                                        <i
+                                            v-if="application.applicant?.profile_verification_status === 'approved'"
+                                            class="fa-solid fa-circle-check text-xs text-emerald-600"
+                                            title="Verified applicant"
+                                            aria-label="Verified applicant"
+                                        ></i>
+                                        <span :class="['rounded px-1.5 py-0.5 text-[9px] font-bold uppercase', reviewPriorityClass(application)]">
                                             {{ reviewPriorityLabel(application) }}
                                         </span>
-                                        <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
-                                            {{ statusLabel(application.status) }}
-                                        </span>
                                     </div>
+                                    <p class="mt-1 text-xs text-slate-500">Submitted {{ application.submitted_at || 'recently' }}</p>
                                 </div>
 
-                                <div class="grid grid-cols-3 border-y border-slate-200 bg-slate-50 text-center text-xs">
-                                    <div class="p-3">
-                                        <p class="font-semibold text-slate-500">Suitability</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ application.dss_score ?? 0 }}%</p>
-                                    </div>
-                                    <div class="border-x border-slate-200 p-3">
-                                        <p class="font-semibold text-slate-500">Match</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ application.eligibility_score ?? 0 }}%</p>
-                                    </div>
-                                    <div class="p-3">
-                                        <p class="font-semibold text-slate-500">Documents</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ application.document_readiness?.percent ?? 0 }}%</p>
-                                    </div>
-                                </div>
-
-                                <div class="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <p class="min-w-0 truncate text-xs font-semibold text-slate-500">
-                                        {{ application.distribution_scheduled_label
-                                            ? `Distribution ${application.distribution_scheduled_label}`
-                                            : (application.status_progress?.label || statusLabel(application.status)) }}
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-semibold text-slate-800">{{ application.scholarship?.title || 'Scholarship' }}</p>
+                                    <p class="mt-0.5 truncate text-[11px] text-slate-500">
+                                        {{ application.status_progress?.label || statusLabel(application.status) }}
                                     </p>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-2 xl:contents">
+                                    <div class="rounded-md bg-slate-50 px-2.5 py-2 text-xs ring-1 ring-slate-200 xl:bg-transparent xl:p-0 xl:ring-0">
+                                        <p class="font-semibold text-slate-500 xl:hidden">DSS / match</p>
+                                        <p class="mt-0.5 font-bold text-slate-950 xl:mt-0">{{ application.dss_score ?? 0 }}% / {{ application.eligibility_score ?? 0 }}%</p>
+                                    </div>
+                                    <div class="rounded-md bg-slate-50 px-2.5 py-2 text-xs ring-1 ring-slate-200 xl:bg-transparent xl:p-0 xl:ring-0">
+                                        <p class="font-semibold text-slate-500 xl:hidden">Files</p>
+                                        <p class="mt-0.5 font-bold text-slate-950 xl:mt-0">{{ application.document_readiness?.percent ?? 0 }}%</p>
+                                        <p v-if="documentIssueCount(application)" class="mt-0.5 text-[10px] font-semibold text-amber-700">{{ documentIssueCount(application) }} issue{{ documentIssueCount(application) === 1 ? '' : 's' }}</p>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-between gap-3 xl:contents">
+                                    <span :class="['w-fit rounded-md px-2 py-1 text-[10px] font-bold uppercase', statusClass(application.status)]">
+                                        {{ statusLabel(application.status) }}
+                                    </span>
                                     <a
                                         :href="application.detail_url || `/provider/applications/${application.id}`"
                                         class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
                                     >
-                                        View details
-                                        <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                                        View
+                                        <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i>
                                     </a>
                                 </div>
                             </article>
+
+                            <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p class="text-xs font-semibold text-slate-500">Showing {{ visibleApplicationRange }}</p>
+                                <div v-if="totalApplicationPages > 1" class="flex gap-2">
+                                    <button
+                                        type="button"
+                                        :disabled="applicationPage === 1"
+                                        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                        @click="applicationPage -= 1"
+                                    >
+                                        Previous
+                                    </button>
+                                    <button
+                                        type="button"
+                                        :disabled="applicationPage === totalApplicationPages"
+                                        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                        @click="applicationPage += 1"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </section>
                 </div>
