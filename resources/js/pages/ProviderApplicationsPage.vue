@@ -29,7 +29,6 @@ const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffs
     .slice(0, 16);
 
 const scheduleTypeCatalog = [
-    { value: 'screening', label: 'Screening', icon: 'fa-solid fa-list-check', help: 'Eligibility and document review' },
     { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question', help: 'Provider-managed exam schedule' },
     { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments', help: 'Shared interview instructions' },
     { value: 'distribution', label: 'Distribution', icon: 'fa-solid fa-hand-holding-dollar', help: 'Award release announcement' },
@@ -511,8 +510,8 @@ onMounted(loadProviderData);
                                 <dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedScholarshipContext?.deadline || 'Not set' }}</dd>
                             </div>
                             <div class="border-t border-slate-200 p-3 sm:border-t-0">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Selection stages</dt>
-                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ programStageSummary || 'Screening' }}</dd>
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Applicant activities</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ programStageSummary || 'None scheduled' }}</dd>
                             </div>
                         </dl>
                     </section>
@@ -521,9 +520,9 @@ onMounted(loadProviderData);
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program Schedule</p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">One announcement for each stage</h3>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">Schedule applicant activities</h3>
                                 <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Set a date once. Applicants receive it automatically when your approval moves them into that stage.
+                                    Add dates for exams, interviews, or distribution. Screening stays in application review and does not need a schedule.
                                 </p>
                             </div>
                             <a :href="`/provider/programs/${selectedScholarshipId}/edit`" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
@@ -628,15 +627,6 @@ onMounted(loadProviderData);
                             </div>
                         </form>
                     </section>
-
-                    <details class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm shadow-sm">
-                        <summary class="cursor-pointer font-bold text-slate-950">
-                            DSS queue guide
-                        </summary>
-                        <p class="mt-2 leading-5 text-slate-600">
-                            DSS helps rank applications, but the provider still makes the final decision.
-                        </p>
-                    </details>
 
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">

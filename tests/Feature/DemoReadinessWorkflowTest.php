@@ -165,7 +165,9 @@ class DemoReadinessWorkflowTest extends TestCase
         $this->actingAs($provider)
             ->getJson('/provider/insights/data')
             ->assertOk()
-            ->assertJsonPath('document_review_queue.0.view_url', route('documents.view', $document));
+            ->assertJsonPath('document_review_queue.total', 1)
+            ->assertJsonPath('document_review_queue.data.0.application_id', $application->id)
+            ->assertJsonPath('document_review_queue.data.0.documents.0.view_url', route('documents.view', $document));
 
         $this->actingAs($admin)
             ->patchJson("/admin/scholarships/{$scholarship->id}/review", ['status' => 'rejected'])

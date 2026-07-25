@@ -246,12 +246,6 @@ function documentRequirements(requirements) {
         .filter(Boolean);
 }
 
-function requirementsLabel(requirements) {
-    const count = documentRequirements(requirements).length;
-
-    return count === 0 ? 'Not listed yet' : `${count} item${count === 1 ? '' : 's'}`;
-}
-
 function matchClass(score) {
     if (Number(score) >= 80) {
         return 'bg-emerald-100 text-emerald-800';
@@ -262,49 +256,6 @@ function matchClass(score) {
     }
 
     return 'bg-rose-100 text-rose-800';
-}
-
-function matchLabel(score) {
-    if (Number(score) >= 80) {
-        return 'Strong match';
-    }
-
-    if (Number(score) >= 50) {
-        return 'Review fit';
-    }
-
-    return 'Needs checking';
-}
-
-function beginnerTags(scholarship) {
-    const tags = [];
-    const score = Number(scholarship?.eligibility_match?.score ?? 0);
-    const documentsPercent = Number(scholarship?.prepared_documents?.percent ?? 0);
-    const days = deadlineDays(scholarship);
-
-    if (scholarship?.eligibility_match?.is_eligible === false) {
-        tags.push({ label: 'Not eligible yet', className: 'bg-rose-50 text-rose-700 ring-rose-100' });
-    } else if (score >= 80) {
-        tags.push({ label: 'Good fit', className: 'bg-emerald-50 text-emerald-700 ring-emerald-100' });
-    } else if (score >= 50) {
-        tags.push({ label: 'Review fit', className: 'bg-amber-50 text-amber-800 ring-amber-100' });
-    }
-
-    if (documentsPercent >= 100) {
-        tags.push({ label: 'Documents ready', className: 'bg-slate-100 text-slate-700 ring-slate-200' });
-    } else if (Number(scholarship?.prepared_documents?.required ?? 0) > 0) {
-        tags.push({ label: 'Needs documents', className: 'bg-slate-100 text-slate-700 ring-slate-200' });
-    }
-
-    if (days !== null && days >= 0 && days <= 7) {
-        tags.push({ label: days === 0 ? 'Due today' : 'Deadline soon', className: 'bg-rose-50 text-rose-700 ring-rose-100' });
-    }
-
-    if (scholarship?.has_applied) {
-        tags.push({ label: 'Already applied', className: 'bg-slate-100 text-slate-700 ring-slate-200' });
-    }
-
-    return tags.slice(0, 3);
 }
 
 function canStartApplication(scholarship) {
@@ -333,66 +284,12 @@ function applicationBlockedActionLabel(scholarship) {
         : 'Complete profile first';
 }
 
-function matchReasonHeading(scholarship) {
-    return scholarship?.eligibility_match?.is_eligible === false
-        ? 'What to check'
-        : 'Why this fits';
-}
-
-function highlightedCriteria(scholarship) {
-    const criteria = scholarship?.eligibility_match?.criteria ?? [];
-
-    if (!criteria.length) {
-        return [];
-    }
-
-    const failing = criteria.filter((criterion) => criterion.status === 'fail' && criterion.key !== 'documents');
-    const missing = criteria.filter((criterion) => criterion.status === 'missing');
-    const passing = criteria.filter((criterion) => criterion.status === 'pass');
-    const selected = [...failing, ...missing, ...passing];
-
-    return (selected.length ? selected : criteria).slice(0, 3);
-}
-
-function criterionReasonClass(status) {
-    if (status === 'fail') {
-        return 'border-rose-200 bg-rose-50 text-rose-700';
-    }
-
-    if (status === 'missing') {
-        return 'border-amber-200 bg-amber-50 text-amber-800';
-    }
-
-    if (status === 'pass') {
-        return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-    }
-
-    return 'border-slate-200 bg-white text-slate-600';
-}
-
-function criterionReasonText(criterion) {
-    const label = criterion?.label || 'Requirement';
-
-    if (criterion?.status === 'fail') {
-        return `${label} not matched`;
-    }
-
-    if (criterion?.status === 'missing') {
-        return `${label} missing`;
-    }
-
-    if (criterion?.status === 'pass') {
-        return `${label} matched`;
-    }
-
-    return criterion?.note || `${label} open`;
-}
-
 function scholarshipSnapshot(scholarship) {
     return [
         { label: 'Benefits', value: scholarship.benefit_summary || formatAmount(scholarship.award_amount) },
         { label: 'For', value: targetApplicantLabel(scholarship) },
-        { label: 'Docs', value: requirementsLabel(scholarship.requirements) },
+        { label: 'Academic', value: academicRequirementLabel(scholarship) },
+        { label: 'Documents', value: documentReadinessLabel(scholarship) },
     ];
 }
 
@@ -428,35 +325,6 @@ function compactDeadlineLabel(scholarship) {
     }
 
     return scholarship.deadline;
-}
-
-function scholarshipHighlights(scholarship) {
-    return [
-        {
-            icon: 'fa-solid fa-gift',
-            label: 'Benefits',
-            value: scholarship.benefit_summary || formatAmount(scholarship.award_amount),
-        },
-        {
-            icon: 'fa-solid fa-users',
-            label: 'For',
-            value: targetApplicantLabel(scholarship),
-        },
-        {
-            icon: 'fa-solid fa-calendar-day',
-            label: 'Deadline',
-            value: compactDeadlineLabel(scholarship),
-        },
-        {
-            icon: 'fa-solid fa-file-lines',
-            label: 'Documents',
-            value: documentReadinessLabel(scholarship),
-        },
-    ];
-}
-
-function visibleMatchReasons(scholarship) {
-    return highlightedCriteria(scholarship).slice(0, 2);
 }
 
 function coverageLabel(scholarship) {
@@ -899,147 +767,119 @@ onMounted(loadScholarships);
                             </div>
                         </div>
 
-                        <div v-else class="grid gap-4 xl:grid-cols-2">
+                        <div v-else class="grid items-stretch gap-4 lg:grid-cols-2">
                             <article
                                 v-for="scholarship in filteredScholarships"
                                 :key="scholarship.id"
-                                class="group relative overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-slate-400 hover:shadow-md"
+                                class="group flex h-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-slate-400 hover:shadow-md"
                             >
-                                <span class="absolute inset-y-0 left-0 w-1 bg-slate-900"></span>
+                                <div class="scholarship-card-head relative overflow-hidden p-4 text-white">
+                                    <div class="relative z-10 flex items-center justify-between gap-3">
+                                        <p class="truncate text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
+                                            {{ scholarship.category || 'Scholarship opportunity' }}
+                                        </p>
+                                        <button
+                                            type="button"
+                                            :disabled="savingId === scholarship.id"
+                                            :aria-label="scholarship.is_saved ? `Remove ${scholarship.title} from saved programs` : `Save ${scholarship.title}`"
+                                            :title="scholarship.is_saved ? 'Remove from saved programs' : 'Save program'"
+                                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/20 bg-white/10 text-sm text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="toggleSave(scholarship)"
+                                        >
+                                            <i :class="[scholarship.is_saved ? 'fa-solid' : 'fa-regular', savingId === scholarship.id ? 'fa-spinner fa-spin' : 'fa-bookmark']"></i>
+                                        </button>
+                                    </div>
 
-                                <div class="flex h-full flex-col p-4">
-                                    <div class="flex items-start gap-3">
+                                    <div class="relative z-10 mt-3 flex min-w-0 items-center gap-3">
                                         <img
                                             :src="scholarshipImage(scholarship)"
                                             :alt="scholarship.title"
-                                            class="h-14 w-14 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
+                                            class="h-13 w-13 shrink-0 rounded-md bg-white object-contain p-1.5 shadow-sm ring-1 ring-white/20"
                                             @error="handleScholarshipImageError"
                                         >
                                         <div class="min-w-0 flex-1">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
-                                                    {{ scholarship.eligibility_match?.score ?? 0 }}% match
-                                                </span>
-                                                <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                                    {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
-                                                </span>
-                                                <span v-if="scholarship.distance_label" class="rounded-md bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">
-                                                    {{ scholarship.distance_label }}
-                                                </span>
-                                            </div>
-                                            <h3 class="mt-2 line-clamp-2 text-lg font-bold leading-snug text-slate-950">
+                                            <h3 class="line-clamp-2 font-display text-lg font-bold leading-snug text-white">
                                                 {{ scholarship.title }}
                                             </h3>
-                                            <p class="mt-1 truncate text-sm font-semibold text-slate-500">
+                                            <p class="mt-1 truncate text-sm font-semibold text-slate-300">
                                                 {{ scholarship.provider?.name || 'Scholarship Provider' }}
                                             </p>
                                         </div>
                                     </div>
+                                </div>
 
-                                    <div v-if="beginnerTags(scholarship).length" class="mt-3 flex flex-wrap gap-2">
-                                        <span
-                                            v-for="tag in beginnerTags(scholarship)"
-                                            :key="tag.label"
-                                            :class="['rounded-md px-2.5 py-1 text-xs font-bold ring-1', tag.className]"
-                                        >
-                                            {{ tag.label }}
-                                        </span>
-                                    </div>
-
-                                    <p v-if="scholarship.description" class="mt-3 line-clamp-1 text-sm leading-6 text-slate-600">
-                                        {{ scholarship.description }}
-                                    </p>
-
-                                    <dl class="mt-4 grid gap-2 sm:grid-cols-2">
-                                        <div
-                                            v-for="fact in scholarshipHighlights(scholarship)"
-                                            :key="fact.label"
-                                            class="flex min-w-0 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
-                                        >
-                                            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-xs text-slate-700 ring-1 ring-slate-200">
-                                                <i :class="fact.icon"></i>
-                                            </span>
-                                            <div class="min-w-0">
-                                                <dt class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                                                    {{ fact.label }}
-                                                </dt>
-                                                <dd class="mt-0.5 truncate text-sm font-bold text-slate-900">
-                                                    {{ fact.value }}
-                                                </dd>
-                                            </div>
-                                        </div>
-                                    </dl>
-
-                                    <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-                                        <div class="flex items-center justify-between gap-3">
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                {{ matchReasonHeading(scholarship) }}
-                                            </p>
-                                            <p class="text-xs font-bold text-slate-700">
-                                                {{ matchLabel(scholarship.eligibility_match?.score) }}
-                                            </p>
-                                        </div>
-                                        <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
-                                            <span
-                                                class="block h-full rounded-full bg-slate-900"
-                                                :style="{ width: `${Math.min(Math.max(Number(scholarship.eligibility_match?.score ?? 0), 0), 100)}%` }"
-                                            ></span>
-                                        </div>
-                                        <div v-if="visibleMatchReasons(scholarship).length" class="mt-3 flex flex-wrap gap-2">
-                                            <span
-                                                v-for="criterion in visibleMatchReasons(scholarship)"
-                                                :key="`${scholarship.id}-${criterion.key}`"
-                                                :class="['rounded-md border px-2.5 py-1 text-xs font-bold', criterionReasonClass(criterion.status)]"
-                                            >
-                                                {{ criterionReasonText(criterion) }}
-                                            </span>
-                                        </div>
-                                        <p v-else class="mt-2 text-xs leading-5 text-slate-500">
-                                            Open the full details to review eligibility and requirements.
+                                <div class="flex flex-1 flex-col p-4">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <p class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
+                                            {{ scholarship.eligibility_match?.score ?? 0 }}% match
+                                        </p>
+                                        <p class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                            <i class="fa-regular fa-calendar mr-1"></i>
+                                            {{ compactDeadlineLabel(scholarship) }}
+                                        </p>
+                                        <p v-if="scholarship.distance_label" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                            <i class="fa-solid fa-location-dot mr-1"></i>
+                                            {{ scholarship.distance_label }}
                                         </p>
                                     </div>
 
-                                    <p v-if="!scholarship.has_applied && !canStartApplication(scholarship)" class="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-                                        {{ applicationBlockedLabel(scholarship) }}
-                                    </p>
-
-                                    <div class="mt-auto flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row">
-                                        <a
-                                            :href="`/dashboard/scholarships/${scholarship.id}`"
-                                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:flex-1"
-                                        >
-                                            View details
-                                        </a>
-                                        <a
-                                            v-if="scholarship.has_applied"
-                                            href="/dashboard/applications"
-                                            class="rounded-md bg-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-600 sm:flex-1"
-                                        >
-                                            Already applied
-                                        </a>
-                                        <a
-                                            v-else-if="canStartApplication(scholarship)"
-                                            :href="`/dashboard/applications?scholarship=${scholarship.id}`"
-                                            class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800 sm:flex-1"
-                                        >
-                                            Start application
-                                        </a>
-                                        <span
-                                            v-else
-                                            class="rounded-md bg-slate-200 px-4 py-2.5 text-center text-sm font-bold text-slate-600 sm:flex-1"
-                                        >
-                                            {{ applicationBlockedActionLabel(scholarship) }}
+                                    <div class="mt-4 flex items-start gap-3">
+                                        <span class="student-icon-badge">
+                                            <i class="fa-solid fa-user-graduate text-xs"></i>
                                         </span>
-                                        <button
-                                            type="button"
-                                            :disabled="savingId === scholarship.id"
-                                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-28"
-                                            @click="toggleSave(scholarship)"
-                                        >
-                                            <i :class="[scholarship.is_saved ? 'fa-solid' : 'fa-regular', 'fa-bookmark mr-1.5']"></i>
-                                            {{ savingId === scholarship.id ? 'Saving...' : scholarship.is_saved ? 'Saved' : 'Save' }}
-                                        </button>
+                                        <div class="min-w-0">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                                Intended for
+                                            </p>
+                                            <p class="mt-1 truncate text-sm font-bold text-slate-900">
+                                                {{ targetApplicantLabel(scholarship) }}
+                                            </p>
+                                        </div>
                                     </div>
+
+                                    <div class="mt-4 flex items-start gap-3 rounded-md border border-amber-100 bg-amber-50 p-3">
+                                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-200 text-amber-900">
+                                            <i class="fa-solid fa-gift text-xs"></i>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">
+                                                Benefits
+                                            </p>
+                                            <p class="mt-1 line-clamp-2 text-sm font-bold leading-5 text-slate-900">
+                                                {{ scholarship.benefit_summary || formatAmount(scholarship.award_amount) }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 p-3">
+                                    <a
+                                        :href="`/dashboard/scholarships/${scholarship.id}`"
+                                        class="rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                                    >
+                                        View details
+                                    </a>
+                                    <a
+                                        v-if="scholarship.has_applied"
+                                        href="/dashboard/applications"
+                                        class="rounded-md bg-slate-200 px-3 py-2.5 text-center text-sm font-bold text-slate-600"
+                                    >
+                                        Application
+                                    </a>
+                                    <a
+                                        v-else-if="canStartApplication(scholarship)"
+                                        :href="`/dashboard/applications?scholarship=${scholarship.id}`"
+                                        class="rounded-md bg-slate-900 px-3 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                                    >
+                                        Apply
+                                    </a>
+                                    <span
+                                        v-else
+                                        :title="applicationBlockedLabel(scholarship)"
+                                        class="rounded-md bg-slate-200 px-3 py-2.5 text-center text-sm font-bold text-slate-600"
+                                    >
+                                        {{ applicationBlockedActionLabel(scholarship) }}
+                                    </span>
                                 </div>
                             </article>
                         </div>
@@ -1051,3 +891,11 @@ onMounted(loadScholarships);
         </section>
     </main>
 </template>
+
+<style scoped>
+.scholarship-card-head {
+    background:
+        radial-gradient(circle at 92% -20%, rgba(252, 211, 77, 0.28), transparent 38%),
+        linear-gradient(120deg, #081426 0%, #10243d 100%);
+}
+</style>

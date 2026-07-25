@@ -6,6 +6,8 @@ class ScholarshipSelectionPlan
 {
     public const STAGES = ['screening', 'exam', 'interview', 'distribution'];
 
+    public const SCHEDULABLE_STAGES = ['exam', 'interview', 'distribution'];
+
     public const DEFAULT = ['screening', 'distribution'];
 
     public static function normalize(mixed $stages): array
@@ -48,6 +50,11 @@ class ScholarshipSelectionPlan
         }
 
         return null;
+    }
+
+    public static function isSchedulable(string $stage): bool
+    {
+        return in_array($stage, self::SCHEDULABLE_STAGES, true);
     }
 
     public static function rejectionStatus(string $currentStatus): ?string

@@ -372,7 +372,7 @@ class ProgramSelectionWorkflowTest extends TestCase
         $this->assertArrayNotHasKey('instructions', $payload['scholarship']['program_events'][0]);
     }
 
-    public function test_shared_screening_schedule_starts_review_without_using_a_generic_status(): void
+    public function test_screening_cannot_be_published_as_an_applicant_schedule(): void
     {
         [$provider, $_applicant, $scholarship, $application] = $this->applicationWithPlan([
             'screening',
@@ -387,17 +387,16 @@ class ProgramSelectionWorkflowTest extends TestCase
                 'mode' => 'provider_managed',
                 'instructions' => 'Keep your profile and uploaded documents current.',
             ])
-            ->assertOk()
-            ->assertJsonPath('audience_count', 1);
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('type');
 
         $this->assertDatabaseHas('scholarship_applications', [
             'id' => $application->id,
-            'status' => 'under_review',
+            'status' => 'submitted',
         ]);
-        $this->assertDatabaseHas('application_schedules', [
+        $this->assertDatabaseMissing('application_schedules', [
             'scholarship_application_id' => $application->id,
             'type' => 'screening',
-            'title' => 'Document screening day',
         ]);
     }
 

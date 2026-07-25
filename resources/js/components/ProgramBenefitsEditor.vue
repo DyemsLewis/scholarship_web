@@ -85,7 +85,7 @@ function benefitSummary(benefit) {
 </script>
 
 <template>
-    <section class="rounded-md border border-slate-200 bg-white p-4 md:col-span-2">
+    <section class="md:col-span-2">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
                 <p class="text-sm font-bold text-slate-950">Benefits offered</p>

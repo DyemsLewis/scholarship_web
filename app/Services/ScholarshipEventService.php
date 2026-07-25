@@ -14,6 +14,10 @@ class ScholarshipEventService
 {
     public function syncEligibleApplications(ScholarshipEvent $event): int
     {
+        if (! ScholarshipSelectionPlan::isSchedulable($event->type)) {
+            return 0;
+        }
+
         $applications = ScholarshipApplication::query()
             ->where('scholarship_id', $event->scholarship_id)
             ->with(['applicant', 'schedules', 'scholarship'])
@@ -30,6 +34,7 @@ class ScholarshipEventService
 
         return $application->scholarship->events
             ->where('status', 'scheduled')
+            ->filter(fn (ScholarshipEvent $event) => ScholarshipSelectionPlan::isSchedulable($event->type))
             ->filter(fn (ScholarshipEvent $event) => in_array(
                 $event->type,
                 ScholarshipSelectionPlan::normalize($application->scholarship->selection_stages),
@@ -43,6 +48,10 @@ class ScholarshipEventService
         ScholarshipEvent $event,
         ScholarshipApplication $application,
     ): ?ApplicationSchedule {
+        if (! ScholarshipSelectionPlan::isSchedulable($event->type)) {
+            return null;
+        }
+
         $application->loadMissing(['schedules', 'applicant', 'scholarship']);
         $schedule = $application->schedules->firstWhere('type', $event->type);
         $isAtStage = in_array($application->status, ScholarshipSelectionPlan::stageStatuses($event->type), true);

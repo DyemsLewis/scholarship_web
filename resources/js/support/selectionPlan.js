@@ -26,6 +26,10 @@ export const selectionStageDefinitions = [
 ];
 
 export function programEventForStage(scholarship, stage) {
+    if (stage === 'screening') {
+        return null;
+    }
+
     const events = Array.isArray(scholarship?.program_events)
         ? scholarship.program_events
         : [];

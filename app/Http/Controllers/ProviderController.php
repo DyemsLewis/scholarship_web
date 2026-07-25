@@ -403,27 +403,67 @@ class ProviderController extends Controller
             ->sortByDesc('total')
             ->values()
             ->take(8);
-        $documentReviewQueue = $applications
-            ->flatMap(fn (ScholarshipApplication $application) => $application->documents->map(fn (ApplicationDocument $document) => [
-                ...$this->documentPayload($document),
-                'application_id' => $application->id,
-                'application_status' => $application->status,
-                'applicant' => $application->applicant?->name,
-                'applicant_email' => $application->applicant?->email,
-                'scholarship' => $application->scholarship?->title,
-                'scholarship_image_url' => $application->scholarship
-                    ? $this->scholarshipImageUrl($application->scholarship)
-                    : asset('uploads/scholarship-default.jpg'),
-                'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
-            ]))
-            ->sortBy(fn (array $document) => [
-                'pending' => 0,
-                'needs_replacement' => 1,
-                'rejected' => 2,
-                'accepted' => 3,
-            ][$document['status'] ?? 'pending'] ?? 4)
-            ->values()
-            ->take(12);
+        $documentStatusPriority = [
+            'pending' => 0,
+            'needs_replacement' => 1,
+            'rejected' => 2,
+            'accepted' => 3,
+        ];
+        $documentReviewPackets = $applications
+            ->filter(fn (ScholarshipApplication $application) => $application->documents->isNotEmpty())
+            ->map(function (ScholarshipApplication $application) use ($documentStatusPriority): array {
+                $documents = $application->documents
+                    ->sortBy(fn (ApplicationDocument $document) => $documentStatusPriority[$document->status ?? 'pending'] ?? 4)
+                    ->values();
+                $statusCounts = $documents->countBy(fn (ApplicationDocument $document) => $document->status ?? 'pending');
+                $needsReview = (int) ($statusCounts['pending'] ?? 0)
+                    + (int) ($statusCounts['needs_replacement'] ?? 0)
+                    + (int) ($statusCounts['rejected'] ?? 0);
+
+                return [
+                    'application_id' => $application->id,
+                    'application_status' => $application->status,
+                    'applicant' => $application->applicant?->name,
+                    'applicant_email' => $application->applicant?->email,
+                    'scholarship' => $application->scholarship?->title,
+                    'scholarship_image_url' => $application->scholarship
+                        ? $this->scholarshipImageUrl($application->scholarship)
+                        : asset('uploads/scholarship-default.jpg'),
+                    'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
+                    'files_count' => $documents->count(),
+                    'needs_review_count' => $needsReview,
+                    'accepted_count' => (int) ($statusCounts['accepted'] ?? 0),
+                    'replacement_count' => (int) ($statusCounts['needs_replacement'] ?? 0),
+                    'rejected_count' => (int) ($statusCounts['rejected'] ?? 0),
+                    'documents' => $documents
+                        ->take(4)
+                        ->map(fn (ApplicationDocument $document) => $this->documentPayload($document))
+                        ->values(),
+                    'review_url' => route('provider.applications.show', [
+                        'application' => $application,
+                        'section' => 'documents',
+                    ]),
+                ];
+            })
+            ->sort(function (array $first, array $second): int {
+                return ($second['needs_review_count'] <=> $first['needs_review_count'])
+                    ?: ($second['application_id'] <=> $first['application_id']);
+            })
+            ->values();
+        $documentReviewPerPage = 8;
+        $documentReviewTotal = $documentReviewPackets->count();
+        $documentReviewLastPage = max(1, (int) ceil($documentReviewTotal / $documentReviewPerPage));
+        $documentReviewPage = min(
+            max(1, $request->integer('document_page', 1)),
+            $documentReviewLastPage,
+        );
+        $documentReviewQueue = [
+            'data' => $documentReviewPackets->forPage($documentReviewPage, $documentReviewPerPage)->values(),
+            'current_page' => $documentReviewPage,
+            'last_page' => $documentReviewLastPage,
+            'per_page' => $documentReviewPerPage,
+            'total' => $documentReviewTotal,
+        ];
 
         return response()->json([
             'user' => $request->user()->loadMissing(['providerProfile'])->publicPayload(),
@@ -590,7 +630,7 @@ class ProviderController extends Controller
         abort_unless($scholarship->provider_id === $request->user()->id, 403);
 
         $validated = $request->validate([
-            'type' => ['required', Rule::in(ScholarshipSelectionPlan::STAGES)],
+            'type' => ['required', Rule::in(ScholarshipSelectionPlan::SCHEDULABLE_STAGES)],
             'title' => ['nullable', 'string', 'max:255'],
             'scheduled_at' => ['required', 'date', 'after_or_equal:now'],
             'mode' => ['required', Rule::in(['onsite', 'online', 'hybrid', 'provider_managed'])],

@@ -18,7 +18,10 @@ const updatingId = ref(null);
 const documentUpdatingId = ref(null);
 const errorMessage = ref('');
 const application = ref(null);
-const activeSection = ref('review');
+const requestedSection = new URLSearchParams(window.location.search).get('section');
+const activeSection = ref(['review', 'schedule', 'documents', 'applicant', 'history'].includes(requestedSection)
+    ? requestedSection
+    : 'review');
 const showRubricDetails = ref(false);
 const showDssDetails = ref(false);
 const reviewForm = ref(emptyReviewForm());

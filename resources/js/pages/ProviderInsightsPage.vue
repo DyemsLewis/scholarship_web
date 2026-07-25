@@ -1,11 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import ConfirmationDialog from '../components/ConfirmationDialog.vue';
-import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import { useConfirmationDialog } from '../composables/useConfirmationDialog';
-import { formatFileSize, labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -15,16 +11,15 @@ const programInsights = ref([]);
 const topMissingDocuments = ref([]);
 const documentIssues = ref([]);
 const documentReviewQueue = ref([]);
-const documentUpdatingId = ref(null);
-const selectedReviewDocument = ref(null);
-const documentReviewError = ref('');
+const documentReviewPagination = ref({
+    current_page: 1,
+    last_page: 1,
+    per_page: 8,
+    total: 0,
+});
+const documentQueueLoading = ref(false);
+const documentQueueError = ref('');
 const dssSummary = ref({});
-const {
-    confirmation,
-    requestConfirmation,
-    confirmConfirmation,
-    cancelConfirmation,
-} = useConfirmationDialog();
 
 const dssItems = computed(() => [
     { label: 'Highly recommended', value: dssSummary.value.highly_recommended ?? 0 },
@@ -34,16 +29,6 @@ const dssItems = computed(() => [
 ]);
 const maxFunnelValue = computed(() => Math.max(1, ...funnel.value.map((item) => Number(item.value ?? 0))));
 const maxProgramApplications = computed(() => Math.max(1, ...programInsights.value.map((program) => Number(program.applications ?? 0))));
-const prioritizedDocumentReviewQueue = computed(() => [...documentReviewQueue.value].sort((first, second) => {
-    const priority = {
-        rejected: 4,
-        needs_replacement: 3,
-        pending: 2,
-        accepted: 0,
-    };
-
-    return (priority[second.status ?? 'pending'] ?? 1) - (priority[first.status ?? 'pending'] ?? 1);
-}));
 
 function barWidth(value, max) {
     const numericValue = Number(value ?? 0);
@@ -67,20 +52,56 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
-function documentStatusClass(status) {
-    if (status === 'accepted') {
-        return 'bg-emerald-100 text-emerald-800';
+function acceptedDocumentPercent(packet) {
+    const total = Number(packet.files_count ?? 0);
+
+    if (total === 0) {
+        return '0%';
     }
 
-    if (status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
+    return `${Math.round((Number(packet.accepted_count ?? 0) / total) * 100)}%`;
+}
+
+function documentPacketStatus(packet) {
+    const pending = Math.max(
+        0,
+        Number(packet.needs_review_count ?? 0)
+            - Number(packet.replacement_count ?? 0)
+            - Number(packet.rejected_count ?? 0),
+    );
+    const parts = [];
+
+    if (pending > 0) {
+        parts.push(`${pending} awaiting review`);
     }
 
-    if (status === 'needs_replacement') {
-        return 'bg-amber-100 text-amber-800';
+    if (Number(packet.replacement_count ?? 0) > 0) {
+        parts.push(`${packet.replacement_count} need replacement`);
     }
 
-    return 'bg-slate-100 text-slate-700';
+    if (Number(packet.rejected_count ?? 0) > 0) {
+        parts.push(`${packet.rejected_count} rejected`);
+    }
+
+    return parts.length ? parts.join(' - ') : 'All documents reviewed';
+}
+
+function applyInsightsPayload(data) {
+    summary.value = data.summary;
+    funnel.value = data.funnel ?? [];
+    programInsights.value = data.program_insights ?? [];
+    topMissingDocuments.value = data.top_missing_documents ?? [];
+    documentIssues.value = data.document_issues ?? [];
+    dssSummary.value = data.dss_summary ?? {};
+
+    const queue = data.document_review_queue ?? {};
+    documentReviewQueue.value = Array.isArray(queue) ? queue : (queue.data ?? []);
+    documentReviewPagination.value = {
+        current_page: Number(queue.current_page ?? 1),
+        last_page: Number(queue.last_page ?? 1),
+        per_page: Number(queue.per_page ?? 8),
+        total: Number(queue.total ?? documentReviewQueue.value.length),
+    };
 }
 
 async function loadInsights() {
@@ -89,14 +110,7 @@ async function loadInsights() {
 
     try {
         const response = await window.axios.get('/provider/insights/data');
-
-        summary.value = response.data.summary;
-        funnel.value = response.data.funnel ?? [];
-        programInsights.value = response.data.program_insights ?? [];
-        topMissingDocuments.value = response.data.top_missing_documents ?? [];
-        documentIssues.value = response.data.document_issues ?? [];
-        documentReviewQueue.value = response.data.document_review_queue ?? [];
-        dssSummary.value = response.data.dss_summary ?? {};
+        applyInsightsPayload(response.data);
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider review.';
     } finally {
@@ -104,51 +118,30 @@ async function loadInsights() {
     }
 }
 
-function openDocumentReview(document) {
-    selectedReviewDocument.value = document;
-    documentReviewError.value = '';
-}
+async function loadDocumentPage(page) {
+    const nextPage = Number(page);
 
-function closeDocumentReview() {
-    selectedReviewDocument.value = null;
-    documentReviewError.value = '';
-}
-
-async function updateDocumentStatus(review) {
-    const document = review?.document ?? selectedReviewDocument.value;
-
-    if (!document) {
+    if (
+        documentQueueLoading.value
+        || nextPage < 1
+        || nextPage > documentReviewPagination.value.last_page
+        || nextPage === documentReviewPagination.value.current_page
+    ) {
         return;
     }
 
-    if (review.status !== document.status && ['rejected', 'needs_replacement'].includes(review.status)) {
-        const confirmed = await requestConfirmation({
-            title: review.status === 'rejected' ? 'Reject this document?' : 'Request a replacement?',
-            message: `${document.applicant || 'The applicant'} will see the document status and your review note.`,
-            confirmLabel: review.status === 'rejected' ? 'Reject document' : 'Request replacement',
-            tone: review.status === 'rejected' ? 'danger' : 'warning',
-        });
-
-        if (!confirmed) {
-            return;
-        }
-    }
-
-    documentUpdatingId.value = document.id;
-    documentReviewError.value = '';
+    documentQueueLoading.value = true;
+    documentQueueError.value = '';
 
     try {
-        await window.axios.patch(`/provider/documents/${document.id}/status`, {
-            status: review.status ?? 'pending',
-            review_notes: review.review_notes ?? '',
+        const response = await window.axios.get('/provider/insights/data', {
+            params: { document_page: nextPage },
         });
-
-        closeDocumentReview();
-        await loadInsights();
-    } catch (handledError) {
-        void handledError;
+        applyInsightsPayload(response.data);
+    } catch (error) {
+        documentQueueError.value = error.response?.data?.message ?? 'Unable to load this document page.';
     } finally {
-        documentUpdatingId.value = null;
+        documentQueueLoading.value = false;
     }
 }
 
@@ -158,12 +151,6 @@ onMounted(loadInsights);
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar />
-
-        <ConfirmationDialog
-            v-bind="confirmation"
-            @confirm="confirmConfirmation"
-            @cancel="cancelConfirmation"
-        />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
@@ -256,66 +243,114 @@ onMounted(loadInsights);
                                     Document Review
                                 </p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Uploaded files to check
+                                    Applicant document packets
                                 </h3>
                                 <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Open a file to preview it and record your decision.
+                                    Review all uploaded files for one application together instead of working through a long file-by-file list.
                                 </p>
                             </div>
-                            <a
-                                href="/provider/applications"
-                                class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                            >
-                                View applications
-                            </a>
+                            <div class="flex shrink-0 items-center gap-2">
+                                <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
+                                    {{ documentReviewPagination.total }} applications
+                                </span>
+                                <a
+                                    href="/provider/applications"
+                                    class="rounded-md border border-slate-300 px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                >
+                                    View queue
+                                </a>
+                            </div>
                         </div>
 
-                        <div v-if="documentReviewQueue.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+                        <p v-if="documentQueueError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">
+                            {{ documentQueueError }}
+                        </p>
+
+                        <div v-if="documentQueueLoading" class="mt-5 rounded-md border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                            Loading document packets...
+                        </div>
+
+                        <div v-else-if="documentReviewQueue.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
                             No uploaded student documents yet.
                         </div>
 
                         <div v-else class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                            <div class="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 xl:grid">
+                                <span>Applicant</span>
+                                <span>Files</span>
+                                <span>Action</span>
+                            </div>
                             <article
-                                v-for="document in prioritizedDocumentReviewQueue"
-                                :key="document.id"
-                                class="flex flex-col gap-3 border-b border-slate-200 p-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                                v-for="packet in documentReviewQueue"
+                                :key="packet.application_id"
+                                class="grid gap-3 border-b border-slate-200 p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] xl:items-center"
                             >
                                 <div class="flex min-w-0 gap-3">
                                     <img
-                                        :src="document.scholarship_image_url || '/uploads/scholarship-default.jpg'"
-                                        :alt="document.scholarship || 'Scholarship'"
+                                        :src="packet.scholarship_image_url || '/uploads/scholarship-default.jpg'"
+                                        :alt="packet.scholarship || 'Scholarship'"
                                         class="h-11 w-11 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                     >
                                     <div class="min-w-0">
-                                        <p class="truncate text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
-                                            {{ document.scholarship || 'Scholarship' }}
-                                        </p>
-                                        <h4 class="mt-1 truncate text-base font-bold text-slate-950">
-                                            {{ document.document_name }}
-                                        </h4>
-                                        <p class="mt-1 truncate text-xs text-slate-500">
-                                            {{ document.applicant || 'Applicant' }} - {{ document.original_name }} - {{ formatFileSize(document.size) }}
-                                        </p>
-                                        <p v-if="document.review_notes" class="mt-1 line-clamp-1 text-xs text-slate-600">
-                                            Review note: {{ document.review_notes }}
-                                        </p>
+                                        <h4 class="truncate text-sm font-bold text-slate-950">{{ packet.applicant || 'Applicant' }}</h4>
+                                        <p class="mt-1 truncate text-xs font-semibold text-amber-700">{{ packet.scholarship || 'Scholarship' }}</p>
+                                        <p class="mt-1 truncate text-xs text-slate-500">{{ packet.applicant_email }} - Submitted {{ packet.submitted_at || 'recently' }}</p>
                                     </div>
                                 </div>
 
-                                <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                                    <span :class="['h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase', documentStatusClass(document.status)]">
-                                        {{ labelFromKey(document.status || 'pending') }}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
-                                        @click="openDocumentReview(document)"
+                                <div class="min-w-0 max-w-md">
+                                    <div class="flex items-center justify-between gap-4">
+                                        <p class="text-sm font-bold text-slate-950">{{ packet.files_count }} uploaded</p>
+                                        <p class="shrink-0 text-xs font-semibold text-slate-500">
+                                            {{ packet.accepted_count }} accepted
+                                        </p>
+                                    </div>
+                                    <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                        <div
+                                            class="h-full rounded-full bg-emerald-500 transition-all"
+                                            :style="{ width: acceptedDocumentPercent(packet) }"
+                                        ></div>
+                                    </div>
+                                    <p
+                                        :class="[
+                                            'mt-2 text-xs font-semibold',
+                                            packet.needs_review_count ? 'text-amber-700' : 'text-emerald-700',
+                                        ]"
                                     >
-                                        <i class="fa-regular fa-eye"></i>
-                                        View
-                                    </button>
+                                        {{ documentPacketStatus(packet) }}
+                                    </p>
                                 </div>
+
+                                <a
+                                    :href="packet.review_url"
+                                    class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800"
+                                >
+                                    Review files
+                                    <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                </a>
                             </article>
+                        </div>
+
+                        <div v-if="documentReviewPagination.last_page > 1" class="mt-4 flex items-center justify-between gap-3">
+                            <button
+                                type="button"
+                                :disabled="documentReviewPagination.current_page === 1 || documentQueueLoading"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                @click="loadDocumentPage(documentReviewPagination.current_page - 1)"
+                            >
+                                Previous
+                            </button>
+                            <p class="text-xs font-semibold text-slate-500">
+                                Page {{ documentReviewPagination.current_page }} of {{ documentReviewPagination.last_page }}
+                            </p>
+                            <button
+                                type="button"
+                                :disabled="documentReviewPagination.current_page === documentReviewPagination.last_page || documentQueueLoading"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                @click="loadDocumentPage(documentReviewPagination.current_page + 1)"
+                            >
+                                Next
+                            </button>
                         </div>
                     </section>
 
@@ -396,14 +431,5 @@ onMounted(loadInsights);
             </div>
         </section>
 
-        <ProviderDocumentReviewModal
-            :document="selectedReviewDocument"
-            :context="[selectedReviewDocument?.applicant, selectedReviewDocument?.scholarship].filter(Boolean).join(' - ')"
-            :saving="documentUpdatingId === selectedReviewDocument?.id"
-            :error="documentReviewError"
-            @close="closeDocumentReview"
-            @save="updateDocumentStatus"
-            @clear-error="documentReviewError = ''"
-        />
     </main>
 </template>
