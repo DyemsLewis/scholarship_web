@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProviderController;
+use App\Http\Controllers\SupportReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PageController::class, 'home'])->name('home');
@@ -27,6 +28,9 @@ Route::post('/dashboard/scholarships/{scholarship}/application-start', [Applican
 Route::get('/dashboard/applications', [ApplicantDashboardController::class, 'applications'])->middleware('auth')->name('dashboard.applications');
 Route::get('/dashboard/documents', [ApplicantDashboardController::class, 'documents'])->middleware('auth')->name('dashboard.documents');
 Route::get('/dashboard/profile', [ApplicantDashboardController::class, 'profile'])->middleware('auth')->name('dashboard.profile');
+Route::get('/dashboard/reports', [SupportReportController::class, 'applicantPage'])->middleware('auth')->name('dashboard.reports');
+Route::get('/dashboard/reports/data', [SupportReportController::class, 'applicantData'])->middleware('auth')->name('dashboard.reports.data');
+Route::post('/dashboard/reports', [SupportReportController::class, 'store'])->middleware(['auth', 'throttle:6,1'])->name('dashboard.reports.store');
 Route::get('/dashboard/profile/data', [ApplicantDashboardController::class, 'profileData'])->middleware('auth')->name('dashboard.profile.data');
 Route::patch('/dashboard/profile', [ApplicantDashboardController::class, 'updateProfile'])->middleware('auth')->name('dashboard.profile.update');
 Route::post('/dashboard/profile/verification-documents', [ApplicantDashboardController::class, 'uploadApplicantVerificationDocument'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applicant-verification-documents.store');
@@ -71,6 +75,9 @@ Route::middleware(['auth', 'admin'])
         Route::get('/scholarships/{scholarship}/review', [AdminController::class, 'scholarshipReview'])->name('scholarships.review.show');
         Route::get('/scholarships/{scholarship}/review/data', [AdminController::class, 'scholarshipReviewData'])->name('scholarships.review.data');
         Route::get('/logs', [AdminController::class, 'logs'])->name('logs');
+        Route::get('/reports', [SupportReportController::class, 'adminPage'])->name('reports');
+        Route::get('/reports/data', [SupportReportController::class, 'adminData'])->name('reports.data');
+        Route::patch('/reports/{report}/status', [SupportReportController::class, 'updateStatus'])->name('reports.status');
         Route::get('/users', [AdminController::class, 'users'])->name('users');
         Route::post('/users', [AdminController::class, 'storeUser'])->name('users.store');
         Route::get('/users/{user}', [AdminController::class, 'showUser'])->name('users.show');
@@ -105,6 +112,9 @@ Route::middleware(['auth', 'provider'])
         Route::get('/programs/{scholarship}/applications', [ProviderController::class, 'programApplications'])->whereNumber('scholarship')->name('programs.applications');
         Route::get('/applications', [ProviderController::class, 'applications'])->name('applications');
         Route::get('/profile', [ProviderController::class, 'profile'])->name('profile');
+        Route::get('/reports', [SupportReportController::class, 'providerPage'])->name('reports');
+        Route::get('/reports/data', [SupportReportController::class, 'providerData'])->name('reports.data');
+        Route::patch('/reports/{report}/status', [SupportReportController::class, 'updateStatus'])->name('reports.status');
         Route::redirect('/insights', '/provider/review')->name('insights.redirect');
         Route::get('/review', [ProviderController::class, 'insights'])->name('review');
         Route::get('/profile/data', [ProviderController::class, 'profileData'])->name('profile.data');

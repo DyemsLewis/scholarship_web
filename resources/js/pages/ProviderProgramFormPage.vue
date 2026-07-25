@@ -37,6 +37,8 @@ const {
 } = useConfirmationDialog();
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
+const requiredHintClass = 'ml-2 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700';
+const optionalHintClass = 'ml-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400';
 const inputClass = 'w-full min-w-0 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const sectionCardClass = 'rounded-lg border border-slate-200 bg-slate-50/50 p-4 sm:p-5';
 const fieldCardClass = 'min-w-0 rounded-md border border-slate-200 bg-white p-4';
@@ -703,6 +705,53 @@ async function openFormSection(sectionId) {
     scholarshipFormElement.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+async function focusFormField(sectionId, fieldId) {
+    activeFormSection.value = sectionId;
+    await nextTick();
+
+    const field = document.getElementById(fieldId);
+
+    field?.focus({ preventScroll: true });
+    field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function readinessFocusTarget(item) {
+    if (item.label === 'Program overview') {
+        if (!hasText(scholarshipForm.value.title)) return 'scholarship-title';
+        if (!hasText(scholarshipForm.value.category)) return 'scholarship-category';
+
+        return 'scholarship-description';
+    }
+
+    if (item.label === 'Offer details') {
+        if (scholarshipForm.value.benefits.length === 0) return 'program-benefit-type';
+        if (!hasText(scholarshipForm.value.applicationMode)) return 'scholarship-mode';
+
+        return 'scholarship-deadline';
+    }
+
+    if (item.label === 'Eligibility and matching rules') {
+        return !hasText(scholarshipForm.value.eligibility)
+            ? 'scholarship-eligibility'
+            : 'target-applicant-preset';
+    }
+
+    if (item.label === 'Document checklist') return 'scholarship-custom-requirements';
+
+    if (item.label === 'Program location') {
+        if (!hasText(scholarshipForm.value.locationName)) return 'scholarship-location-name';
+        if (!hasText(scholarshipForm.value.locationAddress)) return 'scholarship-location-address';
+
+        return 'scholarship-map-toggle';
+    }
+
+    if (item.label === 'Application workflow') return 'scholarship-contact-email';
+    if (item.label === 'Exam details') return 'scholarship-exam-duration';
+    if (item.label === 'Review scoring') return `rubric-label-${scholarshipForm.value.reviewRubric[0]?.key}`;
+
+    return '';
+}
+
 function goToPreviousFormSection() {
     const previous = formSections[activeFormSectionIndex.value - 1];
 
@@ -1315,21 +1364,27 @@ async function saveScholarship() {
     formError.value = '';
 
     if (!hasText(scholarshipForm.value.title)) {
-        await openFormSection('overview');
+        await focusFormField('overview', 'scholarship-title');
         formError.value = 'Add a scholarship title before saving.';
         return;
     }
 
     if (termsRequiredForSave.value && !hasText(scholarshipForm.value.description)) {
-        await openFormSection('overview');
+        await focusFormField('overview', 'scholarship-description');
         formError.value = 'Add a clear scholarship description before continuing.';
         return;
     }
 
     if (reviewSubmissionSelected.value && missingProgramReadinessItems.value.length > 0) {
         const firstMissingItem = missingProgramReadinessItems.value[0];
+        const fieldId = readinessFocusTarget(firstMissingItem);
 
-        await openFormSection(firstMissingItem.section);
+        if (fieldId) {
+            await focusFormField(firstMissingItem.section, fieldId);
+        } else {
+            await openFormSection(firstMissingItem.section);
+        }
+
         formError.value = `${firstMissingItem.label} is incomplete. ${firstMissingItem.help}`;
         return;
     }
@@ -1357,7 +1412,7 @@ async function saveScholarship() {
         )
     ) {
         customizeRubric.value = true;
-        await openFormSection('scoring');
+        await focusFormField('scoring', `rubric-label-${scholarshipForm.value.reviewRubric[0]?.key}`);
         formError.value = 'Add a label for every review criterion and make the weights total 100%.';
         return;
     }
@@ -1538,10 +1593,9 @@ onMounted(loadFormData);
                                     </p>
                                 </div>
                                 <div class="w-full sm:w-64">
-                                    <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
-                                        <span>{{ completedFormSectionCount }} of {{ formSections.length }} ready</span>
-                                        <span>{{ formProgressPercent }}%</span>
-                                    </div>
+                                    <p class="text-xs font-semibold text-slate-500">
+                                        {{ completedFormSectionCount }} of {{ formSections.length }} sections ready
+                                    </p>
                                     <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
                                         <div class="h-full rounded-full bg-amber-500 transition-all" :style="{ width: `${formProgressPercent}%` }"></div>
                                     </div>
@@ -1583,21 +1637,13 @@ onMounted(loadFormData);
                         <div class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
                             <div class="border-b border-slate-200 p-4 sm:p-5">
                                 <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                    <div class="flex min-w-0 items-start gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">
-                                            {{ activeFormSectionIndex + 1 }}
-                                        </span>
-                                        <div class="min-w-0">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">
-                                                Step {{ activeFormSectionIndex + 1 }} of {{ formSections.length }}
-                                            </p>
-                                            <h3 class="mt-1 text-xl font-bold text-slate-950">
-                                                {{ activeFormSectionMeta.label }}
-                                            </h3>
-                                            <p class="mt-1 text-sm leading-6 text-slate-500">
-                                                {{ activeFormSectionMeta.help }}
-                                            </p>
-                                        </div>
+                                    <div class="min-w-0">
+                                        <h3 class="text-xl font-bold text-slate-950">
+                                            {{ activeFormSectionMeta.label }}
+                                        </h3>
+                                        <p class="mt-1 text-sm leading-6 text-slate-500">
+                                            {{ activeFormSectionMeta.help }}
+                                        </p>
                                     </div>
 
                                     <span
@@ -1632,6 +1678,7 @@ onMounted(loadFormData);
                                 <div :class="fieldStackClass">
                                     <label :class="labelClass" for="scholarship-title">
                                         Scholarship title
+                                        <span :class="requiredHintClass">Required</span>
                                     </label>
                                     <input
                                         id="scholarship-title"
@@ -1654,6 +1701,7 @@ onMounted(loadFormData);
                                     <div class="min-w-0">
                                         <label :class="labelClass" for="scholarship-image">
                                             Program logo
+                                            <span :class="optionalHintClass">Optional</span>
                                         </label>
                                         <input
                                             id="scholarship-image"
@@ -1671,7 +1719,10 @@ onMounted(loadFormData);
                             </div>
 
                             <div v-show="activeFormSection === 'audience'" :class="fieldStackClass">
-                                <label :class="labelClass" for="target-applicant-preset">Who is this program for?</label>
+                                <label :class="labelClass" for="target-applicant-preset">
+                                    Who is this program for?
+                                    <span :class="optionalHintClass">Quick setup</span>
+                                </label>
                                 <select
                                     id="target-applicant-preset"
                                     :value="selectedTargetPresetKey"
@@ -1692,6 +1743,7 @@ onMounted(loadFormData);
                                 <div v-show="activeFormSection === 'overview'" :class="[basicFieldStackClass, 'md:col-span-2']">
                                     <label :class="labelClass" for="scholarship-category">
                                         Category
+                                        <span :class="requiredHintClass">Required</span>
                                     </label>
                                     <select id="scholarship-category" v-model="scholarshipForm.category" :class="inputClass">
                                         <option value="">
@@ -1715,6 +1767,7 @@ onMounted(loadFormData);
                                 <div v-show="activeFormSection === 'audience'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-grade-scale">
                                         Academic basis
+                                        <span :class="optionalHintClass">Optional</span>
                                     </label>
                                     <select
                                         id="scholarship-grade-scale"
@@ -1738,6 +1791,7 @@ onMounted(loadFormData);
                                 <div v-if="activeFormSection === 'audience' && academicRequirementNeedsValue" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-minimum-gwa">
                                         {{ selectedGradeScaleOption.inputLabel }}
+                                        <span :class="requiredHintClass">Required</span>
                                     </label>
                                     <input
                                         id="scholarship-minimum-gwa"
@@ -1766,9 +1820,10 @@ onMounted(loadFormData);
                                     </p>
                                 </div>
 
-                                <div v-show="activeFormSection === 'offer'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'offer'" :class="[basicFieldStackClass, 'order-4']">
                                     <label :class="labelClass" for="scholarship-slots">
                                         Award slots
+                                        <span :class="optionalHintClass">Optional</span>
                                     </label>
                                     <input
                                         id="scholarship-slots"
@@ -1784,9 +1839,10 @@ onMounted(loadFormData);
                                     </p>
                                 </div>
 
-                                <div v-show="activeFormSection === 'offer'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'offer'" :class="[basicFieldStackClass, 'order-2']">
                                     <label :class="labelClass" for="scholarship-mode">
                                         Application mode
+                                        <span :class="requiredHintClass">Required</span>
                                     </label>
                                     <select id="scholarship-mode" v-model="scholarshipForm.applicationMode" :class="inputClass">
                                         <option value="">
@@ -1802,9 +1858,10 @@ onMounted(loadFormData);
                                     </select>
                                 </div>
 
-                                <div v-show="activeFormSection === 'offer'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'offer'" :class="[basicFieldStackClass, 'order-3']">
                                     <label :class="labelClass" for="scholarship-deadline">
                                         Deadline
+                                        <span :class="requiredHintClass">Required</span>
                                     </label>
                                     <input
                                         id="scholarship-deadline"
@@ -1838,6 +1895,7 @@ onMounted(loadFormData);
                             <div v-show="activeFormSection === 'overview'" :class="fieldStackClass">
                                 <label :class="labelClass" for="scholarship-description">
                                     Description
+                                    <span :class="requiredHintClass">Required</span>
                                 </label>
                                 <textarea
                                     id="scholarship-description"
@@ -1853,6 +1911,7 @@ onMounted(loadFormData);
                             <div :class="fieldStackClass">
                                 <label :class="labelClass" for="scholarship-eligibility">
                                     Eligibility
+                                    <span :class="requiredHintClass">Required</span>
                                 </label>
                                 <textarea
                                     id="scholarship-eligibility"
@@ -1900,7 +1959,10 @@ onMounted(loadFormData);
 
                                     <div class="mt-4 grid gap-4 md:grid-cols-2">
                                         <div>
-                                            <label :class="labelClass" for="scholarship-exam-duration">Duration in minutes</label>
+                                            <label :class="labelClass" for="scholarship-exam-duration">
+                                                Duration in minutes
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
                                             <input
                                                 id="scholarship-exam-duration"
                                                 v-model="scholarshipForm.examDurationMinutes"
@@ -1915,7 +1977,10 @@ onMounted(loadFormData);
                                         </div>
 
                                         <div>
-                                            <label :class="labelClass" for="scholarship-exam-passing-score">Passing score (%)</label>
+                                            <label :class="labelClass" for="scholarship-exam-passing-score">
+                                                Passing score (%)
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
                                             <input
                                                 id="scholarship-exam-passing-score"
                                                 v-model="scholarshipForm.examPassingScore"
@@ -1934,7 +1999,10 @@ onMounted(loadFormData);
                                 <div :class="['mt-4', fieldCardClass]">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
-                                            <p class="text-sm font-bold text-slate-950">Selection plan</p>
+                                            <p class="text-sm font-bold text-slate-950">
+                                                Selection plan
+                                                <span :class="requiredHintClass">Required</span>
+                                            </p>
                                             <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
                                                 Providers approve or reject applicants at each review gate. The system moves approved applicants to the next stage automatically.
                                             </p>
@@ -2119,6 +2187,16 @@ onMounted(loadFormData);
                                 </div>
 
                                 <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
+                                    <div class="lg:col-span-2">
+                                        <p class="text-sm font-bold text-slate-950">
+                                            Applicant contact
+                                            <span :class="requiredHintClass">Email or number required</span>
+                                        </p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            Add the contact applicants should use for questions about this program.
+                                        </p>
+                                    </div>
+
                                     <div :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-contact-email">
                                             Contact email
@@ -2458,6 +2536,7 @@ onMounted(loadFormData);
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
                                             Map location
+                                            <span :class="requiredHintClass">Address and pin required</span>
                                         </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
                                             Add the office, campus, or service address. Search an address or click the map to set a pin and fill the address.
@@ -2465,6 +2544,7 @@ onMounted(loadFormData);
                                     </div>
 
                                     <button
+                                        id="scholarship-map-toggle"
                                         type="button"
                                         class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                                         @click="toggleLocationMap"
@@ -2477,6 +2557,7 @@ onMounted(loadFormData);
                                     <div :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-location-name">
                                             Location name
+                                            <span :class="requiredHintClass">Required</span>
                                         </label>
                                         <input
                                             id="scholarship-location-name"
@@ -2491,6 +2572,7 @@ onMounted(loadFormData);
                                     <div :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-location-address">
                                             Full address
+                                            <span :class="requiredHintClass">Required</span>
                                         </label>
                                         <input
                                             id="scholarship-location-address"
@@ -2527,6 +2609,7 @@ onMounted(loadFormData);
                                 <div>
                                     <p class="text-sm font-semibold text-slate-700">
                                         Document requirements
+                                        <span :class="requiredHintClass">At least one</span>
                                     </p>
                                     <p class="mt-1 text-xs leading-5 text-slate-500">
                                         Choose the documents applicants must prepare for this scholarship.
@@ -2586,6 +2669,7 @@ onMounted(loadFormData);
                                 <div :class="['mt-4', fieldCardClass]">
                                     <label :class="labelClass" for="scholarship-custom-requirements">
                                         Custom document requirements
+                                        <span :class="optionalHintClass">Optional</span>
                                     </label>
                                     <textarea
                                         id="scholarship-custom-requirements"
@@ -2624,6 +2708,7 @@ onMounted(loadFormData);
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
                                             Provider review rubric
+                                            <span :class="requiredHintClass">Required</span>
                                         </p>
                                         <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
                                             Use the same criteria for every applicant. Scores support review but never make the final decision.

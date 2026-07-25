@@ -33,6 +33,7 @@ const pages = {
     dashboardApplications: () => import('./pages/UserApplicationsPage.vue'),
     dashboardDocuments: () => import('./pages/UserDocumentsPage.vue'),
     dashboardProfile: () => import('./pages/UserProfilePage.vue'),
+    dashboardReports: () => import('./pages/UserReportsPage.vue'),
     dashboardScholarshipDetail: () => import('./pages/UserScholarshipDetailPage.vue'),
     dashboardScholarships: () => import('./pages/UserScholarshipsPage.vue'),
     forgotPassword: () => import('./pages/ForgotPasswordPage.vue'),
@@ -47,6 +48,7 @@ const pages = {
     providerPrograms: () => import('./pages/ProviderProgramsPage.vue'),
     register: () => import('./pages/RegisterPage.vue'),
     resetPassword: () => import('./pages/ResetPasswordPage.vue'),
+    supportReportQueue: () => import('./pages/SupportReportQueuePage.vue'),
 };
 
 function mountGlobalToastHost() {

@@ -802,9 +802,6 @@ onMounted(loadScholarship);
                                     </li>
                                 </ol>
 
-                                <p class="mt-4 rounded-md bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-500 ring-1 ring-slate-200">
-                                    Providers conduct exams and interviews outside the portal. Private links and detailed instructions appear only when you reach the relevant stage.
-                                </p>
                             </article>
 
                             <details v-if="hasContractDetails" class="group student-card overflow-hidden">

@@ -12,6 +12,7 @@ const navLinks = [
     { key: 'dashboard', href: '/admin', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
     { key: 'users', href: '/admin/manage-users', label: 'Manage Users', icon: 'fa-solid fa-users-gear' },
     { key: 'reviews', href: '/admin/reviews', label: 'Reviews', icon: 'fa-solid fa-clipboard-check' },
+    { key: 'reports', href: '/admin/reports', label: 'Reports', icon: 'fa-solid fa-circle-exclamation' },
     { key: 'logs', href: '/admin/logs', label: 'Logs', icon: 'fa-solid fa-clock-rotate-left' },
     { key: 'profile', href: '/admin/profile', label: 'Profile', icon: 'fa-solid fa-id-badge' },
 ];

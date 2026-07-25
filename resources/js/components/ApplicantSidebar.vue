@@ -20,6 +20,7 @@ const navLinks = [
     { href: '/dashboard/applications', label: 'Applications' },
     { href: '/dashboard/documents', label: 'Documents' },
     { href: '/dashboard/profile', label: 'Profile' },
+    { href: '/dashboard/reports', label: 'Reports' },
 ];
 
 function isActive(href) {

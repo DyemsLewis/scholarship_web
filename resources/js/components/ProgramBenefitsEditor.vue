@@ -88,7 +88,10 @@ function benefitSummary(benefit) {
     <section class="md:col-span-2">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-                <p class="text-sm font-bold text-slate-950">Benefits offered</p>
+                <p class="text-sm font-bold text-slate-950">
+                    Benefits offered
+                    <span class="ml-2 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">Required</span>
+                </p>
                 <p class="mt-1 text-xs leading-5 text-slate-500">
                     Add cash, tuition, supplies, services, or other support. A monetary amount is optional unless the value is known.
                 </p>
@@ -99,7 +102,7 @@ function benefitSummary(benefit) {
         </div>
 
         <div class="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <select v-model="pendingType" :class="inputClass" aria-label="Benefit type to add">
+            <select id="program-benefit-type" v-model="pendingType" :class="inputClass" aria-label="Benefit type to add">
                 <option value="">Choose a benefit type</option>
                 <option v-for="option in availableTypes" :key="option.value" :value="option.value">
                     {{ option.label }}

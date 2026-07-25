@@ -6,6 +6,7 @@ const navLinks = [
     { href: '/provider/programs', label: 'Programs', icon: 'fa-solid fa-graduation-cap' },
     { href: '/provider/applications', label: 'Applications', icon: 'fa-solid fa-file-circle-check' },
     { href: '/provider/review', label: 'Review', icon: 'fa-solid fa-clipboard-list' },
+    { href: '/provider/reports', label: 'Reports', icon: 'fa-solid fa-circle-exclamation' },
     { href: '/provider/profile', label: 'Profile', icon: 'fa-solid fa-building-user' },
 ];
 </script>
