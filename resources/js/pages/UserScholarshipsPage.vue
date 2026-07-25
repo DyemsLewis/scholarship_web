@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
@@ -25,6 +25,7 @@ const yearFilter = ref('');
 const locationFilter = ref('');
 const savedOnly = ref(false);
 const showAdvancedFilters = ref(false);
+const previewScholarship = ref(null);
 const dssGuideItems = [
     { label: 'Profile', icon: 'fa-solid fa-user-check', description: 'Your saved learner details.' },
     { label: 'Rules', icon: 'fa-solid fa-list-check', description: 'Provider eligibility settings.' },
@@ -47,6 +48,19 @@ const finderGuideItems = [
         icon: 'fa-solid fa-bookmark',
     },
 ];
+const benefitIcons = {
+    cash_grant: 'fa-solid fa-peso-sign',
+    tuition_coverage: 'fa-solid fa-graduation-cap',
+    allowance: 'fa-solid fa-wallet',
+    school_supplies: 'fa-solid fa-book-open',
+    device_support: 'fa-solid fa-laptop',
+    transportation: 'fa-solid fa-bus',
+    accommodation: 'fa-solid fa-house',
+    training: 'fa-solid fa-certificate',
+    mentorship: 'fa-solid fa-people-group',
+    fee_waiver: 'fa-solid fa-receipt',
+    other: 'fa-solid fa-gift',
+};
 
 const providerTypes = computed(() => [
     'all',
@@ -157,6 +171,64 @@ function formatAmount(amount) {
     }).format(Number(amount));
 }
 
+function primaryBenefit(scholarship) {
+    return Array.isArray(scholarship?.benefits)
+        ? scholarship.benefits[0] ?? null
+        : null;
+}
+
+function primaryBenefitTitle(scholarship) {
+    return primaryBenefit(scholarship)?.title
+        || scholarship?.benefit_summary
+        || 'Benefits available';
+}
+
+function primaryBenefitDetails(scholarship) {
+    const benefit = primaryBenefit(scholarship);
+
+    if (!benefit) {
+        return 'Open the program to review all benefits.';
+    }
+
+    return benefitDetailLine(benefit);
+}
+
+function benefitDetailLine(benefit) {
+    const details = [
+        benefit.amount !== null && benefit.amount !== undefined && benefit.amount !== ''
+            ? formatAmount(benefit.amount)
+            : null,
+        benefit.coverage_label,
+        benefit.frequency_label,
+    ].filter(Boolean);
+
+    return details.length
+        ? details.join(' / ')
+        : benefit.type_label || 'Included with this program';
+}
+
+function previewBenefitItems(scholarship) {
+    return Array.isArray(scholarship?.benefits)
+        ? scholarship.benefits.slice(0, 4)
+        : [];
+}
+
+function hiddenPreviewBenefitCount(scholarship) {
+    return Math.max((scholarship?.benefits?.length ?? 0) - 4, 0);
+}
+
+function remainingBenefitCount(scholarship) {
+    return Math.max((scholarship?.benefits?.length ?? 0) - 1, 0);
+}
+
+function benefitIcon(benefit) {
+    return benefitIcons[benefit?.type] || benefitIcons.other;
+}
+
+function primaryBenefitIcon(scholarship) {
+    return benefitIcon(primaryBenefit(scholarship));
+}
+
 function inferGradeScale(value) {
     if (value === null || value === undefined || value === '') {
         return '';
@@ -235,6 +307,17 @@ function targetApplicantLabel(scholarship) {
     return levels.slice(0, 2).map(labelFromKey).join(', ') + (levels.length > 2 ? ` +${levels.length - 2}` : '');
 }
 
+function optionSummary(value, fallback) {
+    const options = splitOptions(value);
+
+    if (options.length === 0) {
+        return fallback;
+    }
+
+    return options.slice(0, 3).map(labelFromKey).join(', ')
+        + (options.length > 3 ? ` +${options.length - 3}` : '');
+}
+
 function documentRequirements(requirements) {
     if (!requirements) {
         return [];
@@ -244,6 +327,30 @@ function documentRequirements(requirements) {
         .split(/\r?\n|,/)
         .map((requirement) => requirement.trim())
         .filter(Boolean);
+}
+
+function requirementSummary(scholarship) {
+    const count = documentRequirements(scholarship?.requirements).length;
+    const readiness = documentReadinessLabel(scholarship);
+
+    if (count === 0) {
+        return readiness;
+    }
+
+    return `${count} required / ${readiness}`;
+}
+
+function selectionProcessLabel(scholarship) {
+    const stages = Array.isArray(scholarship?.selection_stages)
+        ? scholarship.selection_stages
+        : [];
+
+    if (stages.length === 0) {
+        return 'Provider review';
+    }
+
+    return stages.slice(0, 4).map(labelFromKey).join(', ')
+        + (stages.length > 4 ? ` +${stages.length - 4}` : '');
 }
 
 function matchClass(score) {
@@ -587,7 +694,28 @@ async function loadScholarships() {
     }
 }
 
-onMounted(loadScholarships);
+function openScholarshipPreview(scholarship) {
+    previewScholarship.value = scholarship;
+}
+
+function closeScholarshipPreview() {
+    previewScholarship.value = null;
+}
+
+function handlePreviewKeydown(event) {
+    if (event.key === 'Escape' && previewScholarship.value) {
+        closeScholarshipPreview();
+    }
+}
+
+onMounted(() => {
+    window.addEventListener('keydown', handlePreviewKeydown);
+    loadScholarships();
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handlePreviewKeydown);
+});
 </script>
 
 <template>
@@ -778,16 +906,26 @@ onMounted(loadScholarships);
                                         <p class="truncate text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
                                             {{ scholarship.category || 'Scholarship opportunity' }}
                                         </p>
-                                        <button
-                                            type="button"
-                                            :disabled="savingId === scholarship.id"
-                                            :aria-label="scholarship.is_saved ? `Remove ${scholarship.title} from saved programs` : `Save ${scholarship.title}`"
-                                            :title="scholarship.is_saved ? 'Remove from saved programs' : 'Save program'"
-                                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/20 bg-white/10 text-sm text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
-                                            @click="toggleSave(scholarship)"
-                                        >
-                                            <i :class="[scholarship.is_saved ? 'fa-solid' : 'fa-regular', savingId === scholarship.id ? 'fa-spinner fa-spin' : 'fa-bookmark']"></i>
-                                        </button>
+                                        <div class="flex shrink-0 items-center gap-2">
+                                            <button
+                                                type="button"
+                                                class="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-2.5 text-xs font-bold text-white transition hover:bg-white/20"
+                                                @click="openScholarshipPreview(scholarship)"
+                                            >
+                                                <i class="fa-regular fa-eye"></i>
+                                                Preview
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="savingId === scholarship.id"
+                                                :aria-label="scholarship.is_saved ? `Remove ${scholarship.title} from saved programs` : `Save ${scholarship.title}`"
+                                                :title="scholarship.is_saved ? 'Remove from saved programs' : 'Save program'"
+                                                class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-white/10 text-sm text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="toggleSave(scholarship)"
+                                            >
+                                                <i :class="[scholarship.is_saved ? 'fa-solid' : 'fa-regular', savingId === scholarship.id ? 'fa-spinner fa-spin' : 'fa-bookmark']"></i>
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div class="relative z-10 mt-3 flex min-w-0 items-center gap-3">
@@ -837,16 +975,27 @@ onMounted(loadScholarships);
                                         </div>
                                     </div>
 
-                                    <div class="mt-4 flex items-start gap-3 rounded-md border border-amber-100 bg-amber-50 p-3">
-                                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-200 text-amber-900">
-                                            <i class="fa-solid fa-gift text-xs"></i>
+                                    <div class="mt-4 flex h-24 items-center gap-3 rounded-md border border-amber-100 bg-amber-50 p-3">
+                                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-200 text-amber-900">
+                                            <i :class="[primaryBenefitIcon(scholarship), 'text-sm']"></i>
                                         </span>
-                                        <div class="min-w-0">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">
-                                                Benefits
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">
+                                                    Benefits
+                                                </p>
+                                                <span
+                                                    v-if="remainingBenefitCount(scholarship)"
+                                                    class="shrink-0 rounded-md bg-white px-2 py-0.5 text-[11px] font-bold text-amber-900 ring-1 ring-amber-200"
+                                                >
+                                                    +{{ remainingBenefitCount(scholarship) }} more
+                                                </span>
+                                            </div>
+                                            <p class="mt-1 truncate text-sm font-bold text-slate-950">
+                                                {{ primaryBenefitTitle(scholarship) }}
                                             </p>
-                                            <p class="mt-1 line-clamp-2 text-sm font-bold leading-5 text-slate-900">
-                                                {{ scholarship.benefit_summary || formatAmount(scholarship.award_amount) }}
+                                            <p class="mt-1 truncate text-xs font-semibold text-slate-600">
+                                                {{ primaryBenefitDetails(scholarship) }}
                                             </p>
                                         </div>
                                     </div>
@@ -890,6 +1039,230 @@ onMounted(loadScholarships);
             </div>
         </section>
     </main>
+
+    <Teleport to="body">
+        <div
+            v-if="previewScholarship"
+            class="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="scholarship-preview-title"
+            @click.self="closeScholarshipPreview"
+        >
+            <div class="flex min-h-full items-center justify-center" @click.self="closeScholarshipPreview">
+                <section class="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+                    <header class="scholarship-card-head relative shrink-0 overflow-hidden p-5 text-white">
+                        <div class="relative z-10 flex items-start justify-between gap-4">
+                            <div class="min-w-0">
+                                <p class="truncate text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
+                                    {{ previewScholarship.category || 'Scholarship opportunity' }}
+                                </p>
+                                <div class="mt-3 flex min-w-0 items-center gap-3">
+                                    <img
+                                        :src="scholarshipImage(previewScholarship)"
+                                        :alt="previewScholarship.title"
+                                        class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-1.5 shadow-sm"
+                                        @error="handleScholarshipImageError"
+                                    >
+                                    <div class="min-w-0">
+                                        <h2 id="scholarship-preview-title" class="font-display text-xl font-bold leading-snug text-white sm:text-2xl">
+                                            {{ previewScholarship.title }}
+                                        </h2>
+                                        <p class="mt-1 truncate text-sm font-semibold text-slate-300">
+                                            {{ previewScholarship.provider?.name || 'Scholarship Provider' }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                aria-label="Close scholarship preview"
+                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+                                @click="closeScholarshipPreview"
+                            >
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </header>
+
+                    <div class="overflow-y-auto p-5">
+                        <div class="flex flex-wrap gap-2">
+                            <span class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
+                                {{ previewScholarship.eligibility_match?.score ?? 0 }}% match
+                            </span>
+                            <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                <i class="fa-regular fa-calendar mr-1"></i>
+                                {{ compactDeadlineLabel(previewScholarship) }}
+                            </span>
+                            <span v-if="previewScholarship.distance_label" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                <i class="fa-solid fa-location-dot mr-1"></i>
+                                {{ previewScholarship.distance_label }}
+                            </span>
+                        </div>
+
+                        <p class="mt-4 text-sm leading-6 text-slate-600">
+                            {{ previewScholarship.description || 'Open the full scholarship page to review the complete program information.' }}
+                        </p>
+
+                        <section class="mt-5">
+                            <h3 class="text-sm font-bold text-slate-950">
+                                Program snapshot
+                            </h3>
+                            <dl class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                        Intended for
+                                    </dt>
+                                    <dd class="mt-1 text-sm font-bold text-slate-900">
+                                        {{ targetApplicantLabel(previewScholarship) }}
+                                    </dd>
+                                </div>
+                                <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                        Academic
+                                    </dt>
+                                    <dd class="mt-1 text-sm font-bold text-slate-900">
+                                        {{ academicRequirementLabel(previewScholarship) }}
+                                    </dd>
+                                </div>
+                                <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                        Available slots
+                                    </dt>
+                                    <dd class="mt-1 text-sm font-bold text-slate-900">
+                                        {{ previewScholarship.slots_available !== null && previewScholarship.slots_available !== undefined ? `${previewScholarship.slots_available} slots` : 'Not specified' }}
+                                    </dd>
+                                </div>
+                                <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                        Application
+                                    </dt>
+                                    <dd class="mt-1 text-sm font-bold text-slate-900">
+                                        {{ previewScholarship.application_mode ? labelFromKey(previewScholarship.application_mode) : 'Not specified' }}
+                                    </dd>
+                                </div>
+                            </dl>
+                        </section>
+
+                        <section class="mt-5">
+                            <div class="flex items-center justify-between gap-3">
+                                <h3 class="text-sm font-bold text-slate-950">
+                                    Benefits and support
+                                </h3>
+                                <span class="text-xs font-semibold text-slate-500">
+                                    {{ previewScholarship.benefits?.length ?? 0 }} listed
+                                </span>
+                            </div>
+                            <div v-if="previewBenefitItems(previewScholarship).length" class="mt-3 grid gap-2 sm:grid-cols-2">
+                                <article
+                                    v-for="benefit in previewBenefitItems(previewScholarship)"
+                                    :key="`${benefit.type}-${benefit.title}`"
+                                    class="flex items-start gap-3 rounded-md border border-amber-100 bg-amber-50 p-3"
+                                >
+                                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-200 text-amber-900">
+                                        <i :class="[benefitIcon(benefit), 'text-xs']"></i>
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-bold text-slate-950">
+                                            {{ benefit.title }}
+                                        </p>
+                                        <p class="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                                            {{ benefitDetailLine(benefit) }}
+                                        </p>
+                                    </div>
+                                </article>
+                            </div>
+                            <div v-else class="mt-3 rounded-md border border-amber-100 bg-amber-50 p-3">
+                                <p class="text-sm font-bold text-slate-950">
+                                    {{ primaryBenefitTitle(previewScholarship) }}
+                                </p>
+                                <p class="mt-1 text-xs font-semibold text-slate-600">
+                                    {{ primaryBenefitDetails(previewScholarship) }}
+                                </p>
+                            </div>
+                            <p v-if="hiddenPreviewBenefitCount(previewScholarship)" class="mt-2 text-xs font-semibold text-amber-800">
+                                +{{ hiddenPreviewBenefitCount(previewScholarship) }} additional benefit{{ hiddenPreviewBenefitCount(previewScholarship) === 1 ? '' : 's' }} shown on the full page
+                            </p>
+                        </section>
+
+                        <section class="mt-5">
+                            <h3 class="text-sm font-bold text-slate-950">
+                                Eligibility and application
+                            </h3>
+                            <dl class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
+                                <div class="grid gap-1 px-3 py-2.5 sm:grid-cols-[10rem_1fr] sm:gap-4">
+                                    <dt class="text-xs font-bold text-slate-500">School type</dt>
+                                    <dd class="text-sm font-semibold text-slate-900">
+                                        {{ optionSummary(previewScholarship.eligible_school_types, 'Any school type') }}
+                                    </dd>
+                                </div>
+                                <div class="grid gap-1 px-3 py-2.5 sm:grid-cols-[10rem_1fr] sm:gap-4">
+                                    <dt class="text-xs font-bold text-slate-500">Course or track</dt>
+                                    <dd class="text-sm font-semibold text-slate-900">
+                                        {{ optionSummary(previewScholarship.eligible_courses, 'Any course or track') }}
+                                    </dd>
+                                </div>
+                                <div class="grid gap-1 px-3 py-2.5 sm:grid-cols-[10rem_1fr] sm:gap-4">
+                                    <dt class="text-xs font-bold text-slate-500">Year or grade</dt>
+                                    <dd class="text-sm font-semibold text-slate-900">
+                                        {{ optionSummary(previewScholarship.eligible_year_levels, 'Any year or grade') }}
+                                    </dd>
+                                </div>
+                                <div class="grid gap-1 px-3 py-2.5 sm:grid-cols-[10rem_1fr] sm:gap-4">
+                                    <dt class="text-xs font-bold text-slate-500">Location coverage</dt>
+                                    <dd class="text-sm font-semibold text-slate-900">
+                                        {{ coverageLabel(previewScholarship) }}
+                                    </dd>
+                                </div>
+                                <div class="grid gap-1 px-3 py-2.5 sm:grid-cols-[10rem_1fr] sm:gap-4">
+                                    <dt class="text-xs font-bold text-slate-500">Program location</dt>
+                                    <dd class="text-sm font-semibold text-slate-900">
+                                        {{ previewScholarship.location_address || previewScholarship.location_name || 'Not specified' }}
+                                    </dd>
+                                </div>
+                                <div class="grid gap-1 px-3 py-2.5 sm:grid-cols-[10rem_1fr] sm:gap-4">
+                                    <dt class="text-xs font-bold text-slate-500">Selection process</dt>
+                                    <dd class="text-sm font-semibold text-slate-900">
+                                        {{ selectionProcessLabel(previewScholarship) }}
+                                    </dd>
+                                </div>
+                                <div class="grid gap-1 px-3 py-2.5 sm:grid-cols-[10rem_1fr] sm:gap-4">
+                                    <dt class="text-xs font-bold text-slate-500">Documents</dt>
+                                    <dd class="text-sm font-semibold text-slate-900">
+                                        {{ requirementSummary(previewScholarship) }}
+                                    </dd>
+                                </div>
+                            </dl>
+                        </section>
+
+                        <p
+                            v-if="!previewScholarship.has_applied && !canStartApplication(previewScholarship)"
+                            class="mt-4 rounded-md bg-slate-100 px-3 py-2 text-xs font-semibold leading-5 text-slate-600"
+                        >
+                            {{ applicationBlockedLabel(previewScholarship) }}
+                        </p>
+                    </div>
+
+                    <footer class="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:justify-end">
+                        <button
+                            type="button"
+                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                            @click="closeScholarshipPreview"
+                        >
+                            Close
+                        </button>
+                        <a
+                            :href="`/dashboard/scholarships/${previewScholarship.id}`"
+                            class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                        >
+                            More details
+                            <i class="fa-solid fa-arrow-right ml-2 text-xs"></i>
+                        </a>
+                    </footer>
+                </section>
+            </div>
+        </div>
+    </Teleport>
 </template>
 
 <style scoped>

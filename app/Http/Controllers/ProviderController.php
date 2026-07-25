@@ -36,6 +36,14 @@ use Illuminate\View\View;
 
 class ProviderController extends Controller
 {
+    private const AWARD_SLOT_STATUSES = [
+        'approved',
+        'awarded',
+        'distribution_scheduled',
+        'disbursed',
+        'renewed',
+    ];
+
     public function index(Request $request): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -1214,7 +1222,7 @@ class ProviderController extends Controller
         $reviewNoteChanged = $this->comparableScholarshipValue($application->review_notes)
             !== $this->comparableScholarshipValue($reviewNotes);
 
-        $application->update([
+        $applicationUpdate = [
             'status' => $validated['status'],
             'decision_reason' => $decisionReason,
             'review_notes' => $reviewNotes,
@@ -1229,7 +1237,16 @@ class ProviderController extends Controller
             'rubric_total_score' => $rubricResult ? $rubricResult['total_score'] : $application->rubric_total_score,
             'rubric_scored_by' => $rubricResult ? $request->user()->id : $application->rubric_scored_by,
             'rubric_scored_at' => $rubricResult && $rubricResult['completed'] > 0 ? now() : $application->rubric_scored_at,
-        ]);
+        ];
+
+        DB::transaction(function () use ($application, $applicationUpdate, $previousStatus, $validated): void {
+            $this->ensureScholarshipAwardSlotAvailable(
+                $application,
+                $previousStatus,
+                $validated['status'],
+            );
+            $application->update($applicationUpdate);
+        });
 
         if ($applicantFacingChanged || $reviewNoteChanged) {
             ApplicationStatusHistory::create([
@@ -1290,6 +1307,38 @@ class ProviderController extends Controller
             'message' => $applicantFacingChanged ? 'Application status updated.' : 'Provider review saved.',
             'application' => $this->applicationPayload($freshApplication, true),
         ]);
+    }
+
+    private function ensureScholarshipAwardSlotAvailable(
+        ScholarshipApplication $application,
+        string $previousStatus,
+        string $nextStatus,
+    ): void {
+        if (! in_array($nextStatus, self::AWARD_SLOT_STATUSES, true)
+            || in_array($previousStatus, self::AWARD_SLOT_STATUSES, true)) {
+            return;
+        }
+
+        $scholarship = Scholarship::query()
+            ->whereKey($application->scholarship_id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        if ($scholarship->slots_available === null) {
+            return;
+        }
+
+        $occupiedSlots = ScholarshipApplication::query()
+            ->where('scholarship_id', $scholarship->id)
+            ->where('id', '!=', $application->id)
+            ->whereIn('status', self::AWARD_SLOT_STATUSES)
+            ->count();
+
+        if ($occupiedSlots >= $scholarship->slots_available) {
+            throw ValidationException::withMessages([
+                'status' => 'All available award slots have already been filled. Increase the program slots or review an existing award before approving another applicant.',
+            ]);
+        }
     }
 
     public function updateDocumentStatus(Request $request, ApplicationDocument $document): JsonResponse
@@ -1461,8 +1510,8 @@ class ProviderController extends Controller
         $duplicate->title = $this->duplicateScholarshipTitle($request->user()->id, $scholarship->title);
         $duplicate->status = 'draft';
         $duplicate->views_count = 0;
-        $duplicate->provider_terms_accepted_at = now();
-        $duplicate->provider_terms_version = Terms::VERSION;
+        $duplicate->provider_terms_accepted_at = null;
+        $duplicate->provider_terms_version = null;
         $duplicate->save();
         app(SB::class)->copy($scholarship, $duplicate);
         $duplicate->loadCount('bookmarks');
@@ -1493,12 +1542,18 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipExamDetails($validated);
         [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request);
+        $this->ensureScholarshipReadyForSubmission($validated, $benefits);
         $imagePath = $this->storeScholarshipImage($request);
+        $termsAccepted = $request->boolean('terms_accepted');
 
         unset($validated['image_file'], $validated['terms_accepted'], $validated['program_events']);
+        $validated['description'] = (string) ($validated['description'] ?? '');
         $validated['status'] = $validated['status'] === 'draft' ? 'draft' : 'pending_review';
-        $validated['provider_terms_accepted_at'] = now();
-        $validated['provider_terms_version'] = Terms::VERSION;
+
+        if ($termsAccepted) {
+            $validated['provider_terms_accepted_at'] = now();
+            $validated['provider_terms_version'] = Terms::VERSION;
+        }
 
         $scholarship = DB::transaction(function () use ($validated, $imagePath, $programEvents, $benefits, $request): Scholarship {
             $scholarship = Scholarship::create([
@@ -1549,11 +1604,19 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipExamDetails($validated);
         [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request, $scholarship);
+        $this->ensureScholarshipReadyForSubmission($validated, $benefits, $scholarship);
         $imagePath = $this->storeScholarshipImage($request, $scholarship);
+        $termsAccepted = $request->boolean('terms_accepted');
 
         unset($validated['image_file'], $validated['terms_accepted'], $validated['program_events']);
-        $validated['provider_terms_accepted_at'] = now();
-        $validated['provider_terms_version'] = Terms::VERSION;
+        $validated['description'] = $request->has('description')
+            ? (string) ($validated['description'] ?? '')
+            : $scholarship->description;
+
+        if ($termsAccepted) {
+            $validated['provider_terms_accepted_at'] = now();
+            $validated['provider_terms_version'] = Terms::VERSION;
+        }
 
         if ($imagePath) {
             $validated['image_path'] = $imagePath;
@@ -1563,9 +1626,22 @@ class ProviderController extends Controller
         $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status'], $validated, $benefitsChanged);
         DB::transaction(function () use ($scholarship, $validated, $programEvents, $benefits, $request): void {
             $scholarship->update($validated);
-            $scholarship->events()
-                ->whereNotIn('type', ScholarshipSelectionPlan::normalize($scholarship->selection_stages))
-                ->delete();
+
+            if ($programEvents !== null) {
+                $submittedEventTypes = collect($programEvents)->pluck('type')->all();
+                $eventsToDelete = $scholarship->events()
+                    ->whereIn('type', ['exam', 'interview', 'distribution']);
+
+                if ($submittedEventTypes !== []) {
+                    $eventsToDelete->whereNotIn('type', $submittedEventTypes);
+                }
+
+                $eventsToDelete->delete();
+            } else {
+                $scholarship->events()
+                    ->whereNotIn('type', ScholarshipSelectionPlan::normalize($scholarship->selection_stages))
+                    ->delete();
+            }
 
             foreach ($programEvents ?? [] as $programEvent) {
                 $this->persistScholarshipEvent($scholarship, $programEvent, $request->user());
@@ -1597,12 +1673,140 @@ class ProviderController extends Controller
         ]);
     }
 
+    private function ensureScholarshipReadyForSubmission(
+        array $validated,
+        ?array $benefits,
+        ?Scholarship $scholarship = null,
+    ): void {
+        if (in_array($validated['status'], ['draft', 'closed'], true)) {
+            return;
+        }
+
+        $value = static fn (string $field) => array_key_exists($field, $validated)
+            ? $validated[$field]
+            : $scholarship?->{$field};
+        $errors = [];
+        $deadline = $value('deadline');
+
+        // Do not strand an older live program that predates the expanded form.
+        // Its unchanged deadline remains editable, while a new invalid value is blocked.
+        if ($scholarship?->status === 'published') {
+            if (array_key_exists('deadline', $validated)) {
+                $incomingDeadline = filled($deadline)
+                    ? CarbonImmutable::parse($deadline)->toDateString()
+                    : null;
+                $existingDeadline = $scholarship->deadline?->toDateString();
+
+                if ($incomingDeadline !== $existingDeadline) {
+                    if ($incomingDeadline === null) {
+                        $errors['deadline'] = 'Keep an application deadline on a published program.';
+                    } elseif (CarbonImmutable::parse($incomingDeadline)->startOfDay()->isBefore(CarbonImmutable::today())) {
+                        $errors['deadline'] = 'The application deadline cannot be in the past.';
+                    }
+                }
+            }
+
+            if ($errors !== []) {
+                throw ValidationException::withMessages($errors);
+            }
+
+            return;
+        }
+
+        if (blank($deadline)) {
+            $errors['deadline'] = 'Add an application deadline before submitting the program for review.';
+        } elseif (CarbonImmutable::parse($deadline)->startOfDay()->isBefore(CarbonImmutable::today())) {
+            $errors['deadline'] = 'The application deadline cannot be in the past.';
+        }
+
+        if (blank($value('category'))) {
+            $errors['category'] = 'Choose a scholarship category before submitting for review.';
+        }
+
+        $hasBenefits = $benefits !== null
+            ? $benefits !== []
+            : ($scholarship?->benefitPayload() ?? []) !== [];
+
+        if (! $hasBenefits) {
+            $errors['benefits'] = 'Add at least one program benefit before submitting for review.';
+        }
+
+        if (blank($value('application_mode'))) {
+            $errors['application_mode'] = 'Choose how applicants will submit their application.';
+        }
+
+        if (blank($value('eligibility'))) {
+            $errors['eligibility'] = 'Describe who is eligible for this program.';
+        }
+
+        $hasFinderRule = collect([
+            $value('eligible_education_levels'),
+            $value('eligible_courses'),
+            $value('eligible_school_types'),
+            $value('eligible_year_levels'),
+            $value('eligible_locations'),
+            $value('minimum_gwa'),
+        ])->contains(fn ($field): bool => filled($field))
+            || ($value('income_requirement') !== null && $value('income_requirement') !== 'Any')
+            || in_array($value('minimum_grade_scale'), ['pass_fail', 'other'], true);
+
+        if (! $hasFinderRule) {
+            $errors['eligible_education_levels'] = 'Add at least one applicant matching rule.';
+        }
+
+        if (blank($value('requirements'))) {
+            $errors['requirements'] = 'Add at least one required applicant document.';
+        }
+
+        foreach ([
+            'location_name' => 'Add the program location name.',
+            'location_address' => 'Add the program address.',
+            'latitude' => 'Set the program location pin on the map.',
+            'longitude' => 'Set the program location pin on the map.',
+        ] as $field => $message) {
+            if (blank($value($field))) {
+                $errors[$field] = $message;
+            }
+        }
+
+        if (blank($value('contact_email')) && blank($value('contact_number'))) {
+            $errors['contact_email'] = 'Add an email address or contact number for applicant questions.';
+        }
+
+        $selectionStages = ScholarshipSelectionPlan::normalize($value('selection_stages'));
+
+        if (in_array('exam', $selectionStages, true)) {
+            if (blank($value('exam_duration_minutes'))) {
+                $errors['exam_duration_minutes'] = 'Add the exam duration.';
+            }
+
+            if (blank($value('exam_passing_score'))) {
+                $errors['exam_passing_score'] = 'Add the exam passing score.';
+            }
+        }
+
+        if (blank($value('review_rubric'))) {
+            $errors['review_rubric'] = 'Add at least one review criterion.';
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
     private function validateScholarship(Request $request): array
     {
+        $requiresCompleteSubmission = ! in_array($request->input('status'), ['draft', 'closed'], true);
+
         return $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:100'],
-            'description' => ['required', 'string', 'max:5000'],
+            'description' => [
+                Rule::requiredIf($requiresCompleteSubmission),
+                'nullable',
+                'string',
+                'max:5000',
+            ],
             'eligibility' => ['nullable', 'string', 'max:5000'],
             'eligible_education_levels' => ['nullable', 'string', 'max:2000'],
             'eligible_courses' => ['nullable', 'string', 'max:3000'],
@@ -1633,7 +1837,7 @@ class ProviderController extends Controller
             'deadline' => ['nullable', 'date'],
             'status' => ['required', Rule::in(['draft', 'pending_review', 'published', 'closed', 'rejected'])],
             'image_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
-            'terms_accepted' => ['accepted'],
+            'terms_accepted' => $requiresCompleteSubmission ? ['accepted'] : ['nullable'],
             'review_rubric' => ['nullable', 'string', 'max:8000', 'json'],
         ]);
     }
@@ -1652,6 +1856,12 @@ class ProviderController extends Controller
 
         if (blank($validated['minimum_gwa'] ?? null) && in_array($scale, ['percentage', 'grade_point'], true)) {
             $scale = null;
+        }
+
+        if ($scale === 'grade_point' && (float) $validated['minimum_gwa'] > 5) {
+            throw ValidationException::withMessages([
+                'minimum_gwa' => 'A GWA or GPA grade point must be between 0 and 5.',
+            ]);
         }
 
         $validated['minimum_grade_scale'] = $scale;
@@ -1725,6 +1935,9 @@ class ProviderController extends Controller
         $selectionStages = ScholarshipSelectionPlan::normalize($validated['selection_stages'] ?? null);
         $scholarship?->loadMissing('events');
 
+        $eventDates = [];
+        $eventIndexes = [];
+
         foreach ($eventData as $index => $event) {
             if (! in_array($event['type'], $selectionStages, true)) {
                 throw ValidationException::withMessages([
@@ -1753,6 +1966,28 @@ class ProviderController extends Controller
                     "program_events.{$index}.scheduled_at" => 'Use a future date and time for a new schedule.',
                 ]);
             }
+
+            $eventDates[$event['type']] = $scheduledAt;
+            $eventIndexes[$event['type']] = $index;
+        }
+
+        $previousType = null;
+
+        foreach (['exam', 'interview', 'distribution'] as $eventType) {
+            if (! isset($eventDates[$eventType])) {
+                continue;
+            }
+
+            if ($previousType !== null && $eventDates[$eventType]->isBefore($eventDates[$previousType])) {
+                $eventLabel = ScholarshipSelectionPlan::label($eventType);
+                $previousLabel = ScholarshipSelectionPlan::label($previousType);
+
+                throw ValidationException::withMessages([
+                    "program_events.{$eventIndexes[$eventType]}.scheduled_at" => ucfirst($eventLabel)." must be scheduled after {$previousLabel}.",
+                ]);
+            }
+
+            $previousType = $eventType;
         }
 
         return $eventData;

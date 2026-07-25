@@ -6,9 +6,11 @@ use App\Models\ApplicationDocument;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\StudentDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class DemoReadinessWorkflowTest extends TestCase
@@ -18,6 +20,7 @@ class DemoReadinessWorkflowTest extends TestCase
     public function test_admin_provider_and_applicant_can_complete_the_core_workflow(): void
     {
         Mail::fake();
+        Storage::fake('local');
         $admin = User::factory()->create(['role' => 'admin']);
         $provider = User::factory()->create(['role' => 'provider']);
         $provider->providerProfile()->update(['verification_status' => 'pending']);
@@ -34,7 +37,24 @@ class DemoReadinessWorkflowTest extends TestCase
         $scholarshipResponse = $this->actingAs($provider)
             ->postJson('/provider/scholarships', [
                 'title' => 'Core Workflow Scholarship',
+                'category' => 'Financial assistance',
                 'description' => 'A scholarship used to verify the complete role workflow.',
+                'eligibility' => 'Open to enrolled college students who meet the listed document requirements.',
+                'eligible_education_levels' => 'college',
+                'eligible_locations' => 'Metro Manila',
+                'requirements' => "Completed application form\nCertificate of enrollment\nLatest report card or grades",
+                'benefits' => json_encode([[
+                    'type' => 'cash_grant',
+                    'title' => 'Education allowance',
+                    'amount' => 10000,
+                    'frequency' => 'one_time',
+                ]]),
+                'application_mode' => 'online',
+                'location_name' => 'Community Scholarship Office',
+                'location_address' => 'Quezon City, Metro Manila',
+                'latitude' => 14.6760,
+                'longitude' => 121.0437,
+                'contact_email' => 'scholarships@example.test',
                 'return_service_contract' => 'Provider will handle any return service agreement after awarding.',
                 'other_contract_terms' => 'Provider may require separate contract signing after final selection.',
                 'deadline' => now()->addMonth()->toDateString(),
@@ -58,6 +78,20 @@ class DemoReadinessWorkflowTest extends TestCase
             ->getJson('/admin/dashboard/data')
             ->assertOk()
             ->assertJsonPath('recent_scholarships.0.id', $scholarshipId);
+
+        foreach (['Completed application form', 'Certificate of enrollment', 'Latest report card or grades'] as $documentName) {
+            $path = "student-documents/{$applicant->id}/".str()->slug($documentName).'.pdf';
+            Storage::disk('local')->put($path, 'Demo document content');
+            StudentDocument::create([
+                'user_id' => $applicant->id,
+                'document_name' => $documentName,
+                'original_name' => str()->slug($documentName).'.pdf',
+                'path' => $path,
+                'mime_type' => 'application/pdf',
+                'size' => 21,
+                'uploaded_at' => now(),
+            ]);
+        }
 
         $applicationResponse = $this->actingAs($applicant)
             ->postJson('/dashboard/applications', [

@@ -44,6 +44,10 @@ const fieldStackClass = 'min-w-0 flex flex-col';
 const basicFieldStackClass = fieldStackClass;
 const wideFieldStackClass = `${fieldStackClass} xl:col-span-2`;
 const formGridClass = 'grid items-start gap-x-4 gap-y-5 md:grid-cols-2';
+const currentLocalDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
+    .toISOString();
+const todayDate = currentLocalDateTime.slice(0, 10);
+const minimumScheduleDateTime = currentLocalDateTime.slice(0, 16);
 const formSections = [
     { id: 'overview', label: 'Overview', help: 'Name and describe the program.' },
     { id: 'offer', label: 'Offer', help: 'Set the benefits, deadline, and submission method.' },
@@ -487,6 +491,10 @@ const academicRequirementSummary = computed(() => {
 });
 const academicRequirementInputMax = computed(() => scholarshipForm.value.minimumGradeScale === 'grade_point' ? 5 : 100);
 const academicRequirementInputStep = computed(() => scholarshipForm.value.minimumGradeScale === 'grade_point' ? '0.01' : '0.01');
+const reviewSubmissionSelected = computed(() => ['pending_review', 'rejected'].includes(scholarshipForm.value.status));
+const termsRequiredForSave = computed(() => !['draft', 'closed'].includes(scholarshipForm.value.status));
+const deadlineReady = computed(() => hasText(scholarshipForm.value.deadline)
+    && scholarshipForm.value.deadline >= todayDate);
 const programReadinessItems = computed(() => [
     {
         label: 'Program overview',
@@ -500,9 +508,9 @@ const programReadinessItems = computed(() => [
         label: 'Offer details',
         section: 'offer',
         complete: scholarshipForm.value.benefits.length > 0
-            && hasText(scholarshipForm.value.deadline)
+            && deadlineReady.value
             && hasText(scholarshipForm.value.applicationMode),
-        help: 'At least one benefit, the deadline, and submission method.',
+        help: 'At least one benefit, a current deadline, and submission method.',
     },
     {
         label: 'Eligibility and matching rules',
@@ -569,7 +577,7 @@ const formSectionProgress = computed(() => {
             && hasText(scholarshipForm.value.category)
             && hasText(scholarshipForm.value.description),
         offer: scholarshipForm.value.benefits.length > 0
-            && hasText(scholarshipForm.value.deadline)
+            && deadlineReady.value
             && hasText(scholarshipForm.value.applicationMode),
         audience: hasText(scholarshipForm.value.eligibility)
             && (
@@ -592,7 +600,7 @@ const formSectionProgress = computed(() => {
             && hasText(scholarshipForm.value.longitude),
         documents: selectedRequirementCount.value > 0,
         scoring: reviewRubricReady.value,
-        finish: scholarshipForm.value.termsAccepted,
+        finish: !termsRequiredForSave.value || scholarshipForm.value.termsAccepted,
     };
 
     return Object.fromEntries(formSections.map((section) => [section.id, Boolean(sectionChecks[section.id])]));
@@ -600,7 +608,7 @@ const formSectionProgress = computed(() => {
 const completedFormSectionCount = computed(() => Object.values(formSectionProgress.value).filter(Boolean).length);
 const formProgressPercent = computed(() => Math.round((completedFormSectionCount.value / formSections.length) * 100));
 const publishWarnings = computed(() => {
-    if (!['pending_review', 'rejected'].includes(scholarshipForm.value.status)) {
+    if (!reviewSubmissionSelected.value) {
         return [];
     }
 
@@ -965,6 +973,8 @@ function programEventsPayload() {
 }
 
 function programEventValidationMessage() {
+    let previousScheduledStage = null;
+
     for (const stage of schedulableSelectionStages.value) {
         const event = scholarshipForm.value.programEvents[stage.value];
 
@@ -983,9 +993,26 @@ function programEventValidationMessage() {
         if (!hasText(event.instructions)) {
             return `Add instructions for applicants who reach the ${stage.label.toLowerCase()} stage.`;
         }
+
+        if (
+            previousScheduledStage
+            && new Date(event.scheduledAt).getTime() < new Date(previousScheduledStage.event.scheduledAt).getTime()
+        ) {
+            return `${stage.label} must be scheduled after ${previousScheduledStage.stage.label.toLowerCase()}.`;
+        }
+
+        previousScheduledStage = { stage, event };
     }
 
     return '';
+}
+
+function minimumDateTimeForEvent(event) {
+    if (event?.id && hasText(event.scheduledAt) && event.scheduledAt < minimumScheduleDateTime) {
+        return event.scheduledAt;
+    }
+
+    return minimumScheduleDateTime;
 }
 
 function selectAllOptions(field, options) {
@@ -1034,13 +1061,31 @@ function applyTargetApplicantPreset(preset) {
     }
 }
 
-function applyTargetApplicantPresetByKey(event) {
-    selectedTargetPresetKey.value = event.target.value;
-    const preset = targetApplicantPresets.find((item) => item.key === event.target.value);
+async function applyTargetApplicantPresetByKey(event) {
+    const nextPresetKey = event.target.value;
+    const previousPresetKey = selectedTargetPresetKey.value;
+    const preset = targetApplicantPresets.find((item) => item.key === nextPresetKey);
 
-    if (preset) {
-        applyTargetApplicantPreset(preset);
+    if (!preset) {
+        event.target.value = previousPresetKey;
+        return;
     }
+
+    if (
+        previousPresetKey
+        && previousPresetKey !== nextPresetKey
+        && !await requestConfirmation({
+            title: 'Replace the current applicant rules?',
+            message: 'This preset will replace the matching rules, eligibility notes, and document checklist currently entered.',
+            confirmLabel: 'Apply preset',
+        })
+    ) {
+        event.target.value = previousPresetKey;
+        return;
+    }
+
+    selectedTargetPresetKey.value = nextPresetKey;
+    applyTargetApplicantPreset(preset);
 }
 
 function fillScholarshipForm(scholarship) {
@@ -1269,21 +1314,29 @@ async function loadFormData() {
 async function saveScholarship() {
     formError.value = '';
 
-    if (!hasText(scholarshipForm.value.title) || !hasText(scholarshipForm.value.description)) {
+    if (!hasText(scholarshipForm.value.title)) {
         await openFormSection('overview');
-        formError.value = 'Add a scholarship title and description before saving.';
+        formError.value = 'Add a scholarship title before saving.';
         return;
     }
 
-    if (scholarshipForm.value.status !== 'draft' && scholarshipForm.value.benefits.length === 0) {
-        await openFormSection('offer');
-        formError.value = 'Add at least one benefit before submitting the program for review.';
+    if (termsRequiredForSave.value && !hasText(scholarshipForm.value.description)) {
+        await openFormSection('overview');
+        formError.value = 'Add a clear scholarship description before continuing.';
         return;
     }
 
-    if (!scholarshipForm.value.termsAccepted) {
+    if (reviewSubmissionSelected.value && missingProgramReadinessItems.value.length > 0) {
+        const firstMissingItem = missingProgramReadinessItems.value[0];
+
+        await openFormSection(firstMissingItem.section);
+        formError.value = `${firstMissingItem.label} is incomplete. ${firstMissingItem.help}`;
+        return;
+    }
+
+    if (termsRequiredForSave.value && !scholarshipForm.value.termsAccepted) {
         await openFormSection('finish');
-        formError.value = 'Please accept the provider scholarship terms before saving.';
+        formError.value = 'Accept the provider scholarship terms before submitting or updating this program.';
         return;
     }
 
@@ -1297,8 +1350,11 @@ async function saveScholarship() {
     }
 
     if (
-        scholarshipForm.value.reviewRubric.some((criterion) => !hasText(criterion.label))
-        || rubricWeightTotal.value !== 100
+        termsRequiredForSave.value
+        && (
+            scholarshipForm.value.reviewRubric.some((criterion) => !hasText(criterion.label))
+            || rubricWeightTotal.value !== 100
+        )
     ) {
         customizeRubric.value = true;
         await openFormSection('scoring');
@@ -1395,8 +1451,13 @@ async function saveScholarship() {
         } else {
             resetScholarshipForm();
         }
-    } catch (handledError) {
-        void handledError;
+    } catch (error) {
+        const validationErrors = error.response?.data?.errors ?? {};
+        const firstValidationMessage = Object.values(validationErrors).flat()[0];
+
+        formError.value = firstValidationMessage
+            ?? error.response?.data?.message
+            ?? 'Unable to save this scholarship right now.';
     } finally {
         isSaving.value = false;
     }
@@ -1707,7 +1768,7 @@ onMounted(loadFormData);
 
                                 <div v-show="activeFormSection === 'offer'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-slots">
-                                        Available slots
+                                        Award slots
                                     </label>
                                     <input
                                         id="scholarship-slots"
@@ -1718,6 +1779,9 @@ onMounted(loadFormData);
                                         placeholder="Optional"
                                         :class="inputClass"
                                     >
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        Limits final awards, not the number of applications you can receive.
+                                    </p>
                                 </div>
 
                                 <div v-show="activeFormSection === 'offer'" :class="basicFieldStackClass">
@@ -1746,6 +1810,7 @@ onMounted(loadFormData);
                                         id="scholarship-deadline"
                                         v-model="scholarshipForm.deadline"
                                         type="date"
+                                        :min="todayDate"
                                         :class="inputClass"
                                     >
                                 </div>
@@ -1971,6 +2036,7 @@ onMounted(loadFormData);
                                                         :id="`program-event-date-${stage.value}`"
                                                         v-model="scholarshipForm.programEvents[stage.value].scheduledAt"
                                                         type="datetime-local"
+                                                        :min="minimumDateTimeForEvent(scholarshipForm.programEvents[stage.value])"
                                                         :class="inputClass"
                                                     >
                                                 </div>
@@ -2706,9 +2772,13 @@ onMounted(loadFormData);
 
                         <div v-show="activeFormSection === 'finish'" class="mt-5 border-t border-slate-200 pt-4">
                             <TermsAgreement
+                                v-if="termsRequiredForSave"
                                 v-model="scholarshipForm.termsAccepted"
                                 context="scholarship"
                             />
+                            <p v-else class="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
+                                You can save this draft now. Terms are required only when you submit it for admin review.
+                            </p>
                         </div>
                             </div>
 
