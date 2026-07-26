@@ -98,9 +98,9 @@ const workflowSteps = computed(() => selectionStages.value.map((stage, index) =>
     event: programEvents.value.find((event) => event.type === stage) ?? null,
 })));
 const contractSections = computed(() => [
-    { label: 'Renewal / continuation', value: scholarship.value?.renewal_policy },
-    { label: 'Return service obligation', value: scholarship.value?.return_service_contract },
-    { label: 'Other program terms', value: scholarship.value?.other_contract_terms },
+    { label: 'Possible renewal requirement', value: scholarship.value?.renewal_policy },
+    { label: 'Possible service commitment', value: scholarship.value?.return_service_contract },
+    { label: 'Other possible commitments', value: scholarship.value?.other_contract_terms },
 ].filter((section) => hasText(section.value)));
 const hasLocationDetails = computed(() => Boolean(
     scholarship.value?.location_name
@@ -653,7 +653,8 @@ onMounted(loadScholarship);
 
                             <div class="mt-4 grid gap-5 lg:grid-cols-2">
                                 <section v-if="contractSections.length">
-                                    <h4 class="text-sm font-bold text-slate-950">Program obligations</h4>
+                                    <h4 class="text-sm font-bold text-slate-950">Possible recipient commitments</h4>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">These are previews for applicants. Final terms should be explained after acceptance.</p>
                                     <div class="mt-2 divide-y divide-slate-200 rounded-md border border-slate-200">
                                         <div v-for="term in contractSections" :key="term.label" class="p-3">
                                             <p class="text-xs font-semibold text-slate-500">{{ term.label }}</p>

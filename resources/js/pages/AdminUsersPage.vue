@@ -131,39 +131,6 @@ async function runUserAction(user, action, request) {
     }
 }
 
-async function toggleAccountStatus(user) {
-    if (user.account_status === 'suspended') {
-        await runUserAction(
-            user,
-            'status',
-            () => window.axios.patch(`/admin/users/${user.id}/status`, {
-                account_status: 'active',
-            }),
-        );
-        return;
-    }
-
-    const reason = window.prompt('Reason for suspending this account:', user.suspension_reason ?? '');
-
-    if (reason === null) {
-        return;
-    }
-
-    if (!reason.trim()) {
-        errorMessage.value = 'Add a reason before suspending this account.';
-        return;
-    }
-
-    await runUserAction(
-        user,
-        'status',
-        () => window.axios.patch(`/admin/users/${user.id}/status`, {
-            account_status: 'suspended',
-            suspension_reason: reason.trim(),
-        }),
-    );
-}
-
 async function forcePasswordReset(user) {
     await runUserAction(
         user,
@@ -418,20 +385,6 @@ onMounted(loadAdminData);
                                     </td>
                                     <td class="px-4 py-3 text-right align-top">
                                         <div class="flex flex-wrap justify-end gap-1.5">
-                                            <button
-                                                type="button"
-                                                class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                :disabled="Boolean(activeAction)"
-                                                @click="toggleAccountStatus(user)"
-                                            >
-                                                <span v-if="isActionLoading(user, 'status')">
-                                                    {{ user.account_status === 'suspended' ? 'Reactivating...' : 'Suspending...' }}
-                                                </span>
-                                                <span v-else>
-                                                    {{ user.account_status === 'suspended' ? 'Reactivate' : 'Suspend' }}
-                                                </span>
-                                            </button>
-
                                             <button
                                                 type="button"
                                                 class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"

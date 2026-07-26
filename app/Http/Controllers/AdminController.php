@@ -730,8 +730,21 @@ class AdminController extends Controller
             ],
         );
 
+        if ($user->isAdmin()) {
+            PortalNotification::create([
+                'user_id' => $user->id,
+                'type' => 'staff_account_created',
+                'title' => 'Your staff account is ready',
+                'message' => "Your Scholarship Portal {$user->account_title} account has been created. Username: {$user->username}. Sign in using the temporary password provided to you. You can update your email, username, and contact details in Profile. Use Forgot Password if you need to change your password.",
+                'action_url' => '/login',
+                'deduplication_key' => "staff_account_created:{$user->id}",
+            ]);
+        }
+
         return response()->json([
-            'message' => 'Account created successfully.',
+            'message' => $user->isAdmin()
+                ? 'Staff account created. A welcome email was queued; share the temporary password securely.'
+                : 'Account created successfully.',
             'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ], 201);
     }

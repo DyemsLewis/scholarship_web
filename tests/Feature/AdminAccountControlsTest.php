@@ -39,6 +39,23 @@ class AdminAccountControlsTest extends TestCase
             ->assertJsonPath('user.account_status', 'active');
     }
 
+    public function test_admin_cannot_suspend_own_account_when_another_admin_is_active(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$admin->id}/status", [
+                'account_status' => 'suspended',
+                'suspension_reason' => 'Attempted self-suspension.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'You cannot suspend your own admin account.');
+
+        $this->assertSame('active', $admin->fresh()->account_status);
+        $this->assertNull($admin->fresh()->suspended_at);
+    }
+
     public function test_admin_can_force_password_reset_and_reset_clears_flag(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
@@ -12,6 +12,7 @@ const errorMessage = ref('');
 const applications = ref([]);
 const reviewers = ref([]);
 const assigningReviewerApplicationId = ref(null);
+const canAssignReviewers = computed(() => reviewers.value.length >= 2);
 const selectedScholarshipContext = ref(initialScholarshipId ? {
     id: Number(initialScholarshipId),
     title: initialScholarshipTitle,
@@ -20,6 +21,7 @@ const selectedQueueFilter = ref('all');
 const selectedQueueSort = ref('priority');
 const applicationSearch = ref('');
 const applicationPage = ref(1);
+const selectedApplicationPreview = ref(null);
 const applicationsPerPage = 10;
 const programEvents = ref([]);
 const scheduleEditorType = ref('');
@@ -136,7 +138,7 @@ const exportApplicationsUrl = computed(() => {
 const pageKicker = computed(() => (hasProgramContext.value ? 'Program Workspace' : 'Application Review'));
 const pageTitle = computed(() => (hasProgramContext.value
     ? selectedScholarshipContext.value?.title || 'Scholarship program'
-    : 'Applicant activity queue'));
+    : 'Application review queue'));
 const pageDescription = computed(() => (hasProgramContext.value
     ? 'Manage this program schedule and review its submitted applicants in one place.'
     : 'Review submitted applications, document status, and DSS guidance for your programs.'));
@@ -257,6 +259,28 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function recommendationClass(recommendation) {
+    if (['highly_recommended', 'recommended'].includes(recommendation)) {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (['low_priority', 'not_recommended'].includes(recommendation)) {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
+function applicantInitials(application) {
+    return String(application.applicant?.name || application.applicant?.email || 'Applicant')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((word) => word.charAt(0))
+        .join('')
+        .toUpperCase();
+}
+
 function programStatusClass(status) {
     if (status === 'published') {
         return 'bg-emerald-100 text-emerald-800';
@@ -345,32 +369,12 @@ function reviewPriorityScore(application) {
     return Math.max(0, score);
 }
 
-function reviewPriorityLabel(application) {
-    const score = reviewPriorityScore(application);
-
-    if (score >= 60) {
-        return 'High priority';
-    }
-
-    if (score >= 35) {
-        return 'Needs review';
-    }
-
-    return 'Routine';
+function openApplicationPreview(application) {
+    selectedApplicationPreview.value = application;
 }
 
-function reviewPriorityClass(application) {
-    const score = reviewPriorityScore(application);
-
-    if (score >= 60) {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (score >= 35) {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    return 'bg-slate-200 text-slate-700';
+function closeApplicationPreview() {
+    selectedApplicationPreview.value = null;
 }
 
 function emptyScheduleForm(type = '') {
@@ -650,6 +654,14 @@ watch(totalAttendancePages, (totalPages) => {
     }
 });
 
+watch(selectedApplicationPreview, (application) => {
+    document.body.classList.toggle('overflow-hidden', Boolean(application));
+});
+
+onUnmounted(() => {
+    document.body.classList.remove('overflow-hidden');
+});
+
 onMounted(loadProviderData);
 </script>
 
@@ -822,12 +834,13 @@ onMounted(loadProviderData);
 
                             <div v-if="['onsite', 'hybrid'].includes(scheduleForm.mode)" class="mt-4 grid gap-4 md:grid-cols-2">
                                 <div>
-                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Venue</label>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Event venue</label>
                                     <input v-model="scheduleForm.venue" type="text" maxlength="500" required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
                                 </div>
                                 <div>
-                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Full address</label>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Event address</label>
                                     <input v-model="scheduleForm.locationAddress" type="text" maxlength="1000" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">This can differ from the provider office or program address.</p>
                                 </div>
                                 <div class="overflow-hidden rounded-md md:col-span-2">
                                     <LeafletMapPreview
@@ -845,8 +858,12 @@ onMounted(loadProviderData);
                             </div>
 
                             <div v-if="['online', 'hybrid'].includes(scheduleForm.mode)" class="mt-4">
-                                <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Online link</label>
-                                <input v-model="scheduleForm.onlineUrl" type="url" maxlength="2000" placeholder="https://..." required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                                    Online link
+                                    <span class="ml-1 text-[10px] text-slate-400">{{ scheduleForm.type === 'distribution' ? 'Optional' : 'Required' }}</span>
+                                </label>
+                                <input v-model="scheduleForm.onlineUrl" type="url" maxlength="2000" placeholder="https://..." :required="scheduleForm.type !== 'distribution'" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                <p v-if="scheduleForm.type === 'distribution'" class="mt-2 text-xs leading-5 text-slate-500">Use this only for a release portal or online briefing. Put transfer or release steps in the instructions.</p>
                             </div>
 
                             <div class="mt-4">
@@ -1015,101 +1032,66 @@ onMounted(loadProviderData);
                         </template>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                            Review Queue
-                        </p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                            {{ hasProgramContext ? 'Submitted applicants' : 'Submitted applications' }}
-                        </h3>
-                        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <label class="relative w-full sm:max-w-sm">
+                    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <div>
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                Review Queue
+                            </p>
+                            <h3 class="mt-2 text-xl font-bold text-slate-950">
+                                {{ hasProgramContext ? 'Submitted applicants' : 'Submitted applications' }}
+                            </h3>
+                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                                Review applicant details, document readiness, and decision-support guidance before recording a decision.
+                            </p>
+
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <button
+                                    v-for="filter in reviewFilterOptions"
+                                    :key="filter.value"
+                                    type="button"
+                                    :class="[
+                                        'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
+                                        selectedQueueFilter === filter.value
+                                            ? 'border-slate-900 bg-slate-900 text-white'
+                                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50',
+                                    ]"
+                                    @click="selectedQueueFilter = filter.value"
+                                >
+                                    {{ filter.label }} ({{ filter.count }})
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <label class="relative w-full lg:max-w-md">
                                 <span class="sr-only">Search applicants</span>
                                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
                                 <input
                                     v-model="applicationSearch"
                                     type="search"
-                                    placeholder="Search applicant or program"
+                                    placeholder="Search applicant, email, or program"
                                     class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                                 >
                             </label>
-                            <a
-                                :href="exportApplicationsUrl"
-                                class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                            >
-                                Export CSV
-                            </a>
-                        </div>
-
-                        <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-                            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div class="flex flex-wrap gap-2">
-                                    <button
-                                        v-for="filter in reviewFilterOptions"
-                                        :key="filter.value"
-                                        type="button"
-                                        :class="[
-                                            'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                            selectedQueueFilter === filter.value
-                                                ? 'border-slate-900 bg-slate-900 text-white'
-                                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
-                                        ]"
-                                        @click="selectedQueueFilter = filter.value"
+                            <div class="flex flex-col gap-2 sm:flex-row">
+                                <label>
+                                    <span class="sr-only">Sort applications</span>
+                                    <select
+                                        v-model="selectedQueueSort"
+                                        class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-500 sm:w-44"
                                     >
-                                        {{ filter.label }} ({{ filter.count }})
-                                    </button>
-                                </div>
-
-                                <div class="flex flex-wrap gap-2">
-                                    <button
-                                        type="button"
-                                        :class="[
-                                            'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                            selectedQueueSort === 'priority'
-                                                ? 'border-slate-900 bg-slate-900 text-white'
-                                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
-                                        ]"
-                                        @click="selectedQueueSort = 'priority'"
-                                    >
-                                        Priority
-                                    </button>
-                                    <button
-                                        type="button"
-                                        :class="[
-                                            'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                            selectedQueueSort === 'dss'
-                                                ? 'border-slate-900 bg-slate-900 text-white'
-                                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
-                                        ]"
-                                        @click="selectedQueueSort = 'dss'"
-                                    >
-                                        DSS
-                                    </button>
-                                    <button
-                                        type="button"
-                                        :class="[
-                                            'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                            selectedQueueSort === 'documents'
-                                                ? 'border-slate-900 bg-slate-900 text-white'
-                                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
-                                        ]"
-                                        @click="selectedQueueSort = 'documents'"
-                                    >
-                                        Documents
-                                    </button>
-                                    <button
-                                        type="button"
-                                        :class="[
-                                            'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                            selectedQueueSort === 'oldest'
-                                                ? 'border-slate-900 bg-slate-900 text-white'
-                                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
-                                        ]"
-                                        @click="selectedQueueSort = 'oldest'"
-                                    >
-                                        Oldest
-                                    </button>
-                                </div>
+                                        <option value="priority">Priority first</option>
+                                        <option value="oldest">Oldest first</option>
+                                        <option value="dss">Highest DSS</option>
+                                        <option value="documents">Document issues</option>
+                                    </select>
+                                </label>
+                                <a
+                                    :href="exportApplicationsUrl"
+                                    class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                                >
+                                    Export CSV
+                                </a>
                             </div>
                         </div>
 
@@ -1130,25 +1112,19 @@ onMounted(loadProviderData);
                             No applications match this review filter.
                         </div>
 
-                        <div v-else class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                            <div class="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_10rem_7rem_6rem_8rem_auto] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 xl:grid">
-                                <span>Applicant</span>
-                                <span>Program</span>
-                                <span>Reviewer</span>
-                                <span>Scores</span>
-                                <span>Files</span>
-                                <span>Status</span>
-                                <span class="text-right">Action</span>
-                            </div>
-
+                        <div v-else class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
                             <article
                                 v-for="application in visibleApplications"
                                 :key="application.id"
-                                class="grid gap-3 border-b border-slate-200 p-3 last:border-b-0 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_10rem_7rem_6rem_8rem_auto] xl:items-center xl:px-4"
+                                class="flex flex-wrap items-center gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
                             >
-                                <div class="min-w-0">
-                                    <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-                                        <h4 class="min-w-0 truncate text-sm font-bold text-slate-950">
+                                <div class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
+                                    {{ applicantInitials(application) }}
+                                </div>
+
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex min-w-0 items-center gap-2">
+                                        <h4 class="truncate text-sm font-bold text-slate-950 sm:text-base">
                                             {{ application.applicant?.name || 'Applicant' }}
                                         </h4>
                                         <i
@@ -1157,65 +1133,47 @@ onMounted(loadProviderData);
                                             title="Verified applicant"
                                             aria-label="Verified applicant"
                                         ></i>
-                                        <span :class="['rounded px-1.5 py-0.5 text-[9px] font-bold uppercase', reviewPriorityClass(application)]">
-                                            {{ reviewPriorityLabel(application) }}
+                                        <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', statusClass(application.status)]">
+                                            {{ statusLabel(application.status) }}
                                         </span>
                                     </div>
-                                    <p class="mt-1 text-xs text-slate-500">
-                                        Submitted {{ application.submitted_at || 'recently' }}
-                                        <span v-if="showWaitingTime(application)">- waiting {{ application.waiting_days }}d</span>
+                                    <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
+                                        {{ application.scholarship?.title || 'Scholarship' }} - {{ application.applicant?.email || 'No email provided' }}
                                     </p>
-                                    <p v-if="application.documents_changed_since_review" class="mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">
-                                        <i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i>
-                                        Files updated since review
-                                    </p>
-                                </div>
-
-                                <div class="min-w-0">
-                                    <p class="truncate text-sm font-semibold text-slate-800">{{ application.scholarship?.title || 'Scholarship' }}</p>
-                                    <p class="mt-0.5 truncate text-[11px] text-slate-500">
-                                        {{ application.status_progress?.label || statusLabel(application.status) }}
-                                    </p>
-                                </div>
-
-                                <label class="min-w-0">
-                                    <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 xl:hidden">Reviewer</span>
-                                    <select
-                                        :value="application.assigned_reviewer?.id ?? ''"
-                                        :disabled="assigningReviewerApplicationId === application.id"
-                                        class="w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-slate-500 disabled:cursor-wait disabled:opacity-60"
-                                        @change="assignReviewer(application, $event)"
-                                    >
-                                        <option value="">Unassigned</option>
-                                        <option v-for="reviewer in reviewers" :key="reviewer.id" :value="reviewer.id">
-                                            {{ reviewer.name }} - {{ reviewer.role_label }}
-                                        </option>
-                                    </select>
-                                </label>
-
-                                <div class="grid grid-cols-2 gap-2 xl:contents">
-                                    <div class="rounded-md bg-slate-50 px-2.5 py-2 text-xs ring-1 ring-slate-200 xl:bg-transparent xl:p-0 xl:ring-0">
-                                        <p class="font-semibold text-slate-500 xl:hidden">DSS / match</p>
-                                        <p class="mt-0.5 font-bold text-slate-950 xl:mt-0">{{ application.dss_score ?? 0 }}% / {{ application.eligibility_score ?? 0 }}%</p>
-                                    </div>
-                                    <div class="rounded-md bg-slate-50 px-2.5 py-2 text-xs ring-1 ring-slate-200 xl:bg-transparent xl:p-0 xl:ring-0">
-                                        <p class="font-semibold text-slate-500 xl:hidden">Files</p>
-                                        <p class="mt-0.5 font-bold text-slate-950 xl:mt-0">{{ application.document_readiness?.percent ?? 0 }}%</p>
-                                        <p v-if="documentIssueCount(application)" class="mt-0.5 text-[10px] font-semibold text-amber-700">{{ documentIssueCount(application) }} issue{{ documentIssueCount(application) === 1 ? '' : 's' }}</p>
+                                    <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
+                                        <span>Submitted {{ application.submitted_at || 'recently' }}</span>
+                                        <span v-if="showWaitingTime(application)">Waiting {{ application.waiting_days }}d</span>
+                                        <span>DSS {{ application.dss_score ?? 0 }}%</span>
+                                        <span>Files {{ application.document_readiness?.percent ?? 0 }}%</span>
+                                        <span v-if="documentIssueCount(application)" class="text-amber-700">
+                                            {{ documentIssueCount(application) }} file issue{{ documentIssueCount(application) === 1 ? '' : 's' }}
+                                        </span>
+                                        <span v-if="application.documents_changed_since_review" class="text-amber-700">Files updated</span>
                                     </div>
                                 </div>
 
-                                <div class="flex items-center justify-between gap-3 xl:contents">
-                                    <span :class="['w-fit rounded-md px-2 py-1 text-[10px] font-bold uppercase', statusClass(application.status)]">
-                                        {{ statusLabel(application.status) }}
-                                    </span>
-                                    <a
-                                        :href="application.detail_url || `/provider/applications/${application.id}`"
-                                        class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                <div class="flex w-full shrink-0 gap-2 pl-14 sm:w-auto sm:pl-0">
+                                    <label v-if="canAssignReviewers" class="min-w-0 flex-1 sm:w-44 sm:flex-none">
+                                        <span class="sr-only">Assigned reviewer for {{ application.applicant?.name || 'applicant' }}</span>
+                                        <select
+                                            :value="application.assigned_reviewer?.id ?? ''"
+                                            :disabled="assigningReviewerApplicationId === application.id"
+                                            class="w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-slate-500 disabled:cursor-wait disabled:opacity-60"
+                                            @change="assignReviewer(application, $event)"
+                                        >
+                                            <option value="">Unassigned</option>
+                                            <option v-for="reviewer in reviewers" :key="reviewer.id" :value="reviewer.id">
+                                                {{ reviewer.name }} - {{ reviewer.role_label }}
+                                            </option>
+                                        </select>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                        @click="openApplicationPreview(application)"
                                     >
-                                        View
-                                        <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i>
-                                    </a>
+                                        View details
+                                    </button>
                                 </div>
                             </article>
 
@@ -1247,5 +1205,138 @@ onMounted(loadProviderData);
                 <ProviderFooter />
             </div>
         </section>
+
+        <Teleport to="body">
+            <div
+                v-if="selectedApplicationPreview"
+                class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="provider-application-preview-title"
+                tabindex="-1"
+                @click.self="closeApplicationPreview"
+                @keydown.esc="closeApplicationPreview"
+            >
+                <section class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+                    <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
+                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold tracking-[0.08em] text-white">
+                            {{ applicantInitials(selectedApplicationPreview) }}
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Application overview</p>
+                                <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', statusClass(selectedApplicationPreview.status)]">
+                                    {{ statusLabel(selectedApplicationPreview.status) }}
+                                </span>
+                            </div>
+                            <h2 id="provider-application-preview-title" class="mt-1 truncate text-lg font-bold text-slate-950 sm:text-xl">
+                                {{ selectedApplicationPreview.applicant?.name || 'Applicant' }}
+                            </h2>
+                            <p class="mt-1 truncate text-xs text-slate-500">
+                                {{ selectedApplicationPreview.applicant?.email || 'No email provided' }}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
+                            aria-label="Close application overview"
+                            @click="closeApplicationPreview"
+                        >
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+                        <section class="rounded-md border border-slate-200 bg-slate-50 p-4">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Scholarship program</p>
+                            <p class="mt-1 text-base font-bold text-slate-950">
+                                {{ selectedApplicationPreview.scholarship?.title || 'Scholarship program' }}
+                            </p>
+                            <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
+                                <span>Submitted {{ selectedApplicationPreview.submitted_at || 'recently' }}</span>
+                                <span v-if="showWaitingTime(selectedApplicationPreview)">Waiting {{ selectedApplicationPreview.waiting_days }} days</span>
+                                <span v-if="canAssignReviewers">
+                                    {{ selectedApplicationPreview.assigned_reviewer?.name ? `Reviewer: ${selectedApplicationPreview.assigned_reviewer.name}` : 'Reviewer unassigned' }}
+                                </span>
+                            </div>
+                        </section>
+
+                        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                            <article class="rounded-md border border-slate-200 bg-white p-3">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">DSS guidance</p>
+                                <div class="mt-2 flex items-center justify-between gap-2">
+                                    <p class="text-xl font-bold text-slate-950">{{ selectedApplicationPreview.dss_score ?? 0 }}%</p>
+                                    <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', recommendationClass(selectedApplicationPreview.dss_recommendation)]">
+                                        {{ statusLabel(selectedApplicationPreview.dss_recommendation || 'needs_review') }}
+                                    </span>
+                                </div>
+                            </article>
+
+                            <article class="rounded-md border border-slate-200 bg-white p-3">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Required files</p>
+                                <p class="mt-2 text-xl font-bold text-slate-950">
+                                    {{ selectedApplicationPreview.document_readiness?.uploaded ?? 0 }}/{{ selectedApplicationPreview.document_readiness?.required ?? 0 }}
+                                </p>
+                                <p :class="['mt-1 text-xs font-semibold', documentIssueCount(selectedApplicationPreview) ? 'text-amber-700' : 'text-slate-500']">
+                                    {{ documentIssueCount(selectedApplicationPreview) ? `${documentIssueCount(selectedApplicationPreview)} need review` : 'No file issues shown' }}
+                                </p>
+                            </article>
+
+                            <article class="rounded-md border border-slate-200 bg-white p-3">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Applicant profile</p>
+                                <div class="mt-2 flex items-center gap-2">
+                                    <i
+                                        :class="selectedApplicationPreview.applicant?.profile_verification_status === 'approved' ? 'fa-solid fa-circle-check text-emerald-600' : 'fa-regular fa-circle text-amber-600'"
+                                        aria-hidden="true"
+                                    ></i>
+                                    <p class="text-sm font-bold text-slate-950">
+                                        {{ selectedApplicationPreview.applicant?.profile_verification_status === 'approved' ? 'Verified' : statusLabel(selectedApplicationPreview.applicant?.profile_verification_status || 'pending') }}
+                                    </p>
+                                </div>
+                                <p class="mt-2 line-clamp-1 text-xs text-slate-500">
+                                    {{ selectedApplicationPreview.applicant?.education_level || selectedApplicationPreview.applicant?.school || 'Profile available in full review' }}
+                                </p>
+                            </article>
+                        </div>
+
+                        <section class="mt-4 rounded-md border border-slate-200 bg-white p-4">
+                            <div class="flex items-start gap-3">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                    <i class="fa-solid fa-list-check text-xs" aria-hidden="true"></i>
+                                </span>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold text-slate-950">Review focus</p>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">
+                                        {{ selectedApplicationPreview.dss_explanation?.next_action || 'Check eligibility, submitted files, and the applicant profile before recording a decision.' }}
+                                    </p>
+                                    <p v-if="selectedApplicationPreview.documents_changed_since_review" class="mt-2 text-xs font-bold text-amber-700">
+                                        The applicant uploaded newer files after the last review.
+                                    </p>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                        <p class="text-xs text-slate-500">Open the full review to check files, profile proofs, rubric scores, and record a decision.</p>
+                        <div class="flex shrink-0 gap-2">
+                            <button
+                                type="button"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                @click="closeApplicationPreview"
+                            >
+                                Close
+                            </button>
+                            <a
+                                :href="selectedApplicationPreview.detail_url || `/provider/applications/${selectedApplicationPreview.id}`"
+                                class="rounded-md bg-slate-950 px-3 py-2 text-center text-xs font-bold text-white transition hover:bg-slate-800"
+                            >
+                                Open full review
+                            </a>
+                        </div>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
     </main>
 </template>

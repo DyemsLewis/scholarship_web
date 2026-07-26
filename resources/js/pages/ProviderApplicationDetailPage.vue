@@ -290,9 +290,9 @@ const providerContractSections = computed(() => {
     const scholarship = application.value?.scholarship ?? {};
 
     return [
-        { label: 'Return service contract', value: scholarship.return_service_contract },
-        { label: 'Other contract terms', value: scholarship.other_contract_terms },
-        { label: 'Renewal / continuation', value: scholarship.renewal_policy },
+        { label: 'Possible service commitment', value: scholarship.return_service_contract },
+        { label: 'Other possible commitments', value: scholarship.other_contract_terms },
+        { label: 'Possible renewal requirement', value: scholarship.renewal_policy },
     ].filter((section) => section.value && String(section.value).trim());
 });
 
@@ -1439,8 +1439,8 @@ onMounted(loadApplication);
                                 v-if="activeSection === 'applicant' && providerContractSections.length"
                                 class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2"
                             >
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Post-Acceptance Obligations</p>
-                                <p class="mt-2 text-sm leading-6 text-slate-600">Terms the applicant may need to fulfill if selected for this scholarship.</p>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Possible recipient commitments</p>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">A preview only. Explain and confirm the final agreement with the applicant after acceptance.</p>
                                 <div class="mt-3 grid gap-2">
                                     <div v-for="section in providerContractSections" :key="section.label" class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
                                         <p class="font-bold text-slate-800">{{ section.label }}</p>

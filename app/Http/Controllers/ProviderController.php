@@ -254,8 +254,19 @@ class ProviderController extends Controller
             ],
         );
 
+        $teamRole = self::PROVIDER_TEAM_ROLES[$account->account_title] ?? 'Team member';
+        $providerName = $owner->providerProfile?->provider_name ?: $owner->name ?: 'provider organization';
+        PortalNotification::create([
+            'user_id' => $account->id,
+            'type' => 'staff_account_created',
+            'title' => 'Your provider staff account is ready',
+            'message' => "Your {$providerName} {$teamRole} account has been created. Username: {$account->username}. Sign in using the temporary password provided to you. You can update your email, username, and contact details in Profile. Use Forgot Password if you need to change your password.",
+            'action_url' => '/login',
+            'deduplication_key' => "staff_account_created:{$account->id}",
+        ]);
+
         return response()->json([
-            'message' => 'Team account created successfully.',
+            'message' => 'Team account created. A welcome email was queued; share the temporary password securely.',
             'account' => $this->providerTeamAccountPayload($account->fresh('providerProfile')),
         ], 201);
     }
@@ -418,19 +429,27 @@ class ProviderController extends Controller
 
         $user = $request->user();
         $providerOwner = $user->providerOrganizationOwner();
-        $validated = $request->validate([
+        $canManageOrganization = $user->hasPortalPermission('manage_profile');
+        $rules = [
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
             'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
-            'provider_name' => ['required', 'string', 'max:255'],
-            'provider_type' => ['nullable', Rule::in(['school', 'foundation', 'government', 'company', 'non_profit', 'other'])],
-            'provider_website' => ['nullable', 'string', 'max:255'],
-            'provider_address' => ['nullable', 'string', 'max:500'],
-            'provider_description' => ['nullable', 'string', 'max:1500'],
-        ]);
+        ];
+
+        if ($canManageOrganization) {
+            $rules += [
+                'provider_name' => ['required', 'string', 'max:255'],
+                'provider_type' => ['nullable', Rule::in(['school', 'foundation', 'government', 'company', 'non_profit', 'other'])],
+                'provider_website' => ['nullable', 'string', 'max:255'],
+                'provider_address' => ['nullable', 'string', 'max:500'],
+                'provider_description' => ['nullable', 'string', 'max:1500'],
+            ];
+        }
+
+        $validated = $request->validate($rules);
 
         $middleInitial = strtoupper($validated['middle_initial']);
 
@@ -440,7 +459,7 @@ class ProviderController extends Controller
         ]);
 
         $profile = $providerOwner->providerProfile;
-        $organizationProfile = [
+        $organizationProfile = $canManageOrganization ? [
             'provider_name' => $validated['provider_name'],
             'provider_type' => $validated['provider_type'] ?? null,
             'provider_website' => $validated['provider_website'] ?? null,
@@ -450,7 +469,7 @@ class ProviderController extends Controller
             'verification_notes' => $profile?->verification_notes,
             'verified_by' => $profile?->verified_by,
             'verified_at' => $profile?->verified_at,
-        ];
+        ] : [];
 
         $user->providerProfile()->updateOrCreate([
             'user_id' => $user->id,
@@ -462,7 +481,7 @@ class ProviderController extends Controller
             ...$organizationProfile,
         ]);
 
-        if (! $providerOwner->is($user)) {
+        if ($canManageOrganization && ! $providerOwner->is($user)) {
             $providerOwner->providerProfile()->updateOrCreate([
                 'user_id' => $providerOwner->id,
             ], [
@@ -477,7 +496,7 @@ class ProviderController extends Controller
         ActivityLog::record(
             $user,
             'provider_profile_updated',
-            "{$validated['provider_name']} updated their provider profile.",
+            "{$providerOwner->providerProfile?->provider_name} updated their provider profile.",
             $request,
             ['provider_id' => $providerOwner->id, 'updated_by' => $user->id],
         );
@@ -904,7 +923,10 @@ class ProviderController extends Controller
             'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
             'online_url' => [
-                Rule::requiredIf(in_array($request->input('mode'), ['online', 'hybrid'], true)),
+                Rule::requiredIf(
+                    $request->input('type') !== 'distribution'
+                    && in_array($request->input('mode'), ['online', 'hybrid'], true)
+                ),
                 'nullable',
                 'url:http,https',
                 'max:2000',
@@ -1302,7 +1324,10 @@ class ProviderController extends Controller
             'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
             'online_url' => [
-                Rule::requiredIf(in_array($request->input('mode'), ['online', 'hybrid'], true)),
+                Rule::requiredIf(
+                    $request->input('type') !== 'distribution'
+                    && in_array($request->input('mode'), ['online', 'hybrid'], true)
+                ),
                 'nullable',
                 'url:http,https',
                 'max:2000',
@@ -2471,7 +2496,11 @@ class ProviderController extends Controller
                 ]);
             }
 
-            if (in_array($event['mode'], ['online', 'hybrid'], true) && blank($event['online_url'] ?? null)) {
+            if (
+                $event['type'] !== 'distribution'
+                && in_array($event['mode'], ['online', 'hybrid'], true)
+                && blank($event['online_url'] ?? null)
+            ) {
                 throw ValidationException::withMessages([
                     "program_events.{$index}.online_url" => 'Add the online meeting or assessment link.',
                 ]);

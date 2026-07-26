@@ -364,6 +364,9 @@ onMounted(loadAccount);
                                 >
                             </div>
                         </div>
+                        <p v-if="!isEditMode" class="border-t border-slate-200 bg-amber-50 px-5 py-3 text-xs leading-5 text-amber-900 sm:px-6">
+                            A welcome email will include the username and sign-in link. Share the temporary password separately. Staff can update their email, username, and contact details in Profile after signing in.
+                        </p>
                     </section>
 
                     <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">

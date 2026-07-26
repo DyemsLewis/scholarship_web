@@ -468,18 +468,20 @@ onMounted(loadProviderProfile);
                         <section class="grid gap-5 border-t border-slate-200 p-5 sm:p-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
                             <div>
                                 <p class="text-sm font-bold text-slate-950">Organization</p>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Public details applicants use to recognize the scholarship provider.</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">
+                                    {{ canManageProfile ? 'Public details applicants use to recognize the scholarship provider.' : 'Organization details are managed by authorized provider staff.' }}
+                                </p>
                             </div>
                             <div>
                                 <div class="grid gap-4 md:grid-cols-2">
                                 <label>
                                     <span :class="labelClass">Provider name</span>
-                                    <input v-model="form.provider_name" type="text" placeholder="Provider" :class="inputClass">
+                                    <input v-model="form.provider_name" type="text" placeholder="Provider" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
                                     <span v-if="fieldError('provider_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_name') }}</span>
                                 </label>
                                 <label>
                                     <span :class="labelClass">Provider type</span>
-                                    <select v-model="form.provider_type" :class="inputClass">
+                                    <select v-model="form.provider_type" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
                                         <option v-for="option in providerTypeOptions" :key="option.value" :value="option.value">
                                             {{ option.label }}
                                         </option>
@@ -488,12 +490,12 @@ onMounted(loadProviderProfile);
                                 </label>
                                 <label>
                                     <span :class="labelClass">Website</span>
-                                    <input v-model="form.provider_website" type="text" placeholder="https://example.com" :class="inputClass">
+                                    <input v-model="form.provider_website" type="text" placeholder="https://example.com" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
                                     <span v-if="fieldError('provider_website')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_website') }}</span>
                                 </label>
                                 <label>
                                     <span :class="labelClass">Address</span>
-                                    <input v-model="form.provider_address" type="text" placeholder="Office address" :class="inputClass">
+                                    <input v-model="form.provider_address" type="text" placeholder="Office address" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
                                     <span v-if="fieldError('provider_address')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_address') }}</span>
                                 </label>
                             </div>
@@ -504,7 +506,8 @@ onMounted(loadProviderProfile);
                                     v-model="form.provider_description"
                                     rows="4"
                                     placeholder="Briefly describe the scholarship provider."
-                                    :class="inputClass"
+                                    :disabled="!canManageProfile"
+                                    :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"
                                 ></textarea>
                                 <span v-if="fieldError('provider_description')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_description') }}</span>
                             </label>
@@ -560,8 +563,7 @@ onMounted(loadProviderProfile);
                                 <i :class="['fa-solid fa-circle text-[8px]', user?.can_post_scholarships ? 'text-emerald-500' : 'text-amber-500']" aria-hidden="true"></i>
                                 {{ user?.can_post_scholarships ? 'Publishing access is active.' : 'Publishing unlocks after provider verification.' }}
                             </p>
-                            <span v-if="!canManageProfile" class="text-xs font-bold text-slate-500">View only</span>
-                            <button v-else type="submit" :disabled="isSaving" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
+                            <button type="submit" :disabled="isSaving" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
                                 {{ isSaving ? 'Saving...' : 'Save profile' }}
                             </button>
                         </div>

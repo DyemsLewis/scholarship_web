@@ -85,9 +85,9 @@ const selectedContractSections = computed(() => {
     }
 
     return [
-        { label: 'Return service contract', value: scholarship.return_service_contract },
-        { label: 'Other contract terms', value: scholarship.other_contract_terms },
-        { label: 'Renewal / continuation', value: scholarship.renewal_policy },
+        { label: 'Possible service commitment', value: scholarship.return_service_contract },
+        { label: 'Other possible commitments', value: scholarship.other_contract_terms },
+        { label: 'Possible renewal requirement', value: scholarship.renewal_policy },
     ].filter((section) => section.value && String(section.value).trim());
 });
 const appliedScholarshipIds = computed(() => new Set(applications.value.map((application) => application.scholarship?.id).filter(Boolean)));
@@ -1392,7 +1392,7 @@ watch(selectedScholarship, (scholarship) => {
                                             Possible obligations after acceptance
                                         </p>
                                         <p class="mt-2 text-xs leading-5 text-slate-600">
-                                            If selected, the provider will confirm which agreements or service obligations apply to you.
+                                            Applying does not mean you accept these terms. If selected, the provider will explain the final agreement before you accept or sign it.
                                         </p>
                                         <div class="mt-3 grid gap-3">
                                             <div

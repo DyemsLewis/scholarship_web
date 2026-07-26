@@ -2,6 +2,8 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
 
 const accountId = window.location.pathname.match(/\/admin\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
@@ -17,6 +19,12 @@ const suspensionReason = ref('');
 const supportLink = ref('');
 const verificationDocuments = ref([]);
 const applicantVerificationNotes = ref('');
+const {
+    confirmation,
+    requestConfirmation,
+    confirmConfirmation,
+    cancelConfirmation,
+} = useConfirmationDialog();
 const adminPermissionOptions = [
     { value: 'manage_accounts', label: 'Manage accounts', description: 'Create and maintain applicant and provider accounts.' },
     { value: 'manage_reviews', label: 'Manage reviews', description: 'Verify providers and applicants, and publish programs.' },
@@ -123,6 +131,10 @@ function fillForm(user) {
 }
 
 const accountStatusLabel = computed(() => account.value?.account_status === 'suspended' ? 'Suspended' : 'Active');
+const isCurrentAdminAccount = computed(() => Boolean(
+    account.value?.role === 'admin'
+    && Number(account.value?.id) === Number(window.portalUser?.id),
+));
 const canChooseAdminRole = computed(() => !window.portalUser?.is_managed_account);
 const visibleAccountRoleOptions = computed(() => accountRoleOptions.filter((role) => (
     role.value !== 'admin' || canChooseAdminRole.value
@@ -334,6 +346,11 @@ async function updateAccountStatus(status) {
     errorMessage.value = '';
     supportLink.value = '';
 
+    if (status === 'suspended' && isCurrentAdminAccount.value) {
+        errorMessage.value = 'You cannot suspend the admin account you are currently using.';
+        return;
+    }
+
     if (status === 'suspended' && !suspensionReason.value.trim()) {
         errorMessage.value = 'Add a reason before suspending this account.';
         return;
@@ -357,6 +374,19 @@ async function updateAccountStatus(status) {
 
 async function forcePasswordReset() {
     if (!accountId) {
+        return;
+    }
+
+    const isResending = Boolean(account.value?.must_reset_password);
+    const confirmed = await requestConfirmation({
+        title: isResending ? 'Send a new reset link?' : 'Require a password reset?',
+        message: isResending
+            ? `A new password-reset link will be sent to ${account.value?.email}. The previous link will no longer be valid.`
+            : `This will block ${account.value?.email} from signing in until they set a new password from the emailed reset link.`,
+        confirmLabel: isResending ? 'Send new link' : 'Require reset',
+    });
+
+    if (!confirmed) {
         return;
     }
 
@@ -455,6 +485,12 @@ onMounted(loadAccount);
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <AdminSidebar active="users" />
+
+        <ConfirmationDialog
+            v-bind="confirmation"
+            @confirm="confirmConfirmation"
+            @cancel="cancelConfirmation"
+        />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-5xl">
@@ -727,18 +763,15 @@ onMounted(loadAccount);
                                 >
                             </div>
                         </div>
+                        <p v-if="!isEditMode && form.role === 'admin'" class="border-t border-slate-200 bg-amber-50 px-5 py-3 text-xs leading-5 text-amber-900 sm:px-6">
+                            A welcome email will include the username and sign-in link. Share the temporary password separately. Staff can update their email, username, and contact details in Profile after signing in.
+                        </p>
                     </section>
 
                     <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                         <div class="min-h-5">
                             <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">
                                 {{ errorMessage }}
-                            </p>
-                            <p v-if="supportLink" class="mt-1 text-sm text-slate-600">
-                                Reset link:
-                                <a :href="supportLink" class="break-all font-semibold text-slate-900 underline">
-                                    {{ supportLink }}
-                                </a>
                             </p>
                         </div>
 
@@ -764,101 +797,166 @@ onMounted(loadAccount);
 
                 <section
                     v-if="isEditMode && account"
-                    class="mt-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+                    class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
                 >
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div class="border-b border-slate-200 p-5 sm:p-6">
                         <div>
                             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Account controls
                             </p>
                             <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                Support and security
+                                Security and access
                             </h3>
-                            <div class="mt-3 flex flex-wrap gap-2">
-                                <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', accountStatusClass]">
-                                    {{ accountStatusLabel }}
-                                </span>
-                                <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', emailStatusClass]">
-                                    {{ emailStatusLabel }}
-                                </span>
-                                <span
-                                    v-if="account.must_reset_password"
-                                    class="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-bold text-white"
-                                >
-                                    Password reset required
-                                </span>
-                            </div>
-                            <p v-if="account.suspended_at" class="mt-3 text-sm text-slate-500">
-                                Suspended {{ account.suspended_at }}.
+                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                                Manage sign-in recovery, email verification, and access to this account.
                             </p>
-                            <p v-if="account.password_reset_required_at" class="mt-1 text-sm text-slate-500">
-                                Password reset required since {{ account.password_reset_required_at }}.
-                            </p>
-                        </div>
-
-                        <div class="grid gap-2 sm:grid-cols-2 lg:min-w-[24rem]">
-                            <button
-                                type="button"
-                                class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
-                                :disabled="Boolean(accountAction)"
-                                @click="forcePasswordReset"
-                            >
-                                {{ accountAction === 'force-reset' ? 'Preparing reset...' : 'Force password reset' }}
-                            </button>
-
-                            <button
-                                v-if="!account.email_verified"
-                                type="button"
-                                class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
-                                :disabled="Boolean(accountAction)"
-                                @click="resendVerificationEmail"
-                            >
-                                {{ accountAction === 'resend-verification' ? 'Sending...' : 'Resend verification' }}
-                            </button>
-
-                            <button
-                                v-if="!account.email_verified"
-                                type="button"
-                                class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
-                                :disabled="Boolean(accountAction)"
-                                @click="verifyEmail"
-                            >
-                                {{ accountAction === 'verify-email' ? 'Verifying...' : 'Mark email verified' }}
-                            </button>
                         </div>
                     </div>
 
-                    <div class="mt-5 grid gap-3 border-t border-slate-200 pt-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                        <div>
-                            <label :class="labelClass" for="admin-suspension-reason">Suspension reason</label>
-                            <textarea
-                                id="admin-suspension-reason"
-                                v-model="suspensionReason"
-                                rows="3"
-                                placeholder="Reason shown in admin records"
-                                class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
-                            />
+                    <div class="divide-y divide-slate-200">
+                        <div class="grid gap-4 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                            <div class="flex items-start gap-3">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
+                                    <i class="fa-solid fa-envelope-circle-check" aria-hidden="true"></i>
+                                </span>
+                                <div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h4 class="text-sm font-bold text-slate-950">Email verification</h4>
+                                        <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', emailStatusClass]">
+                                            {{ emailStatusLabel }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 text-sm leading-6 text-slate-500">
+                                        {{ account.email_verified
+                                            ? 'The email address can receive security and account notifications.'
+                                            : 'Resend the verification message, or verify manually only after confirming ownership.' }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div v-if="!account.email_verified" class="flex flex-col gap-2 sm:flex-row lg:justify-end">
+                                <button
+                                    type="button"
+                                    class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+                                    :disabled="Boolean(accountAction)"
+                                    @click="resendVerificationEmail"
+                                >
+                                    {{ accountAction === 'resend-verification' ? 'Sending...' : 'Resend email' }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md bg-slate-900 px-3.5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                    :disabled="Boolean(accountAction)"
+                                    @click="verifyEmail"
+                                >
+                                    {{ accountAction === 'verify-email' ? 'Verifying...' : 'Mark verified' }}
+                                </button>
+                            </div>
                         </div>
 
-                        <div class="flex flex-col gap-2 sm:flex-row lg:justify-end">
+                        <div class="grid gap-4 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                            <div class="flex items-start gap-3">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
+                                    <i class="fa-solid fa-key" aria-hidden="true"></i>
+                                </span>
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h4 class="text-sm font-bold text-slate-950">Password security</h4>
+                                        <span v-if="account.must_reset_password" class="rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">
+                                            Reset required
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 text-sm leading-6 text-slate-500">
+                                        Require the user to set a new password through a secure email link before signing in again.
+                                    </p>
+                                    <p v-if="account.password_reset_required_at" class="mt-1 text-xs font-semibold text-slate-500">
+                                        Required since {{ account.password_reset_required_at }}
+                                    </p>
+                                    <p v-if="supportLink" class="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs leading-5 text-amber-900">
+                                        Local reset link:
+                                        <a :href="supportLink" class="break-all font-bold underline">{{ supportLink }}</a>
+                                    </p>
+                                </div>
+                            </div>
+
                             <button
-                                v-if="account.account_status === 'suspended'"
                                 type="button"
-                                class="rounded-md bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-80"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
                                 :disabled="Boolean(accountAction)"
-                                @click="updateAccountStatus('active')"
+                                @click="forcePasswordReset"
                             >
-                                {{ accountAction === 'activate' ? 'Reactivating...' : 'Reactivate account' }}
+                                {{ accountAction === 'force-reset'
+                                    ? 'Preparing reset...'
+                                    : account.must_reset_password ? 'Send reset link again' : 'Require password reset' }}
                             </button>
-                            <button
-                                v-else
-                                type="button"
-                                class="rounded-md bg-rose-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-80"
-                                :disabled="Boolean(accountAction)"
-                                @click="updateAccountStatus('suspended')"
-                            >
-                                {{ accountAction === 'suspend' ? 'Suspending...' : 'Suspend account' }}
-                            </button>
+                        </div>
+
+                        <div :class="['p-5 sm:p-6', account.account_status === 'suspended' ? 'bg-amber-50/60' : 'bg-rose-50/40']">
+                            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                                <div class="flex items-start gap-3">
+                                    <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md', account.account_status === 'suspended' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-700']">
+                                        <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+                                    </span>
+                                    <div>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h4 class="text-sm font-bold text-slate-950">Account access</h4>
+                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', accountStatusClass]">
+                                                {{ accountStatusLabel }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">
+                                            {{ isCurrentAdminAccount
+                                                ? 'This is the admin account currently signed in. Its access cannot be suspended from this session.'
+                                                : account.account_status === 'suspended'
+                                                ? 'This user cannot sign in until an administrator restores access.'
+                                                : 'Suspend access only when the account presents a security, policy, or ownership concern.' }}
+                                        </p>
+                                        <p v-if="account.account_status === 'suspended' && account.suspension_reason" class="mt-2 text-sm font-semibold text-slate-800">
+                                            Reason: {{ account.suspension_reason }}
+                                        </p>
+                                        <p v-if="account.suspended_at" class="mt-1 text-xs font-semibold text-slate-500">
+                                            Suspended {{ account.suspended_at }}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <button
+                                    v-if="account.account_status === 'suspended'"
+                                    type="button"
+                                    class="rounded-md bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-80"
+                                    :disabled="Boolean(accountAction)"
+                                    @click="updateAccountStatus('active')"
+                                >
+                                    {{ accountAction === 'activate' ? 'Reactivating...' : 'Reactivate account' }}
+                                </button>
+                            </div>
+
+                            <div v-if="account.account_status !== 'suspended' && !isCurrentAdminAccount" class="mt-4 grid gap-3 border-t border-rose-200 pt-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                                <div>
+                                    <label :class="labelClass" for="admin-suspension-reason">Reason for suspension</label>
+                                    <textarea
+                                        id="admin-suspension-reason"
+                                        v-model="suspensionReason"
+                                        rows="2"
+                                        placeholder="Required for the security and activity record"
+                                        class="w-full rounded-md border border-rose-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-rose-400 focus:ring-3 focus:ring-rose-100"
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    class="rounded-md bg-rose-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-80"
+                                    :disabled="Boolean(accountAction)"
+                                    @click="updateAccountStatus('suspended')"
+                                >
+                                    {{ accountAction === 'suspend' ? 'Suspending...' : 'Suspend account' }}
+                                </button>
+                            </div>
+                            <div v-else-if="isCurrentAdminAccount" class="mt-4 flex items-center gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600">
+                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
+                                    <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                                </span>
+                                <p><span class="font-bold text-slate-900">Self-suspension is disabled.</span> Another administrator can manage this account if access changes are needed.</p>
+                            </div>
                         </div>
                     </div>
                 </section>

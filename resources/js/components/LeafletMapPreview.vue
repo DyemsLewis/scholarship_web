@@ -81,6 +81,7 @@ const markerInstance = ref(null);
 const secondaryMarkerInstance = ref(null);
 const routeLineInstance = ref(null);
 let isMounted = false;
+let pendingPickedCoordinates = null;
 
 function numberOrNull(value) {
     if (value === null || value === undefined || value === '') {
@@ -104,6 +105,15 @@ function secondaryCoordinates() {
     const longitude = numberOrNull(props.secondaryLongitude);
 
     return latitude === null || longitude === null ? null : { latitude, longitude };
+}
+
+function coordinatesMatch(first, second) {
+    if (!first || !second) {
+        return false;
+    }
+
+    return Math.abs(first.latitude - second.latitude) < 0.000001
+        && Math.abs(first.longitude - second.longitude) < 0.000001;
 }
 
 function markerLabel() {
@@ -347,7 +357,7 @@ function updateRouteLine(primaryCoordinates, userCoordinates) {
     });
 }
 
-async function renderMap(coordinates = currentCoordinates()) {
+async function renderMap(coordinates = currentCoordinates(), preserveView = false) {
     if (!isMounted || !mapElement.value) {
         return;
     }
@@ -384,7 +394,11 @@ async function renderMap(coordinates = currentCoordinates()) {
     }
 
     const position = [coordinates.latitude, coordinates.longitude];
-    mapInstance.value.setView(position, 15);
+
+    if (!preserveView) {
+        mapInstance.value.setView(position, 15);
+    }
+
     updateMarker(coordinates);
     updateRouteLine(coordinates, secondaryCoordinates());
     statusMessage.value = props.picker ? 'Pin set. You can drag it to adjust the location.' : '';
@@ -395,7 +409,8 @@ async function renderMap(coordinates = currentCoordinates()) {
 }
 
 async function setPickedCoordinates(coordinates) {
-    await renderMap(coordinates);
+    pendingPickedCoordinates = coordinates;
+    await renderMap(coordinates, true);
 
     if (!props.reverseGeocodeOnPick) {
         emit('picked', coordinates);
@@ -440,7 +455,14 @@ async function previewAddress() {
 watch(
     () => [props.latitude, props.longitude, props.secondaryLatitude, props.secondaryLongitude],
     () => {
-        renderMap();
+        const coordinates = currentCoordinates();
+        const preserveView = props.picker && coordinatesMatch(coordinates, pendingPickedCoordinates);
+
+        if (preserveView) {
+            pendingPickedCoordinates = null;
+        }
+
+        renderMap(coordinates, preserveView);
     },
 );
 

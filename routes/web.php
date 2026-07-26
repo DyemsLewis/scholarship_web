@@ -126,7 +126,7 @@ Route::middleware(['auth', 'provider'])
         Route::redirect('/insights', '/provider/review')->name('insights.redirect');
         Route::get('/review', [ProviderController::class, 'insights'])->middleware('permission:review_applications')->name('review');
         Route::get('/profile/data', [ProviderController::class, 'profileData'])->name('profile.data');
-        Route::patch('/profile', [ProviderController::class, 'updateProfile'])->middleware('permission:manage_profile')->name('profile.update');
+        Route::patch('/profile', [ProviderController::class, 'updateProfile'])->name('profile.update');
         Route::post('/verification-documents', [ProviderController::class, 'uploadVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.store');
         Route::get('/verification-documents/{document}/download', [ProviderController::class, 'downloadVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.download');
         Route::delete('/verification-documents/{document}', [ProviderController::class, 'deleteVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.destroy');

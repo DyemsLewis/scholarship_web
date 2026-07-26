@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Mail\PortalNotificationMail;
 use App\Models\Scholarship;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class RolePermissionAccountTest extends TestCase
@@ -13,6 +15,7 @@ class RolePermissionAccountTest extends TestCase
 
     public function test_primary_admin_can_create_an_admin_with_limited_permissions(): void
     {
+        Mail::fake();
         $admin = User::factory()->create(['role' => 'admin']);
 
         $response = $this->actingAs($admin)->postJson('/admin/users', [
@@ -33,6 +36,15 @@ class RolePermissionAccountTest extends TestCase
 
         $this->assertSame($admin->id, $staff->parent_account_id);
         $this->assertSame(['manage_reviews'], $staff->permissions);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $staff->id,
+            'type' => 'staff_account_created',
+            'action_url' => '/login',
+        ]);
+        Mail::assertQueued(PortalNotificationMail::class, fn (PortalNotificationMail $mail) => (
+            $mail->hasTo($staff->email)
+            && str_contains($mail->notificationMessage, 'Profile')
+        ));
 
         $this->actingAs($staff)->get('/admin/reviews')->assertOk();
         $this->actingAs($staff)->get('/admin/manage-users')->assertForbidden();
@@ -70,6 +82,7 @@ class RolePermissionAccountTest extends TestCase
 
     public function test_provider_team_account_uses_organization_programs_and_enforced_permissions(): void
     {
+        Mail::fake();
         $provider = User::factory()->create(['role' => 'provider']);
         $provider->providerProfile()->update(['verification_status' => 'approved']);
 
@@ -90,6 +103,15 @@ class RolePermissionAccountTest extends TestCase
 
         $this->assertSame($provider->id, $staff->parent_account_id);
         $this->assertSame(['manage_programs'], $staff->permissions);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $staff->id,
+            'type' => 'staff_account_created',
+            'action_url' => '/login',
+        ]);
+        Mail::assertQueued(PortalNotificationMail::class, fn (PortalNotificationMail $mail) => (
+            $mail->hasTo($staff->email)
+            && str_contains($mail->notificationMessage, 'Profile')
+        ));
 
         $programResponse = $this->actingAs($staff)->postJson('/provider/scholarships', [
             'title' => 'Team Managed Draft',
@@ -103,6 +125,37 @@ class RolePermissionAccountTest extends TestCase
 
         $this->actingAs($staff)->get('/provider/applications')->assertForbidden();
         $this->actingAs($staff)->get('/provider/reports')->assertForbidden();
+    }
+
+    public function test_provider_staff_can_update_personal_credentials_without_editing_organization_details(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update([
+            'provider_name' => 'Original Foundation',
+            'provider_address' => 'Original address',
+        ]);
+        $staff = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'account_title' => 'program_coordinator',
+            'permissions' => ['manage_programs'],
+        ]);
+
+        $this->actingAs($staff)->patchJson('/provider/profile', [
+            'first_name' => 'Updated',
+            'last_name' => 'Coordinator',
+            'middle_initial' => 'C',
+            'email' => 'updated.coordinator@example.test',
+            'username' => 'updated.coordinator',
+            'contact_number' => '09171234561',
+            'provider_name' => 'Unauthorized Change',
+            'provider_address' => 'Unauthorized address',
+        ])->assertOk()
+            ->assertJsonPath('user.email', 'updated.coordinator@example.test')
+            ->assertJsonPath('user.username', 'updated.coordinator');
+
+        $this->assertSame('Original Foundation', $provider->fresh()->providerProfile->provider_name);
+        $this->assertSame('Original address', $provider->fresh()->providerProfile->provider_address);
     }
 
     public function test_provider_can_create_a_custom_role_with_selected_permissions(): void

@@ -811,24 +811,24 @@ onMounted(loadScholarship);
                                             <i class="fa-solid fa-file-signature" aria-hidden="true"></i>
                                         </span>
                                         <span>
-                                            <span class="student-kicker block">Award conditions</span>
-                                            <span class="mt-1 block text-lg font-bold text-slate-950">Renewal and recipient responsibilities</span>
-                                            <span class="mt-1 block text-sm text-slate-500">Read these conditions before submitting.</span>
+                                            <span class="student-kicker block">Possible recipient commitments</span>
+                                            <span class="mt-1 block text-lg font-bold text-slate-950">What may apply after acceptance</span>
+                                            <span class="mt-1 block text-sm text-slate-500">For awareness only. The provider will explain the final agreement if you are accepted.</span>
                                         </span>
                                     </span>
                                     <i class="fa-solid fa-chevron-down text-sm text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
                                 </summary>
                                 <div class="grid gap-3 border-t border-slate-200 bg-slate-50 p-5 text-sm sm:p-6">
                                     <div v-if="scholarship.renewal_policy" class="rounded-md bg-white p-4 ring-1 ring-slate-200">
-                                        <p class="font-bold text-slate-950">Renewal or continuation</p>
+                                        <p class="font-bold text-slate-950">Possible renewal requirement</p>
                                         <p class="mt-1 leading-6 text-slate-600">{{ scholarship.renewal_policy }}</p>
                                     </div>
                                     <div v-if="scholarship.return_service_contract" class="rounded-md bg-white p-4 ring-1 ring-slate-200">
-                                        <p class="font-bold text-slate-950">Return service</p>
+                                        <p class="font-bold text-slate-950">Possible service commitment</p>
                                         <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">{{ scholarship.return_service_contract }}</p>
                                     </div>
                                     <div v-if="scholarship.other_contract_terms" class="rounded-md bg-white p-4 ring-1 ring-slate-200">
-                                        <p class="font-bold text-slate-950">Other responsibilities</p>
+                                        <p class="font-bold text-slate-950">Other possible commitments</p>
                                         <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">{{ scholarship.other_contract_terms }}</p>
                                     </div>
                                 </div>

@@ -110,6 +110,38 @@ class ProgramSelectionWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_online_distribution_can_use_instructions_without_a_link_but_interview_cannot(): void
+    {
+        [$provider, $_applicant, $scholarship] = $this->applicationWithPlan([
+            'screening',
+            'interview',
+            'distribution',
+        ]);
+
+        $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/events", [
+                'type' => 'distribution',
+                'title' => 'Digital scholarship release',
+                'scheduled_at' => now()->addWeek()->format('Y-m-d H:i:s'),
+                'mode' => 'online',
+                'instructions' => 'Approved recipients will receive transfer instructions by email.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('event.mode', 'online')
+            ->assertJsonPath('event.online_url', null);
+
+        $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/events", [
+                'type' => 'interview',
+                'title' => 'Online applicant interview',
+                'scheduled_at' => now()->addDays(3)->format('Y-m-d H:i:s'),
+                'mode' => 'online',
+                'instructions' => 'Join ten minutes before the interview.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('online_url');
+    }
+
     public function test_editing_a_shared_event_preserves_each_applicants_completed_tracking(): void
     {
         [$provider, $_applicant, $scholarship, $application] = $this->applicationWithPlan([
@@ -207,6 +239,31 @@ class ProgramSelectionWorkflowTest extends TestCase
             'title' => 'Interview Selection Scholarship',
             'selection_stages' => json_encode(['screening', 'interview', 'distribution']),
         ]);
+    }
+
+    public function test_program_form_accepts_online_distribution_without_a_link(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+
+        $this->actingAs($provider)
+            ->postJson('/provider/scholarships', [
+                'title' => 'Digital Release Scholarship',
+                'description' => 'A program that releases its benefits remotely.',
+                'selection_stages' => json_encode(['distribution']),
+                'program_events' => json_encode([[
+                    'type' => 'distribution',
+                    'title' => 'Digital benefit release',
+                    'scheduled_at' => now()->addDays(10)->format('Y-m-d H:i:s'),
+                    'mode' => 'online',
+                    'instructions' => 'Recipients will receive secure transfer instructions after approval.',
+                ]]),
+                'status' => 'draft',
+                'terms_accepted' => true,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('scholarship.program_events.0.mode', 'online')
+            ->assertJsonPath('scholarship.program_events.0.online_url', null);
     }
 
     public function test_program_form_saves_planned_dates_that_applicants_can_preview_before_applying(): void

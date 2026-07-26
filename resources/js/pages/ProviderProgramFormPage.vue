@@ -22,9 +22,11 @@ const imageFile = ref(null);
 const imagePreviewUrl = ref('');
 const providerLocationMessage = ref('');
 const providerAddressLookupTrigger = ref(0);
+const eventLocationMapStage = ref('');
+const eventLocationMapMessage = ref('');
+const eventAddressLookupTrigger = ref(0);
 const activeFormSection = ref('overview');
 const showAudienceDetails = ref(false);
-const showProcessSchedules = ref(false);
 const showProgramTerms = ref(false);
 const showLocationMap = ref(false);
 const customizeRubric = ref(false);
@@ -54,7 +56,7 @@ const formSections = [
     { id: 'overview', label: 'Overview', help: 'Name and describe the program.' },
     { id: 'offer', label: 'Offer', help: 'Set the benefits, deadline, and submission method.' },
     { id: 'audience', label: 'Applicants', help: 'Choose who the program is intended for.' },
-    { id: 'process', label: 'Process', help: 'Choose the review stages and contact channel.' },
+    { id: 'process', label: 'Process', help: 'Set review stages, confirmed schedules, and applicant contact.' },
     { id: 'location', label: 'Location', help: 'Add an address and optional map pin.' },
     { id: 'documents', label: 'Documents', help: 'Start with common files, then adjust if needed.' },
     { id: 'scoring', label: 'Scoring', help: 'Use the standard rubric or customize it.' },
@@ -639,16 +641,6 @@ const hiddenSelectedSchoolTypeLabels = computed(() => {
 
     return optionLabels(hiddenValues, schoolTypeOptions);
 });
-const workflowSummary = computed(() => [
-    `${scholarshipForm.value.selectionStages.length} selection stages`,
-    hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber) ? 'Contact available' : 'No contact channel',
-    scheduledProgramEventCount.value
-        ? `${scheduledProgramEventCount.value} date${scheduledProgramEventCount.value === 1 ? '' : 's'} announced`
-        : 'Dates not announced',
-    hasText(scholarshipForm.value.returnServiceContract) || hasText(scholarshipForm.value.otherContractTerms)
-        ? 'Additional terms added'
-        : 'No additional terms',
-]);
 const schedulableSelectionStages = computed(() => selectionStageOptions.filter((stage) => (
     stage.value !== 'screening'
     && scholarshipForm.value.selectionStages.includes(stage.value)
@@ -656,6 +648,17 @@ const schedulableSelectionStages = computed(() => selectionStageOptions.filter((
 const scheduledProgramEventCount = computed(() => schedulableSelectionStages.value
     .filter((stage) => hasText(scholarshipForm.value.programEvents[stage.value]?.scheduledAt))
     .length);
+const activeEventMapStage = computed(() => selectionStageOptions.find((stage) => stage.value === eventLocationMapStage.value) ?? null);
+const activeEventMap = computed(() => scholarshipForm.value.programEvents[eventLocationMapStage.value] ?? null);
+const activeEventMapAddress = computed(() => {
+    if (!activeEventMap.value) {
+        return '';
+    }
+
+    return [activeEventMap.value.venue, activeEventMap.value.locationAddress]
+        .filter((value) => hasText(value))
+        .join(', ');
+});
 const statusOptions = computed(() => {
     const options = [
         { value: 'draft', label: 'Save as draft', help: 'Only provider can see it.' },
@@ -999,8 +1002,12 @@ function scheduleModeNeedsVenue(mode) {
     return ['onsite', 'hybrid'].includes(mode);
 }
 
-function scheduleModeNeedsOnlineUrl(mode) {
+function scheduleModeShowsOnlineUrl(mode) {
     return ['online', 'hybrid'].includes(mode);
+}
+
+function scheduleModeRequiresOnlineUrl(mode, stageType) {
+    return scheduleModeShowsOnlineUrl(mode) && stageType !== 'distribution';
 }
 
 function programEventsPayload() {
@@ -1035,7 +1042,7 @@ function programEventValidationMessage() {
             return `Add a venue for the ${stage.label.toLowerCase()} schedule.`;
         }
 
-        if (scheduleModeNeedsOnlineUrl(event.mode) && !hasText(event.onlineUrl)) {
+        if (scheduleModeRequiresOnlineUrl(event.mode, stage.value) && !hasText(event.onlineUrl)) {
             return `Add the online link for the ${stage.label.toLowerCase()} schedule.`;
         }
 
@@ -1264,12 +1271,16 @@ function lookupScholarshipAddress() {
     providerAddressLookupTrigger.value += 1;
 }
 
-function toggleLocationMap() {
-    showLocationMap.value = !showLocationMap.value;
+function openLocationMap() {
+    showLocationMap.value = true;
 
-    if (showLocationMap.value && scholarshipFormMapAddress.value && !scholarshipForm.value.latitude) {
-        lookupScholarshipAddress();
+    if (scholarshipFormMapAddress.value && !scholarshipForm.value.latitude) {
+        nextTick(lookupScholarshipAddress);
     }
+}
+
+function closeLocationMap() {
+    showLocationMap.value = false;
 }
 
 function handleScholarshipLocationResolved(location) {
@@ -1308,13 +1319,95 @@ function handleScholarshipLocationError(message) {
     providerLocationMessage.value = message;
 }
 
+function clearProgramEventMapPoint(stageValue) {
+    const event = scholarshipForm.value.programEvents[stageValue];
+
+    if (!event) {
+        return;
+    }
+
+    event.latitude = '';
+    event.longitude = '';
+}
+
+function lookupProgramEventAddress() {
+    if (!activeEventMapAddress.value) {
+        eventLocationMapMessage.value = 'Enter the event venue or address first.';
+        return;
+    }
+
+    eventLocationMapMessage.value = 'Searching the event address on the map...';
+    eventAddressLookupTrigger.value += 1;
+}
+
+function openProgramEventMap(stageValue) {
+    showLocationMap.value = false;
+    eventLocationMapStage.value = stageValue;
+    eventLocationMapMessage.value = '';
+
+    nextTick(() => {
+        if (activeEventMapAddress.value && !activeEventMap.value?.latitude) {
+            lookupProgramEventAddress();
+        }
+    });
+}
+
+function closeProgramEventMap() {
+    eventLocationMapStage.value = '';
+    eventLocationMapMessage.value = '';
+}
+
+function handleProgramEventLocationResolved(location) {
+    if (!activeEventMap.value) {
+        return;
+    }
+
+    activeEventMap.value.latitude = Number(location.latitude).toFixed(7);
+    activeEventMap.value.longitude = Number(location.longitude).toFixed(7);
+    eventLocationMapMessage.value = 'Address found. The pin is saved with this stage when you save the program.';
+}
+
+function handleProgramEventLocationPicked(location) {
+    if (!activeEventMap.value) {
+        return;
+    }
+
+    const address = location.address ?? {};
+    const suggestedVenue = address.office
+        || address.amenity
+        || address.building
+        || address.school
+        || address.university
+        || address.tourism;
+
+    activeEventMap.value.latitude = Number(location.latitude).toFixed(7);
+    activeEventMap.value.longitude = Number(location.longitude).toFixed(7);
+    activeEventMap.value.venue = activeEventMap.value.venue || suggestedVenue || '';
+    activeEventMap.value.locationAddress = location.displayName
+        || [
+            [address.house_number, address.road].filter(Boolean).join(' '),
+            address.neighbourhood || address.suburb || address.quarter,
+            address.city || address.municipality || address.town,
+            address.province || address.state,
+        ].filter(Boolean).join(', ')
+        || activeEventMap.value.locationAddress;
+    eventLocationMapMessage.value = location.displayName
+        ? 'Pin set. The event address was filled from the selected location.'
+        : 'Pin set. Save the program to keep this event location.';
+}
+
+function handleProgramEventLocationError(message) {
+    eventLocationMapMessage.value = message;
+}
+
 function resetScholarshipForm() {
     scholarshipForm.value = emptyScholarshipForm();
     activeFormSection.value = 'overview';
     showAudienceDetails.value = false;
-    showProcessSchedules.value = false;
     showProgramTerms.value = false;
     showLocationMap.value = false;
+    eventLocationMapStage.value = '';
+    eventLocationMapMessage.value = '';
     customizeRubric.value = false;
     selectedTargetPresetKey.value = '';
     imageFile.value = null;
@@ -1398,7 +1491,6 @@ async function saveScholarship() {
     const scheduleError = programEventValidationMessage();
 
     if (scheduleError) {
-        showProcessSchedules.value = true;
         await openFormSection('process');
         formError.value = scheduleError;
         return;
@@ -1923,42 +2015,71 @@ onMounted(loadFormData);
                             </div>
                         </div>
 
-                            <fieldset v-show="activeFormSection === 'process'" :class="['mt-5', sectionCardClass]">
-                                <legend class="text-sm font-semibold text-slate-700">
-                                    Application workflow
-                                </legend>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">
-                                    Choose the stages once. Add shared dates now when they are known, or announce them later.
-                                </p>
+                            <section v-show="activeFormSection === 'process'" class="mt-5 flex flex-col gap-4">
+                                <div :class="sectionCardClass">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-base font-bold text-slate-950">
+                                                Review stages
+                                                <span :class="requiredHintClass">Required</span>
+                                            </p>
+                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                                                Screening and distribution are included. Add an exam or interview only when your program uses them.
+                                            </p>
+                                        </div>
+                                        <span class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                                            {{ scholarshipForm.selectionStages.length }} stages
+                                        </span>
+                                    </div>
 
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <span
-                                        v-for="summary in workflowSummary"
-                                        :key="`workflow-detail-${summary}`"
-                                        class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
-                                    >
-                                        {{ summary }}
-                                    </span>
+                                    <div class="mt-4 grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                        <button
+                                            v-for="stage in selectionStageOptions"
+                                            :key="stage.value"
+                                            type="button"
+                                            :aria-pressed="scholarshipForm.selectionStages.includes(stage.value)"
+                                            :disabled="stage.required"
+                                            :class="[
+                                                'flex h-full flex-col rounded-md border p-3 text-left transition',
+                                                scholarshipForm.selectionStages.includes(stage.value)
+                                                    ? 'border-slate-900 bg-white shadow-sm'
+                                                    : 'border-dashed border-slate-300 bg-slate-50 text-slate-600 hover:border-slate-400 hover:bg-white',
+                                                stage.required ? 'cursor-default' : 'cursor-pointer',
+                                            ]"
+                                            @click="toggleSelectionStage(stage.value)"
+                                        >
+                                            <span class="flex w-full items-center justify-between gap-3">
+                                                <span :class="['grid h-9 w-9 place-items-center rounded-md', scholarshipForm.selectionStages.includes(stage.value) ? 'bg-slate-950 text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200']">
+                                                    <i :class="stage.icon" aria-hidden="true"></i>
+                                                </span>
+                                                <span :class="['text-[10px] font-bold uppercase tracking-[0.1em]', scholarshipForm.selectionStages.includes(stage.value) ? 'text-emerald-700' : 'text-slate-400']">
+                                                    {{ stage.required ? 'Always included' : (scholarshipForm.selectionStages.includes(stage.value) ? 'Included' : 'Add stage') }}
+                                                </span>
+                                            </span>
+                                            <span class="mt-3 block font-bold text-slate-950">{{ stage.label }}</span>
+                                            <span class="mt-1 block text-xs leading-5 text-slate-500">{{ stage.description }}</span>
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div
                                     v-if="scholarshipForm.selectionStages.includes('exam')"
-                                    :class="['mt-4', fieldCardClass]"
+                                    :class="fieldCardClass"
                                 >
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                            <i class="fa-solid fa-clipboard-question" aria-hidden="true"></i>
+                                        </span>
                                         <div>
-                                            <p class="text-sm font-bold text-slate-950">Provider-managed exam details</p>
-                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Set the basic exam rules applicants should know. Your organization conducts and grades the exam outside this platform.
+                                            <p class="text-base font-bold text-slate-950">Exam settings</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">
+                                                Enter the basic rules for the exam your organization will conduct and grade.
                                             </p>
                                         </div>
-                                        <span class="w-fit rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-200">
-                                            No online test is created
-                                        </span>
                                     </div>
 
                                     <div class="mt-4 grid gap-4 md:grid-cols-2">
-                                        <div>
+                                        <div :class="fieldStackClass">
                                             <label :class="labelClass" for="scholarship-exam-duration">
                                                 Duration in minutes
                                                 <span :class="requiredHintClass">Required</span>
@@ -1973,10 +2094,9 @@ onMounted(loadFormData);
                                                 placeholder="Example: 60"
                                                 :class="inputClass"
                                             >
-                                            <p class="mt-2 text-xs leading-5 text-slate-500">Use the expected time applicants will spend at the provider's exam.</p>
                                         </div>
 
-                                        <div>
+                                        <div :class="fieldStackClass">
                                             <label :class="labelClass" for="scholarship-exam-passing-score">
                                                 Passing score (%)
                                                 <span :class="requiredHintClass">Required</span>
@@ -1991,114 +2111,46 @@ onMounted(loadFormData);
                                                 placeholder="Example: 75"
                                                 :class="inputClass"
                                             >
-                                            <p class="mt-2 text-xs leading-5 text-slate-500">The provider records the result and decides who advances.</p>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div :class="['mt-4', fieldCardClass]">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div :class="sectionCardClass">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
-                                            <p class="text-sm font-bold text-slate-950">
-                                                Selection plan
-                                                <span :class="requiredHintClass">Required</span>
-                                            </p>
+                                            <p class="text-base font-bold text-slate-950">Stage schedules</p>
                                             <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Providers approve or reject applicants at each review gate. The system moves approved applicants to the next stage automatically.
+                                                Dates are optional. Add one only when it is confirmed; the remaining details will appear after a date is selected.
                                             </p>
                                         </div>
-                                        <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Shared workflow</span>
-                                    </div>
-
-                                    <div class="mt-4 grid gap-3 md:grid-cols-2">
-                                        <button
-                                            v-for="(stage, index) in selectionStageOptions"
-                                            :key="stage.value"
-                                            type="button"
-                                            :aria-pressed="scholarshipForm.selectionStages.includes(stage.value)"
-                                            :disabled="stage.required"
-                                            :class="[
-                                                'flex items-start gap-3 rounded-md border p-3 text-left transition',
-                                                scholarshipForm.selectionStages.includes(stage.value)
-                                                    ? 'border-slate-900 bg-slate-900 text-white'
-                                                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white',
-                                                stage.required ? 'cursor-default' : 'cursor-pointer',
-                                            ]"
-                                            @click="toggleSelectionStage(stage.value)"
-                                        >
-                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', scholarshipForm.selectionStages.includes(stage.value) ? 'bg-white/10' : 'bg-white ring-1 ring-slate-200']">
-                                                <i :class="stage.icon" aria-hidden="true"></i>
-                                            </span>
-                                            <span class="min-w-0 flex-1">
-                                                <span class="flex items-center justify-between gap-2">
-                                                    <span class="font-bold">{{ stage.label }}</span>
-                                                    <span class="text-[10px] font-bold uppercase tracking-[0.1em]">
-                                                        {{ stage.required ? 'Required' : (scholarshipForm.selectionStages.includes(stage.value) ? 'Included' : 'Optional') }}
-                                                    </span>
-                                                </span>
-                                                <span :class="['mt-1 block text-xs leading-5', scholarshipForm.selectionStages.includes(stage.value) ? 'text-slate-300' : 'text-slate-500']">
-                                                    {{ stage.description }}
-                                                </span>
-                                            </span>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="mt-4 flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p class="text-sm font-bold text-slate-950">Stage dates</p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Optional. Add dates only when your exam, interview, or distribution schedule is confirmed.
-                                        </p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        class="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                        @click="showProcessSchedules = !showProcessSchedules"
-                                    >
-                                        {{ showProcessSchedules ? 'Hide dates' : (scheduledProgramEventCount ? `Edit ${scheduledProgramEventCount} date${scheduledProgramEventCount === 1 ? '' : 's'}` : 'Add dates') }}
-                                    </button>
-                                </div>
-
-                                <div v-if="showProcessSchedules" :class="['mt-4', fieldCardClass]">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">Planned stage dates</p>
-                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Optional. Applicants can see the date, mode, and general venue before applying. Private links and detailed instructions appear only after they reach that stage.
-                                            </p>
-                                        </div>
-                                        <span class="w-fit rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-200">
+                                        <span class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
                                             {{ scheduledProgramEventCount }} scheduled
                                         </span>
                                     </div>
 
                                     <div class="mt-4 grid gap-3">
-                                        <details
+                                        <article
                                             v-for="stage in schedulableSelectionStages"
                                             :key="`schedule-${stage.value}`"
-                                            :open="Boolean(scholarshipForm.programEvents[stage.value].scheduledAt)"
-                                            class="rounded-md border border-slate-200 bg-slate-50 p-3 open:bg-white"
+                                            class="rounded-md border border-slate-200 bg-white p-4"
                                         >
-                                            <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
+                                            <div class="flex items-center justify-between gap-3">
                                                 <span class="flex min-w-0 items-center gap-3">
-                                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
+                                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-white">
                                                         <i :class="stage.icon" aria-hidden="true"></i>
                                                     </span>
                                                     <span>
-                                                        <span class="block text-sm font-bold text-slate-900">{{ stage.label }} schedule</span>
-                                                        <span class="block text-xs text-slate-500">
-                                                            {{ scholarshipForm.programEvents[stage.value].scheduledAt ? 'Date will be visible before application.' : 'Open to add an optional date.' }}
-                                                        </span>
+                                                        <span class="block text-sm font-bold text-slate-950">{{ stage.label }}</span>
+                                                        <span class="block text-xs text-slate-500">Shared with applicants when confirmed</span>
                                                     </span>
                                                 </span>
-                                                <span class="shrink-0 rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                                                    {{ scholarshipForm.programEvents[stage.value].scheduledAt ? 'Date added' : 'Optional' }}
+                                                <span :class="['shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em]', scholarshipForm.programEvents[stage.value].scheduledAt ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-slate-100 text-slate-500']">
+                                                    {{ scholarshipForm.programEvents[stage.value].scheduledAt ? 'Scheduled' : 'Optional' }}
                                                 </span>
-                                            </summary>
+                                            </div>
 
                                             <div class="mt-4 grid gap-4 border-t border-slate-200 pt-4 md:grid-cols-2">
-                                                <div>
+                                                <div :class="fieldStackClass">
                                                     <label :class="labelClass" :for="`program-event-date-${stage.value}`">Date and time</label>
                                                     <input
                                                         :id="`program-event-date-${stage.value}`"
@@ -2109,7 +2161,7 @@ onMounted(loadFormData);
                                                     >
                                                 </div>
 
-                                                <div>
+                                                <div :class="fieldStackClass">
                                                     <label :class="labelClass" :for="`program-event-mode-${stage.value}`">Mode</label>
                                                     <select
                                                         :id="`program-event-mode-${stage.value}`"
@@ -2122,8 +2174,9 @@ onMounted(loadFormData);
                                                     </select>
                                                 </div>
 
+                                                <template v-if="scholarshipForm.programEvents[stage.value].scheduledAt">
                                                 <div class="md:col-span-2">
-                                                    <label :class="labelClass" :for="`program-event-title-${stage.value}`">Public schedule title</label>
+                                                    <label :class="labelClass" :for="`program-event-title-${stage.value}`">Schedule title</label>
                                                     <input
                                                         :id="`program-event-title-${stage.value}`"
                                                         v-model="scholarshipForm.programEvents[stage.value].title"
@@ -2134,7 +2187,10 @@ onMounted(loadFormData);
                                                 </div>
 
                                                 <div v-if="scheduleModeNeedsVenue(scholarshipForm.programEvents[stage.value].mode)">
-                                                    <label :class="labelClass" :for="`program-event-venue-${stage.value}`">Venue</label>
+                                                    <label :class="labelClass" :for="`program-event-venue-${stage.value}`">
+                                                        Event venue
+                                                        <span :class="requiredHintClass">Required</span>
+                                                    </label>
                                                     <input
                                                         :id="`program-event-venue-${stage.value}`"
                                                         v-model="scholarshipForm.programEvents[stage.value].venue"
@@ -2145,21 +2201,42 @@ onMounted(loadFormData);
                                                 </div>
 
                                                 <div v-if="scheduleModeNeedsVenue(scholarshipForm.programEvents[stage.value].mode)">
-                                                    <label :class="labelClass" :for="`program-event-address-${stage.value}`">Address</label>
+                                                    <label :class="labelClass" :for="`program-event-address-${stage.value}`">
+                                                        Event address
+                                                        <span :class="optionalHintClass">Optional</span>
+                                                    </label>
                                                     <input
                                                         :id="`program-event-address-${stage.value}`"
                                                         v-model="scholarshipForm.programEvents[stage.value].locationAddress"
                                                         type="text"
                                                         placeholder="General venue address"
                                                         :class="inputClass"
+                                                        @input="clearProgramEventMapPoint(stage.value)"
                                                     >
+                                                    <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                        <p class="text-xs leading-5 text-slate-500">
+                                                            It can differ from the program address.
+                                                        </p>
+                                                        <button
+                                                            type="button"
+                                                            class="shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                                            @click="openProgramEventMap(stage.value)"
+                                                        >
+                                                            <i class="fa-solid fa-map-location-dot mr-1" aria-hidden="true"></i>
+                                                            {{ scholarshipForm.programEvents[stage.value].latitude ? 'Review pin' : 'Set map pin' }}
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 <div
-                                                    v-if="scheduleModeNeedsOnlineUrl(scholarshipForm.programEvents[stage.value].mode)"
+                                                    v-if="scheduleModeShowsOnlineUrl(scholarshipForm.programEvents[stage.value].mode)"
                                                     class="md:col-span-2"
                                                 >
-                                                    <label :class="labelClass" :for="`program-event-url-${stage.value}`">Private online link</label>
+                                                    <label :class="labelClass" :for="`program-event-url-${stage.value}`">
+                                                        Private online link
+                                                        <span v-if="stage.value === 'distribution'" :class="optionalHintClass">Optional</span>
+                                                        <span v-else :class="requiredHintClass">Required</span>
+                                                    </label>
                                                     <input
                                                         :id="`program-event-url-${stage.value}`"
                                                         v-model="scholarshipForm.programEvents[stage.value].onlineUrl"
@@ -2167,11 +2244,15 @@ onMounted(loadFormData);
                                                         placeholder="https://..."
                                                         :class="inputClass"
                                                     >
-                                                    <p class="mt-2 text-xs leading-5 text-slate-500">This link is not shown before application.</p>
+                                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                                        {{ stage.value === 'distribution'
+                                                            ? 'Add a release portal or briefing link only when recipients need one.'
+                                                            : 'Visible only to applicants who reach this stage.' }}
+                                                    </p>
                                                 </div>
 
                                                 <div class="md:col-span-2">
-                                                    <label :class="labelClass" :for="`program-event-instructions-${stage.value}`">Instructions for qualified applicants</label>
+                                                    <label :class="labelClass" :for="`program-event-instructions-${stage.value}`">Applicant instructions</label>
                                                     <textarea
                                                         :id="`program-event-instructions-${stage.value}`"
                                                         v-model="scholarshipForm.programEvents[stage.value].instructions"
@@ -2179,28 +2260,26 @@ onMounted(loadFormData);
                                                         placeholder="What should applicants bring, prepare, or do?"
                                                         :class="inputClass"
                                                     ></textarea>
-                                                    <p class="mt-2 text-xs leading-5 text-slate-500">Required only when a date is added. These instructions stay private until the applicant reaches this stage.</p>
                                                 </div>
+                                                </template>
                                             </div>
-                                        </details>
+                                        </article>
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
+                                <div :class="[sectionCardClass, 'grid items-stretch gap-4 lg:grid-cols-2']">
                                     <div class="lg:col-span-2">
-                                        <p class="text-sm font-bold text-slate-950">
+                                        <p class="text-base font-bold text-slate-950">
                                             Applicant contact
                                             <span :class="requiredHintClass">Email or number required</span>
                                         </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Add the contact applicants should use for questions about this program.
+                                            Use the official contact applicants should reach for program questions.
                                         </p>
                                     </div>
 
                                     <div :class="fieldStackClass">
-                                        <label :class="labelClass" for="scholarship-contact-email">
-                                            Contact email
-                                        </label>
+                                        <label :class="labelClass" for="scholarship-contact-email">Contact email</label>
                                         <input
                                             id="scholarship-contact-email"
                                             v-model="scholarshipForm.contactEmail"
@@ -2211,9 +2290,7 @@ onMounted(loadFormData);
                                     </div>
 
                                     <div :class="fieldStackClass">
-                                        <label :class="labelClass" for="scholarship-contact-number">
-                                            Contact number
-                                        </label>
+                                        <label :class="labelClass" for="scholarship-contact-number">Contact number</label>
                                         <input
                                             id="scholarship-contact-number"
                                             v-model="scholarshipForm.contactNumber"
@@ -2223,66 +2300,66 @@ onMounted(loadFormData);
                                         >
                                     </div>
 
-                                    <div class="lg:col-span-2 flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div class="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between lg:col-span-2">
                                         <div>
-                                            <p class="text-sm font-bold text-slate-950">Renewal and contract terms</p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">Optional. Add these only when the award has continuation rules or obligations.</p>
+                                            <p class="text-sm font-bold text-slate-950">Possible commitments after acceptance</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">Optional. Give applicants a short preview. Explain the final agreement to accepted applicants before they sign.</p>
                                         </div>
                                         <button
                                             type="button"
-                                            class="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                            class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                                             @click="showProgramTerms = !showProgramTerms"
                                         >
-                                            {{ showProgramTerms ? 'Hide terms' : ((scholarshipForm.renewalPolicy || scholarshipForm.returnServiceContract || scholarshipForm.otherContractTerms) ? 'Edit terms' : 'Add terms') }}
+                                            {{ showProgramTerms ? 'Hide commitments' : ((scholarshipForm.renewalPolicy || scholarshipForm.returnServiceContract || scholarshipForm.otherContractTerms) ? 'Edit commitments' : 'Add commitments') }}
                                         </button>
                                     </div>
 
                                     <div v-if="showProgramTerms" :class="[fieldStackClass, 'lg:col-span-2']">
                                         <label :class="labelClass" for="scholarship-renewal">
-                                            Renewal or continuation policy
+                                            Possible renewal requirement
                                         </label>
                                         <textarea
                                             id="scholarship-renewal"
                                             v-model="scholarshipForm.renewalPolicy"
                                             rows="3"
-                                            placeholder="Example: Renewable every semester if the learner maintains eligibility and submits updated requirements."
+                                            placeholder="Example: Recipients may need to maintain eligibility and submit updated requirements for renewal."
                                             :class="inputClass"
                                         ></textarea>
                                     </div>
 
                                     <div v-if="showProgramTerms" :class="[fieldStackClass, 'lg:col-span-2']">
                                         <label :class="labelClass" for="scholarship-return-service-contract">
-                                            Return service contract
+                                            Possible service commitment
                                         </label>
                                         <textarea
                                             id="scholarship-return-service-contract"
                                             v-model="scholarshipForm.returnServiceContract"
                                             rows="4"
-                                            placeholder="Example: Awardees sign a scholarship agreement and render return service after graduation for the period required by the program."
+                                            placeholder="Example: Accepted recipients may be asked to complete community service or another agreed responsibility."
                                             :class="inputClass"
                                         ></textarea>
                                         <p class="mt-2 text-xs leading-5 text-slate-500">
-                                            State service duration, placement rules, teaching obligations, deferment rules, or where applicants should verify the official contract.
+                                            Keep this as a short preview. Confirm the exact duties, duration, and conditions directly with accepted applicants.
                                         </p>
                                     </div>
 
                                     <div v-if="showProgramTerms" :class="[fieldStackClass, 'lg:col-span-2']">
                                         <label :class="labelClass" for="scholarship-other-contract-terms">
-                                            Other contract terms
+                                            Other possible commitments
                                         </label>
                                         <textarea
                                             id="scholarship-other-contract-terms"
                                             v-model="scholarshipForm.otherContractTerms"
                                             rows="4"
-                                            placeholder="Example: Scholarship agreement, data privacy consent, approved course rules, refund terms, termination rules, travel clearance, or parent/guardian undertaking."
+                                            placeholder="Example: Attend required activities, submit progress updates, or follow program conduct rules."
                                             :class="inputClass"
                                         ></textarea>
                                         <p class="mt-2 text-xs leading-5 text-slate-500">
-                                            Use this for contract items beyond return service, including data privacy, truthful declarations, approved course or school rules, refund clauses, and termination conditions.
+                                            List only responsibilities applicants should know in advance. The provider should explain and confirm the final agreement after acceptance.
                                         </p>
                                     </div>
                                 </div>
-                            </fieldset>
+                            </section>
 
                             <section v-show="activeFormSection === 'audience'" :class="['mt-4', sectionCardClass]">
                                 <div>
@@ -2547,9 +2624,10 @@ onMounted(loadFormData);
                                         id="scholarship-map-toggle"
                                         type="button"
                                         class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                        @click="toggleLocationMap"
+                                        @click="openLocationMap"
                                     >
-                                        {{ showLocationMap ? 'Hide map' : (scholarshipForm.latitude ? 'Review map pin' : 'Set map pin') }}
+                                        <i class="fa-solid fa-map-location-dot mr-1.5" aria-hidden="true"></i>
+                                        {{ scholarshipForm.latitude ? 'Review map pin' : 'Set map pin' }}
                                     </button>
                                 </div>
 
@@ -2585,23 +2663,12 @@ onMounted(loadFormData);
                                     </div>
                                 </div>
 
-                                <LeafletMapPreview
-                                    v-if="showLocationMap"
-                                    class="mt-4"
-                                    :address="scholarshipFormMapAddress"
-                                    :latitude="scholarshipForm.latitude"
-                                    :longitude="scholarshipForm.longitude"
-                                    title="Scholarship address map preview"
-                                    :marker-text="scholarshipForm.locationName || 'Scholarship location'"
-                                    :geocode-trigger="providerAddressLookupTrigger"
-                                    picker
-                                    @resolved="handleScholarshipLocationResolved"
-                                    @picked="handleScholarshipLocationPicked"
-                                    @error="handleScholarshipLocationError"
-                                />
-
                                 <p v-if="providerLocationMessage" class="mt-3 text-xs font-semibold text-slate-700">
                                     {{ providerLocationMessage }}
+                                </p>
+                                <p v-else-if="scholarshipForm.latitude" class="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                                    <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                                    A map pin is set for this program.
                                 </p>
                             </fieldset>
 
@@ -2922,5 +2989,161 @@ onMounted(loadFormData);
                 <ProviderFooter />
             </div>
         </section>
+
+        <Teleport to="body">
+            <div
+                v-if="showLocationMap"
+                class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="program-location-map-title"
+                tabindex="-1"
+                @click.self="closeLocationMap"
+                @keydown.esc="closeLocationMap"
+            >
+                <section class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+                    <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
+                            <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i>
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program location</p>
+                            <h2 id="program-location-map-title" class="mt-1 text-lg font-bold text-slate-950 sm:text-xl">
+                                Set the map pin
+                            </h2>
+                            <p class="mt-1 truncate text-xs text-slate-500">
+                                {{ scholarshipFormMapAddress || 'Add a full address, then search or select the location on the map.' }}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
+                            aria-label="Close program location map"
+                            @click="closeLocationMap"
+                        >
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-4">
+                        <LeafletMapPreview
+                            :address="scholarshipFormMapAddress"
+                            :latitude="scholarshipForm.latitude"
+                            :longitude="scholarshipForm.longitude"
+                            title="Scholarship address map preview"
+                            :marker-text="scholarshipForm.locationName || 'Scholarship location'"
+                            :geocode-trigger="providerAddressLookupTrigger"
+                            height="min(58vh, 32rem)"
+                            picker
+                            @resolved="handleScholarshipLocationResolved"
+                            @picked="handleScholarshipLocationPicked"
+                            @error="handleScholarshipLocationError"
+                        />
+                    </div>
+
+                    <footer class="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                        <p :class="['text-xs font-semibold', scholarshipForm.latitude ? 'text-emerald-700' : 'text-slate-500']">
+                            {{ providerLocationMessage || (scholarshipForm.latitude ? 'Pin selected. Use this location to return to the form.' : 'Click the map to place a pin.') }}
+                        </p>
+                        <div class="flex shrink-0 gap-2">
+                            <button
+                                type="button"
+                                :disabled="!scholarshipFormMapAddress"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                @click="lookupScholarshipAddress"
+                            >
+                                Search address
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                @click="closeLocationMap"
+                            >
+                                {{ scholarshipForm.latitude ? 'Use this location' : 'Close map' }}
+                            </button>
+                        </div>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div
+                v-if="activeEventMap && activeEventMapStage"
+                class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="program-event-map-title"
+                tabindex="-1"
+                @click.self="closeProgramEventMap"
+                @keydown.esc="closeProgramEventMap"
+            >
+                <section class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+                    <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
+                            <i :class="activeEventMapStage.icon" aria-hidden="true"></i>
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">
+                                {{ activeEventMapStage.label }} schedule
+                            </p>
+                            <h2 id="program-event-map-title" class="mt-1 text-lg font-bold text-slate-950 sm:text-xl">
+                                Set the event map pin
+                            </h2>
+                            <p class="mt-1 truncate text-xs text-slate-500">
+                                {{ activeEventMapAddress || 'Add an event venue or address, then select its location on the map.' }}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
+                            aria-label="Close event location map"
+                            @click="closeProgramEventMap"
+                        >
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-4">
+                        <LeafletMapPreview
+                            :address="activeEventMapAddress"
+                            :latitude="activeEventMap.latitude"
+                            :longitude="activeEventMap.longitude"
+                            :title="`${activeEventMapStage.label} event map`"
+                            :marker-text="activeEventMap.venue || `${activeEventMapStage.label} venue`"
+                            :geocode-trigger="eventAddressLookupTrigger"
+                            height="min(58vh, 32rem)"
+                            picker
+                            @resolved="handleProgramEventLocationResolved"
+                            @picked="handleProgramEventLocationPicked"
+                            @error="handleProgramEventLocationError"
+                        />
+                    </div>
+
+                    <footer class="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                        <p :class="['text-xs font-semibold', activeEventMap.latitude ? 'text-emerald-700' : 'text-slate-500']">
+                            {{ eventLocationMapMessage || (activeEventMap.latitude ? 'Event pin selected.' : 'Click the map to place the event pin.') }}
+                        </p>
+                        <div class="flex shrink-0 gap-2">
+                            <button
+                                type="button"
+                                :disabled="!activeEventMapAddress"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                @click="lookupProgramEventAddress"
+                            >
+                                Search address
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                @click="closeProgramEventMap"
+                            >
+                                {{ activeEventMap.latitude ? 'Use this location' : 'Close map' }}
+                            </button>
+                        </div>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
     </main>
 </template>

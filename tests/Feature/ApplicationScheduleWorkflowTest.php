@@ -237,6 +237,39 @@ class ApplicationScheduleWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_online_distribution_schedule_does_not_require_an_access_link(): void
+    {
+        $provider = User::query()->where('email', 'tulayaral@scholarship.test')->firstOrFail();
+        $applicant = User::query()->where('email', 'student@scholarship.test')->firstOrFail();
+        $scholarship = Scholarship::query()->where('provider_id', $provider->id)->firstOrFail();
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'approved',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->postJson("/provider/applications/{$application->id}/schedules", [
+                'type' => 'distribution',
+                'title' => 'Remote benefit release',
+                'scheduled_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                'mode' => 'online',
+                'instructions' => 'Check your registered email for secure transfer instructions.',
+                'awarded_amount' => 10000,
+            ])
+            ->assertOk()
+            ->assertJsonPath('schedule.mode', 'online')
+            ->assertJsonPath('schedule.online_url', null);
+
+        $this->assertDatabaseHas('application_schedules', [
+            'scholarship_application_id' => $application->id,
+            'type' => 'distribution',
+            'mode' => 'online',
+            'online_url' => null,
+        ]);
+    }
+
     public function test_mobile_app_receives_an_active_schedule_without_acknowledgment(): void
     {
         $provider = User::query()->where('email', 'tulayaral@scholarship.test')->firstOrFail();
