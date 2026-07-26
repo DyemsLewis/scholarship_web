@@ -10,6 +10,8 @@ const initialScholarshipTitle = appElement?.dataset.scholarshipTitle ?? '';
 const isLoading = ref(true);
 const errorMessage = ref('');
 const applications = ref([]);
+const reviewers = ref([]);
+const assigningReviewerApplicationId = ref(null);
 const selectedScholarshipContext = ref(initialScholarshipId ? {
     id: Number(initialScholarshipId),
     title: initialScholarshipTitle,
@@ -138,7 +140,6 @@ const pageTitle = computed(() => (hasProgramContext.value
 const pageDescription = computed(() => (hasProgramContext.value
     ? 'Manage this program schedule and review its submitted applicants in one place.'
     : 'Review submitted applications, document status, and DSS guidance for your programs.'));
-const programStageSummary = computed(() => configuredScheduleTypes.value.map((stage) => stage.label).join(', '));
 const reviewFilterOptions = computed(() => [
     { value: 'all', label: 'All', count: applications.value.length },
     {
@@ -192,6 +193,10 @@ const rankedApplications = computed(() => {
 
         if (selectedQueueSort.value === 'documents') {
             return documentIssueCount(second) - documentIssueCount(first);
+        }
+
+        if (selectedQueueSort.value === 'oldest') {
+            return Number(second.waiting_days ?? 0) - Number(first.waiting_days ?? 0);
         }
 
         return reviewPriorityScore(second) - reviewPriorityScore(first) || Number(second.dss_score ?? 0) - Number(first.dss_score ?? 0);
@@ -272,6 +277,11 @@ function documentIssueCount(application) {
     return (application.documents ?? []).filter((document) => ['pending', 'needs_replacement', 'rejected'].includes(document.status ?? 'pending')).length;
 }
 
+function showWaitingTime(application) {
+    return Number(application.waiting_days ?? 0) > 0
+        && !['rejected', 'not_awarded', 'exam_failed', 'disbursed', 'renewed'].includes(application.status);
+}
+
 function reviewPriorityScore(application) {
     const status = application.status ?? 'submitted';
     const readiness = Number(application.document_readiness?.percent ?? 0);
@@ -286,6 +296,10 @@ function reviewPriorityScore(application) {
 
     if (status === 'under_review') {
         score += 16;
+    }
+
+    if (application.documents_changed_since_review) {
+        score += 20;
     }
 
     if (['exam_qualified', 'exam_scheduled', 'exam_taken'].includes(status)) {
@@ -576,6 +590,7 @@ async function loadProviderData(showLoading = true) {
         });
 
         applications.value = response.data.applications;
+        reviewers.value = Array.isArray(response.data.reviewers) ? response.data.reviewers : [];
         selectedScholarshipContext.value = response.data.selected_scholarship ?? selectedScholarshipContext.value;
         programEvents.value = response.data.program_events ?? [];
 
@@ -586,6 +601,29 @@ async function loadProviderData(showLoading = true) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider applications.';
     } finally {
         isLoading.value = false;
+    }
+}
+
+async function assignReviewer(application, event) {
+    const previousReviewerId = application.assigned_reviewer?.id ?? '';
+    const selectedReviewerId = event.target.value ? Number(event.target.value) : null;
+
+    assigningReviewerApplicationId.value = application.id;
+
+    try {
+        const response = await window.axios.patch(`/provider/applications/${application.id}/reviewer`, {
+            assigned_reviewer_id: selectedReviewerId,
+        });
+        const applicationIndex = applications.value.findIndex((item) => item.id === application.id);
+
+        if (applicationIndex >= 0) {
+            applications.value.splice(applicationIndex, 1, response.data.application);
+        }
+    } catch (handledError) {
+        event.target.value = previousReviewerId;
+        void handledError;
+    } finally {
+        assigningReviewerApplicationId.value = null;
     }
 }
 
@@ -684,18 +722,30 @@ onMounted(loadProviderData);
                             </span>
                         </div>
 
-                        <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-3 sm:divide-x sm:divide-slate-200">
+                        <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-slate-200">
                             <div class="p-3">
                                 <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Benefits</dt>
                                 <dd class="mt-1 line-clamp-2 text-sm font-bold leading-5 text-slate-900">{{ selectedScholarshipContext?.benefit_summary || 'Not specified' }}</dd>
                             </div>
-                            <div class="border-t border-slate-200 p-3 sm:border-t-0">
+                            <div class="border-t border-slate-200 p-3 sm:border-l sm:border-t-0 xl:border-l-0">
                                 <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Deadline</dt>
                                 <dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedScholarshipContext?.deadline || 'Not set' }}</dd>
                             </div>
-                            <div class="border-t border-slate-200 p-3 sm:border-t-0">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Applicant activities</dt>
-                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ programStageSummary || 'None scheduled' }}</dd>
+                            <div class="border-t border-slate-200 p-3 xl:border-t-0">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Applicant queue</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-900">
+                                    {{ selectedScholarshipContext?.applications_count ?? applications.length }} total
+                                    <span class="font-semibold text-amber-700">- {{ selectedScholarshipContext?.pending_review_applications_count ?? 0 }} to review</span>
+                                </dd>
+                            </div>
+                            <div class="border-t border-slate-200 p-3 sm:border-l xl:border-l-0 xl:border-t-0">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Slot usage</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-900">
+                                    {{ selectedScholarshipContext?.awarded_slots_count ?? 0 }} selected
+                                    <span v-if="Number(selectedScholarshipContext?.slots_available ?? 0) > 0" class="font-semibold text-slate-500">
+                                        of {{ selectedScholarshipContext.slots_available }}
+                                    </span>
+                                </dd>
                             </div>
                         </dl>
                     </section>
@@ -1047,6 +1097,18 @@ onMounted(loadProviderData);
                                     >
                                         Documents
                                     </button>
+                                    <button
+                                        type="button"
+                                        :class="[
+                                            'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
+                                            selectedQueueSort === 'oldest'
+                                                ? 'border-slate-900 bg-slate-900 text-white'
+                                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                                        ]"
+                                        @click="selectedQueueSort = 'oldest'"
+                                    >
+                                        Oldest
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1069,9 +1131,10 @@ onMounted(loadProviderData);
                         </div>
 
                         <div v-else class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                            <div class="hidden grid-cols-[minmax(0,1.35fr)_minmax(0,1.1fr)_7rem_6rem_8rem_auto] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 xl:grid">
+                            <div class="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_10rem_7rem_6rem_8rem_auto] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 xl:grid">
                                 <span>Applicant</span>
                                 <span>Program</span>
+                                <span>Reviewer</span>
                                 <span>Scores</span>
                                 <span>Files</span>
                                 <span>Status</span>
@@ -1081,7 +1144,7 @@ onMounted(loadProviderData);
                             <article
                                 v-for="application in visibleApplications"
                                 :key="application.id"
-                                class="grid gap-3 border-b border-slate-200 p-3 last:border-b-0 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1.1fr)_7rem_6rem_8rem_auto] xl:items-center xl:px-4"
+                                class="grid gap-3 border-b border-slate-200 p-3 last:border-b-0 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_10rem_7rem_6rem_8rem_auto] xl:items-center xl:px-4"
                             >
                                 <div class="min-w-0">
                                     <div class="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -1098,7 +1161,14 @@ onMounted(loadProviderData);
                                             {{ reviewPriorityLabel(application) }}
                                         </span>
                                     </div>
-                                    <p class="mt-1 text-xs text-slate-500">Submitted {{ application.submitted_at || 'recently' }}</p>
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        Submitted {{ application.submitted_at || 'recently' }}
+                                        <span v-if="showWaitingTime(application)">- waiting {{ application.waiting_days }}d</span>
+                                    </p>
+                                    <p v-if="application.documents_changed_since_review" class="mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">
+                                        <i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i>
+                                        Files updated since review
+                                    </p>
                                 </div>
 
                                 <div class="min-w-0">
@@ -1107,6 +1177,21 @@ onMounted(loadProviderData);
                                         {{ application.status_progress?.label || statusLabel(application.status) }}
                                     </p>
                                 </div>
+
+                                <label class="min-w-0">
+                                    <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 xl:hidden">Reviewer</span>
+                                    <select
+                                        :value="application.assigned_reviewer?.id ?? ''"
+                                        :disabled="assigningReviewerApplicationId === application.id"
+                                        class="w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-slate-500 disabled:cursor-wait disabled:opacity-60"
+                                        @change="assignReviewer(application, $event)"
+                                    >
+                                        <option value="">Unassigned</option>
+                                        <option v-for="reviewer in reviewers" :key="reviewer.id" :value="reviewer.id">
+                                            {{ reviewer.name }} - {{ reviewer.role_label }}
+                                        </option>
+                                    </select>
+                                </label>
 
                                 <div class="grid grid-cols-2 gap-2 xl:contents">
                                     <div class="rounded-md bg-slate-50 px-2.5 py-2 text-xs ring-1 ring-slate-200 xl:bg-transparent xl:p-0 xl:ring-0">

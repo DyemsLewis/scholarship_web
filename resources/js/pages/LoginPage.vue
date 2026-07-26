@@ -90,14 +90,10 @@ onMounted(() => {
     const params = new URLSearchParams(window.location.search);
 
     if (params.get('registered') === '1') {
-        const verificationSent = params.get('verification_sent') !== '0';
-
         showToast(
             'success',
-            'Registration complete',
-            verificationSent
-                ? 'Your account was created. Check your email for the verification link, then sign in.'
-                : 'Your account was created. Sign in to resend the verification email.',
+            'Account created',
+            'Your email is verified and your account is ready. You can now sign in.',
         );
         window.history.replaceState({}, '', window.location.pathname);
         return;

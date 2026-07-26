@@ -33,7 +33,7 @@ const roleFilters = computed(() => [
     { value: 'applicant', label: 'Applicants', count: stats.value.applicants },
     { value: 'provider', label: 'Providers', count: stats.value.providers },
     { value: 'admin', label: 'Admins', count: stats.value.admins },
-]);
+].filter((option) => option.value !== 'admin' || !window.portalUser?.is_managed_account));
 const applicantVerificationStates = {
     approved: {
         label: 'Profile verified',
@@ -380,6 +380,9 @@ onMounted(loadAdminData);
                                         >
                                             {{ roleLabel(user.role) }}
                                         </span>
+                                        <p v-if="user.account_title" class="mt-1 text-xs capitalize text-slate-500">
+                                            {{ user.account_title.replace(/_/g, ' ') }}
+                                        </p>
                                     </td>
                                     <td class="px-4 py-3 align-top">
                                         <div class="flex items-center gap-1.5 whitespace-nowrap">

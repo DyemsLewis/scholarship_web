@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -17,15 +18,34 @@ class User extends Authenticatable implements MustVerifyEmail
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    public const ADMIN_PERMISSIONS = [
+        'manage_accounts',
+        'manage_reviews',
+        'manage_reports',
+        'view_logs',
+        'export_data',
+    ];
+
+    public const PROVIDER_PERMISSIONS = [
+        'manage_programs',
+        'review_applications',
+        'manage_reports',
+        'manage_profile',
+        'manage_team',
+    ];
+
     /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
      */
     protected $fillable = [
+        'parent_account_id',
         'email',
         'username',
         'role',
+        'account_title',
+        'permissions',
         'password',
         'account_status',
         'must_reset_password',
@@ -60,7 +80,18 @@ class User extends Authenticatable implements MustVerifyEmail
             'password_reset_required_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
             'privacy_accepted_at' => 'datetime',
+            'permissions' => 'array',
         ];
+    }
+
+    public function parentAccount(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_account_id');
+    }
+
+    public function managedAccounts(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_account_id');
     }
 
     public function studentProfile(): HasOne
@@ -131,6 +162,46 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isApplicant(): bool
     {
         return $this->role === 'applicant';
+    }
+
+    public function isManagedAccount(): bool
+    {
+        return $this->parent_account_id !== null;
+    }
+
+    public function hasPortalPermission(string $permission): bool
+    {
+        if (! $this->isAdmin() && ! $this->isProvider()) {
+            return false;
+        }
+
+        if (! $this->isManagedAccount()) {
+            return true;
+        }
+
+        return in_array($permission, $this->permissions ?? [], true);
+    }
+
+    public function providerOrganizationId(): int
+    {
+        return $this->isProvider() && $this->parent_account_id
+            ? (int) $this->parent_account_id
+            : (int) $this->id;
+    }
+
+    public function providerOrganizationOwner(): self
+    {
+        if (! $this->isProvider() || ! $this->parent_account_id) {
+            return $this;
+        }
+
+        $owner = $this->relationLoaded('parentAccount')
+            ? $this->parentAccount
+            : $this->parentAccount()->with('providerProfile')->first();
+
+        $owner?->loadMissing('providerProfile');
+
+        return $owner ?? $this;
     }
 
     public function isSuspended(): bool
@@ -220,9 +291,16 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         $birthdate = $this->studentProfile?->birthdate;
         $age = $birthdate?->age;
+        $providerOwner = $this->isProvider() ? $this->providerOrganizationOwner() : null;
+        $providerProfile = $providerOwner?->providerProfile ?? $this->providerProfile;
 
         return [
             'id' => $this->id,
+            'parent_account_id' => $this->parent_account_id,
+            'account_title' => $this->account_title,
+            'permissions' => array_values($this->permissions ?? []),
+            'is_managed_account' => $this->isManagedAccount(),
+            'has_full_access' => ! $this->isManagedAccount() && ($this->isAdmin() || $this->isProvider()),
             'name' => $this->name,
             'first_name' => $this->first_name,
             'last_name' => $this->last_name,
@@ -245,16 +323,17 @@ class User extends Authenticatable implements MustVerifyEmail
             'password_reset_required_at' => $this->password_reset_required_at?->format('M d, Y h:i A'),
             'account_managed_by' => $this->studentProfile?->account_managed_by,
             'display_name' => $this->adminProfile?->display_name,
-            'provider_name' => $this->provider_name,
-            'provider_type' => $this->provider_type,
-            'provider_website' => $this->provider_website,
-            'provider_address' => $this->provider_address,
-            'provider_description' => $this->provider_description,
-            'verification_status' => $this->providerProfile?->verification_status,
-            'verification_notes' => $this->providerProfile?->verification_notes,
+            'provider_name' => $providerProfile?->provider_name,
+            'provider_type' => $providerProfile?->provider_type,
+            'provider_website' => $providerProfile?->provider_website,
+            'provider_address' => $providerProfile?->provider_address,
+            'provider_description' => $providerProfile?->provider_description,
+            'verification_status' => $providerProfile?->verification_status,
+            'verification_notes' => $providerProfile?->verification_notes,
             'can_post_scholarships' => $this->isProvider()
-                && $this->hasVerifiedEmail()
-                && $this->providerProfile?->isVerified(),
+                && $providerOwner?->isActive()
+                && $providerOwner?->hasVerifiedEmail()
+                && $providerOwner?->providerProfile?->isVerified(),
             'applicant_verification_status' => $this->studentProfile?->verification_status ?? 'unsubmitted',
             'applicant_verification_notes' => $this->studentProfile?->verification_notes,
             'applicant_verified_at' => $this->studentProfile?->verified_at?->format('M d, Y'),

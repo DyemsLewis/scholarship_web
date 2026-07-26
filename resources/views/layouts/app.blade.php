@@ -8,6 +8,13 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body>
+        <script>
+            window.portalUser = {{ Illuminate\Support\Js::from(
+                auth()->check()
+                    ? auth()->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload()
+                    : null
+            ) }};
+        </script>
         <div id="app" data-page="@yield('page', 'landing')" @yield('appAttributes')></div>
     </body>
 </html>

@@ -8,6 +8,10 @@ const errorMessage = ref('');
 const user = ref(null);
 const scholarships = ref([]);
 const reviewQueue = ref([]);
+const canManagePrograms = computed(() => Boolean(
+    window.portalUser?.has_full_access
+        || window.portalUser?.permissions?.includes('manage_programs'),
+));
 
 const recentPrograms = computed(() => scholarships.value.slice(0, 3));
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
@@ -249,7 +253,7 @@ onMounted(loadProviderData);
                             >
                                 {{ user?.can_post_scholarships ? 'Profile' : verificationPrompt.action }}
                             </a>
-                            <a v-if="user?.can_post_scholarships" href="/provider/programs/create" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">New program</a>
+                            <a v-if="user?.can_post_scholarships && canManagePrograms" href="/provider/programs/create" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">New program</a>
                         </div>
                     </section>
 
@@ -294,7 +298,7 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section v-if="canManagePrograms" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="border-b border-slate-200 px-5 py-4">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -341,7 +345,7 @@ onMounted(loadProviderData);
                                     href="/provider/programs"
                                     class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
                                 >
-                                    Manage programs
+                                    {{ canManagePrograms ? 'Manage programs' : 'View programs' }}
                                 </a>
                             </div>
 
@@ -349,7 +353,7 @@ onMounted(loadProviderData);
                                 <a
                                     v-for="program in recentPrograms"
                                     :key="program.id"
-                                    :href="`/provider/programs/${program.id}/edit`"
+                                    :href="canManagePrograms ? `/provider/programs/${program.id}/edit` : '/provider/programs'"
                                     class="flex flex-col gap-2 bg-white p-3 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
                                 >
                                     <div class="min-w-0">

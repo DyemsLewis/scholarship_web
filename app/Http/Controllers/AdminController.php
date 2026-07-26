@@ -26,6 +26,14 @@ use Throwable;
 
 class AdminController extends Controller
 {
+    private const ADMIN_ROLE_PERMISSION_PRESETS = [
+        'Account manager' => ['manage_accounts'],
+        'Review officer' => ['manage_reviews'],
+        'Support officer' => ['manage_reports'],
+        'Records officer' => ['view_logs', 'export_data'],
+        'Portal manager' => ['manage_accounts', 'manage_reviews', 'manage_reports', 'view_logs', 'export_data'],
+    ];
+
     public function index(Request $request): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -41,39 +49,46 @@ class AdminController extends Controller
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
+        $canManageAccounts = $request->user()->hasPortalPermission('manage_accounts');
+        $canManageReviews = $request->user()->hasPortalPermission('manage_reviews');
         $today = now()->startOfDay();
         $deadlineLimit = now()->addDays(30)->endOfDay();
-        $recentUsers = User::query()
-            ->with(['studentProfile', 'providerProfile', 'adminProfile'])
-            ->latest()
-            ->limit(4)
-            ->get(['id', 'email', 'username', 'role', 'created_at']);
-        $recentScholarships = Scholarship::query()
-            ->with('provider.providerProfile')
-            ->latest('updated_at')
-            ->limit(3)
-            ->get();
+        $recentUsers = $canManageAccounts
+            ? User::query()
+                ->with(['studentProfile', 'providerProfile', 'adminProfile'])
+                ->latest()
+                ->limit(4)
+                ->get(['id', 'email', 'username', 'role', 'created_at'])
+            : collect();
+        $recentScholarships = $canManageReviews
+            ? Scholarship::query()
+                ->with('provider.providerProfile')
+                ->latest('updated_at')
+                ->limit(3)
+                ->get()
+            : collect();
 
         return response()->json([
             'stats' => [
-                'pending_providers' => User::query()
+                'pending_providers' => $canManageReviews ? User::query()
                     ->where('role', 'provider')
+                    ->whereNull('parent_account_id')
                     ->whereHas('providerProfile', fn ($query) => $query->where('verification_status', 'pending'))
-                    ->count(),
-                'documents_pending_review' => ApplicationDocument::query()->where('status', 'pending')->count(),
-                'documents_needing_replacement' => ApplicationDocument::query()->where('status', 'needs_replacement')->count(),
-                'upcoming_deadlines' => Scholarship::query()
+                    ->count() : 0,
+                'documents_pending_review' => $canManageReviews ? ApplicationDocument::query()->where('status', 'pending')->count() : 0,
+                'documents_needing_replacement' => $canManageReviews ? ApplicationDocument::query()->where('status', 'needs_replacement')->count() : 0,
+                'upcoming_deadlines' => $canManageReviews ? Scholarship::query()
                     ->where('status', 'published')
                     ->whereDate('deadline', '>=', $today->toDateString())
                     ->whereDate('deadline', '<=', $deadlineLimit->toDateString())
-                    ->count(),
-                'expired_published' => Scholarship::query()
+                    ->count() : 0,
+                'expired_published' => $canManageReviews ? Scholarship::query()
                     ->where('status', 'published')
                     ->whereDate('deadline', '<', $today->toDateString())
-                    ->count(),
-                'needs_review_applications' => ScholarshipApplication::query()
+                    ->count() : 0,
+                'needs_review_applications' => $canManageReviews ? ScholarshipApplication::query()
                     ->where('dss_recommendation', 'needs_review')
-                    ->count(),
+                    ->count() : 0,
             ],
             'recent_users' => $recentUsers->map(fn (User $user) => [
                 'id' => $user->id,
@@ -104,13 +119,17 @@ class AdminController extends Controller
         return view('admin-users');
     }
 
-    public function accountForm(Request $request): View|RedirectResponse
+    public function accountForm(Request $request, ?User $user = null): View|RedirectResponse
     {
         if (! $request->user()) {
             return redirect()->route('login');
         }
 
         abort_unless($request->user()->isAdmin(), 403);
+
+        if ($user) {
+            $this->authorizeAdminAccountTarget($request->user(), $user);
+        }
 
         return view('admin-account-form');
     }
@@ -144,7 +163,7 @@ class AdminController extends Controller
         }
 
         abort_unless($request->user()->isAdmin(), 403);
-        abort_unless($provider->isProvider(), 404);
+        abort_unless($provider->isProvider() && ! $provider->isManagedAccount(), 404);
 
         return view('admin-provider-review', [
             'provider' => $provider,
@@ -203,13 +222,15 @@ class AdminController extends Controller
         $search = trim((string) ($validated['search'] ?? ''));
         $role = $validated['role'] ?? 'all';
         $perPage = (int) ($validated['per_page'] ?? 10);
-        $roleCounts = User::query()
+        $visibleUsers = User::query()
+            ->when($request->user()->isManagedAccount(), fn ($query) => $query->where('role', '!=', 'admin'));
+        $roleCounts = (clone $visibleUsers)
             ->selectRaw('role, count(*) as total')
             ->groupBy('role')
             ->pluck('total', 'role');
         $totalUsers = (int) $roleCounts->sum();
 
-        $query = User::query()
+        $query = (clone $visibleUsers)
             ->with(['studentProfile', 'providerProfile', 'adminProfile'])
             ->latest();
 
@@ -254,9 +275,9 @@ class AdminController extends Controller
                 'admins' => (int) ($roleCounts['admin'] ?? 0),
                 'applicants' => (int) ($roleCounts['applicant'] ?? 0),
                 'providers' => (int) ($roleCounts['provider'] ?? 0),
-                'recent_signups' => User::query()->where('created_at', '>=', now()->subDays(7))->count(),
-                'suspended_users' => User::query()->where('account_status', 'suspended')->count(),
-                'password_resets_required' => User::query()->where('must_reset_password', true)->count(),
+                'recent_signups' => (clone $visibleUsers)->where('created_at', '>=', now()->subDays(7))->count(),
+                'suspended_users' => (clone $visibleUsers)->where('account_status', 'suspended')->count(),
+                'password_resets_required' => (clone $visibleUsers)->where('must_reset_password', true)->count(),
             ],
             'users' => $users->getCollection()->map(fn (User $user) => [
                 ...$user->publicPayload(),
@@ -276,6 +297,7 @@ class AdminController extends Controller
     public function showUser(Request $request, User $user): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
+        $this->authorizeAdminAccountTarget($request->user(), $user);
 
         return response()->json([
             'user' => $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
@@ -347,7 +369,7 @@ class AdminController extends Controller
     public function providerReviewData(Request $request, User $provider): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($provider->isProvider(), 404);
+        abort_unless($provider->isProvider() && ! $provider->isManagedAccount(), 404);
 
         $provider->loadMissing(['providerProfile', 'providerVerificationDocuments']);
 
@@ -382,6 +404,7 @@ class AdminController extends Controller
         $providers = User::query()
             ->with(['providerProfile', 'providerVerificationDocuments'])
             ->where('role', 'provider')
+            ->whereNull('parent_account_id')
             ->latest()
             ->get(['id', 'email', 'username', 'role', 'created_at']);
         $applicants = User::query()
@@ -471,13 +494,14 @@ class AdminController extends Controller
             $reviewMessage .= " Reason: {$validated['review_notes']}";
         }
 
-        PortalNotification::create([
-            'user_id' => $scholarship->provider_id,
-            'type' => 'scholarship_review',
-            'title' => 'Scholarship review updated',
-            'message' => $reviewMessage,
-            'action_url' => '/provider/programs',
-        ]);
+        $this->providerNotificationRecipients($scholarship->provider_id, 'manage_programs')
+            ->each(fn (User $provider) => PortalNotification::create([
+                'user_id' => $provider->id,
+                'type' => 'scholarship_review',
+                'title' => 'Scholarship review updated',
+                'message' => $reviewMessage,
+                'action_url' => '/provider/programs',
+            ]));
 
         return response()->json([
             'message' => 'Scholarship review updated.',
@@ -490,7 +514,7 @@ class AdminController extends Controller
     public function updateProviderVerification(Request $request, User $provider): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($provider->isProvider(), 404);
+        abort_unless($provider->isProvider() && ! $provider->isManagedAccount(), 404);
 
         $validated = $request->validate([
             'verification_status' => ['required', 'string', 'in:pending,approved,rejected'],
@@ -520,13 +544,14 @@ class AdminController extends Controller
             $verificationMessage .= " Reason: {$validated['verification_notes']}";
         }
 
-        PortalNotification::create([
-            'user_id' => $provider->id,
-            'type' => 'provider_verification',
-            'title' => 'Provider verification updated',
-            'message' => $verificationMessage,
-            'action_url' => '/provider',
-        ]);
+        $this->providerNotificationRecipients($provider->id, 'manage_profile')
+            ->each(fn (User $recipient) => PortalNotification::create([
+                'user_id' => $recipient->id,
+                'type' => 'provider_verification',
+                'title' => 'Provider verification updated',
+                'message' => $verificationMessage,
+                'action_url' => '/provider',
+            ]));
 
         return response()->json([
             'message' => 'Provider verification updated.',
@@ -633,6 +658,7 @@ class AdminController extends Controller
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
+        $actor = $request->user();
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
@@ -641,16 +667,32 @@ class AdminController extends Controller
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', 'unique:users,username'],
             'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
             'role' => ['required', 'string', 'in:applicant,provider,admin'],
+            'account_title' => [Rule::requiredIf($request->input('role') === 'admin'), 'nullable', 'string', 'max:80'],
+            'permissions' => [Rule::requiredIf($request->input('role') === 'admin'), 'nullable', 'array', 'min:1'],
+            'permissions.*' => ['string', Rule::in(User::ADMIN_PERMISSIONS)],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
+
+        if ($validated['role'] === 'admin') {
+            abort_if($actor->isManagedAccount(), 403, 'Only a primary administrator can create admin accounts.');
+            $validated['permissions'] = $this->adminPermissionsForRole(
+                $validated['account_title'],
+                $validated['permissions'],
+            );
+        }
 
         $middleInitial = strtoupper($validated['middle_initial']);
         $displayName = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
 
         $user = User::create([
+            'parent_account_id' => $validated['role'] === 'admin' ? $actor->id : null,
             'email' => $validated['email'],
             'username' => $validated['username'],
             'role' => $validated['role'],
+            'account_title' => $validated['role'] === 'admin' ? trim($validated['account_title']) : null,
+            'permissions' => $validated['role'] === 'admin'
+                ? array_values(array_unique($validated['permissions']))
+                : null,
             'password' => $validated['password'],
         ]);
 
@@ -681,7 +723,11 @@ class AdminController extends Controller
             'account_created',
             "{$request->user()->name} created {$user->role} account {$user->email}.",
             $request,
-            ['created_user_id' => $user->id, 'created_user_role' => $user->role],
+            [
+                'created_user_id' => $user->id,
+                'created_user_role' => $user->role,
+                'permissions' => $user->permissions ?? [],
+            ],
         );
 
         return response()->json([
@@ -694,6 +740,11 @@ class AdminController extends Controller
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
+        $actor = $request->user();
+        $this->authorizeAdminAccountTarget($actor, $user);
+        $willBeManagedAdmin = $request->input('role') === 'admin'
+            && ($user->isManagedAccount() || ! $user->isAdmin());
+
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
@@ -702,10 +753,30 @@ class AdminController extends Controller
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
             'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
             'role' => ['required', 'string', 'in:applicant,provider,admin'],
+            'account_title' => [Rule::requiredIf($willBeManagedAdmin), 'nullable', 'string', 'max:80'],
+            'permissions' => [Rule::requiredIf($willBeManagedAdmin), 'nullable', 'array', 'min:1'],
+            'permissions.*' => ['string', Rule::in(User::ADMIN_PERMISSIONS)],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
         ]);
 
+        if ($validated['role'] === 'admin') {
+            abort_if($actor->isManagedAccount(), 403, 'Only a primary administrator can manage admin accounts.');
+
+            if ($willBeManagedAdmin) {
+                $validated['permissions'] = $this->adminPermissionsForRole(
+                    $validated['account_title'],
+                    $validated['permissions'],
+                );
+            }
+        }
+
         $previousRole = $user->role;
+
+        if ($previousRole !== $validated['role'] && $user->managedAccounts()->exists()) {
+            return response()->json([
+                'message' => 'Reassign or suspend this account\'s managed staff before changing its role.',
+            ], 422);
+        }
 
         if ($previousRole === 'admin' && $validated['role'] !== 'admin' && $this->lastActiveAdminWouldBeLost($user)) {
             return response()->json([
@@ -719,6 +790,21 @@ class AdminController extends Controller
             'email' => $validated['email'],
             'username' => $validated['username'],
             'role' => $validated['role'],
+            'parent_account_id' => $willBeManagedAdmin
+                ? ($user->parent_account_id ?: $actor->id)
+                : ($validated['role'] === 'provider' && $previousRole === 'provider'
+                    ? $user->parent_account_id
+                    : null),
+            'account_title' => $willBeManagedAdmin
+                ? trim($validated['account_title'])
+                : ($validated['role'] === 'provider' && $previousRole === 'provider'
+                    ? $user->account_title
+                    : null),
+            'permissions' => $willBeManagedAdmin
+                ? array_values(array_unique($validated['permissions']))
+                : ($validated['role'] === 'provider' && $previousRole === 'provider'
+                    ? $user->permissions
+                    : null),
         ];
 
         if (filled($validated['password'] ?? null)) {
@@ -764,6 +850,7 @@ class AdminController extends Controller
                 'updated_user_id' => $user->id,
                 'previous_role' => $previousRole,
                 'current_role' => $user->role,
+                'permissions' => $user->permissions ?? [],
             ],
         );
 
@@ -776,6 +863,7 @@ class AdminController extends Controller
     public function updateUserStatus(Request $request, User $user): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
+        $this->authorizeAdminAccountTarget($request->user(), $user);
 
         $validated = $request->validate([
             'account_status' => ['required', Rule::in(['active', 'suspended'])],
@@ -839,6 +927,7 @@ class AdminController extends Controller
     public function forcePasswordReset(Request $request, User $user): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
+        $this->authorizeAdminAccountTarget($request->user(), $user);
 
         $user->forceFill([
             'must_reset_password' => true,
@@ -875,6 +964,7 @@ class AdminController extends Controller
     public function verifyUserEmail(Request $request, User $user): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
+        $this->authorizeAdminAccountTarget($request->user(), $user);
 
         if (! $user->hasVerifiedEmail() && $user->markEmailAsVerified()) {
             event(new Verified($user));
@@ -911,6 +1001,7 @@ class AdminController extends Controller
     public function resendUserVerificationEmail(Request $request, User $user): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
+        $this->authorizeAdminAccountTarget($request->user(), $user);
 
         if ($user->hasVerifiedEmail()) {
             return response()->json([
@@ -1093,6 +1184,32 @@ class AdminController extends Controller
 
             fclose($handle);
         }, 'scholarship-applications.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    private function adminPermissionsForRole(string $accountTitle, array $permissions): array
+    {
+        return self::ADMIN_ROLE_PERMISSION_PRESETS[$accountTitle]
+            ?? array_values(array_unique($permissions));
+    }
+
+    private function authorizeAdminAccountTarget(User $actor, User $target): void
+    {
+        abort_if(
+            $actor->isManagedAccount() && $target->isAdmin(),
+            403,
+            'Delegated administrators cannot manage administrator accounts.',
+        );
+    }
+
+    private function providerNotificationRecipients(int $providerId, string $permission)
+    {
+        return User::query()
+            ->where('role', 'provider')
+            ->where(function ($query) use ($providerId): void {
+                $query->whereKey($providerId)->orWhere('parent_account_id', $providerId);
+            })
+            ->get()
+            ->filter(fn (User $provider) => $provider->hasPortalPermission($permission));
     }
 
     private function lastActiveAdminWouldBeLost(User $user): bool

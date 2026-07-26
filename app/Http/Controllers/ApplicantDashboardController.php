@@ -453,12 +453,13 @@ class ApplicantDashboardController extends Controller
         User::query()
             ->where('role', 'admin')
             ->get()
+            ->filter(fn (User $admin) => $admin->hasPortalPermission('manage_reviews'))
             ->each(fn (User $admin) => PortalNotification::create([
                 'user_id' => $admin->id,
                 'type' => 'applicant_profile_verification',
                 'title' => 'Applicant proof uploaded',
                 'message' => "{$user->name} submitted a profile verification proof.",
-                'action_url' => "/admin/accounts/{$user->id}/edit",
+                'action_url' => "/admin/applicants/{$user->id}/review",
             ]));
 
         ActivityLog::record(

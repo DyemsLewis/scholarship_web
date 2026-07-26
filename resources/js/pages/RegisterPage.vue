@@ -7,6 +7,11 @@ import ToastMessage from '../components/ToastMessage.vue';
 const formElement = ref(null);
 const isProviderRegistration = window.location.pathname.startsWith('/provider/register');
 const registrationRole = isProviderRegistration ? 'provider' : 'applicant';
+const registrationStep = ref('details');
+const registrationToken = ref('');
+const verificationEmail = ref('');
+const verificationCode = ref('');
+const resendSeconds = ref(0);
 const form = ref({
     firstName: '',
     lastName: '',
@@ -40,6 +45,8 @@ const toggleButtonClass = 'absolute inset-y-0 right-2 my-auto h-9 rounded-md px-
 const primaryButtonClass = 'w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80';
 
 const isSubmitting = ref(false);
+const isVerifying = ref(false);
+const isResending = ref(false);
 const showPassword = ref(false);
 const toast = ref({
     show: false,
@@ -49,6 +56,7 @@ const toast = ref({
 });
 
 let toastTimer = null;
+let resendTimer = null;
 
 function showToast(type, title, message) {
     if (toastTimer) {
@@ -76,6 +84,19 @@ function closeToast() {
 }
 
 const shellCopy = computed(() => {
+    if (registrationStep.value === 'verification') {
+        return {
+            eyebrow: 'Email Verification',
+            title: 'Check your email',
+            description: `Enter the six-digit code sent to ${verificationEmail.value || 'your email'}.`,
+            panelBadge: 'Secure Registration',
+            panelTitle: 'Verify before account creation',
+            panelText: 'Your account is created only after the email code is confirmed.',
+            panelHighlights: [],
+            panelNote: 'The code expires after 10 minutes.',
+        };
+    }
+
     if (isProviderRegistration) {
         return {
             eyebrow: 'Provider Registration',
@@ -89,7 +110,7 @@ const shellCopy = computed(() => {
                 'Keep one contact person connected to the account.',
                 'Manage programs from a separate provider dashboard.',
             ],
-            panelNote: 'After registration, return to login and sign in with the provider account.',
+            panelNote: 'We verify the contact email before creating the provider account.',
         };
     }
 
@@ -105,7 +126,7 @@ const shellCopy = computed(() => {
             'Keep your basic profile details ready.',
             'Continue setup or browse the web after signing in.',
         ],
-        panelNote: 'After registration, return to login and sign in with the applicant account.',
+        panelNote: 'We verify your email before creating the applicant account.',
     };
 });
 
@@ -115,6 +136,39 @@ function handleMiddleInitialInput(event) {
 
 function handleNumberInput(event) {
     form.value.number = event.target.value.replace(/[^\d+\s()-]/g, '');
+}
+
+function handleVerificationCodeInput(event) {
+    verificationCode.value = event.target.value.replace(/\D/g, '').slice(0, 6);
+}
+
+function startResendCountdown(seconds) {
+    if (resendTimer) {
+        window.clearInterval(resendTimer);
+    }
+
+    resendSeconds.value = Number(seconds) || 0;
+
+    if (resendSeconds.value <= 0) {
+        return;
+    }
+
+    resendTimer = window.setInterval(() => {
+        resendSeconds.value = Math.max(0, resendSeconds.value - 1);
+
+        if (resendSeconds.value === 0) {
+            window.clearInterval(resendTimer);
+            resendTimer = null;
+        }
+    }, 1000);
+}
+
+function returnToDetails() {
+    registrationStep.value = 'details';
+    registrationToken.value = '';
+    verificationCode.value = '';
+    verificationEmail.value = '';
+    startResendCountdown(0);
 }
 
 async function submitForm() {
@@ -180,7 +234,12 @@ async function submitForm() {
 
     try {
         const response = await window.axios.post('/register', payload);
-        window.location.href = response.data.redirect ?? '/login?registered=1';
+        registrationToken.value = response.data.registration_token;
+        verificationEmail.value = response.data.email ?? form.value.email;
+        verificationCode.value = '';
+        registrationStep.value = 'verification';
+        startResendCountdown(response.data.resend_after ?? 60);
+        showToast('success', 'Code sent', response.data.message ?? 'Check your email for the verification code.');
     } catch (error) {
         const message = error.response?.data?.message ?? 'Registration failed. Check your details and try again.';
         showToast('error', 'Registration failed', message);
@@ -189,9 +248,72 @@ async function submitForm() {
     }
 }
 
+async function verifyRegistration() {
+    if (!/^\d{6}$/.test(verificationCode.value)) {
+        showToast('error', 'Verification failed', 'Enter the complete six-digit verification code.');
+        return;
+    }
+
+    isVerifying.value = true;
+
+    try {
+        const response = await window.axios.post('/register/verify', {
+            registration_token: registrationToken.value,
+            code: verificationCode.value,
+        });
+        showToast('success', 'Account created', response.data.message);
+        window.setTimeout(() => {
+            window.location.href = response.data.redirect ?? '/login?registered=1&verified=1';
+        }, 500);
+    } catch (error) {
+        const message = error.response?.data?.message ?? 'The verification code could not be confirmed.';
+        showToast('error', 'Verification failed', message);
+
+        if (error.response?.data?.restart_required) {
+            returnToDetails();
+        }
+    } finally {
+        isVerifying.value = false;
+    }
+}
+
+async function resendVerificationCode() {
+    if (resendSeconds.value > 0 || isResending.value) {
+        return;
+    }
+
+    isResending.value = true;
+
+    try {
+        const response = await window.axios.post('/register/resend-code', {
+            registration_token: registrationToken.value,
+        });
+        verificationCode.value = '';
+        startResendCountdown(response.data.resend_after ?? 60);
+        showToast('success', 'New code sent', response.data.message);
+    } catch (error) {
+        const message = error.response?.data?.message ?? 'Unable to resend the verification code.';
+        showToast('error', 'Code not sent', message);
+
+        if (error.response?.status === 429) {
+            startResendCountdown(error.response?.data?.retry_after ?? 60);
+        }
+
+        if (error.response?.data?.restart_required) {
+            returnToDetails();
+        }
+    } finally {
+        isResending.value = false;
+    }
+}
+
 onBeforeUnmount(() => {
     if (toastTimer) {
         window.clearTimeout(toastTimer);
+    }
+
+    if (resendTimer) {
+        window.clearInterval(resendTimer);
     }
 });
 </script>
@@ -208,7 +330,7 @@ onBeforeUnmount(() => {
         :panel-text="shellCopy.panelText"
         :panel-highlights="shellCopy.panelHighlights"
         :panel-note="shellCopy.panelNote"
-        :show-panel="!isProviderRegistration"
+        :show-panel="registrationStep === 'details' && !isProviderRegistration"
     >
         <ToastMessage
             :show="toast.show"
@@ -218,7 +340,7 @@ onBeforeUnmount(() => {
             @close="closeToast"
         />
 
-        <form ref="formElement" class="space-y-5" @submit.prevent="submitForm">
+        <form v-if="registrationStep === 'details'" ref="formElement" class="space-y-5" @submit.prevent="submitForm">
             <div v-if="isProviderRegistration" class="rounded-md border border-slate-200 bg-slate-50 p-4">
                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                     Provider Details
@@ -470,8 +592,71 @@ onBeforeUnmount(() => {
                 :disabled="isSubmitting"
                 :class="primaryButtonClass"
             >
-                {{ isSubmitting ? 'Saving profile...' : isProviderRegistration ? 'Create provider account' : 'Create applicant account' }}
+                {{ isSubmitting ? 'Sending code...' : 'Continue to email verification' }}
             </button>
+        </form>
+
+        <form v-else class="space-y-5" @submit.prevent="verifyRegistration">
+            <div class="rounded-md border border-amber-200 bg-amber-50 p-4 text-center">
+                <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-amber-200 text-amber-900">
+                    <i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i>
+                </span>
+                <p class="mt-3 text-sm font-bold text-slate-950">
+                    Code sent to {{ verificationEmail }}
+                </p>
+                <p class="mt-1 text-sm leading-6 text-slate-600">
+                    No account has been created yet. Enter the code below to finish registration.
+                </p>
+            </div>
+
+            <div>
+                <label :class="labelClass" for="registration-code">
+                    Six-digit verification code
+                </label>
+                <input
+                    id="registration-code"
+                    :value="verificationCode"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    maxlength="6"
+                    pattern="[0-9]{6}"
+                    required
+                    autofocus
+                    placeholder="000000"
+                    class="w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-center text-2xl font-bold tracking-[0.45em] text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
+                    @input="handleVerificationCodeInput"
+                >
+                <p class="mt-2 text-center text-xs text-slate-500">
+                    The code expires in 10 minutes.
+                </p>
+            </div>
+
+            <button
+                type="submit"
+                :disabled="isVerifying || verificationCode.length !== 6"
+                :class="primaryButtonClass"
+            >
+                {{ isVerifying ? 'Verifying...' : 'Verify and create account' }}
+            </button>
+
+            <div class="flex flex-col items-center justify-between gap-3 border-t border-slate-200 pt-4 text-sm sm:flex-row">
+                <button
+                    type="button"
+                    class="font-semibold text-slate-600 transition hover:text-slate-950"
+                    @click="returnToDetails"
+                >
+                    Change registration details
+                </button>
+                <button
+                    type="button"
+                    :disabled="resendSeconds > 0 || isResending"
+                    class="font-bold text-slate-900 transition hover:text-amber-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                    @click="resendVerificationCode"
+                >
+                    {{ isResending ? 'Sending...' : resendSeconds > 0 ? `Resend code in ${resendSeconds}s` : 'Resend code' }}
+                </button>
+            </div>
         </form>
 
     </AuthShell>

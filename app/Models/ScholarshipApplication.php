@@ -32,6 +32,7 @@ class ScholarshipApplication extends Model
         'dss_recommendation',
         'dss_breakdown',
         'reviewed_by',
+        'assigned_reviewer_id',
         'reviewed_at',
         'submitted_at',
         'terms_accepted_at',
@@ -91,6 +92,11 @@ class ScholarshipApplication extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function assignedReviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_reviewer_id');
     }
 
     public function rubricScorer(): BelongsTo

@@ -13,7 +13,13 @@ class EnsureUserIsAdmin
      */
     public function handle(Request $request, Closure $next): Response
     {
-        abort_unless($request->user()?->isAdmin(), 403);
+        $user = $request->user();
+        abort_unless($user?->isAdmin(), 403);
+
+        if ($user->isManagedAccount()) {
+            $owner = $user->parentAccount()->first();
+            abort_unless($owner?->isAdmin() && $owner->isActive(), 403, 'This admin group is not active.');
+        }
 
         return $next($request);
     }

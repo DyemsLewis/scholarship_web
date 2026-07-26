@@ -13,7 +13,13 @@ class EnsureUserIsProvider
      */
     public function handle(Request $request, Closure $next): Response
     {
-        abort_unless($request->user()?->isProvider(), 403);
+        $user = $request->user();
+        abort_unless($user?->isProvider(), 403);
+
+        if ($user->isManagedAccount()) {
+            $owner = $user->providerOrganizationOwner();
+            abort_unless($owner->isProvider() && $owner->isActive(), 403, 'This provider organization is not active.');
+        }
 
         return $next($request);
     }

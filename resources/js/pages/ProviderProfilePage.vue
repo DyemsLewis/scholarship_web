@@ -18,6 +18,10 @@ const verificationDocumentFile = ref(null);
 const verificationDocumentTermsAccepted = ref(false);
 const isUploadingDocument = ref(false);
 const deletingDocumentId = ref(null);
+const canManageProfile = computed(() => Boolean(
+    window.portalUser?.has_full_access
+        || window.portalUser?.permissions?.includes('manage_profile'),
+));
 const {
     confirmation,
     requestConfirmation,
@@ -371,7 +375,7 @@ onMounted(loadProviderProfile);
                             </p>
                         </div>
 
-                        <div class="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
+                        <div v-if="canManageProfile" class="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
                             <label>
                                 <span :class="labelClass">Document type</span>
                                 <select v-model="verificationDocumentType" :class="inputClass">
@@ -404,6 +408,7 @@ onMounted(loadProviderProfile);
                         </div>
 
                         <TermsAgreement
+                            v-if="canManageProfile"
                             v-model="verificationDocumentTermsAccepted"
                             class="mt-4"
                             context="providerDocument"
@@ -429,12 +434,14 @@ onMounted(loadProviderProfile);
                                 </div>
                                 <div class="flex flex-wrap gap-2">
                                     <a
+                                        v-if="canManageProfile"
                                         :href="document.download_url"
                                         class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                                     >
                                         Download
                                     </a>
                                     <button
+                                        v-if="canManageProfile"
                                         type="button"
                                         :disabled="deletingDocumentId === document.id"
                                         class="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -553,7 +560,8 @@ onMounted(loadProviderProfile);
                                 <i :class="['fa-solid fa-circle text-[8px]', user?.can_post_scholarships ? 'text-emerald-500' : 'text-amber-500']" aria-hidden="true"></i>
                                 {{ user?.can_post_scholarships ? 'Publishing access is active.' : 'Publishing unlocks after provider verification.' }}
                             </p>
-                            <button type="submit" :disabled="isSaving" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
+                            <span v-if="!canManageProfile" class="text-xs font-bold text-slate-500">View only</span>
+                            <button v-else type="submit" :disabled="isSaving" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
                                 {{ isSaving ? 'Saving...' : 'Save profile' }}
                             </button>
                         </div>

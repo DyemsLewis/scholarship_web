@@ -36,6 +36,21 @@ use Illuminate\View\View;
 
 class ProviderController extends Controller
 {
+    private const PROVIDER_TEAM_ROLES = [
+        'manager' => 'Manager',
+        'program_coordinator' => 'Program coordinator',
+        'application_reviewer' => 'Application reviewer',
+        'support_staff' => 'Support staff',
+        'custom' => 'Custom role',
+    ];
+
+    private const PROVIDER_TEAM_ROLE_PERMISSION_PRESETS = [
+        'manager' => ['manage_programs', 'review_applications', 'manage_reports', 'manage_profile', 'manage_team'],
+        'program_coordinator' => ['manage_programs'],
+        'application_reviewer' => ['review_applications'],
+        'support_staff' => ['manage_reports'],
+    ];
+
     private const AWARD_SLOT_STATUSES = [
         'approved',
         'awarded',
@@ -74,7 +89,9 @@ class ProviderController extends Controller
 
         abort_unless($request->user()->isProvider(), 403);
 
-        if (! $request->user()->hasVerifiedEmail() || ! $request->user()->providerProfile?->isVerified()) {
+        $providerOwner = $request->user()->providerOrganizationOwner();
+
+        if (! $providerOwner->hasVerifiedEmail() || ! $providerOwner->providerProfile?->isVerified()) {
             return redirect()->to(route('provider.profile').'#verification-documents');
         }
 
@@ -99,7 +116,7 @@ class ProviderController extends Controller
         }
 
         abort_unless($request->user()->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
 
         return view('provider-applications', [
             'scholarship' => $scholarship,
@@ -113,7 +130,7 @@ class ProviderController extends Controller
         }
 
         abort_unless($request->user()->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
 
         return view('provider-application-detail', [
             'application' => $application,
@@ -129,6 +146,197 @@ class ProviderController extends Controller
         abort_unless($request->user()->isProvider(), 403);
 
         return view('provider-profile');
+    }
+
+    public function team(Request $request): View|RedirectResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        return view('provider-team');
+    }
+
+    public function teamAccountForm(Request $request, ?User $account = null): View|RedirectResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        if ($account) {
+            $this->authorizeProviderTeamAccount($request->user(), $account);
+        }
+
+        return view('provider-team-account-form');
+    }
+
+    public function teamData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $owner = $request->user()->providerOrganizationOwner()->loadMissing('providerProfile');
+        $accounts = User::query()
+            ->with(['providerProfile', 'parentAccount.providerProfile'])
+            ->where('role', 'provider')
+            ->where('parent_account_id', $owner->id)
+            ->orderBy('account_status')
+            ->orderBy('account_title')
+            ->orderBy('username')
+            ->get();
+
+        return response()->json([
+            'organization' => [
+                'id' => $owner->id,
+                'name' => $owner->provider_name ?? $owner->name,
+                'owner' => $owner->name,
+            ],
+            'accounts' => $accounts->map(fn (User $account) => $this->providerTeamAccountPayload($account))->values(),
+            'available_permissions' => $this->grantableProviderPermissions($request->user()),
+        ]);
+    }
+
+    public function showTeamAccount(Request $request, User $account): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        $this->authorizeProviderTeamAccount($request->user(), $account);
+
+        return response()->json([
+            'account' => $this->providerTeamAccountPayload($account->loadMissing('providerProfile')),
+            'available_permissions' => $this->grantableProviderPermissions($request->user()),
+        ]);
+    }
+
+    public function storeTeamAccount(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $actor = $request->user();
+        $owner = $actor->providerOrganizationOwner()->loadMissing('providerProfile');
+        $validated = $this->validateProviderTeamAccount($request);
+        $middleInitial = strtoupper($validated['middle_initial']);
+
+        $account = DB::transaction(function () use ($validated, $middleInitial, $owner): User {
+            $account = User::create([
+                'parent_account_id' => $owner->id,
+                'email' => $validated['email'],
+                'username' => $validated['username'],
+                'role' => 'provider',
+                'account_title' => $validated['account_title'],
+                'permissions' => array_values(array_unique($validated['permissions'])),
+                'password' => $validated['password'],
+            ]);
+
+            $ownerProfile = $owner->providerProfile;
+            $account->providerProfile()->create([
+                'first_name' => $validated['first_name'],
+                'last_name' => $validated['last_name'],
+                'middle_initial' => $middleInitial,
+                'contact_number' => $validated['contact_number'],
+                'provider_name' => $ownerProfile?->provider_name,
+                'provider_type' => $ownerProfile?->provider_type,
+                'provider_website' => $ownerProfile?->provider_website,
+                'provider_address' => $ownerProfile?->provider_address,
+                'provider_description' => $ownerProfile?->provider_description,
+                'verification_status' => $ownerProfile?->verification_status ?? 'pending',
+                'verification_notes' => $ownerProfile?->verification_notes,
+                'verified_by' => $ownerProfile?->verified_by,
+                'verified_at' => $ownerProfile?->verified_at,
+            ]);
+
+            return $account;
+        });
+
+        ActivityLog::record(
+            $actor,
+            'provider_team_account_created',
+            "{$actor->name} created provider team account {$account->email}.",
+            $request,
+            [
+                'created_user_id' => $account->id,
+                'provider_id' => $owner->id,
+                'permissions' => $account->permissions,
+            ],
+        );
+
+        return response()->json([
+            'message' => 'Team account created successfully.',
+            'account' => $this->providerTeamAccountPayload($account->fresh('providerProfile')),
+        ], 201);
+    }
+
+    public function updateTeamAccount(Request $request, User $account): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $actor = $request->user();
+        $this->authorizeProviderTeamAccount($actor, $account);
+        $validated = $this->validateProviderTeamAccount($request, $account);
+        $middleInitial = strtoupper($validated['middle_initial']);
+        $emailChanged = $account->email !== $validated['email'];
+
+        DB::transaction(function () use ($account, $validated, $middleInitial, $emailChanged): void {
+            $account->update([
+                'email' => $validated['email'],
+                'username' => $validated['username'],
+                'account_title' => $validated['account_title'],
+                'permissions' => array_values(array_unique($validated['permissions'])),
+                ...filled($validated['password'] ?? null) ? ['password' => $validated['password']] : [],
+            ]);
+
+            if ($emailChanged) {
+                $account->forceFill(['email_verified_at' => null])->save();
+            }
+
+            $account->providerProfile()->updateOrCreate(['user_id' => $account->id], [
+                'first_name' => $validated['first_name'],
+                'last_name' => $validated['last_name'],
+                'middle_initial' => $middleInitial,
+                'contact_number' => $validated['contact_number'],
+            ]);
+        });
+
+        ActivityLog::record(
+            $actor,
+            'provider_team_account_updated',
+            "{$actor->name} updated provider team account {$account->email}.",
+            $request,
+            ['updated_user_id' => $account->id, 'permissions' => $account->permissions],
+        );
+
+        return response()->json([
+            'message' => 'Team account updated successfully.',
+            'account' => $this->providerTeamAccountPayload($account->fresh('providerProfile')),
+        ]);
+    }
+
+    public function updateTeamAccountStatus(Request $request, User $account): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $actor = $request->user();
+        $this->authorizeProviderTeamAccount($actor, $account);
+        abort_if($actor->is($account), 422, 'You cannot suspend your own team account.');
+
+        $validated = $request->validate([
+            'account_status' => ['required', Rule::in(['active', 'suspended'])],
+        ]);
+        $suspended = $validated['account_status'] === 'suspended';
+
+        $account->forceFill([
+            'account_status' => $validated['account_status'],
+            'suspended_at' => $suspended ? now() : null,
+            'suspended_by' => $suspended ? $actor->id : null,
+            'suspension_reason' => $suspended ? 'Suspended by the provider organization.' : null,
+        ])->save();
+
+        ActivityLog::record(
+            $actor,
+            'provider_team_account_status_updated',
+            "{$actor->name} marked {$account->email} as {$validated['account_status']}.",
+            $request,
+            ['updated_user_id' => $account->id, 'account_status' => $validated['account_status']],
+        );
+
+        return response()->json([
+            'message' => $suspended ? 'Team account suspended.' : 'Team account reactivated.',
+            'account' => $this->providerTeamAccountPayload($account->fresh('providerProfile')),
+        ]);
     }
 
     public function insights(Request $request): View|RedirectResponse
@@ -147,26 +355,31 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
 
         $provider = $request->user()
-            ->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])
-            ->loadCount('providerVerificationDocuments');
+            ->loadMissing(['studentProfile', 'providerProfile', 'adminProfile']);
+        $providerId = $provider->providerOrganizationId();
+        $verificationDocumentsCount = ProviderVerificationDocument::query()
+            ->where('provider_id', $providerId)
+            ->count();
 
         $scholarships = Scholarship::query()
-            ->where('provider_id', $provider->id)
-            ->withCount('bookmarks')
+            ->where('provider_id', $providerId)
+            ->withCount($this->providerProgramCountRelations())
             ->latest()
             ->get();
-        $reviewQueue = ScholarshipApplication::query()
-            ->with(['applicant.studentProfile', 'documents', 'scholarship'])
-            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $provider->id))
-            ->whereIn('status', ['submitted', 'under_review', 'qualified', 'shortlisted', 'interview'])
-            ->latest('submitted_at')
-            ->limit(3)
-            ->get();
+        $reviewQueue = $provider->hasPortalPermission('review_applications')
+            ? ScholarshipApplication::query()
+                ->with(['applicant.studentProfile', 'documents', 'scholarship'])
+                ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId))
+                ->whereIn('status', ['submitted', 'under_review', 'qualified', 'shortlisted', 'interview'])
+                ->latest('submitted_at')
+                ->limit(3)
+                ->get()
+            : collect();
 
         return response()->json([
             'user' => [
                 ...$provider->publicPayload(),
-                'verification_documents_count' => (int) $provider->provider_verification_documents_count,
+                'verification_documents_count' => $verificationDocumentsCount,
             ],
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
             'review_queue' => $reviewQueue->map(fn (ScholarshipApplication $application) => [
@@ -185,9 +398,12 @@ class ProviderController extends Controller
     {
         abort_unless($request->user()?->isProvider(), 403);
 
+        $user = $request->user()->loadMissing(['providerProfile']);
+        $providerOwner = $user->providerOrganizationOwner();
+
         return response()->json([
-            'user' => $request->user()->loadMissing(['providerProfile'])->publicPayload(),
-            'verification_documents' => $request->user()
+            'user' => $this->providerStaffPayload($user),
+            'verification_documents' => $providerOwner
                 ->providerVerificationDocuments()
                 ->latest()
                 ->get()
@@ -201,6 +417,7 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
 
         $user = $request->user();
+        $providerOwner = $user->providerOrganizationOwner();
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
@@ -222,14 +439,8 @@ class ProviderController extends Controller
             'username' => $validated['username'],
         ]);
 
-        $profile = $user->providerProfile;
-        $user->providerProfile()->updateOrCreate([
-            'user_id' => $user->id,
-        ], [
-            'first_name' => $validated['first_name'],
-            'last_name' => $validated['last_name'],
-            'middle_initial' => $middleInitial,
-            'contact_number' => $validated['contact_number'],
+        $profile = $providerOwner->providerProfile;
+        $organizationProfile = [
             'provider_name' => $validated['provider_name'],
             'provider_type' => $validated['provider_type'] ?? null,
             'provider_website' => $validated['provider_website'] ?? null,
@@ -239,19 +450,41 @@ class ProviderController extends Controller
             'verification_notes' => $profile?->verification_notes,
             'verified_by' => $profile?->verified_by,
             'verified_at' => $profile?->verified_at,
+        ];
+
+        $user->providerProfile()->updateOrCreate([
+            'user_id' => $user->id,
+        ], [
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'middle_initial' => $middleInitial,
+            'contact_number' => $validated['contact_number'],
+            ...$organizationProfile,
         ]);
+
+        if (! $providerOwner->is($user)) {
+            $providerOwner->providerProfile()->updateOrCreate([
+                'user_id' => $providerOwner->id,
+            ], [
+                'first_name' => $profile?->first_name,
+                'last_name' => $profile?->last_name,
+                'middle_initial' => $profile?->middle_initial,
+                'contact_number' => $profile?->contact_number,
+                ...$organizationProfile,
+            ]);
+        }
 
         ActivityLog::record(
             $user,
             'provider_profile_updated',
             "{$validated['provider_name']} updated their provider profile.",
             $request,
-            ['provider_id' => $user->id],
+            ['provider_id' => $providerOwner->id, 'updated_by' => $user->id],
         );
 
         return response()->json([
             'message' => 'Provider profile updated successfully.',
-            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+            'user' => $this->providerStaffPayload($user->fresh(['providerProfile'])),
         ]);
     }
 
@@ -272,10 +505,11 @@ class ProviderController extends Controller
         ]);
 
         $file = $validated['document_file'];
-        $path = $file->store("provider-verification/{$request->user()->id}", 'local');
+        $providerOwner = $request->user()->providerOrganizationOwner();
+        $path = $file->store("provider-verification/{$providerOwner->id}", 'local');
 
         $document = ProviderVerificationDocument::create([
-            'provider_id' => $request->user()->id,
+            'provider_id' => $providerOwner->id,
             'uploaded_by' => $request->user()->id,
             'document_type' => $validated['document_type'],
             'original_name' => $file->getClientOriginalName(),
@@ -288,10 +522,10 @@ class ProviderController extends Controller
             'terms_version' => Terms::VERSION,
         ]);
 
-        $returnedToReview = $request->user()->providerProfile?->verification_status === 'rejected';
+        $returnedToReview = $providerOwner->providerProfile?->verification_status === 'rejected';
 
         if ($returnedToReview) {
-            $request->user()->providerProfile()->update([
+            $providerOwner->providerProfile()->update([
                 'verification_status' => 'pending',
                 'verified_by' => null,
                 'verified_at' => null,
@@ -301,11 +535,12 @@ class ProviderController extends Controller
         User::query()
             ->where('role', 'admin')
             ->get()
+            ->filter(fn (User $admin) => $admin->hasPortalPermission('manage_reviews'))
             ->each(fn (User $admin) => PortalNotification::create([
                 'user_id' => $admin->id,
                 'type' => 'provider_verification_document',
                 'title' => 'Provider document uploaded',
-                'message' => "{$request->user()->provider_name} uploaded a verification document.",
+                'message' => "{$providerOwner->provider_name} uploaded a verification document.",
                 'action_url' => '/admin/reviews',
             ]));
 
@@ -321,9 +556,9 @@ class ProviderController extends Controller
             'message' => $returnedToReview
                 ? 'Verification proof uploaded and returned for admin review.'
                 : 'Verification proof uploaded for admin review.',
-            'user' => $request->user()->fresh(['providerProfile'])->publicPayload(),
+            'user' => $this->providerStaffPayload($request->user()->fresh(['providerProfile'])),
             'document' => $this->verificationDocumentPayload($document),
-            'verification_documents' => $request->user()
+            'verification_documents' => $providerOwner
                 ->providerVerificationDocuments()
                 ->latest()
                 ->get()
@@ -335,7 +570,8 @@ class ProviderController extends Controller
     public function deleteVerificationDocument(Request $request, ProviderVerificationDocument $document): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($document->provider_id === $request->user()->id, 403);
+        $providerOwner = $request->user()->providerOrganizationOwner();
+        abort_unless($document->provider_id === $providerOwner->id, 403);
 
         if (Storage::disk('local')->exists($document->path)) {
             Storage::disk('local')->delete($document->path);
@@ -345,7 +581,7 @@ class ProviderController extends Controller
 
         return response()->json([
             'message' => 'Verification document removed.',
-            'verification_documents' => $request->user()
+            'verification_documents' => $providerOwner
                 ->providerVerificationDocuments()
                 ->latest()
                 ->get()
@@ -356,7 +592,11 @@ class ProviderController extends Controller
 
     public function downloadVerificationDocument(Request $request, ProviderVerificationDocument $document)
     {
-        abort_unless($request->user()?->isProvider() && $document->provider_id === $request->user()->id, 403);
+        abort_unless(
+            $request->user()?->isProvider()
+                && $document->provider_id === $request->user()->providerOrganizationId(),
+            403,
+        );
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
         return Storage::disk('local')->download($document->path, $document->original_name);
@@ -366,14 +606,15 @@ class ProviderController extends Controller
     {
         abort_unless($request->user()?->isProvider(), 403);
 
+        $providerId = $request->user()->providerOrganizationId();
         $scholarships = Scholarship::query()
-            ->where('provider_id', $request->user()->id)
-            ->withCount('bookmarks')
+            ->where('provider_id', $providerId)
+            ->withCount($this->providerProgramCountRelations())
             ->latest()
             ->get();
         $applications = ScholarshipApplication::query()
             ->with(['applicant.studentProfile', 'documents.reviewer', 'scholarship'])
-            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id))
+            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId))
             ->latest('submitted_at')
             ->get();
         $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
@@ -527,15 +768,23 @@ class ProviderController extends Controller
     {
         abort_unless($request->user()?->isProvider(), 403);
 
+        $providerId = $request->user()->providerOrganizationId();
         $selectedScholarship = $this->requestedProviderScholarship($request);
         $scholarships = Scholarship::query()
-            ->where('provider_id', $request->user()->id)
-            ->withCount('bookmarks')
+            ->where('provider_id', $providerId)
+            ->withCount($this->providerProgramCountRelations())
             ->latest()
             ->get();
+        $reviewers = $this->providerApplicationReviewers($providerId);
         $applicationsQuery = ScholarshipApplication::query()
-            ->with(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship'])
-            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $request->user()->id));
+            ->with([
+                'applicant.studentProfile',
+                'documents.reviewer',
+                'assignedReviewer.providerProfile',
+                'statusHistories.actor',
+                'scholarship' => fn ($query) => $query->withCount($this->providerProgramCountRelations()),
+            ])
+            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId));
 
         if ($selectedScholarship) {
             $applicationsQuery->where('scholarship_id', $selectedScholarship->id);
@@ -554,6 +803,9 @@ class ProviderController extends Controller
 
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+            'reviewers' => $reviewers
+                ->map(fn (User $reviewer) => $this->applicationReviewerPayload($reviewer, $providerId))
+                ->values(),
             'stats' => [
                 'scholarships' => $scholarships->count(),
                 'applications' => $applications->count(),
@@ -620,11 +872,11 @@ class ProviderController extends Controller
     public function applicationDetailData(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
 
-        $application->load(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship']);
+        $application->load(['applicant.studentProfile', 'documents.reviewer', 'assignedReviewer.providerProfile', 'statusHistories.actor', 'scholarship']);
         app(DecisionSupportService::class)->syncApplication($application);
-        $application = $application->fresh()->load(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship']);
+        $application = $application->fresh()->load(['applicant.studentProfile', 'documents.reviewer', 'assignedReviewer.providerProfile', 'statusHistories.actor', 'scholarship']);
 
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
@@ -635,7 +887,7 @@ class ProviderController extends Controller
     public function upsertScholarshipEvent(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
 
         $validated = $request->validate([
             'type' => ['required', Rule::in(ScholarshipSelectionPlan::SCHEDULABLE_STAGES)],
@@ -697,7 +949,7 @@ class ProviderController extends Controller
         ScholarshipEvent $event,
     ): JsonResponse {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
         abort_unless($event->scholarship_id === $scholarship->id, 404);
 
         if ($event->scheduled_at?->isFuture()) {
@@ -742,7 +994,7 @@ class ProviderController extends Controller
         ScholarshipEvent $event,
     ): JsonResponse {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
         abort_unless($event->scholarship_id === $scholarship->id, 404);
 
         if ($event->status !== 'completed') {
@@ -894,7 +1146,7 @@ class ProviderController extends Controller
     public function decideApplication(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
 
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['approve', 'reject'])],
@@ -965,10 +1217,75 @@ class ProviderController extends Controller
         ]);
     }
 
+    public function assignApplicationReviewer(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $providerId = $request->user()->providerOrganizationId();
+
+        abort_unless($application->scholarship?->provider_id === $providerId, 403);
+
+        $validated = $request->validate([
+            'assigned_reviewer_id' => ['nullable', 'integer'],
+        ]);
+        $reviewerId = $validated['assigned_reviewer_id'] ?? null;
+        $reviewer = $reviewerId
+            ? $this->providerApplicationReviewers($providerId)->firstWhere('id', $reviewerId)
+            : null;
+
+        if ($reviewerId && ! $reviewer) {
+            throw ValidationException::withMessages([
+                'assigned_reviewer_id' => 'Choose an active reviewer from this provider organization.',
+            ]);
+        }
+
+        $previousReviewerId = $application->assigned_reviewer_id;
+        $application->forceFill(['assigned_reviewer_id' => $reviewer?->id])->save();
+
+        if ((int) $previousReviewerId !== (int) ($reviewer?->id)) {
+            ActivityLog::record(
+                $request->user(),
+                'application_reviewer_assigned',
+                $reviewer
+                    ? "{$request->user()->name} assigned application #{$application->id} to {$reviewer->name}."
+                    : "{$request->user()->name} removed the reviewer from application #{$application->id}.",
+                $request,
+                [
+                    'application_id' => $application->id,
+                    'previous_reviewer_id' => $previousReviewerId,
+                    'assigned_reviewer_id' => $reviewer?->id,
+                ],
+            );
+
+            if ($reviewer && $reviewer->id !== $request->user()->id) {
+                PortalNotification::create([
+                    'user_id' => $reviewer->id,
+                    'type' => 'application_assignment',
+                    'title' => 'Application assigned to you',
+                    'message' => "Review {$application->applicant?->name}'s application for {$application->scholarship?->title}.",
+                    'action_url' => route('provider.applications.show', $application, false),
+                ]);
+            }
+        }
+
+        $application = $application->fresh()->load([
+            'applicant.studentProfile',
+            'documents.reviewer',
+            'assignedReviewer.providerProfile',
+            'statusHistories.actor',
+            'scholarship' => fn ($query) => $query->withCount($this->providerProgramCountRelations()),
+        ]);
+
+        return response()->json([
+            'message' => $reviewer ? 'Reviewer assigned.' : 'Application returned to the unassigned queue.',
+            'application' => $this->applicationPayload($application),
+        ]);
+    }
+
     public function upsertApplicationSchedule(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
 
         $validated = $request->validate([
             'type' => ['required', Rule::in(['exam', 'interview', 'distribution'])],
@@ -1158,7 +1475,7 @@ class ProviderController extends Controller
         ApplicationSchedule $schedule,
     ): JsonResponse {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
         abort_unless($schedule->scholarship_application_id === $application->id, 404);
 
         $validated = $request->validate([
@@ -1311,7 +1628,7 @@ class ProviderController extends Controller
         ApplicantVerificationDocument $document,
     ) {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
         abort_unless($document->applicant_id === $application->applicant_id, 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
@@ -1324,7 +1641,7 @@ class ProviderController extends Controller
     public function updateApplicationStatus(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->id, 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
 
         $outcomeStatuses = ['awarded', 'not_awarded', 'disbursed', 'renewed'];
         $validated = $request->validate([
@@ -1546,7 +1863,7 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
 
         $document->load('application.scholarship');
-        abort_unless($document->application?->scholarship?->provider_id === $request->user()->id, 403);
+        abort_unless($document->application?->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['pending', 'accepted', 'rejected', 'needs_replacement'])],
@@ -1618,18 +1935,19 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
 
         $provider = $request->user();
+        $providerId = $provider->providerOrganizationId();
         $selectedScholarship = $this->requestedProviderScholarship($request);
         $filename = $selectedScholarship
             ? "provider-applications-program-{$selectedScholarship->id}.csv"
             : 'provider-applications.csv';
 
-        return response()->streamDownload(function () use ($provider, $selectedScholarship) {
+        return response()->streamDownload(function () use ($providerId, $selectedScholarship) {
             $handle = fopen('php://output', 'w');
             fputcsv($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Distribution Date', 'Distribution Instructions', 'Outcome Date', 'Outcome Notes', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Review Notes']);
 
             $query = ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship'])
-                ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $provider->id));
+                ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId));
 
             if ($selectedScholarship) {
                 $query->where('scholarship_id', $selectedScholarship->id);
@@ -1676,9 +1994,9 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
 
         $scholarships = Scholarship::query()
-            ->where('provider_id', $request->user()->id)
+            ->where('provider_id', $request->user()->providerOrganizationId())
             ->with('events')
-            ->withCount('bookmarks')
+            ->withCount($this->providerProgramCountRelations())
             ->latest()
             ->get();
 
@@ -1690,24 +2008,26 @@ class ProviderController extends Controller
     public function showScholarship(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
 
         return response()->json([
-            'scholarship' => $this->scholarshipPayload($scholarship->loadCount('bookmarks')),
+            'scholarship' => $this->scholarshipPayload(
+                $scholarship->loadCount($this->providerProgramCountRelations()),
+            ),
         ]);
     }
 
     public function duplicateScholarship(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
         $this->ensureProviderCanPost($request);
 
         $duplicate = $scholarship->replicate([
             'created_at',
             'updated_at',
         ]);
-        $duplicate->title = $this->duplicateScholarshipTitle($request->user()->id, $scholarship->title);
+        $duplicate->title = $this->duplicateScholarshipTitle($request->user()->providerOrganizationId(), $scholarship->title);
         $duplicate->status = 'draft';
         $duplicate->views_count = 0;
         $duplicate->provider_terms_accepted_at = null;
@@ -1759,7 +2079,7 @@ class ProviderController extends Controller
             $scholarship = Scholarship::create([
                 ...$validated,
                 'image_path' => $imagePath,
-                'provider_id' => $request->user()->id,
+                'provider_id' => $request->user()->providerOrganizationId(),
             ]);
 
             foreach ($programEvents ?? [] as $programEvent) {
@@ -1794,7 +2114,7 @@ class ProviderController extends Controller
     public function updateScholarship(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
         $this->ensureProviderCanPost($request);
 
         $validated = $this->validateScholarship($request);
@@ -2325,6 +2645,7 @@ class ProviderController extends Controller
         User::query()
             ->where('role', 'admin')
             ->get()
+            ->filter(fn (User $admin) => $admin->hasPortalPermission('manage_reviews'))
             ->each(fn (User $admin) => PortalNotification::create([
                 'user_id' => $admin->id,
                 'type' => 'scholarship_review',
@@ -2366,8 +2687,14 @@ class ProviderController extends Controller
         $readiness = $this->documentReadiness($application);
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
-        $application->loadMissing('schedules');
+        $application->loadMissing(['schedules', 'assignedReviewer.providerProfile']);
         $application->scholarship?->loadMissing('events');
+        $latestDocumentUploadedAt = $application->documents
+            ->pluck('uploaded_at')
+            ->filter()
+            ->sortDesc()
+            ->first();
+        $submittedAt = $application->submitted_at ?? $application->created_at;
 
         if ($includeApplicantProfile) {
             $application->loadMissing('applicant.applicantVerificationDocuments');
@@ -2402,6 +2729,21 @@ class ProviderController extends Controller
             'distribution_scheduled_label' => $application->distribution_scheduled_for?->format('M d, Y'),
             'distribution_instructions' => $application->distribution_instructions,
             'reviewed_at' => $application->reviewed_at?->format('M d, Y h:i A'),
+            'assigned_reviewer' => $application->assignedReviewer
+                ? $this->applicationReviewerPayload(
+                    $application->assignedReviewer,
+                    $application->scholarship?->provider_id ?? $application->assignedReviewer->providerOrganizationId(),
+                )
+                : null,
+            'waiting_days' => $submittedAt
+                ? (int) $submittedAt->startOfDay()->diffInDays(now()->startOfDay())
+                : 0,
+            'latest_document_uploaded_at' => $latestDocumentUploadedAt?->format('M d, Y h:i A'),
+            'documents_changed_since_review' => (bool) (
+                $latestDocumentUploadedAt
+                && $application->reviewed_at
+                && $latestDocumentUploadedAt->gt($application->reviewed_at)
+            ),
             'requires_student_response' => false,
             'can_receive_student_response' => false,
             'schedules' => $application->schedules
@@ -2568,6 +2910,11 @@ class ProviderController extends Controller
             'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
             'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             'slots_available' => $scholarship->slots_available,
+            'applications_count' => $scholarship->applications_count ?? $scholarship->applications()->count(),
+            'pending_review_applications_count' => $scholarship->pending_review_applications_count
+                ?? $scholarship->applications()->whereIn('status', ['submitted', 'under_review'])->count(),
+            'awarded_slots_count' => $scholarship->awarded_slots_count
+                ?? $scholarship->applications()->whereIn('status', self::AWARD_SLOT_STATUSES)->count(),
             'application_mode' => $scholarship->application_mode,
             'selection_stages' => ScholarshipSelectionPlan::normalize($scholarship->selection_stages),
             'exam_duration_minutes' => $scholarship->exam_duration_minutes,
@@ -2637,9 +2984,64 @@ class ProviderController extends Controller
         }
 
         return Scholarship::query()
-            ->where('provider_id', $request->user()->id)
-            ->withCount('bookmarks')
+            ->where('provider_id', $request->user()->providerOrganizationId())
+            ->withCount($this->providerProgramCountRelations())
             ->findOrFail($scholarshipId);
+    }
+
+    private function providerProgramCountRelations(): array
+    {
+        return [
+            'bookmarks',
+            'applications',
+            'applications as pending_review_applications_count' => fn ($query) => $query
+                ->whereIn('status', ['submitted', 'under_review']),
+            'applications as awarded_slots_count' => fn ($query) => $query
+                ->whereIn('status', self::AWARD_SLOT_STATUSES),
+        ];
+    }
+
+    private function providerApplicationReviewers(int $providerId)
+    {
+        return User::query()
+            ->with(['providerProfile', 'parentAccount.providerProfile'])
+            ->where('role', 'provider')
+            ->where(function ($query) use ($providerId): void {
+                $query->whereKey($providerId)
+                    ->orWhere('parent_account_id', $providerId);
+            })
+            ->get()
+            ->filter(fn (User $reviewer) => $reviewer->isActive()
+                && $reviewer->providerOrganizationOwner()->isActive()
+                && $reviewer->hasPortalPermission('review_applications'))
+            ->sortBy(fn (User $reviewer) => sprintf(
+                '%d-%s',
+                $reviewer->id === $providerId ? 0 : 1,
+                strtolower($reviewer->email),
+            ))
+            ->values();
+    }
+
+    private function applicationReviewerPayload(User $reviewer, int $providerId): array
+    {
+        $reviewer->loadMissing('providerProfile');
+        $profile = $reviewer->providerProfile;
+        $contactName = collect([
+            $profile?->first_name,
+            filled($profile?->middle_initial) ? strtoupper($profile->middle_initial).'.' : null,
+            $profile?->last_name,
+        ])->filter()->implode(' ');
+        $isOwner = $reviewer->id === $providerId;
+
+        return [
+            'id' => $reviewer->id,
+            'name' => $isOwner
+                ? ($profile?->provider_name ?: $contactName ?: $reviewer->username ?: $reviewer->email)
+                : ($contactName ?: $reviewer->username ?: $reviewer->email),
+            'role_label' => $isOwner
+                ? 'Provider owner'
+                : (self::PROVIDER_TEAM_ROLES[$reviewer->account_title] ?? 'Team member'),
+        ];
     }
 
     private function scholarshipImageUrl(Scholarship $scholarship): string
@@ -2653,17 +3055,111 @@ class ProviderController extends Controller
 
     private function ensureProviderCanPost(Request $request): void
     {
+        $providerOwner = $request->user()->providerOrganizationOwner();
+
         abort_unless(
-            $request->user()->hasVerifiedEmail(),
+            $providerOwner->hasVerifiedEmail(),
             403,
             'Verify your email address before submitting a scholarship.'
         );
 
-        if ($request->user()->providerProfile?->isVerified()) {
+        if ($providerOwner->providerProfile?->isVerified()) {
             return;
         }
 
         abort(403, 'Your provider account must be approved by an admin before posting scholarships.');
+    }
+
+    private function validateProviderTeamAccount(Request $request, ?User $account = null): array
+    {
+        $permissions = $this->grantableProviderPermissions($request->user());
+
+        $validated = $request->validate([
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($account?->id)],
+            'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($account?->id)],
+            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'account_title' => ['required', 'string', Rule::in(array_keys(self::PROVIDER_TEAM_ROLES))],
+            'permissions' => ['required', 'array', 'min:1'],
+            'permissions.*' => ['required', 'string', 'distinct', Rule::in($permissions)],
+            'password' => [$account ? 'nullable' : 'required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $preset = self::PROVIDER_TEAM_ROLE_PERMISSION_PRESETS[$validated['account_title']] ?? null;
+
+        if ($preset === null) {
+            return $validated;
+        }
+
+        $validated['permissions'] = array_values(array_intersect($preset, $permissions));
+
+        if ($validated['permissions'] === []) {
+            throw ValidationException::withMessages([
+                'account_title' => 'You cannot assign this role with your current permissions.',
+            ]);
+        }
+
+        return $validated;
+    }
+
+    private function grantableProviderPermissions(User $actor): array
+    {
+        if (! $actor->isManagedAccount()) {
+            return User::PROVIDER_PERMISSIONS;
+        }
+
+        return array_values(array_intersect(User::PROVIDER_PERMISSIONS, $actor->permissions ?? []));
+    }
+
+    private function authorizeProviderTeamAccount(User $actor, User $account): void
+    {
+        abort_unless(
+            $account->isProvider()
+                && (int) $account->parent_account_id === $actor->providerOrganizationId(),
+            404,
+        );
+
+        if ($actor->isManagedAccount()) {
+            abort_if(
+                array_diff($account->permissions ?? [], $actor->permissions ?? []) !== [],
+                403,
+                'You cannot manage a team account with broader permissions than your own.',
+            );
+        }
+    }
+
+    private function providerStaffPayload(User $user): array
+    {
+        $owner = $user->providerOrganizationOwner()->loadMissing('providerProfile');
+        $profile = $owner->providerProfile;
+
+        return [
+            ...$user->publicPayload(),
+            'provider_name' => $profile?->provider_name,
+            'provider_type' => $profile?->provider_type,
+            'provider_website' => $profile?->provider_website,
+            'provider_address' => $profile?->provider_address,
+            'provider_description' => $profile?->provider_description,
+            'verification_status' => $profile?->verification_status,
+            'verification_notes' => $profile?->verification_notes,
+        ];
+    }
+
+    private function providerTeamAccountPayload(User $account): array
+    {
+        $profile = $account->providerProfile;
+        $middle = filled($profile?->middle_initial) ? ' '.strtoupper($profile->middle_initial).'.' : '';
+        $name = trim(($profile?->first_name ?? '').$middle.' '.($profile?->last_name ?? ''));
+
+        return [
+            ...$this->providerStaffPayload($account),
+            'name' => $name ?: ($account->username ?: $account->email),
+            'team_role' => $account->account_title,
+            'team_role_label' => self::PROVIDER_TEAM_ROLES[$account->account_title] ?? 'Team member',
+            'created_at' => $account->created_at?->format('M d, Y'),
+        ];
     }
 
     private function mapUrl(Scholarship $scholarship): ?string

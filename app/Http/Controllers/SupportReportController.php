@@ -90,18 +90,28 @@ class SupportReportController extends Controller
         ]);
 
         if ($scholarship) {
-            PortalNotification::create([
-                'user_id' => $scholarship->provider_id,
-                'type' => 'support_report',
-                'title' => 'New program concern',
-                'message' => "{$request->user()->name} reported a concern about {$scholarship->title}.",
-                'action_url' => '/provider/reports',
-            ]);
+            User::query()
+                ->where('role', 'provider')
+                ->where(function ($query) use ($scholarship): void {
+                    $query
+                        ->whereKey($scholarship->provider_id)
+                        ->orWhere('parent_account_id', $scholarship->provider_id);
+                })
+                ->get()
+                ->filter(fn (User $provider) => $provider->hasPortalPermission('manage_reports'))
+                ->each(fn (User $provider) => PortalNotification::create([
+                    'user_id' => $provider->id,
+                    'type' => 'support_report',
+                    'title' => 'New program concern',
+                    'message' => "{$request->user()->name} reported a concern about {$scholarship->title}.",
+                    'action_url' => '/provider/reports',
+                ]));
         }
 
         User::query()
             ->where('role', 'admin')
             ->get()
+            ->filter(fn (User $admin) => $admin->hasPortalPermission('manage_reports'))
             ->each(fn (User $admin) => PortalNotification::create([
                 'user_id' => $admin->id,
                 'type' => 'support_report',
@@ -145,7 +155,9 @@ class SupportReportController extends Controller
 
         return $this->queueResponse(
             $request,
-            SupportReport::query()->where('assigned_role', 'provider')->where('provider_id', $request->user()->id),
+            SupportReport::query()
+                ->where('assigned_role', 'provider')
+                ->where('provider_id', $request->user()->providerOrganizationId()),
         );
     }
 
@@ -172,7 +184,11 @@ class SupportReportController extends Controller
         abort_unless($user?->isProvider() || $user?->isAdmin(), 403);
 
         if ($user->isProvider()) {
-            abort_unless($report->assigned_role === 'provider' && $report->provider_id === $user->id, 403);
+            abort_unless(
+                $report->assigned_role === 'provider'
+                    && $report->provider_id === $user->providerOrganizationId(),
+                403,
+            );
         }
 
         $validated = $request->validate([

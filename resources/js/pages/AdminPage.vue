@@ -22,8 +22,10 @@ const stats = ref({
 });
 const users = ref([]);
 const programs = ref([]);
+const canManageAccounts = computed(() => Boolean(window.portalUser?.has_full_access || window.portalUser?.permissions?.includes('manage_accounts')));
+const canManageReviews = computed(() => Boolean(window.portalUser?.has_full_access || window.portalUser?.permissions?.includes('manage_reviews')));
 const recentUsers = computed(() => users.value.slice(0, 4));
-const platformSignals = computed(() => [
+const platformSignals = computed(() => canManageReviews.value ? [
     {
         label: 'Provider approval queue',
         icon: 'fa-solid fa-building-circle-check',
@@ -60,7 +62,7 @@ const platformSignals = computed(() => [
         href: '/admin/reviews',
         action: 'Review applications',
     },
-]);
+] : []);
 
 function signalClass(tone) {
     if (tone === 'good') {
@@ -145,6 +147,7 @@ onMounted(loadAdminData);
                         </div>
 
                         <a
+                            v-if="canManageAccounts"
                             href="/admin/manage-users"
                             class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
                         >
@@ -162,7 +165,7 @@ onMounted(loadAdminData);
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section v-if="canManageReviews" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -195,8 +198,8 @@ onMounted(loadAdminData);
                         </div>
                     </section>
 
-                    <section class="grid gap-4 lg:grid-cols-2">
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-if="canManageReviews || canManageAccounts" class="grid gap-4 lg:grid-cols-2">
+                        <article v-if="canManageReviews" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div class="flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -230,7 +233,7 @@ onMounted(loadAdminData);
                             </div>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article v-if="canManageAccounts" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div class="flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -273,6 +276,11 @@ onMounted(loadAdminData);
                             </div>
                         </article>
 
+                    </section>
+
+                    <section v-if="!canManageReviews && !canManageAccounts" class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <p class="text-sm font-bold text-slate-950">Your admin workspace is ready.</p>
+                        <p class="mt-1 text-sm text-slate-500">Use the permitted sections in the side panel or update your own profile.</p>
                     </section>
 
                 </div>

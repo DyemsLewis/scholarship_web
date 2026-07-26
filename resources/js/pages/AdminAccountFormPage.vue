@@ -17,6 +17,71 @@ const suspensionReason = ref('');
 const supportLink = ref('');
 const verificationDocuments = ref([]);
 const applicantVerificationNotes = ref('');
+const adminPermissionOptions = [
+    { value: 'manage_accounts', label: 'Manage accounts', description: 'Create and maintain applicant and provider accounts.' },
+    { value: 'manage_reviews', label: 'Manage reviews', description: 'Verify providers and applicants, and publish programs.' },
+    { value: 'manage_reports', label: 'Manage reports', description: 'Review and resolve concerns submitted through the portal.' },
+    { value: 'view_logs', label: 'View activity logs', description: 'Inspect recorded administrative and platform actions.' },
+    { value: 'export_data', label: 'Export data', description: 'Download user and application CSV files.' },
+];
+const adminRolePresets = [
+    {
+        value: 'Account manager',
+        label: 'Account manager',
+        description: 'Creates and maintains portal user accounts.',
+        permissions: ['manage_accounts'],
+    },
+    {
+        value: 'Review officer',
+        label: 'Review officer',
+        description: 'Reviews applicants, providers, and scholarship programs.',
+        permissions: ['manage_reviews'],
+    },
+    {
+        value: 'Support officer',
+        label: 'Support officer',
+        description: 'Reviews and resolves submitted platform concerns.',
+        permissions: ['manage_reports'],
+    },
+    {
+        value: 'Records officer',
+        label: 'Records officer',
+        description: 'Reviews activity records and exports authorized data.',
+        permissions: ['view_logs', 'export_data'],
+    },
+    {
+        value: 'Portal manager',
+        label: 'Portal manager',
+        description: 'Has access to all delegated administrative work areas.',
+        permissions: adminPermissionOptions.map((permission) => permission.value),
+    },
+    {
+        value: 'Custom role',
+        label: 'Custom role',
+        description: 'Build a role by selecting permissions manually.',
+        permissions: [],
+    },
+];
+const accountRoleOptions = [
+    {
+        value: 'applicant',
+        label: 'Applicant',
+        description: 'Student or learner scholarship account.',
+        icon: 'fa-graduation-cap',
+    },
+    {
+        value: 'provider',
+        label: 'Provider',
+        description: 'Organization account for scholarship programs.',
+        icon: 'fa-building-columns',
+    },
+    {
+        value: 'admin',
+        label: 'Admin staff',
+        description: 'Portal staff with selected administrative access.',
+        icon: 'fa-user-shield',
+    },
+];
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
@@ -31,6 +96,8 @@ function emptyForm() {
         username: '',
         contactNumber: '',
         role: 'applicant',
+        accountTitle: '',
+        permissions: [],
         password: '',
         passwordConfirmation: '',
     };
@@ -48,12 +115,43 @@ function fillForm(user) {
         username: user?.username ?? '',
         contactNumber: user?.contact_number ?? '',
         role: user?.role ?? 'applicant',
+        accountTitle: user?.account_title ?? '',
+        permissions: [...(user?.permissions ?? [])],
         password: '',
         passwordConfirmation: '',
     };
 }
 
 const accountStatusLabel = computed(() => account.value?.account_status === 'suspended' ? 'Suspended' : 'Active');
+const canChooseAdminRole = computed(() => !window.portalUser?.is_managed_account);
+const visibleAccountRoleOptions = computed(() => accountRoleOptions.filter((role) => (
+    role.value !== 'admin' || canChooseAdminRole.value
+)));
+const selectableAdminRolePresets = computed(() => {
+    const currentTitle = form.value.accountTitle;
+
+    if (!currentTitle || adminRolePresets.some((role) => role.value === currentTitle)) {
+        return adminRolePresets;
+    }
+
+    return [
+        {
+            value: currentTitle,
+            label: currentTitle,
+            description: 'Existing custom admin role.',
+            permissions: [...form.value.permissions],
+        },
+        ...adminRolePresets,
+    ];
+});
+const selectedAdminRolePreset = computed(() => selectableAdminRolePresets.value.find(
+    (role) => role.value === form.value.accountTitle,
+));
+const adminPermissionsLocked = computed(() => form.value.role === 'admin'
+    && form.value.accountTitle !== 'Custom role'
+    && adminRolePresets.some((role) => role.value === form.value.accountTitle));
+const needsAdminPermissions = computed(() => form.value.role === 'admin'
+    && (!isEditMode.value || account.value?.is_managed_account || account.value?.role !== 'admin'));
 const accountStatusClass = computed(() => account.value?.account_status === 'suspended'
     ? 'bg-rose-100 text-rose-800'
     : 'bg-emerald-100 text-emerald-800');
@@ -97,6 +195,28 @@ function handleMiddleInitialInput(event) {
 
 function handleNumberInput(event) {
     form.value.contactNumber = event.target.value.replace(/[^\d+\s().-]/g, '');
+}
+
+function handleRoleChange() {
+    if (form.value.role !== 'admin') {
+        form.value.accountTitle = '';
+        form.value.permissions = [];
+        return;
+    }
+
+    if (!adminRolePresets.some((role) => role.value === form.value.accountTitle)) {
+        form.value.accountTitle = adminRolePresets[0].value;
+    }
+
+    applyAdminRolePreset();
+}
+
+function applyAdminRolePreset() {
+    const preset = adminRolePresets.find((role) => role.value === form.value.accountTitle);
+
+    if (preset) {
+        form.value.permissions = [...preset.permissions];
+    }
 }
 
 function resetForm() {
@@ -161,6 +281,12 @@ async function saveAccount() {
     }
 
     formElement.value?.querySelector('#admin-password-confirmation')?.setCustomValidity('');
+
+    if (needsAdminPermissions.value && form.value.permissions.length === 0) {
+        errorMessage.value = 'Select at least one admin permission.';
+        return;
+    }
+
     isSaving.value = true;
 
     const payload = {
@@ -172,6 +298,11 @@ async function saveAccount() {
         contact_number: form.value.contactNumber,
         role: form.value.role,
     };
+
+    if (needsAdminPermissions.value) {
+        payload.account_title = form.value.accountTitle;
+        payload.permissions = form.value.permissions;
+    }
 
     if (!isEditMode.value || hasPasswordInput) {
         payload.password = form.value.password;
@@ -331,13 +462,13 @@ onMounted(loadAccount);
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Account Form
+                                User Access
                             </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                {{ isEditMode ? 'Edit account' : 'Create account' }}
+                            <h2 class="mt-2 font-display text-2xl font-bold text-slate-950">
+                                {{ isEditMode ? 'Edit user account' : 'Create user account' }}
                             </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Keep account creation and editing separate from the Manage Users table.
+                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                Add the person's details, choose an account type, and set their portal access.
                             </p>
                         </div>
 
@@ -345,6 +476,7 @@ onMounted(loadAccount);
                             href="/admin/manage-users"
                             class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                         >
+                            <i class="fa-solid fa-arrow-left mr-2" aria-hidden="true"></i>
                             Back to users
                         </a>
                     </div>
@@ -357,107 +489,247 @@ onMounted(loadAccount);
                 <form
                     v-else
                     ref="formElement"
-                    class="mt-6 grid gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+                    class="mt-6 grid gap-5"
                     @submit.prevent="saveAccount"
                 >
-                    <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1fr)] lg:items-end">
-                        <div>
-                            <label :class="labelClass" for="admin-first-name">First name</label>
-                            <input id="admin-first-name" v-model="form.firstName" type="text" autocomplete="given-name" required placeholder="First name" :class="inputClass">
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+                            <div class="flex items-center gap-3">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
+                                    <i class="fa-solid fa-user" aria-hidden="true"></i>
+                                </span>
+                                <div>
+                                    <h3 class="text-base font-bold text-slate-950">Identity and contact</h3>
+                                    <p class="mt-0.5 text-xs text-slate-500">Basic details used across the portal.</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">01</span>
                         </div>
 
-                        <div class="lg:mx-auto lg:w-[5.5rem]">
-                            <label :class="[labelClass, 'lg:text-center']" for="admin-middle-initial">M.I.</label>
-                            <input
-                                id="admin-middle-initial"
-                                :value="form.middleInitial"
-                                type="text"
-                                inputmode="text"
-                                maxlength="1"
-                                pattern="[A-Za-z]"
-                                required
-                                placeholder="M"
-                                :class="compactInputClass"
-                                @input="handleMiddleInitialInput"
-                            >
+                        <div class="grid gap-4 p-5 sm:p-6">
+                            <div class="grid grid-cols-[minmax(0,1fr)_4.75rem] gap-4 lg:grid-cols-[minmax(0,1fr)_5rem_minmax(0,1fr)] lg:items-end">
+                                <div>
+                                    <label :class="labelClass" for="admin-first-name">First name</label>
+                                    <input id="admin-first-name" v-model="form.firstName" type="text" autocomplete="given-name" required placeholder="First name" :class="inputClass">
+                                </div>
+
+                                <div>
+                                    <label :class="[labelClass, 'text-center']" for="admin-middle-initial">M.I.</label>
+                                    <input
+                                        id="admin-middle-initial"
+                                        :value="form.middleInitial"
+                                        type="text"
+                                        inputmode="text"
+                                        maxlength="1"
+                                        pattern="[A-Za-z]"
+                                        required
+                                        placeholder="M"
+                                        :class="compactInputClass"
+                                        @input="handleMiddleInitialInput"
+                                    >
+                                </div>
+
+                                <div class="col-span-2 lg:col-span-1">
+                                    <label :class="labelClass" for="admin-last-name">Last name</label>
+                                    <input id="admin-last-name" v-model="form.lastName" type="text" autocomplete="family-name" required placeholder="Last name" :class="inputClass">
+                                </div>
+                            </div>
+
+                            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                <div>
+                                    <label :class="labelClass" for="admin-email">Email address</label>
+                                    <input id="admin-email" v-model="form.email" type="email" autocomplete="email" required placeholder="name@example.com" :class="inputClass">
+                                </div>
+
+                                <div>
+                                    <label :class="labelClass" for="admin-username">Username</label>
+                                    <input id="admin-username" v-model="form.username" type="text" autocomplete="username" pattern="[A-Za-z0-9_.-]{4,}" required placeholder="At least 4 characters" :class="inputClass">
+                                </div>
+
+                                <div class="md:col-span-2 xl:col-span-1">
+                                    <label :class="labelClass" for="admin-contact-number">Contact number</label>
+                                    <input
+                                        id="admin-contact-number"
+                                        :value="form.contactNumber"
+                                        type="tel"
+                                        inputmode="numeric"
+                                        autocomplete="tel"
+                                        required
+                                        placeholder="09XX XXX XXXX"
+                                        :class="inputClass"
+                                        @input="(event) => { event.target.setCustomValidity(''); handleNumberInput(event); }"
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+                            <div class="flex items-center gap-3">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-300 text-slate-950">
+                                    <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+                                </span>
+                                <div>
+                                    <h3 class="text-base font-bold text-slate-950">Role and access</h3>
+                                    <p class="mt-0.5 text-xs text-slate-500">Choose what kind of account this person needs.</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">02</span>
                         </div>
 
-                        <div>
-                            <label :class="labelClass" for="admin-last-name">Last name</label>
-                            <input id="admin-last-name" v-model="form.lastName" type="text" autocomplete="family-name" required placeholder="Last name" :class="inputClass">
-                        </div>
-                    </div>
+                        <div class="p-5 sm:p-6">
+                            <div class="grid gap-3 md:grid-cols-3">
+                                <label
+                                    v-for="role in visibleAccountRoleOptions"
+                                    :key="role.value"
+                                    :class="[
+                                        'flex cursor-pointer gap-3 rounded-md border p-4 transition',
+                                        form.role === role.value
+                                            ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                                            : 'border-slate-200 bg-white text-slate-900 hover:border-slate-400',
+                                    ]"
+                                >
+                                    <input
+                                        v-model="form.role"
+                                        type="radio"
+                                        name="admin-role"
+                                        :value="role.value"
+                                        class="sr-only"
+                                        @change="handleRoleChange"
+                                    >
+                                    <i :class="['fa-solid mt-0.5 w-5 text-center', role.icon, form.role === role.value ? 'text-amber-300' : 'text-amber-700']" aria-hidden="true"></i>
+                                    <span>
+                                        <span class="block text-sm font-bold">{{ role.label }}</span>
+                                        <span :class="['mt-1 block text-xs leading-5', form.role === role.value ? 'text-slate-300' : 'text-slate-500']">
+                                            {{ role.description }}
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
 
-                    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        <div>
-                            <label :class="labelClass" for="admin-email">Email address</label>
-                            <input id="admin-email" v-model="form.email" type="email" autocomplete="email" required placeholder="Email address" :class="inputClass">
+                            <div v-if="form.role === 'admin'" class="mt-5 border-t border-slate-200 pt-5">
+                                <div v-if="needsAdminPermissions" class="grid gap-5">
+                                    <div class="max-w-xl">
+                                        <label :class="labelClass" for="admin-account-title">Admin staff role</label>
+                                        <select
+                                            id="admin-account-title"
+                                            v-model="form.accountTitle"
+                                            required
+                                            :class="inputClass"
+                                            @change="applyAdminRolePreset"
+                                        >
+                                            <option
+                                                v-for="role in selectableAdminRolePresets"
+                                                :key="role.value"
+                                                :value="role.value"
+                                            >
+                                                {{ role.label }}
+                                            </option>
+                                        </select>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">
+                                            {{ selectedAdminRolePreset?.description }} Recommended permissions are selected automatically and can be adjusted below.
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <div class="flex items-end justify-between gap-4">
+                                            <div>
+                                                <p class="text-sm font-bold text-slate-900">Portal permissions</p>
+                                                <p class="mt-1 text-xs text-slate-500">
+                                                    {{ adminPermissionsLocked ? 'Permissions are fixed by the selected role. Choose Custom role to set them manually.' : 'Select the work areas this custom role needs.' }}
+                                                </p>
+                                            </div>
+                                            <span class="text-xs font-bold text-slate-500">{{ form.permissions.length }} selected</span>
+                                        </div>
+                                        <div class="mt-3 grid gap-2 md:grid-cols-2">
+                                            <label
+                                                v-for="permission in adminPermissionOptions"
+                                                :key="permission.value"
+                                                :class="[
+                                                    'flex gap-3 rounded-md border p-3 transition',
+                                                    adminPermissionsLocked ? 'cursor-not-allowed' : 'cursor-pointer',
+                                                    form.permissions.includes(permission.value)
+                                                        ? 'border-amber-400 bg-amber-50'
+                                                        : 'border-slate-200 bg-slate-50 hover:border-slate-300',
+                                                ]"
+                                            >
+                                                <input
+                                                    v-model="form.permissions"
+                                                    type="checkbox"
+                                                    :value="permission.value"
+                                                    :disabled="adminPermissionsLocked"
+                                                    class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-amber-400"
+                                                >
+                                                <span>
+                                                    <span class="block text-sm font-bold text-slate-900">{{ permission.label }}</span>
+                                                    <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ permission.description }}</span>
+                                                </span>
+                                            </label>
+                                        </div>
+                                        <p v-if="form.permissions.length === 0" class="mt-2 text-xs font-semibold text-rose-700">
+                                            Select at least one permission.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div v-else class="rounded-md bg-slate-50 p-4">
+                                    <p class="text-sm font-bold text-slate-900">Primary administrator</p>
+                                    <p class="mt-1 text-sm text-slate-500">This existing primary account keeps full admin access.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+                            <div class="flex items-center gap-3">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-200 text-slate-800">
+                                    <i class="fa-solid fa-key" aria-hidden="true"></i>
+                                </span>
+                                <div>
+                                    <h3 class="text-base font-bold text-slate-950">Sign-in details</h3>
+                                    <p class="mt-0.5 text-xs text-slate-500">Use a temporary password the account owner can replace.</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">03</span>
                         </div>
 
-                        <div>
-                            <label :class="labelClass" for="admin-username">Username</label>
-                            <input id="admin-username" v-model="form.username" type="text" autocomplete="username" pattern="[A-Za-z0-9_.-]{4,}" required placeholder="Username" :class="inputClass">
-                        </div>
+                        <div class="grid gap-4 p-5 md:grid-cols-2 sm:p-6">
+                            <div>
+                                <label :class="labelClass" for="admin-password">
+                                    {{ isEditMode ? 'New password (optional)' : 'Temporary password' }}
+                                </label>
+                                <input
+                                    id="admin-password"
+                                    v-model="form.password"
+                                    type="password"
+                                    autocomplete="new-password"
+                                    minlength="8"
+                                    :required="!isEditMode"
+                                    :placeholder="isEditMode ? 'Leave blank to keep current password' : 'At least 8 characters'"
+                                    :class="inputClass"
+                                >
+                            </div>
 
-                        <div>
-                            <label :class="labelClass" for="admin-contact-number">Contact number</label>
-                            <input
-                                id="admin-contact-number"
-                                :value="form.contactNumber"
-                                type="tel"
-                                inputmode="numeric"
-                                autocomplete="tel"
-                                required
-                                placeholder="Contact number"
-                                :class="inputClass"
-                                @input="(event) => { event.target.setCustomValidity(''); handleNumberInput(event); }"
-                            >
+                            <div>
+                                <label :class="labelClass" for="admin-password-confirmation">Confirm password</label>
+                                <input
+                                    id="admin-password-confirmation"
+                                    v-model="form.passwordConfirmation"
+                                    type="password"
+                                    autocomplete="new-password"
+                                    minlength="8"
+                                    :required="!isEditMode || Boolean(form.password)"
+                                    placeholder="Enter the password again"
+                                    :class="inputClass"
+                                    @input="$event.target.setCustomValidity('')"
+                                >
+                            </div>
                         </div>
+                    </section>
 
-                        <div>
-                            <label :class="labelClass" for="admin-role">Role</label>
-                            <select id="admin-role" v-model="form.role" required :class="inputClass">
-                                <option value="applicant">Applicant</option>
-                                <option value="provider">Provider</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid gap-4 md:grid-cols-2">
-                        <div>
-                            <label :class="labelClass" for="admin-password">
-                                {{ isEditMode ? 'New password' : 'Password' }}
-                            </label>
-                            <input
-                                id="admin-password"
-                                v-model="form.password"
-                                type="password"
-                                autocomplete="new-password"
-                                minlength="8"
-                                :required="!isEditMode"
-                                :placeholder="isEditMode ? 'Leave blank to keep current password' : 'Password'"
-                                :class="inputClass"
-                            >
-                        </div>
-
-                        <div>
-                            <label :class="labelClass" for="admin-password-confirmation">Confirm password</label>
-                            <input
-                                id="admin-password-confirmation"
-                                v-model="form.passwordConfirmation"
-                                type="password"
-                                autocomplete="new-password"
-                                minlength="8"
-                                :required="!isEditMode || Boolean(form.password)"
-                                placeholder="Confirm password"
-                                :class="inputClass"
-                                @input="$event.target.setCustomValidity('')"
-                            >
-                        </div>
-                    </div>
-
-                    <div class="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                         <div class="min-h-5">
                             <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">
                                 {{ errorMessage }}
@@ -482,7 +754,7 @@ onMounted(loadAccount);
                             <button
                                 type="submit"
                                 :disabled="isSaving"
-                                class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80"
+                                class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80"
                             >
                                 {{ isSaving ? 'Saving...' : isEditMode ? 'Update account' : 'Create account' }}
                             </button>
