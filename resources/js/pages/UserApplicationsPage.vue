@@ -6,6 +6,7 @@ import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { labelFromKey } from '../support/display';
+import { showPortalToast } from '../support/portalToast';
 import { progressStateLabel, selectionPlanFor } from '../support/selectionPlan';
 
 const isLoading = ref(true);
@@ -142,6 +143,7 @@ const activeApplicationCount = computed(() => applications.value.filter((applica
     'disbursed',
     'renewed',
     'exam_failed',
+    'interview_failed',
 ].includes(application.status ?? 'submitted')).length);
 const pendingScheduleCount = computed(() => applications.value.reduce(
     (total, application) => total + applicationSchedules(application)
@@ -180,6 +182,7 @@ const applicationQueue = computed(() => [...applications.value].sort((first, sec
         disbursed: 1,
         renewed: 1,
         exam_failed: 0,
+        interview_failed: 0,
         rejected: 0,
         not_awarded: 0,
     };
@@ -310,6 +313,7 @@ function statusLabel(status) {
         exam_taken: 'Exam taken',
         exam_passed: 'Passed exam',
         exam_failed: 'Failed exam',
+        interview_failed: 'Failed interview',
         distribution_scheduled: 'Distribution scheduled',
         disbursed: 'Distributed',
     };
@@ -328,7 +332,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed'].includes(status)) {
+    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
@@ -534,7 +538,11 @@ function openDocumentUpload(requirement) {
     errorMessage.value = '';
 
     if (!documentTermsAccepted.value) {
-        errorMessage.value = 'Accept the document upload terms before choosing a file.';
+        showPortalToast({
+            type: 'error',
+            title: 'Terms required',
+            message: 'Accept the document upload terms before choosing a file.',
+        });
         return;
     }
 

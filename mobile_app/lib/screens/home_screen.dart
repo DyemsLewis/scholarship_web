@@ -4004,7 +4004,12 @@ class _StatusPill extends StatelessWidget {
       'disbursed',
       'renewed',
     ].contains(raw);
-    final isClosed = ['rejected', 'not_awarded'].contains(raw);
+    final isClosed = [
+      'rejected',
+      'not_awarded',
+      'exam_failed',
+      'interview_failed',
+    ].contains(raw);
     final isReview = [
       'under_review',
       'shortlisted',
@@ -4470,8 +4475,14 @@ int intValue(Object? value) {
 String labelFromKey(Object? value) {
   final key = stringValue(value, fallback: 'pending');
 
-  if (key == 'disbursed') {
-    return 'Distributed';
+  const labels = {
+    'disbursed': 'Distributed',
+    'exam_failed': 'Failed exam',
+    'interview_failed': 'Failed interview',
+  };
+
+  if (labels.containsKey(key)) {
+    return labels[key]!;
   }
 
   final text = key.replaceAll('_', ' ');
@@ -4571,6 +4582,8 @@ String statusDescription(Object? value) {
     'exam_passed' =>
       'You passed the scholarship exam and remain under final award review.',
     'exam_failed' => 'The provider recorded that the exam was not passed.',
+    'interview_failed' =>
+      'The provider recorded that the interview was not passed.',
     'approved' => 'Your application was approved by the provider.',
     'awarded' =>
       'The provider recorded your award and will set the reward distribution schedule.',

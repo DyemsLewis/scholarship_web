@@ -310,7 +310,7 @@ function activeSchedule(application) {
 }
 
 function isClosedApplication(application) {
-    return ['rejected', 'not_awarded', 'disbursed', 'renewed', 'exam_failed'].includes(application?.status);
+    return ['rejected', 'not_awarded', 'disbursed', 'renewed', 'exam_failed', 'interview_failed'].includes(application?.status);
 }
 
 function applicationPriority(application) {
@@ -339,6 +339,7 @@ function applicationPriority(application) {
         disbursed: 20,
         renewed: 15,
         exam_failed: 10,
+        interview_failed: 10,
         rejected: 5,
         not_awarded: 5,
     };
@@ -383,6 +384,7 @@ function applicationNextAction(application) {
         rejected: 'Review the provider note for the decision.',
         not_awarded: 'The review finished without an award. Check the provider note.',
         exam_failed: 'Review the provider note for the exam result.',
+        interview_failed: 'Review the provider note for the interview result.',
     }[application?.status] ?? 'Open the application for the latest provider update.';
 }
 
@@ -393,6 +395,7 @@ function statusLabel(status) {
         exam_taken: 'Exam taken',
         exam_passed: 'Passed exam',
         exam_failed: 'Failed exam',
+        interview_failed: 'Failed interview',
         distribution_scheduled: 'Distribution scheduled',
         disbursed: 'Distributed',
     };
@@ -411,7 +414,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed'].includes(status)) {
+    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 

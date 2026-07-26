@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\ApplicantVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\StudentDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -60,6 +61,45 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->actingAs($provider)
             ->get("/dashboard/profile/verification-documents/{$documentId}/view")
             ->assertForbidden();
+    }
+
+    public function test_verification_proof_is_copied_to_documents_and_survives_verification_deletion(): void
+    {
+        Storage::fake('local');
+
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $response = $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'school_id',
+                'document_file' => UploadedFile::fake()->image('school-id.jpg'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('prepared_document.document_name', 'School ID')
+            ->assertJsonPath('prepared_documents_count', 1);
+
+        $verificationDocument = ApplicantVerificationDocument::query()->firstOrFail();
+        $preparedDocument = StudentDocument::query()->firstOrFail();
+
+        $this->assertNotSame($verificationDocument->path, $preparedDocument->path);
+        Storage::disk('local')->assertExists($verificationDocument->path);
+        Storage::disk('local')->assertExists($preparedDocument->path);
+
+        $this->actingAs($applicant)
+            ->deleteJson("/dashboard/profile/verification-documents/{$verificationDocument->id}")
+            ->assertOk()
+            ->assertJsonPath('prepared_documents_count', 1);
+
+        $this->assertDatabaseMissing('applicant_verification_documents', ['id' => $verificationDocument->id]);
+        $this->assertDatabaseHas('student_documents', ['id' => $preparedDocument->id]);
+        Storage::disk('local')->assertMissing($verificationDocument->path);
+        Storage::disk('local')->assertExists($preparedDocument->path);
+
+        $this->actingAs($applicant)
+            ->getJson('/dashboard/documents/data')
+            ->assertOk()
+            ->assertJsonPath('prepared_documents.0.document_name', 'School ID');
     }
 
     public function test_admin_verification_is_visible_in_provider_list_without_exposing_proof_files(): void

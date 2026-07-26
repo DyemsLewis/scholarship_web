@@ -856,6 +856,7 @@ class ProviderController extends Controller
                 'exam_taken' => $statusCounts['exam_taken'] ?? 0,
                 'exam_passed' => $statusCounts['exam_passed'] ?? 0,
                 'exam_failed' => $statusCounts['exam_failed'] ?? 0,
+                'interview_failed' => $statusCounts['interview_failed'] ?? 0,
                 'approved' => $statusCounts['approved'] ?? 0,
                 'rejected' => $statusCounts['rejected'] ?? 0,
             ],
@@ -1681,6 +1682,7 @@ class ProviderController extends Controller
                 'exam_taken',
                 'exam_passed',
                 'exam_failed',
+                'interview_failed',
                 'approved',
                 'awarded',
                 'distribution_scheduled',
@@ -3440,6 +3442,11 @@ class ProviderController extends Controller
                 'title' => 'Exam not passed',
                 'message' => "Your application for {$programTitle} did not pass the scholarship exam. Review the provider note for details.",
             ],
+            'interview_failed' => [
+                'type' => 'application_status',
+                'title' => 'Interview not passed',
+                'message' => "Your application for {$programTitle} did not advance after the interview. Review the provider note for details.",
+            ],
             'approved' => [
                 'type' => 'application_status',
                 'title' => 'Application approved',
@@ -3462,7 +3469,7 @@ class ProviderController extends Controller
             ],
         };
 
-        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed'], true) && filled($decisionReason)) {
+        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'], true) && filled($decisionReason)) {
             $payload['message'] .= " Reason: {$this->statusLabel($decisionReason)}.";
         }
 
@@ -3477,10 +3484,12 @@ class ProviderController extends Controller
             'exam_taken' => 'Exam taken',
             'exam_passed' => 'Passed exam',
             'exam_failed' => 'Failed exam',
+            'interview_failed' => 'Failed interview',
             'for_exam' => 'Meets exam eligibility',
             'exam_completed' => 'Exam completed',
             'passed_exam' => 'Passed exam',
             'failed_exam' => 'Failed exam',
+            'failed_interview' => 'Failed interview',
             default => str($status)->replace('_', ' ')->title()->toString(),
         };
     }

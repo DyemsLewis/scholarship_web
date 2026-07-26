@@ -1374,6 +1374,7 @@ async function uploadVerificationDocument(documentType, event) {
 
         user.value = response.data.user;
         verificationDocuments.value = response.data.verification_documents ?? [];
+        preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
     } catch (handledError) {
         void handledError;
     } finally {
@@ -1385,7 +1386,7 @@ async function uploadVerificationDocument(documentType, event) {
 async function deleteVerificationDocument(document) {
     const confirmed = await requestConfirmation({
         title: 'Remove verification proof?',
-        message: `${document.original_name || 'This proof'} will be removed. Your verified status will return to pending or not submitted.`,
+        message: `${document.original_name || 'This proof'} will be removed from verification. Its separate copy in Documents will stay available. Your verified status will return to pending or not submitted.`,
         confirmLabel: 'Remove proof',
         tone: 'danger',
     });
@@ -1402,6 +1403,7 @@ async function deleteVerificationDocument(document) {
 
         user.value = response.data.user;
         verificationDocuments.value = response.data.verification_documents ?? [];
+        preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
     } catch (handledError) {
         void handledError;
     } finally {
@@ -2441,7 +2443,7 @@ watch(() => form.value.grading_scale, (scale) => {
 
                                     <div class="mt-4">
                                         <TermsAgreement v-model="verificationDocumentTermsAccepted" context="document" />
-                                        <p class="mt-2 text-xs text-slate-500">Agree once, then upload directly beside the proof you want to use. One clear proof is usually enough.</p>
+                                        <p class="mt-2 text-xs text-slate-500">Agree once, then upload beside the proof you want to use. A separate reusable copy is saved automatically in Documents.</p>
                                     </div>
 
                                     <div class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -2519,7 +2521,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
 
                                     <p class="mt-3 text-xs leading-5 text-slate-500">
-                                        You can keep up to three proof types. To use a different type after reaching the limit, remove one saved proof first. Replacing any approved proof returns the profile to admin review.
+                                        You can keep up to three proof types. Removing a verification proof does not remove its separate Documents copy. Replacing any approved proof returns the profile to admin review.
                                     </p>
                                 </div>
 

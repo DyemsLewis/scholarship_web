@@ -1,4 +1,4 @@
-export const negativeDecisionStatuses = ['rejected', 'not_awarded', 'exam_failed'];
+export const negativeDecisionStatuses = ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'];
 
 export const decisionReasonOptions = [
     { value: '', label: 'No reason selected' },
@@ -12,6 +12,7 @@ export const decisionReasonOptions = [
     { value: 'passed_exam', label: 'Passed exam' },
     { value: 'failed_exam', label: 'Failed exam' },
     { value: 'for_interview', label: 'For interview' },
+    { value: 'failed_interview', label: 'Failed interview' },
     { value: 'approved_for_award', label: 'Approved for award' },
     { value: 'distribution_scheduled', label: 'Distribution scheduled' },
     { value: 'award_released', label: 'Reward distributed' },

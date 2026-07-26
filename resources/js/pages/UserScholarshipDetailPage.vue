@@ -303,6 +303,20 @@ function criteriaLabel(value) {
     return items.length ? items.join(', ') : 'Any';
 }
 
+function eligibilityCriterionText(value, fallback = '') {
+    if (Array.isArray(value)) {
+        const items = value
+            .map((item) => eligibilityCriterionText(item))
+            .filter(Boolean);
+
+        return items.length ? items.join(', ') : fallback;
+    }
+
+    const text = String(value ?? '').trim();
+
+    return text ? labelFromKey(text) : fallback;
+}
+
 function targetApplicantLabel(scholarship) {
     const levels = String(scholarship?.eligible_education_levels ?? '')
         .split(/\r?\n|,/)
@@ -659,12 +673,12 @@ onMounted(loadScholarship);
                                             class="flex flex-col gap-2 border-b border-slate-200 p-4 last:border-b-0 sm:flex-row sm:items-start sm:justify-between"
                                         >
                                             <div class="min-w-0">
-                                                <p class="text-sm font-bold text-slate-950">{{ criterion.label }}</p>
+                                                <p class="text-sm font-bold text-slate-950">{{ eligibilityCriterionText(criterion.label, 'Eligibility requirement') }}</p>
                                                 <p class="mt-1 text-xs leading-5 text-slate-500">
-                                                    Your profile: {{ criterion.student_value || criterion.studentValue || 'Not set' }}
+                                                    Your profile: {{ eligibilityCriterionText(criterion.student_value || criterion.studentValue, 'Not set') }}
                                                 </p>
                                                 <p v-if="criterion.requirement" class="mt-0.5 text-xs leading-5 text-slate-500">
-                                                    Provider rule: {{ criterion.requirement }}
+                                                    Provider rule: {{ eligibilityCriterionText(criterion.requirement) }}
                                                 </p>
                                             </div>
                                             <span :class="['w-fit rounded-md border px-2.5 py-1 text-xs font-bold', criterionClass(criterion.status)]">

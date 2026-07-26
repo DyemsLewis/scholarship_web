@@ -7,6 +7,7 @@ import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
+import { showPortalToast } from '../support/portalToast';
 import { progressStateLabel, progressStepIcon } from '../support/selectionPlan';
 
 const appElement = document.getElementById('app');
@@ -83,7 +84,7 @@ const schedules = computed(() => application.value?.schedules ?? []);
 const currentSchedule = computed(() => schedules.value.find((schedule) => schedule.status === 'scheduled') ?? null);
 const filesNeedingAction = computed(() => applicationFileRows.value.filter((row) => !row.document
     || ['needs_replacement', 'rejected'].includes(row.document.status)));
-const applicationIsClosed = computed(() => ['rejected', 'not_awarded', 'exam_failed', 'disbursed'].includes(application.value?.status));
+const applicationIsClosed = computed(() => ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'disbursed'].includes(application.value?.status));
 const applicationSections = computed(() => [
     { key: 'overview', label: 'Overview' },
     { key: 'files', label: 'Required files', count: filesNeedingAction.value.length },
@@ -128,6 +129,7 @@ function statusLabel(status) {
         exam_taken: 'Exam taken',
         exam_passed: 'Passed exam',
         exam_failed: 'Failed exam',
+        interview_failed: 'Failed interview',
         distribution_scheduled: 'Distribution scheduled',
         disbursed: 'Distributed',
     };
@@ -146,7 +148,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed'].includes(status)) {
+    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
@@ -294,6 +296,7 @@ function labelFromKey(value) {
         exam_completed: 'Exam completed',
         passed_exam: 'Passed exam',
         failed_exam: 'Failed exam',
+        failed_interview: 'Failed interview',
     };
 
     if (labels[value]) {
@@ -350,7 +353,7 @@ function applicantNextAction(current) {
         return `Your reward distribution is scheduled for ${current.distribution_scheduled_for || 'the provider date'}. Review the instructions below.`;
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed'].includes(current.status)) {
+    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(current.status)) {
         return 'This application is closed. Check review notes for the provider decision.';
     }
 
@@ -436,7 +439,11 @@ function openUploadPicker(requirement) {
     errorMessage.value = '';
 
     if (!documentTermsAccepted.value) {
-        errorMessage.value = 'Please agree to the document upload terms first.';
+        showPortalToast({
+            type: 'error',
+            title: 'Terms required',
+            message: 'Accept the document upload terms before choosing a file.',
+        });
         return;
     }
 
@@ -490,7 +497,11 @@ async function uploadDocument() {
     }
 
     if (!documentTermsAccepted.value) {
-        errorMessage.value = 'Please accept the document upload terms before uploading.';
+        showPortalToast({
+            type: 'error',
+            title: 'Terms required',
+            message: 'Accept the document upload terms before uploading.',
+        });
         return;
     }
 

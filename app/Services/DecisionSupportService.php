@@ -167,7 +167,7 @@ class DecisionSupportService
         ]])->concat(collect($selectionStages)->map(fn (string $stage): array => [
             'key' => $stage,
             'label' => match ($stage) {
-                'screening' => 'Screening',
+                'screening' => 'Review',
                 'exam' => 'Exam',
                 'interview' => 'Interview',
                 'distribution' => 'Reward distribution',
@@ -184,7 +184,7 @@ class DecisionSupportService
         $currentStage = $this->progressStage($application, $selectionStages);
         $stageIndex = $flow->search(fn (array $step): bool => $step['key'] === $currentStage);
         $stageIndex = $stageIndex === false ? 0 : $stageIndex;
-        $isClosedWithoutAward = in_array($status, ['rejected', 'not_awarded', 'exam_failed'], true);
+        $isClosedWithoutAward = in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'], true);
         $isComplete = in_array($status, ['disbursed', 'renewed'], true);
         $steps = $flow
             ->map(function (array $step, int $index) use ($stageIndex, $isClosedWithoutAward, $isComplete): array {
@@ -254,7 +254,7 @@ class DecisionSupportService
             null, '', 'submitted' => 'submitted',
             'under_review', 'qualified', 'shortlisted', 'other' => 'screening',
             'exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed' => 'exam',
-            'interview' => 'interview',
+            'interview', 'interview_failed' => 'interview',
             'approved', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed' => 'distribution',
             default => 'screening',
         };
@@ -621,7 +621,7 @@ class DecisionSupportService
             'exam_scheduled' => 84,
             'exam_qualified' => 80,
             'under_review' => 75,
-            'rejected', 'not_awarded', 'exam_failed' => 10,
+            'rejected', 'not_awarded', 'exam_failed', 'interview_failed' => 10,
             default => 60,
         };
     }
@@ -674,7 +674,7 @@ class DecisionSupportService
             return 'Award outcome is already recorded.';
         }
 
-        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed'], true)) {
+        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'], true)) {
             return 'Application is closed; review notes explain the final decision.';
         }
 
@@ -698,7 +698,7 @@ class DecisionSupportService
             return 'Keep outcome details updated for renewal or reporting.';
         }
 
-        if (in_array($application->status, ['rejected', 'not_awarded', 'exam_failed'], true)) {
+        if (in_array($application->status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'], true)) {
             return 'No action is required unless the provider reopens the application.';
         }
 
@@ -741,7 +741,7 @@ class DecisionSupportService
     {
         return match ($status) {
             'approved', 'awarded', 'disbursed', 'renewed', 'exam_passed' => 'success',
-            'rejected', 'not_awarded', 'exam_failed' => 'danger',
+            'rejected', 'not_awarded', 'exam_failed', 'interview_failed' => 'danger',
             'under_review', 'qualified', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled' => 'info',
             default => 'warning',
         };
@@ -761,6 +761,7 @@ class DecisionSupportService
             'exam_taken' => "Your exam participation is recorded. Wait for the provider decision for {$nextAfterExam}.",
             'exam_passed' => "You passed the exam. Wait for the provider decision for {$nextAfterExam}.",
             'exam_failed' => 'This application did not advance after the exam. Check the provider note for context.',
+            'interview_failed' => 'This application did not advance after the interview. Check the provider note for context.',
             'approved' => 'You passed the configured selection stages. Wait for the shared reward distribution schedule.',
             'awarded' => 'Your award is recorded. Wait for the provider to post reward distribution details.',
             'distribution_scheduled' => 'Reward distribution is scheduled; follow the provider instructions.',
@@ -793,12 +794,14 @@ class DecisionSupportService
             'exam_taken' => 'Exam taken',
             'exam_passed' => 'Passed exam',
             'exam_failed' => 'Failed exam',
+            'interview_failed' => 'Failed interview',
             'distribution_scheduled' => 'Distribution scheduled',
             'disbursed' => 'Distributed',
             'for_exam' => 'Meets exam eligibility',
             'exam_completed' => 'Exam completed',
             'passed_exam' => 'Passed exam',
             'failed_exam' => 'Failed exam',
+            'failed_interview' => 'Failed interview',
             default => str($status)->replace('_', ' ')->title()->toString(),
         };
     }

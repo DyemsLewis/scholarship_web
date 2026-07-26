@@ -226,12 +226,14 @@ const customStatusLabels = {
     exam_taken: 'Exam taken',
     exam_passed: 'Passed exam',
     exam_failed: 'Failed exam',
+    interview_failed: 'Failed interview',
     distribution_scheduled: 'Distribution scheduled',
     disbursed: 'Distributed',
     for_exam: 'Meets exam eligibility',
     exam_completed: 'Exam completed',
     passed_exam: 'Passed exam',
     failed_exam: 'Failed exam',
+    failed_interview: 'Failed interview',
 };
 function statusLabel(status) {
     if (customStatusLabels[status]) {
@@ -248,7 +250,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed'].includes(status)) {
+    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
@@ -303,7 +305,7 @@ function documentIssueCount(application) {
 
 function showWaitingTime(application) {
     return Number(application.waiting_days ?? 0) > 0
-        && !['rejected', 'not_awarded', 'exam_failed', 'disbursed', 'renewed'].includes(application.status);
+        && !['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'disbursed', 'renewed'].includes(application.status);
 }
 
 function reviewPriorityScore(application) {
@@ -362,7 +364,7 @@ function reviewPriorityScore(application) {
         score += 5;
     }
 
-    if (['not_awarded', 'disbursed', 'renewed', 'rejected', 'exam_failed'].includes(status)) {
+    if (['not_awarded', 'disbursed', 'renewed', 'rejected', 'exam_failed', 'interview_failed'].includes(status)) {
         score -= 25;
     }
 

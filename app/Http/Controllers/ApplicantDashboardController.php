@@ -15,6 +15,7 @@ use App\Models\ScholarshipFunnelEvent;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Services\DecisionSupportService;
+use App\Services\ApplicantDocumentLibraryService;
 use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
@@ -32,7 +33,10 @@ use Illuminate\View\View;
 
 class ApplicantDashboardController extends Controller
 {
-    public function __construct(private readonly ScholarshipEligibilityService $eligibilityService) {}
+    public function __construct(
+        private readonly ScholarshipEligibilityService $eligibilityService,
+        private readonly ApplicantDocumentLibraryService $documentLibraryService,
+    ) {}
 
     public function index(Request $request): View|RedirectResponse
     {
@@ -438,6 +442,7 @@ class ApplicantDashboardController extends Controller
             'terms_accepted_at' => now(),
             'terms_version' => Terms::VERSION,
         ]);
+        $preparedDocument = $this->documentLibraryService->ensureVerificationCopy($user, $document);
 
         $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
             'verification_status' => 'pending',
@@ -467,13 +472,27 @@ class ApplicantDashboardController extends Controller
             'applicant_verification_document_uploaded',
             "{$user->name} uploaded an applicant profile verification proof.",
             $request,
-            ['document_id' => $document->id, 'document_type' => $document->document_type],
+            [
+                'document_id' => $document->id,
+                'document_type' => $document->document_type,
+                'prepared_document_id' => $preparedDocument?->id,
+            ],
         );
 
+        $message = $existing
+            ? 'Verification proof updated and sent for review.'
+            : 'Verification proof sent for admin review.';
+
+        if ($preparedDocument) {
+            $message .= ' A separate copy was also saved in Documents.';
+        }
+
         return response()->json([
-            'message' => $existing ? 'Verification proof updated and sent for review.' : 'Verification proof sent for admin review.',
+            'message' => $message,
             'user' => $user->fresh(['studentProfile'])->publicPayload(),
             'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
+            'prepared_document' => $preparedDocument ? $this->studentDocumentPayload($preparedDocument) : null,
+            'prepared_documents_count' => $user->studentDocuments()->count(),
         ], $existing ? 200 : 201);
     }
 
@@ -517,6 +536,7 @@ class ApplicantDashboardController extends Controller
                 : 'Verification proof removed.',
             'user' => $user->fresh(['studentProfile'])->publicPayload(),
             'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
+            'prepared_documents_count' => $user->studentDocuments()->count(),
         ]);
     }
 
@@ -1323,6 +1343,7 @@ class ApplicantDashboardController extends Controller
             'Government-issued ID',
             'Recent 2x2 ID photo',
             'Admission or acceptance letter',
+            'Other identity or school proof',
         ];
     }
 

@@ -63,7 +63,11 @@ class ScholarshipSelectionPlan
             return 'exam_failed';
         }
 
-        if (in_array($currentStatus, ['submitted', 'under_review', 'qualified', 'shortlisted', 'interview'], true)) {
+        if ($currentStatus === 'interview') {
+            return 'interview_failed';
+        }
+
+        if (in_array($currentStatus, ['submitted', 'under_review', 'qualified', 'shortlisted'], true)) {
             return 'rejected';
         }
 

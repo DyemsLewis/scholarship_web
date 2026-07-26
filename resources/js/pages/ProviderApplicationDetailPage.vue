@@ -97,12 +97,14 @@ const customStatusLabels = {
     exam_taken: 'Exam taken',
     exam_passed: 'Passed exam',
     exam_failed: 'Failed exam',
+    interview_failed: 'Failed interview',
     distribution_scheduled: 'Distribution scheduled',
     disbursed: 'Distributed',
     for_exam: 'Meets exam eligibility',
     exam_completed: 'Exam completed',
     passed_exam: 'Passed exam',
     failed_exam: 'Failed exam',
+    failed_interview: 'Failed interview',
 };
 
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
@@ -171,7 +173,9 @@ const nextApprovalStatus = computed(() => {
 const nextRejectionStatus = computed(() => (
     ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed'].includes(application.value?.status)
         ? 'exam_failed'
-        : (['submitted', 'under_review', 'qualified', 'shortlisted', 'interview'].includes(application.value?.status) ? 'rejected' : null)
+        : (application.value?.status === 'interview'
+            ? 'interview_failed'
+            : (['submitted', 'under_review', 'qualified', 'shortlisted'].includes(application.value?.status) ? 'rejected' : null))
 ));
 const suggestedReviewActions = computed(() => {
     const actions = [];
@@ -200,8 +204,26 @@ const suggestedReviewActions = computed(() => {
     }
 
     if (nextRejectionStatus.value) {
+        const failedStageAction = {
+            exam_failed: {
+                label: 'Failed exam',
+                description: 'Record that the applicant did not pass the scholarship exam.',
+                confirmLabel: 'Record failed exam',
+                reason: 'failed_exam',
+                note: 'Applicant did not pass the scholarship exam.',
+            },
+            interview_failed: {
+                label: 'Failed interview',
+                description: 'Record that the applicant did not pass the scholarship interview.',
+                confirmLabel: 'Record failed interview',
+                reason: 'failed_interview',
+                note: 'Applicant did not pass the scholarship interview.',
+            },
+        }[nextRejectionStatus.value] ?? {};
+
         actions.push({
             ...reviewActionCatalog.reject,
+            ...failedStageAction,
             key: 'reject_applicant',
             decision: 'reject',
             status: nextRejectionStatus.value,
@@ -319,7 +341,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed'].includes(status)) {
+    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
@@ -514,6 +536,12 @@ function statusConfirmation(status) {
         },
         exam_failed: {
             title: 'Record a failed exam result?',
+            message: `${applicantName} will receive this negative decision and its reason.`,
+            confirmLabel: 'Record failure',
+            tone: 'danger',
+        },
+        interview_failed: {
+            title: 'Record a failed interview result?',
             message: `${applicantName} will receive this negative decision and its reason.`,
             confirmLabel: 'Record failure',
             tone: 'danger',

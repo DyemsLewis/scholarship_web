@@ -114,6 +114,50 @@ class ProviderExamReviewWorkflowTest extends TestCase
         $this->assertSame(0, PortalNotification::query()->count());
     }
 
+    public function test_failed_interview_records_a_distinct_result_and_notifies_the_applicant(): void
+    {
+        Mail::fake();
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+        $applicant = User::factory()->create();
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Interview Workflow Scholarship',
+            'description' => 'Used to verify the interview result workflow.',
+            'selection_stages' => ['screening', 'interview', 'distribution'],
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'interview',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/decision", [
+                'decision' => 'reject',
+                'decision_reason' => 'failed_interview',
+                'review_notes' => 'Applicant did not pass the scholarship interview.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'interview_failed')
+            ->assertJsonPath('application.status_progress.current_stage', 'interview')
+            ->assertJsonPath('application.status_progress.label', 'Failed interview');
+
+        $this->assertDatabaseHas('scholarship_applications', [
+            'id' => $application->id,
+            'status' => 'interview_failed',
+            'decision_reason' => 'failed_interview',
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $applicant->id,
+            'type' => 'application_status',
+            'title' => 'Interview not passed',
+            'message' => 'Your application for Interview Workflow Scholarship did not advance after the interview. Review the provider note for details. Reason: Failed interview.',
+        ]);
+    }
+
     private function examApplication(): array
     {
         $provider = User::factory()->create(['role' => 'provider']);

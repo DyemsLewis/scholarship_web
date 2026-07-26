@@ -1,7 +1,7 @@
 export const selectionStageDefinitions = [
     {
         value: 'screening',
-        label: 'Screening',
+        label: 'Review',
         icon: 'fa-solid fa-list-check',
         detail: 'Eligibility and file review',
     },

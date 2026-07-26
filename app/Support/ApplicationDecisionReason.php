@@ -4,7 +4,7 @@ namespace App\Support;
 
 class ApplicationDecisionReason
 {
-    public const NEGATIVE_STATUSES = ['rejected', 'not_awarded', 'exam_failed'];
+    public const NEGATIVE_STATUSES = ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'];
 
     private const OPTIONS = [
         'complete_requirements' => 'Complete requirements',
@@ -17,6 +17,7 @@ class ApplicationDecisionReason
         'passed_exam' => 'Passed exam',
         'failed_exam' => 'Failed exam',
         'for_interview' => 'For interview',
+        'failed_interview' => 'Failed interview',
         'approved_for_award' => 'Approved for award',
         'distribution_scheduled' => 'Distribution scheduled',
         'award_released' => 'Reward distributed',
