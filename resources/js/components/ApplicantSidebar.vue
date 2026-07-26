@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue';
+import ApplicantReportModal from './ApplicantReportModal.vue';
 import ConfirmationDialog from './ConfirmationDialog.vue';
 import EmailVerificationReminder from './EmailVerificationReminder.vue';
 import NotificationBell from './NotificationBell.vue';
@@ -7,6 +8,7 @@ import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const currentPath = window.location.pathname.replace(/\/$/, '') || '/dashboard';
 const isMenuOpen = ref(false);
+const isReportModalOpen = ref(false);
 const {
     confirmation,
     requestConfirmation,
@@ -20,7 +22,6 @@ const navLinks = [
     { href: '/dashboard/applications', label: 'Applications' },
     { href: '/dashboard/documents', label: 'Documents' },
     { href: '/dashboard/profile', label: 'Profile' },
-    { href: '/dashboard/reports', label: 'Reports' },
 ];
 
 function isActive(href) {
@@ -33,6 +34,11 @@ function isActive(href) {
 
 function closeMenu() {
     isMenuOpen.value = false;
+}
+
+function openReportModal() {
+    closeMenu();
+    isReportModalOpen.value = true;
 }
 
 async function requestLogout() {
@@ -184,9 +190,24 @@ async function requestLogout() {
         </aside>
     </div>
 
+    <button
+        v-if="!isMenuOpen && !isReportModalOpen"
+        type="button"
+        class="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-amber-300 px-4 py-3 text-sm font-bold text-slate-950 shadow-[0_14px_35px_rgba(8,20,38,0.28)] ring-2 ring-white transition hover:-translate-y-0.5 hover:bg-amber-200 sm:bottom-6 sm:right-6"
+        aria-label="Report a problem"
+        @click="openReportModal"
+    >
+        <span class="flex h-7 w-7 items-center justify-center rounded-full bg-slate-950 text-amber-200">
+            <i class="fa-solid fa-circle-exclamation text-xs" aria-hidden="true"></i>
+        </span>
+        Report
+    </button>
+
     <ConfirmationDialog
         v-bind="confirmation"
         @confirm="confirmConfirmation"
         @cancel="cancelConfirmation"
     />
+
+    <ApplicantReportModal v-model="isReportModalOpen" />
 </template>

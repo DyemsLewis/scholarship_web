@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Scholarship;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -89,5 +90,44 @@ class AdminAccessTest extends TestCase
         $this->actingAs($provider)
             ->get('/provider')
             ->assertOk();
+    }
+
+    public function test_admin_program_review_queue_filters_each_status_with_global_counts(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+
+        foreach (['pending_review', 'published', 'rejected'] as $status) {
+            Scholarship::create([
+                'provider_id' => $provider->id,
+                'title' => str($status)->replace('_', ' ')->title().' Program',
+                'description' => "Program in the {$status} review state.",
+                'status' => $status,
+            ]);
+        }
+
+        $this->actingAs($admin)
+            ->getJson('/admin/reviews/data')
+            ->assertOk()
+            ->assertJsonPath('selected_program_status', 'pending_review')
+            ->assertJsonPath('stats.pending_programs', 1)
+            ->assertJsonPath('stats.published_programs', 1)
+            ->assertJsonPath('stats.rejected_programs', 1)
+            ->assertJsonCount(1, 'scholarships')
+            ->assertJsonPath('scholarships.0.status', 'pending_review');
+
+        $this->actingAs($admin)
+            ->getJson('/admin/reviews/data?program_status=published')
+            ->assertOk()
+            ->assertJsonPath('selected_program_status', 'published')
+            ->assertJsonCount(1, 'scholarships')
+            ->assertJsonPath('scholarships.0.status', 'published');
+
+        $this->actingAs($admin)
+            ->getJson('/admin/reviews/data?program_status=rejected')
+            ->assertOk()
+            ->assertJsonPath('selected_program_status', 'rejected')
+            ->assertJsonCount(1, 'scholarships')
+            ->assertJsonPath('scholarships.0.status', 'rejected');
     }
 }

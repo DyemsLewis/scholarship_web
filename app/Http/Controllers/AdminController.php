@@ -372,6 +372,13 @@ class AdminController extends Controller
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
+        $programStatuses = ['pending_review', 'published', 'rejected'];
+        $programStatus = $request->query('program_status', 'pending_review');
+
+        if (! is_string($programStatus) || ! in_array($programStatus, $programStatuses, true)) {
+            $programStatus = 'pending_review';
+        }
+
         $providers = User::query()
             ->with(['providerProfile', 'providerVerificationDocuments'])
             ->where('role', 'provider')
@@ -382,10 +389,15 @@ class AdminController extends Controller
             ->where('role', 'applicant')
             ->latest()
             ->get(['id', 'email', 'username', 'role', 'created_at']);
+        $programStatusCounts = Scholarship::query()
+            ->whereIn('status', $programStatuses)
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
         $scholarships = Scholarship::query()
             ->with(['provider.providerProfile', 'events'])
             ->withCount('bookmarks')
-            ->whereIn('status', ['pending_review', 'rejected', 'published'])
+            ->where('status', $programStatus)
             ->latest('updated_at')
             ->limit(12)
             ->get();
@@ -403,13 +415,14 @@ class AdminController extends Controller
                 'rejected_applicants' => $applicants->filter(fn (User $user) => $user->studentProfile?->verification_status === 'rejected')->count(),
                 'unsubmitted_applicants' => $applicants->filter(fn (User $user) => $user->applicantVerificationDocuments->isEmpty())->count(),
                 'applicant_proofs' => $applicants->sum(fn (User $user) => $user->applicantVerificationDocuments->count()),
-                'pending_programs' => $scholarships->where('status', 'pending_review')->count(),
-                'published_programs' => $scholarships->where('status', 'published')->count(),
-                'rejected_programs' => $scholarships->where('status', 'rejected')->count(),
+                'pending_programs' => (int) ($programStatusCounts['pending_review'] ?? 0),
+                'published_programs' => (int) ($programStatusCounts['published'] ?? 0),
+                'rejected_programs' => (int) ($programStatusCounts['rejected'] ?? 0),
             ],
             'providers' => $providers->map(fn (User $user) => $this->providerReviewPayload($user))->values(),
             'applicants' => $applicants->map(fn (User $user) => $this->applicantReviewPayload($user))->values(),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipReviewPayload($scholarship))->values(),
+            'selected_program_status' => $programStatus,
         ]);
     }
 

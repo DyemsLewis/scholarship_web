@@ -691,6 +691,206 @@ class ProviderController extends Controller
         ]);
     }
 
+    public function completeScholarshipEvent(
+        Request $request,
+        Scholarship $scholarship,
+        ScholarshipEvent $event,
+    ): JsonResponse {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+        abort_unless($event->scholarship_id === $scholarship->id, 404);
+
+        if ($event->scheduled_at?->isFuture()) {
+            throw ValidationException::withMessages([
+                'event' => 'This event cannot be completed before its scheduled date and time.',
+            ]);
+        }
+
+        $event->update([
+            'status' => 'completed',
+            'updated_by' => $request->user()->id,
+        ]);
+
+        $participantCount = ApplicationSchedule::query()
+            ->where('type', $event->type)
+            ->whereHas('application', fn ($query) => $query->where('scholarship_id', $scholarship->id))
+            ->count();
+
+        ActivityLog::record(
+            $request->user(),
+            'scholarship_event_completed',
+            "{$request->user()->name} completed the {$event->type} event for {$scholarship->title}.",
+            $request,
+            [
+                'scholarship_id' => $scholarship->id,
+                'scholarship_event_id' => $event->id,
+                'schedule_type' => $event->type,
+                'participant_count' => $participantCount,
+            ],
+        );
+
+        return response()->json([
+            'message' => ucfirst(ScholarshipSelectionPlan::label($event->type)).' marked complete. Attendance can now be recorded in bulk.',
+            'event' => ScholarshipEventPayload::make($event->fresh()),
+            'participant_count' => $participantCount,
+        ]);
+    }
+
+    public function bulkUpdateScholarshipEventAttendance(
+        Request $request,
+        Scholarship $scholarship,
+        ScholarshipEvent $event,
+    ): JsonResponse {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($scholarship->provider_id === $request->user()->id, 403);
+        abort_unless($event->scholarship_id === $scholarship->id, 404);
+
+        if ($event->status !== 'completed') {
+            throw ValidationException::withMessages([
+                'event' => 'Mark the program event complete before recording attendance.',
+            ]);
+        }
+
+        $attendanceValues = $event->type === 'distribution'
+            ? ['received', 'not_required']
+            : ['attended', 'absent', 'excused'];
+        $validated = $request->validate([
+            'application_ids' => ['required', 'array', 'min:1', 'max:500'],
+            'application_ids.*' => ['required', 'integer', 'distinct'],
+            'attendance_status' => ['required', Rule::in($attendanceValues)],
+            'attendance_notes' => ['nullable', 'string', 'max:1500'],
+        ]);
+        $applicationIds = collect($validated['application_ids'])
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values();
+        $applications = ScholarshipApplication::query()
+            ->with(['applicant', 'scholarship', 'schedules'])
+            ->where('scholarship_id', $scholarship->id)
+            ->whereIn('id', $applicationIds)
+            ->get();
+
+        if ($applications->count() !== $applicationIds->count()) {
+            throw ValidationException::withMessages([
+                'application_ids' => 'One or more selected applicants do not belong to this program.',
+            ]);
+        }
+
+        $missingSchedule = $applications->first(fn (ScholarshipApplication $application) => ! $application->schedules->firstWhere('type', $event->type));
+
+        if ($missingSchedule) {
+            throw ValidationException::withMessages([
+                'application_ids' => 'One or more selected applicants have not reached this program stage.',
+            ]);
+        }
+
+        $statusChangedIds = [];
+        $scheduleStatus = $event->type === 'distribution' && $validated['attendance_status'] === 'not_required'
+            ? 'cancelled'
+            : 'completed';
+
+        DB::transaction(function () use (
+            $applications,
+            $event,
+            $request,
+            $scheduleStatus,
+            $validated,
+            &$statusChangedIds,
+        ): void {
+            foreach ($applications as $application) {
+                $schedule = $application->schedules->firstWhere('type', $event->type);
+                $schedule->update([
+                    'status' => $scheduleStatus,
+                    'attendance_status' => $validated['attendance_status'],
+                    'attendance_notes' => $validated['attendance_notes'] ?? null,
+                    'completed_at' => $scheduleStatus === 'completed' ? now() : null,
+                    'cancelled_at' => $scheduleStatus === 'cancelled' ? now() : null,
+                    'updated_by' => $request->user()->id,
+                ]);
+
+                $nextStatus = null;
+
+                if ($event->type === 'exam' && $validated['attendance_status'] === 'attended') {
+                    $nextStatus = 'exam_taken';
+                }
+
+                if ($event->type === 'distribution' && $validated['attendance_status'] === 'received') {
+                    $nextStatus = 'disbursed';
+                }
+
+                if (! $nextStatus || $application->status === $nextStatus) {
+                    continue;
+                }
+
+                $fromStatus = $application->status;
+                $decisionReason = $nextStatus === 'disbursed' ? 'award_released' : 'exam_completed';
+                $application->update([
+                    'status' => $nextStatus,
+                    'decision_reason' => $decisionReason,
+                    'outcome_at' => $nextStatus === 'disbursed' ? now() : $application->outcome_at,
+                    'reviewed_by' => $request->user()->id,
+                    'reviewed_at' => now(),
+                ]);
+
+                ApplicationStatusHistory::create([
+                    'scholarship_application_id' => $application->id,
+                    'changed_by' => $request->user()->id,
+                    'from_status' => $fromStatus,
+                    'to_status' => $nextStatus,
+                    'decision_reason' => $decisionReason,
+                    'review_notes' => "{$this->scheduleTypeLabel($event->type)} attendance recorded through the program list.",
+                    'changed_at' => now(),
+                ]);
+                $statusChangedIds[] = $application->id;
+            }
+        });
+
+        foreach ($applications as $application) {
+            PortalNotification::create([
+                'user_id' => $application->applicant_id,
+                'type' => 'application_schedule',
+                'title' => $this->scheduleTypeLabel($event->type).' record updated',
+                'message' => "The provider marked your {$this->scheduleTypeLabel($event->type)} participation as {$validated['attendance_status']}.",
+                'action_url' => route('dashboard.applications.show', $application, false),
+            ]);
+
+            $freshApplication = $application->fresh()->load(['applicant', 'scholarship']);
+
+            if (in_array($application->id, $statusChangedIds, true)) {
+                ScholarshipFunnelEvent::record(
+                    $freshApplication->applicant,
+                    "application_status_{$freshApplication->status}",
+                    $freshApplication->scholarship,
+                    $freshApplication,
+                    'provider',
+                    ['scholarship_event_id' => $event->id, 'schedule_type' => $event->type],
+                );
+            }
+
+            app(DecisionSupportService::class)->syncApplication($freshApplication, 'provider_bulk_schedule_tracking_updated');
+        }
+
+        ActivityLog::record(
+            $request->user(),
+            'application_schedule_bulk_tracking_updated',
+            "{$request->user()->name} updated {$event->type} participation for {$applications->count()} applicant(s).",
+            $request,
+            [
+                'scholarship_id' => $scholarship->id,
+                'scholarship_event_id' => $event->id,
+                'schedule_type' => $event->type,
+                'attendance_status' => $validated['attendance_status'],
+                'application_ids' => $applicationIds->all(),
+            ],
+        );
+
+        return response()->json([
+            'message' => "Updated {$applications->count()} applicant record(s).",
+            'updated_count' => $applications->count(),
+            'attendance_status' => $validated['attendance_status'],
+        ]);
+    }
+
     public function decideApplication(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);

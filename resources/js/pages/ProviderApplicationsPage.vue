@@ -24,6 +24,16 @@ const scheduleEditorType = ref('');
 const scheduleSaving = ref(false);
 const scheduleError = ref('');
 const scheduleForm = ref(emptyScheduleForm());
+const attendanceEventType = ref('');
+const attendanceSearch = ref('');
+const attendancePage = ref(1);
+const selectedAttendanceIds = ref([]);
+const bulkAttendanceStatus = ref('');
+const bulkAttendanceNotes = ref('');
+const attendanceSaving = ref(false);
+const completingEventId = ref(null);
+const attendanceError = ref('');
+const attendancePerPage = 25;
 const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
     .toISOString()
     .slice(0, 16);
@@ -47,6 +57,73 @@ const configuredScheduleTypes = computed(() => {
 
     return scheduleTypeCatalog.filter((type) => configured.includes(type.value));
 });
+const attendanceEvents = computed(() => configuredScheduleTypes.value
+    .map((type) => programEvents.value.find((event) => event.type === type.value))
+    .filter(Boolean));
+const activeAttendanceEvent = computed(() => attendanceEvents.value.find((event) => event.type === attendanceEventType.value)
+    ?? attendanceEvents.value[0]
+    ?? null);
+const attendanceParticipants = computed(() => {
+    const event = activeAttendanceEvent.value;
+
+    if (!event) {
+        return [];
+    }
+
+    return applications.value
+        .map((application) => ({
+            application,
+            schedule: applicationSchedule(application, event.type),
+        }))
+        .filter((record) => record.schedule);
+});
+const filteredAttendanceParticipants = computed(() => {
+    const query = attendanceSearch.value.trim().toLowerCase();
+
+    if (!query) {
+        return attendanceParticipants.value;
+    }
+
+    return attendanceParticipants.value.filter(({ application }) => [
+        application.applicant?.name,
+        application.applicant?.email,
+    ].filter(Boolean).join(' ').toLowerCase().includes(query));
+});
+const totalAttendancePages = computed(() => Math.max(1, Math.ceil(filteredAttendanceParticipants.value.length / attendancePerPage)));
+const visibleAttendanceParticipants = computed(() => {
+    const start = (attendancePage.value - 1) * attendancePerPage;
+
+    return filteredAttendanceParticipants.value.slice(start, start + attendancePerPage);
+});
+const attendanceRange = computed(() => {
+    if (filteredAttendanceParticipants.value.length === 0) {
+        return '0 applicants';
+    }
+
+    const start = (attendancePage.value - 1) * attendancePerPage + 1;
+    const end = Math.min(attendancePage.value * attendancePerPage, filteredAttendanceParticipants.value.length);
+
+    return `${start}-${end} of ${filteredAttendanceParticipants.value.length}`;
+});
+const allVisibleAttendanceSelected = computed(() => visibleAttendanceParticipants.value.length > 0
+    && visibleAttendanceParticipants.value.every(({ application }) => selectedAttendanceIds.value.includes(application.id)));
+const attendanceSummary = computed(() => attendanceParticipants.value.reduce((summary, { schedule }) => {
+    const status = schedule.attendance_status ?? 'pending';
+
+    summary[status] = (summary[status] ?? 0) + 1;
+
+    return summary;
+}, {}));
+const bulkAttendanceOptions = computed(() => activeAttendanceEvent.value?.type === 'distribution'
+    ? [
+        { value: 'received', label: 'Received' },
+        { value: 'not_required', label: 'Not required' },
+    ]
+    : [
+        { value: 'attended', label: 'Attended' },
+        { value: 'absent', label: 'Absent' },
+        { value: 'excused', label: 'Excused' },
+    ]);
 const exportApplicationsUrl = computed(() => {
     if (!hasProgramContext.value) {
         return '/provider/export/applications';
@@ -305,6 +382,96 @@ function scheduleEvent(type) {
     return programEvents.value.find((event) => event.type === type) ?? null;
 }
 
+function applicationSchedule(application, type) {
+    return (application.schedules ?? []).find((schedule) => schedule.type === type) ?? null;
+}
+
+function eventStatusClass(status) {
+    return status === 'completed'
+        ? 'bg-emerald-100 text-emerald-800'
+        : 'bg-amber-100 text-amber-800';
+}
+
+function attendanceStatusClass(status) {
+    if (['attended', 'received'].includes(status)) {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'absent') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (['excused', 'not_required'].includes(status)) {
+        return 'bg-slate-200 text-slate-700';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
+function canCompleteEvent(event) {
+    return event?.scheduled_at && new Date(event.scheduled_at).getTime() <= Date.now();
+}
+
+function toggleVisibleAttendance() {
+    const visibleIds = visibleAttendanceParticipants.value.map(({ application }) => application.id);
+
+    if (allVisibleAttendanceSelected.value) {
+        selectedAttendanceIds.value = selectedAttendanceIds.value.filter((id) => !visibleIds.includes(id));
+        return;
+    }
+
+    selectedAttendanceIds.value = [...new Set([...selectedAttendanceIds.value, ...visibleIds])];
+}
+
+async function completeProgramEvent(event) {
+    completingEventId.value = event.id;
+    attendanceError.value = '';
+
+    try {
+        await window.axios.patch(`/provider/scholarships/${selectedScholarshipId.value}/events/${event.id}/complete`);
+        await loadProviderData(false);
+    } catch (error) {
+        attendanceError.value = error.response?.data?.errors?.event?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to complete this event.';
+    } finally {
+        completingEventId.value = null;
+    }
+}
+
+async function applyBulkAttendance() {
+    if (!bulkAttendanceStatus.value || selectedAttendanceIds.value.length === 0) {
+        attendanceError.value = 'Select applicants and choose an attendance result.';
+        return;
+    }
+
+    attendanceSaving.value = true;
+    attendanceError.value = '';
+
+    try {
+        await window.axios.patch(
+            `/provider/scholarships/${selectedScholarshipId.value}/events/${activeAttendanceEvent.value.id}/attendance`,
+            {
+                application_ids: selectedAttendanceIds.value,
+                attendance_status: bulkAttendanceStatus.value,
+                attendance_notes: bulkAttendanceNotes.value || null,
+            },
+        );
+        selectedAttendanceIds.value = [];
+        bulkAttendanceStatus.value = '';
+        bulkAttendanceNotes.value = '';
+        await loadProviderData(false);
+    } catch (error) {
+        const validationErrors = error.response?.data?.errors ?? {};
+
+        attendanceError.value = Object.values(validationErrors).flat()[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to update attendance.';
+    } finally {
+        attendanceSaving.value = false;
+    }
+}
+
 function defaultScheduleDetails(type) {
     const scholarship = selectedScholarshipContext.value ?? {};
 
@@ -411,6 +578,10 @@ async function loadProviderData(showLoading = true) {
         applications.value = response.data.applications;
         selectedScholarshipContext.value = response.data.selected_scholarship ?? selectedScholarshipContext.value;
         programEvents.value = response.data.program_events ?? [];
+
+        if (!programEvents.value.some((event) => event.type === attendanceEventType.value)) {
+            attendanceEventType.value = programEvents.value[0]?.type ?? '';
+        }
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider applications.';
     } finally {
@@ -425,6 +596,19 @@ watch([selectedQueueFilter, selectedQueueSort, applicationSearch], () => {
 watch(totalApplicationPages, (totalPages) => {
     if (applicationPage.value > totalPages) {
         applicationPage.value = totalPages;
+    }
+});
+
+watch([attendanceEventType, attendanceSearch], () => {
+    attendancePage.value = 1;
+    selectedAttendanceIds.value = [];
+    bulkAttendanceStatus.value = '';
+    attendanceError.value = '';
+});
+
+watch(totalAttendancePages, (totalPages) => {
+    if (attendancePage.value > totalPages) {
+        attendancePage.value = totalPages;
     }
 });
 
@@ -549,8 +733,8 @@ onMounted(loadProviderData);
                                     <span :class="['grid h-9 w-9 place-items-center rounded-md', scheduleEditorType === type.value ? 'bg-white/10' : 'bg-white text-slate-700 ring-1 ring-slate-200']">
                                         <i :class="type.icon" aria-hidden="true"></i>
                                     </span>
-                                    <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', scheduleEvent(type.value) ? 'bg-emerald-100 text-emerald-800' : (scheduleEditorType === type.value ? 'bg-white/10 text-white' : 'bg-slate-200 text-slate-600')]">
-                                        {{ scheduleEvent(type.value) ? 'Scheduled' : 'Not set' }}
+                                    <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', scheduleEvent(type.value) ? eventStatusClass(scheduleEvent(type.value).status) : (scheduleEditorType === type.value ? 'bg-white/10 text-white' : 'bg-slate-200 text-slate-600')]">
+                                        {{ scheduleEvent(type.value) ? statusLabel(scheduleEvent(type.value).status) : 'Not set' }}
                                     </span>
                                 </span>
                                 <span class="mt-3 font-bold">{{ type.label }}</span>
@@ -626,6 +810,159 @@ onMounted(loadProviderData);
                                 </button>
                             </div>
                         </form>
+                    </section>
+
+                    <section v-if="hasProgramContext" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Attendance & results</p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">Update applicants in bulk</h3>
+                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+                                    Complete the shared activity once, then record the same result for multiple applicants.
+                                </p>
+                            </div>
+                            <span v-if="activeAttendanceEvent" class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+                                {{ attendanceParticipants.length }} participants
+                            </span>
+                        </div>
+
+                        <div v-if="attendanceEvents.length === 0" class="p-5">
+                            <div class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5">
+                                <p class="text-sm font-bold text-slate-900">No activity is scheduled yet</p>
+                                <p class="mt-1 text-sm text-slate-500">Publish an exam, interview, or distribution schedule above to manage its participants here.</p>
+                            </div>
+                        </div>
+
+                        <template v-else>
+                            <div class="flex gap-2 overflow-x-auto border-b border-slate-200 px-5 py-3">
+                                <button
+                                    v-for="event in attendanceEvents"
+                                    :key="event.id"
+                                    type="button"
+                                    :class="[
+                                        'shrink-0 rounded-md border px-3 py-2 text-sm font-bold transition',
+                                        activeAttendanceEvent?.id === event.id
+                                            ? 'border-slate-900 bg-slate-900 text-white'
+                                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50',
+                                    ]"
+                                    @click="attendanceEventType = event.type"
+                                >
+                                    {{ scheduleTypeLabel(event.type) }}
+                                </button>
+                            </div>
+
+                            <div v-if="activeAttendanceEvent" class="p-5">
+                                <div class="flex flex-col gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h4 class="font-bold text-slate-950">{{ activeAttendanceEvent.title }}</h4>
+                                            <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', eventStatusClass(activeAttendanceEvent.status)]">
+                                                {{ statusLabel(activeAttendanceEvent.status) }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-1 text-sm text-slate-600">{{ activeAttendanceEvent.scheduled_label }}</p>
+                                        <p v-if="activeAttendanceEvent.status !== 'completed' && !canCompleteEvent(activeAttendanceEvent)" class="mt-1 text-xs font-semibold text-amber-700">
+                                            This activity can be completed after its scheduled time.
+                                        </p>
+                                    </div>
+                                    <button
+                                        v-if="activeAttendanceEvent.status !== 'completed'"
+                                        type="button"
+                                        :disabled="completingEventId === activeAttendanceEvent.id || !canCompleteEvent(activeAttendanceEvent)"
+                                        class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                        @click="completeProgramEvent(activeAttendanceEvent)"
+                                    >
+                                        {{ completingEventId === activeAttendanceEvent.id ? 'Completing...' : 'Mark event complete' }}
+                                    </button>
+                                </div>
+
+                                <p v-if="attendanceError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">
+                                    {{ attendanceError }}
+                                </p>
+
+                                <div v-if="activeAttendanceEvent.status === 'completed'" class="mt-5">
+                                    <div class="flex flex-wrap gap-2 text-xs font-bold">
+                                        <span class="rounded-md bg-amber-100 px-2.5 py-1 text-amber-800">{{ attendanceSummary.pending ?? 0 }} pending</span>
+                                        <template v-if="activeAttendanceEvent.type === 'distribution'">
+                                            <span class="rounded-md bg-emerald-100 px-2.5 py-1 text-emerald-800">{{ attendanceSummary.received ?? 0 }} received</span>
+                                            <span class="rounded-md bg-slate-200 px-2.5 py-1 text-slate-700">{{ attendanceSummary.not_required ?? 0 }} not required</span>
+                                        </template>
+                                        <template v-else>
+                                            <span class="rounded-md bg-emerald-100 px-2.5 py-1 text-emerald-800">{{ attendanceSummary.attended ?? 0 }} attended</span>
+                                            <span class="rounded-md bg-rose-100 px-2.5 py-1 text-rose-800">{{ attendanceSummary.absent ?? 0 }} absent</span>
+                                            <span class="rounded-md bg-slate-200 px-2.5 py-1 text-slate-700">{{ attendanceSummary.excused ?? 0 }} excused</span>
+                                        </template>
+                                    </div>
+
+                                    <div class="mt-4 grid gap-3 lg:grid-cols-[minmax(13rem,1fr)_13rem_minmax(13rem,1fr)_auto]">
+                                        <label class="relative block">
+                                            <span class="sr-only">Search participants</span>
+                                            <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
+                                            <input v-model="attendanceSearch" type="search" placeholder="Search applicant" class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-slate-600">
+                                        </label>
+                                        <select v-model="bulkAttendanceStatus" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                            <option value="">Choose result</option>
+                                            <option v-for="option in bulkAttendanceOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                        </select>
+                                        <input v-model="bulkAttendanceNotes" type="text" maxlength="1500" placeholder="Optional note for selected applicants" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                        <button
+                                            type="button"
+                                            :disabled="attendanceSaving || selectedAttendanceIds.length === 0 || !bulkAttendanceStatus"
+                                            class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                            @click="applyBulkAttendance"
+                                        >
+                                            {{ attendanceSaving ? 'Applying...' : `Apply to ${selectedAttendanceIds.length}` }}
+                                        </button>
+                                    </div>
+
+                                    <div v-if="attendanceParticipants.length === 0" class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
+                                        No applicants are assigned to this activity yet.
+                                    </div>
+
+                                    <div v-else-if="filteredAttendanceParticipants.length === 0" class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
+                                        No applicants match this search.
+                                    </div>
+
+                                    <div v-else class="mt-4 overflow-hidden rounded-lg border border-slate-200">
+                                        <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_9rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 sm:grid">
+                                            <button type="button" class="text-left" @click="toggleVisibleAttendance">
+                                                <i :class="allVisibleAttendanceSelected ? 'fa-solid fa-square-check text-slate-900' : 'fa-regular fa-square text-slate-400'" aria-hidden="true"></i>
+                                                <span class="sr-only">Select displayed applicants</span>
+                                            </button>
+                                            <span>Applicant</span>
+                                            <span>Status</span>
+                                        </div>
+
+                                        <label
+                                            v-for="record in visibleAttendanceParticipants"
+                                            :key="record.application.id"
+                                            class="grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0 hover:bg-slate-50"
+                                        >
+                                            <input v-model="selectedAttendanceIds" type="checkbox" :value="record.application.id" class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500">
+                                            <span class="min-w-0">
+                                                <span class="block truncate text-sm font-bold text-slate-900">{{ record.application.applicant?.name || 'Applicant' }}</span>
+                                                <span class="block truncate text-xs text-slate-500">{{ record.application.applicant?.email }}</span>
+                                            </span>
+                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', attendanceStatusClass(record.schedule.attendance_status)]">
+                                                {{ statusLabel(record.schedule.attendance_status || 'pending') }}
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    <div v-if="filteredAttendanceParticipants.length > attendancePerPage" class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                                        <p class="text-xs font-semibold text-slate-500">{{ attendanceRange }}</p>
+                                        <div class="flex gap-2">
+                                            <button type="button" :disabled="attendancePage === 1" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" @click="attendancePage -= 1">Previous</button>
+                                            <button type="button" :disabled="attendancePage === totalAttendancePages" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" @click="attendancePage += 1">Next</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+                                    Applicant results become available after the shared event is completed.
+                                </div>
+                            </div>
+                        </template>
                     </section>
 
                     <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">

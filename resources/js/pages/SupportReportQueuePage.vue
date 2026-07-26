@@ -25,7 +25,7 @@ const pageCopy = computed(() => ({
     eyebrow: isAdmin ? 'Platform Support' : 'Program Support',
     title: isAdmin ? 'Applicant reports' : 'Program concerns',
     description: isAdmin
-        ? 'Review account, technical, and general platform concerns submitted by applicants.'
+        ? 'Review program, account, technical, and general concerns submitted by applicants.'
         : 'Review concerns connected only to scholarship programs managed by your organization.',
 }));
 const statusFilters = computed(() => [

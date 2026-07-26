@@ -30,7 +30,6 @@ const selectedProfileProof = ref(null);
 const selectedReviewActionKey = ref('');
 const documentReviewError = ref('');
 const rubricScores = ref({});
-const scheduleTrackingId = ref(null);
 const {
     confirmation,
     requestConfirmation,
@@ -353,75 +352,6 @@ function scheduleTypeIcon(type) {
 
 function scheduleModeLabel(mode) {
     return scheduleModeOptions.find((option) => option.value === mode)?.label ?? labelFromKey(mode);
-}
-
-function attendanceOptions(type) {
-    if (type === 'distribution') {
-        return [
-            { value: 'pending', label: 'Pending release' },
-            { value: 'received', label: 'Received' },
-            { value: 'not_required', label: 'Not required' },
-        ];
-    }
-
-    return [
-        { value: 'pending', label: 'Pending attendance' },
-        { value: 'attended', label: 'Attended' },
-        { value: 'absent', label: 'Absent' },
-        { value: 'excused', label: 'Excused' },
-        { value: 'not_required', label: 'Not required' },
-    ];
-}
-
-function handleScheduleStatusChange(schedule) {
-    if (schedule.status === 'scheduled') {
-        schedule.attendance_status = 'pending';
-        return;
-    }
-
-    if (schedule.status === 'completed' && schedule.attendance_status === 'pending') {
-        schedule.attendance_status = schedule.type === 'distribution' ? 'received' : 'attended';
-        return;
-    }
-
-    if (schedule.status === 'cancelled' && ['attended', 'absent', 'received'].includes(schedule.attendance_status)) {
-        schedule.attendance_status = 'pending';
-    }
-}
-
-async function saveScheduleTracking(schedule) {
-    if (['completed', 'cancelled'].includes(schedule.status)) {
-        const confirmed = await requestConfirmation({
-            title: schedule.status === 'completed' ? 'Complete this activity?' : 'Cancel this schedule?',
-            message: schedule.status === 'completed'
-                ? 'The applicant will see the attendance or release result and the application may advance automatically.'
-                : 'The applicant will be notified that this schedule was cancelled.',
-            confirmLabel: schedule.status === 'completed' ? 'Mark complete' : 'Cancel schedule',
-            tone: schedule.status === 'cancelled' ? 'danger' : 'warning',
-        });
-
-        if (!confirmed) {
-            await loadApplication();
-            return;
-        }
-    }
-
-    scheduleTrackingId.value = schedule.id;
-    errorMessage.value = '';
-
-    try {
-        const response = await window.axios.patch(`/provider/applications/${application.value.id}/schedules/${schedule.id}`, {
-            status: schedule.status,
-            attendance_status: schedule.attendance_status,
-            attendance_notes: schedule.attendance_notes || null,
-        });
-
-        applyApplication(response.data.application);
-    } catch {
-        await loadApplication();
-    } finally {
-        scheduleTrackingId.value = null;
-    }
 }
 
 function recommendationClass(recommendation) {
@@ -1241,24 +1171,19 @@ onMounted(loadApplication);
                                             </div>
                                         </div>
 
-                                        <div class="border-t border-slate-200 bg-slate-50 p-3">
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Provider tracking</p>
-                                            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                                                <select v-model="schedule.status" :class="inputClass" @change="handleScheduleStatusChange(schedule)">
-                                                    <option value="scheduled">Scheduled</option>
-                                                    <option value="completed">Completed</option>
-                                                    <option value="cancelled">Cancelled</option>
-                                                </select>
-                                                <select v-model="schedule.attendance_status" :class="inputClass">
-                                                    <option v-for="option in attendanceOptions(schedule.type)" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                                </select>
+                                        <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Applicant result</p>
+                                                <p class="mt-1 text-sm text-slate-600">
+                                                    {{ labelFromKey(schedule.attendance_status || 'pending') }}. Attendance is updated in bulk from the program workspace.
+                                                </p>
                                             </div>
-                                            <textarea v-model="schedule.attendance_notes" rows="2" maxlength="1500" placeholder="Optional attendance or release note" :class="['mt-3', inputClass]"></textarea>
-                                            <div class="mt-3 flex flex-wrap justify-end gap-2">
-                                                <button type="button" :disabled="scheduleTrackingId === schedule.id" class="rounded-md bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60" @click="saveScheduleTracking(schedule)">
-                                                    {{ scheduleTrackingId === schedule.id ? 'Saving...' : 'Save tracking' }}
-                                                </button>
-                                            </div>
+                                            <a
+                                                :href="`/provider/programs/${application.scholarship?.id}/applications`"
+                                                class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                                            >
+                                                Open attendance list
+                                            </a>
                                         </div>
                                     </details>
                                 </div>

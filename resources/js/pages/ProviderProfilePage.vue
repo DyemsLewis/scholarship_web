@@ -58,7 +58,22 @@ const providerTypeLabels = Object.fromEntries(
     providerTypeOptions.filter((option) => option.value).map((option) => [option.value, option.label]),
 );
 const labelClass = 'text-xs font-bold uppercase tracking-[0.14em] text-slate-500';
-const inputClass = 'mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
+const inputClass = 'mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const providerInitials = computed(() => {
+    const name = user.value?.provider_name || user.value?.name || 'Provider';
+
+    return name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join('');
+});
+const representativeName = computed(() => [
+    user.value?.first_name,
+    user.value?.middle_initial ? `${user.value.middle_initial}.` : null,
+    user.value?.last_name,
+].filter(Boolean).join(' ') || user.value?.name || 'Not set');
 const verificationGuidance = computed(() => {
     if (user.value?.can_post_scholarships) {
         return {
@@ -260,16 +275,16 @@ onMounted(loadProviderProfile);
         />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-5xl">
+            <div class="mx-auto max-w-6xl">
                 <header class="provider-hero">
                     <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                         Provider Profile
                     </p>
                     <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                        Edit organization details
+                        Organization and account
                     </h2>
                     <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                        Keep provider contact, organization, and verification details current for students and admins.
+                        Keep the public organization details and representative contact information accurate.
                     </p>
                 </header>
 
@@ -277,58 +292,67 @@ onMounted(loadProviderProfile);
                     Loading provider profile...
                 </div>
 
-                <div v-else class="mt-6 space-y-6">
+                <div v-else class="mt-6 grid gap-5">
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.16em] text-amber-700">
-                                    Provider preview
-                                </p>
-                                <h3 class="mt-2 font-display text-2xl font-bold text-slate-950">
-                                    {{ user?.provider_name || user?.name || 'Provider' }}
-                                </h3>
-                                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                    {{ user?.provider_description || 'No provider description added yet.' }}
-                                </p>
-                                <p class="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                                    {{ providerTypeLabels[user?.provider_type] || 'Provider type not set' }}
-                                </p>
-                                <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-slate-500">
-                                    <span v-if="user?.provider_address" class="inline-flex items-center gap-2">
-                                        <i class="fa-solid fa-location-dot text-amber-700" aria-hidden="true"></i>
-                                        {{ user.provider_address }}
-                                    </span>
-                                    <span v-if="user?.provider_website" class="inline-flex items-center gap-2">
-                                        <i class="fa-solid fa-globe text-amber-700" aria-hidden="true"></i>
-                                        {{ user.provider_website }}
-                                    </span>
-                                    <span v-if="user?.contact_number" class="inline-flex items-center gap-2">
-                                        <i class="fa-solid fa-phone text-amber-700" aria-hidden="true"></i>
-                                        {{ user.contact_number }}
-                                    </span>
+                    <section class="order-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-sm">
+                        <div class="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                            <div class="flex min-w-0 items-center gap-4">
+                                <div class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-amber-300 text-lg font-black text-slate-950">
+                                    {{ providerInitials }}
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">
+                                        {{ providerTypeLabels[user?.provider_type] || 'Scholarship provider' }}
+                                    </p>
+                                    <h3 class="mt-1 truncate font-display text-2xl font-bold text-white">
+                                        {{ user?.provider_name || user?.name || 'Provider' }}
+                                    </h3>
+                                    <p class="mt-1 line-clamp-2 max-w-2xl text-sm leading-6 text-slate-300">
+                                        {{ user?.provider_description || 'Add a short organization description so applicants know who provides the scholarship.' }}
+                                    </p>
                                 </div>
                             </div>
-                            <span :class="['w-fit rounded-md px-3 py-1.5 text-xs font-bold uppercase', verificationClass(user?.verification_status)]">
-                                {{ verificationLabel(user?.verification_status) }}
+                            <span :class="['w-fit shrink-0 rounded-md px-3 py-1.5 text-xs font-bold uppercase', verificationClass(user?.verification_status)]">
+                                {{ verificationLabel(user?.verification_status) }} provider
                             </span>
+                        </div>
+                        <div class="grid border-t border-white/10 bg-white/[0.04] sm:grid-cols-3 sm:divide-x sm:divide-white/10">
+                            <div class="flex items-start gap-3 p-4">
+                                <i class="fa-solid fa-user-tie mt-0.5 text-amber-300" aria-hidden="true"></i>
+                                <div class="min-w-0">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Representative</p>
+                                    <p class="mt-1 truncate text-sm font-semibold text-white">{{ representativeName }}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3 border-t border-white/10 p-4 sm:border-t-0">
+                                <i class="fa-solid fa-envelope mt-0.5 text-amber-300" aria-hidden="true"></i>
+                                <div class="min-w-0">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Email</p>
+                                    <p class="mt-1 truncate text-sm font-semibold text-white">{{ user?.email || 'Not set' }}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3 border-t border-white/10 p-4 sm:border-t-0">
+                                <i class="fa-solid fa-location-dot mt-0.5 text-amber-300" aria-hidden="true"></i>
+                                <div class="min-w-0">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Office</p>
+                                    <p class="mt-1 line-clamp-2 text-sm font-semibold text-white">{{ user?.provider_address || 'Address not set' }}</p>
+                                </div>
+                            </div>
                         </div>
                     </section>
 
-                    <section id="verification-documents" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Verification Documents
-                                </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Upload proof for admin review
-                                </h3>
-                                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Add organization registration, authorization letter, representative ID, or school/office proof. Admins can use these files before approving scholarship publishing access.
-                                </p>
+                    <section id="verification-documents" class="order-3 scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                    <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+                                </span>
+                                <div>
+                                    <h3 class="font-bold text-slate-950">Provider verification</h3>
+                                    <p class="mt-0.5 text-sm text-slate-500">Submit organization proof for admin review and publishing access.</p>
+                                </div>
                             </div>
                             <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
                                 {{ verificationDocuments.length }} file{{ verificationDocuments.length === 1 ? '' : 's' }}
@@ -347,7 +371,7 @@ onMounted(loadProviderProfile);
                             </p>
                         </div>
 
-                        <div class="mt-5 grid gap-3 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
+                        <div class="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
                             <label>
                                 <span :class="labelClass">Document type</span>
                                 <select v-model="verificationDocumentType" :class="inputClass">
@@ -423,13 +447,24 @@ onMounted(loadProviderProfile);
                         </div>
                     </section>
 
-                    <form class="grid gap-6" @submit.prevent="saveProviderProfile">
-                        <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                Organization Details
-                            </p>
+                    <form class="order-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" @submit.prevent="saveProviderProfile">
+                        <div class="flex items-center gap-3 p-5 sm:p-6">
+                            <span class="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                <i class="fa-solid fa-building" aria-hidden="true"></i>
+                            </span>
+                            <div>
+                                <p class="font-bold text-slate-950">Profile details</p>
+                                <p class="mt-0.5 text-sm text-slate-500">Information shown to applicants and used to contact your organization.</p>
+                            </div>
+                        </div>
 
-                            <div class="mt-5 grid gap-4 md:grid-cols-2">
+                        <section class="grid gap-5 border-t border-slate-200 p-5 sm:p-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
+                            <div>
+                                <p class="text-sm font-bold text-slate-950">Organization</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Public details applicants use to recognize the scholarship provider.</p>
+                            </div>
+                            <div>
+                                <div class="grid gap-4 md:grid-cols-2">
                                 <label>
                                     <span :class="labelClass">Provider name</span>
                                     <input v-model="form.provider_name" type="text" placeholder="Provider" :class="inputClass">
@@ -466,14 +501,16 @@ onMounted(loadProviderProfile);
                                 ></textarea>
                                 <span v-if="fieldError('provider_description')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_description') }}</span>
                             </label>
+                            </div>
                         </section>
 
-                        <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                Contact and Account
-                            </p>
-
-                            <div class="mt-5 grid gap-4 md:grid-cols-[1fr_5rem_1fr]">
+                        <section class="grid gap-5 border-t border-slate-200 p-5 sm:p-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
+                            <div>
+                                <p class="text-sm font-bold text-slate-950">Representative account</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">The authorized person responsible for this provider account.</p>
+                            </div>
+                            <div>
+                                <div class="grid gap-4 md:grid-cols-[1fr_5rem_1fr]">
                                 <label>
                                     <span :class="labelClass">First name</span>
                                     <input v-model="form.first_name" type="text" placeholder="First name" :class="inputClass">
@@ -508,30 +545,18 @@ onMounted(loadProviderProfile);
                                     <span v-if="fieldError('contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('contact_number') }}</span>
                                 </label>
                             </div>
-                        </section>
-
-                        <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                        Publishing Access
-                                    </p>
-                                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                                        {{ user?.can_post_scholarships ? 'This account is approved and can publish scholarships.' : 'This account needs admin approval before publishing scholarships.' }}
-                                    </p>
-                                    <p v-if="user?.verification_notes" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
-                                        {{ user.verification_notes }}
-                                    </p>
-                                </div>
-                                <button
-                                    type="submit"
-                                    :disabled="isSaving"
-                                    class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                                >
-                                    {{ isSaving ? 'Saving...' : 'Save profile' }}
-                                </button>
                             </div>
                         </section>
+
+                        <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                            <p class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
+                                <i :class="['fa-solid fa-circle text-[8px]', user?.can_post_scholarships ? 'text-emerald-500' : 'text-amber-500']" aria-hidden="true"></i>
+                                {{ user?.can_post_scholarships ? 'Publishing access is active.' : 'Publishing unlocks after provider verification.' }}
+                            </p>
+                            <button type="submit" :disabled="isSaving" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
+                                {{ isSaving ? 'Saving...' : 'Save profile' }}
+                            </button>
+                        </div>
                     </form>
                 </div>
 

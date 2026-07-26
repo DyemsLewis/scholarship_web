@@ -97,18 +97,20 @@ class SupportReportController extends Controller
                 'message' => "{$request->user()->name} reported a concern about {$scholarship->title}.",
                 'action_url' => '/provider/reports',
             ]);
-        } else {
-            User::query()
-                ->where('role', 'admin')
-                ->get()
-                ->each(fn (User $admin) => PortalNotification::create([
-                    'user_id' => $admin->id,
-                    'type' => 'support_report',
-                    'title' => 'New applicant report',
-                    'message' => "{$request->user()->name} submitted a {$validated['category']} concern.",
-                    'action_url' => '/admin/reports',
-                ]));
         }
+
+        User::query()
+            ->where('role', 'admin')
+            ->get()
+            ->each(fn (User $admin) => PortalNotification::create([
+                'user_id' => $admin->id,
+                'type' => 'support_report',
+                'title' => $scholarship ? 'New program concern' : 'New applicant report',
+                'message' => $scholarship
+                    ? "{$request->user()->name} reported a concern about {$scholarship->title}."
+                    : "{$request->user()->name} submitted a {$validated['category']} concern.",
+                'action_url' => '/admin/reports',
+            ]));
 
         ActivityLog::record(
             $request->user(),
@@ -124,7 +126,7 @@ class SupportReportController extends Controller
 
         return response()->json([
             'message' => $scholarship
-                ? 'Your report was sent to the scholarship provider.'
+                ? 'Your report was sent to the scholarship provider and platform support.'
                 : 'Your report was sent to platform support.',
             'report' => $this->reportPayload($report->load('scholarship:id,title')),
         ], 201);
@@ -160,7 +162,7 @@ class SupportReportController extends Controller
 
         return $this->queueResponse(
             $request,
-            SupportReport::query()->where('assigned_role', 'admin'),
+            SupportReport::query(),
         );
     }
 
@@ -171,8 +173,6 @@ class SupportReportController extends Controller
 
         if ($user->isProvider()) {
             abort_unless($report->assigned_role === 'provider' && $report->provider_id === $user->id, 403);
-        } else {
-            abort_unless($report->assigned_role === 'admin', 403);
         }
 
         $validated = $request->validate([
@@ -260,7 +260,9 @@ class SupportReportController extends Controller
             'description' => $report->description,
             'status' => $report->status,
             'status_label' => ucfirst($report->status),
-            'sent_to' => $report->assigned_role === 'provider' ? 'Program provider' : 'Platform support',
+            'sent_to' => $report->assigned_role === 'provider'
+                ? 'Program provider and platform support'
+                : 'Platform support',
             'program' => $report->scholarship ? [
                 'id' => $report->scholarship->id,
                 'title' => $report->scholarship->title,

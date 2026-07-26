@@ -28,7 +28,7 @@ Route::post('/dashboard/scholarships/{scholarship}/application-start', [Applican
 Route::get('/dashboard/applications', [ApplicantDashboardController::class, 'applications'])->middleware('auth')->name('dashboard.applications');
 Route::get('/dashboard/documents', [ApplicantDashboardController::class, 'documents'])->middleware('auth')->name('dashboard.documents');
 Route::get('/dashboard/profile', [ApplicantDashboardController::class, 'profile'])->middleware('auth')->name('dashboard.profile');
-Route::get('/dashboard/reports', [SupportReportController::class, 'applicantPage'])->middleware('auth')->name('dashboard.reports');
+Route::get('/dashboard/reports', fn () => redirect('/dashboard'))->middleware('auth')->name('dashboard.reports');
 Route::get('/dashboard/reports/data', [SupportReportController::class, 'applicantData'])->middleware('auth')->name('dashboard.reports.data');
 Route::post('/dashboard/reports', [SupportReportController::class, 'store'])->middleware(['auth', 'throttle:6,1'])->name('dashboard.reports.store');
 Route::get('/dashboard/profile/data', [ApplicantDashboardController::class, 'profileData'])->middleware('auth')->name('dashboard.profile.data');
@@ -139,6 +139,8 @@ Route::middleware(['auth', 'provider'])
         Route::get('/scholarships', [ProviderController::class, 'scholarships'])->name('scholarships');
         Route::post('/scholarships', [ProviderController::class, 'storeScholarship'])->name('scholarships.store');
         Route::post('/scholarships/{scholarship}/events', [ProviderController::class, 'upsertScholarshipEvent'])->name('scholarships.events.upsert');
+        Route::patch('/scholarships/{scholarship}/events/{event}/complete', [ProviderController::class, 'completeScholarshipEvent'])->name('scholarships.events.complete');
+        Route::patch('/scholarships/{scholarship}/events/{event}/attendance', [ProviderController::class, 'bulkUpdateScholarshipEventAttendance'])->name('scholarships.events.attendance');
         Route::get('/scholarships/{scholarship}', [ProviderController::class, 'showScholarship'])->name('scholarships.show');
         Route::put('/scholarships/{scholarship}', [ProviderController::class, 'updateScholarship'])->name('scholarships.update');
         Route::post('/scholarships/{scholarship}/duplicate', [ProviderController::class, 'duplicateScholarship'])->name('scholarships.duplicate');

@@ -34,6 +34,28 @@ const roleFilters = computed(() => [
     { value: 'provider', label: 'Providers', count: stats.value.providers },
     { value: 'admin', label: 'Admins', count: stats.value.admins },
 ]);
+const applicantVerificationStates = {
+    approved: {
+        label: 'Profile verified',
+        icon: 'fa-solid fa-circle-check',
+        className: 'bg-emerald-100 text-emerald-700',
+    },
+    pending: {
+        label: 'Proof pending',
+        icon: 'fa-solid fa-clock',
+        className: 'bg-amber-100 text-amber-700',
+    },
+    rejected: {
+        label: 'Proof rejected',
+        icon: 'fa-solid fa-circle-xmark',
+        className: 'bg-rose-100 text-rose-700',
+    },
+    missing: {
+        label: 'No profile proof',
+        icon: 'fa-solid fa-circle-minus',
+        className: 'bg-slate-100 text-slate-500',
+    },
+};
 
 const paginationLabel = computed(() => {
     if (!pagination.value.total) {
@@ -51,6 +73,10 @@ function roleLabel(role) {
 
 function statusLabel(status) {
     return status === 'suspended' ? 'Suspended' : 'Active';
+}
+
+function applicantVerificationState(status) {
+    return applicantVerificationStates[status] ?? applicantVerificationStates.missing;
 }
 
 function actionKey(user, action) {
@@ -356,7 +382,7 @@ onMounted(loadAdminData);
                                         </span>
                                     </td>
                                     <td class="px-4 py-3 align-top">
-                                        <div class="flex flex-wrap gap-1.5">
+                                        <div class="flex items-center gap-1.5 whitespace-nowrap">
                                             <span
                                                 :class="[
                                                     'whitespace-nowrap rounded-md px-2 py-1 text-xs font-bold',
@@ -375,24 +401,12 @@ onMounted(loadAdminData);
                                             </span>
                                             <span
                                                 v-if="user.role === 'applicant'"
-                                                :class="[
-                                                    'whitespace-nowrap rounded-md px-2 py-1 text-xs font-bold',
-                                                    user.applicant_verification_status === 'approved'
-                                                        ? 'bg-emerald-100 text-emerald-800'
-                                                        : user.applicant_verification_status === 'pending'
-                                                            ? 'bg-amber-100 text-amber-800'
-                                                            : user.applicant_verification_status === 'rejected'
-                                                                ? 'bg-rose-100 text-rose-800'
-                                                                : 'bg-slate-100 text-slate-600',
-                                                ]"
+                                                :title="applicantVerificationState(user.applicant_verification_status).label"
+                                                :aria-label="applicantVerificationState(user.applicant_verification_status).label"
+                                                :class="['inline-grid h-6 w-6 shrink-0 place-items-center rounded-md text-xs', applicantVerificationState(user.applicant_verification_status).className]"
                                             >
-                                                {{ user.applicant_verification_status === 'approved'
-                                                    ? 'Profile verified'
-                                                    : user.applicant_verification_status === 'pending'
-                                                        ? 'Proof pending'
-                                                        : user.applicant_verification_status === 'rejected'
-                                                            ? 'Proof rejected'
-                                                            : 'No proof' }}
+                                                <i :class="applicantVerificationState(user.applicant_verification_status).icon" aria-hidden="true"></i>
+                                                <span class="sr-only">{{ applicantVerificationState(user.applicant_verification_status).label }}</span>
                                             </span>
                                         </div>
                                     </td>

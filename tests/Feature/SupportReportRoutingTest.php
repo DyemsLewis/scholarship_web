@@ -13,7 +13,7 @@ class SupportReportRoutingTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_program_report_is_routed_only_to_the_program_provider(): void
+    public function test_program_report_is_shared_with_the_program_provider_and_admin(): void
     {
         Mail::fake();
         $applicant = User::factory()->create();
@@ -35,7 +35,7 @@ class SupportReportRoutingTest extends TestCase
                 'description' => 'Please clarify which school record should be uploaded.',
             ])
             ->assertCreated()
-            ->assertJsonPath('report.sent_to', 'Program provider');
+            ->assertJsonPath('report.sent_to', 'Program provider and platform support');
 
         $report = SupportReport::query()->firstOrFail();
 
@@ -51,7 +51,7 @@ class SupportReportRoutingTest extends TestCase
             'user_id' => $provider->id,
             'type' => 'support_report',
         ]);
-        $this->assertDatabaseMissing('portal_notifications', [
+        $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $admin->id,
             'type' => 'support_report',
         ]);
@@ -69,7 +69,7 @@ class SupportReportRoutingTest extends TestCase
         $this->actingAs($admin)
             ->getJson('/admin/reports/data')
             ->assertOk()
-            ->assertJsonCount(0, 'reports');
+            ->assertJsonPath('reports.0.id', $report->id);
     }
 
     public function test_non_program_report_is_routed_to_admin_and_visible_only_to_its_applicant(): void
@@ -124,7 +124,7 @@ class SupportReportRoutingTest extends TestCase
             ->assertJsonCount(0, 'reports');
     }
 
-    public function test_only_the_assigned_staff_role_can_resolve_a_report(): void
+    public function test_program_provider_and_admin_can_resolve_a_report_but_other_providers_cannot(): void
     {
         Mail::fake();
         $applicant = User::factory()->create();
@@ -147,17 +147,18 @@ class SupportReportRoutingTest extends TestCase
 
         $this->actingAs($admin)
             ->patchJson("/admin/reports/{$report->id}/status", ['status' => 'resolved'])
-            ->assertForbidden();
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/reports/{$report->id}/status", ['status' => 'resolved'])
             ->assertOk()
             ->assertJsonPath('report.status', 'resolved');
 
+        $this->actingAs($provider)
+            ->patchJson("/provider/reports/{$report->id}/status", ['status' => 'open'])
+            ->assertOk()
+            ->assertJsonPath('report.status', 'open');
+
         $this->assertDatabaseHas('support_reports', [
             'id' => $report->id,
-            'status' => 'resolved',
-            'resolved_by' => $provider->id,
+            'status' => 'open',
+            'resolved_by' => null,
         ]);
         $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $applicant->id,

@@ -1,71 +1,21 @@
 <script setup>
-import { computed, ref } from 'vue';
-import TermsModal from './TermsModal.vue';
+import PortalFooter from './PortalFooter.vue';
 
-const props = defineProps({
+defineProps({
     variant: {
         type: String,
         default: 'light',
         validator: (value) => ['light', 'dark'].includes(value),
     },
 });
-
-const currentYear = new Date().getFullYear();
-const isDark = computed(() => props.variant === 'dark');
-const showTermsModal = ref(false);
-
-const links = [
-    { href: '/', label: 'Home' },
-    { href: '/login', label: 'Login' },
-    { href: '/register', label: 'Register' },
-    { href: '/provider/register', label: 'Provider Registration' },
-];
 </script>
 
 <template>
-    <footer
-        :class="[
-            'border-t',
-            isDark
-                ? 'border-white/10 bg-slate-950 text-slate-300'
-                : 'border-slate-200 bg-white text-slate-500'
-        ]"
-    >
-        <div class="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-            <div>
-                <p :class="['font-display text-lg font-bold', isDark ? 'text-white' : 'text-slate-950']">
-                    Scholarship Portal
-                </p>
-                <p class="mt-2 max-w-xl text-sm leading-6">
-                    Applicant and provider access for scholarship opportunities.
-                </p>
-            </div>
-
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <nav class="flex flex-wrap gap-3 text-sm font-semibold">
-                    <a
-                        v-for="link in links"
-                        :key="link.href"
-                        :href="link.href"
-                        :class="isDark ? 'text-slate-300 transition hover:text-amber-200' : 'text-slate-600 transition hover:text-slate-950'"
-                    >
-                        {{ link.label }}
-                    </a>
-                    <button
-                        type="button"
-                        :class="isDark ? 'text-left text-slate-300 transition hover:text-amber-200' : 'text-left text-slate-600 transition hover:text-slate-950'"
-                        @click="showTermsModal = true"
-                    >
-                        Terms
-                    </button>
-                </nav>
-
-                <p :class="['text-sm', isDark ? 'text-slate-400' : 'text-slate-500']">
-                    &copy; {{ currentYear }}
-                </p>
-            </div>
-        </div>
-
-        <TermsModal v-model="showTermsModal" context="general" />
-    </footer>
+    <PortalFooter
+        context="public"
+        panel-name="Scholarship Portal"
+        message="Helping Filipino learners discover suitable scholarships and connect with verified providers."
+        :variant="variant"
+        standalone
+    />
 </template>

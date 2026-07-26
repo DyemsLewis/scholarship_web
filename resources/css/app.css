@@ -24,6 +24,11 @@
 }
 
 @layer base {
+    html,
+    body {
+        overflow-x: clip;
+    }
+
     body {
         @apply bg-slate-950 text-slate-100 antialiased;
     }

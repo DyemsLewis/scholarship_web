@@ -7,7 +7,9 @@ use App\Models\MobileApiToken;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\ScholarshipEvent;
 use App\Models\User;
+use App\Services\ScholarshipEventService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -285,5 +287,85 @@ class ApplicationScheduleWorkflowTest extends TestCase
             );
 
         $this->assertNull($schedule->fresh()->applicant_acknowledged_at);
+    }
+
+    public function test_provider_can_complete_one_program_event_and_record_attendance_in_bulk(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $applicants = User::factory()->count(3)->create();
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Bulk Attendance Scholarship',
+            'description' => 'Tests scalable provider attendance tracking.',
+            'selection_stages' => ['screening', 'exam', 'distribution'],
+            'status' => 'published',
+        ]);
+        $applications = $applicants->map(fn (User $applicant) => ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'exam_qualified',
+            'submitted_at' => now(),
+        ]));
+        $event = ScholarshipEvent::create([
+            'scholarship_id' => $scholarship->id,
+            'type' => 'exam',
+            'title' => 'Qualifying exam',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'venue' => 'Provider office',
+            'instructions' => 'Bring a school ID.',
+            'status' => 'scheduled',
+            'created_by' => $provider->id,
+            'updated_by' => $provider->id,
+        ]);
+
+        app(ScholarshipEventService::class)->syncEligibleApplications($event);
+
+        $this->actingAs($otherProvider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/complete")
+            ->assertForbidden();
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/complete")
+            ->assertOk()
+            ->assertJsonPath('event.status', 'completed')
+            ->assertJsonPath('participant_count', 3);
+
+        $selectedIds = $applications->take(2)->pluck('id')->all();
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/attendance", [
+                'application_ids' => $selectedIds,
+                'attendance_status' => 'attended',
+                'attendance_notes' => 'Attendance checked at the venue.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('updated_count', 2);
+
+        foreach ($selectedIds as $applicationId) {
+            $this->assertDatabaseHas('scholarship_applications', [
+                'id' => $applicationId,
+                'status' => 'exam_taken',
+            ]);
+            $this->assertDatabaseHas('application_schedules', [
+                'scholarship_application_id' => $applicationId,
+                'type' => 'exam',
+                'status' => 'completed',
+                'attendance_status' => 'attended',
+            ]);
+        }
+
+        $unselectedApplication = $applications->last();
+        $this->assertDatabaseHas('application_schedules', [
+            'scholarship_application_id' => $unselectedApplication->id,
+            'type' => 'exam',
+            'status' => 'scheduled',
+            'attendance_status' => 'pending',
+        ]);
+        $this->assertDatabaseHas('scholarship_applications', [
+            'id' => $unselectedApplication->id,
+            'status' => 'exam_scheduled',
+        ]);
     }
 }
