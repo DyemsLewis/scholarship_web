@@ -174,7 +174,7 @@ onMounted(loadProviderData);
         <ProviderSidebar />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-6xl">
+            <div class="mx-auto max-w-7xl">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>

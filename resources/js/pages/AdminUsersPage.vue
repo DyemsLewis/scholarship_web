@@ -75,6 +75,15 @@ function statusLabel(status) {
     return status === 'suspended' ? 'Suspended' : 'Active';
 }
 
+function userInitials(user) {
+    return String(user?.name || user?.username || 'User')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join('');
+}
+
 function applicantVerificationState(status) {
     return applicantVerificationStates[status] ?? applicantVerificationStates.missing;
 }
@@ -212,252 +221,192 @@ onMounted(loadAdminData);
                     </div>
                 </header>
 
-                <div class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                    <div class="flex flex-col gap-4 border-b border-slate-200 p-4">
-                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div>
-                                <h3 class="text-lg font-bold text-slate-950">
-                                    User Records
-                                </h3>
-                                <p class="mt-1 text-sm text-slate-500">
-                                    {{ paginationLabel }}
-                                </p>
-                                <p class="mt-1 text-xs font-semibold text-slate-500">
-                                    {{ stats.suspended_users }} suspended / {{ stats.password_resets_required }} password resets required
-                                </p>
-                            </div>
-
-                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                <input
-                                    v-model="search"
-                                    type="search"
-                                    placeholder="Search users"
-                                    class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100 sm:w-72"
-                                >
-
-                                <button
-                                    type="button"
-                                    class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
-                                    @click="loadAdminData(pagination.current_page)"
-                                >
-                                    Refresh
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="flex flex-wrap gap-2">
-                            <button
-                                v-for="filter in roleFilters"
-                                :key="filter.value"
-                                type="button"
-                                :class="[
-                                    'rounded-md border px-3 py-2 text-sm font-semibold transition',
-                                    selectedRole === filter.value
-                                        ? 'border-slate-900 bg-slate-900 text-white'
-                                        : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'
-                                ]"
-                                @click="selectRole(filter.value)"
-                            >
-                                {{ filter.label }} ({{ filter.count }})
-                            </button>
-                        </div>
-
-                    </div>
-
-                    <div v-if="isLoading" class="p-6 text-sm text-slate-500">
-                        Loading users...
-                    </div>
-
-                    <div v-else-if="errorMessage" class="p-6">
-                        <p class="rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
-                            {{ errorMessage }}
+                <section class="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <div>
+                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Account Directory</p>
+                        <h3 class="mt-2 text-xl font-bold text-slate-950">Accounts and access</h3>
+                        <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                            {{ paginationLabel }}
                         </p>
                     </div>
 
-                    <div v-else class="max-w-full overflow-x-auto">
-                        <table class="w-full min-w-[58rem] table-fixed divide-y divide-slate-200 text-left text-sm xl:min-w-full">
-                            <colgroup>
-                                <col class="w-[16rem]">
-                                <col class="w-[9rem]">
-                                <col class="w-[8rem]">
-                                <col class="w-[7rem]">
-                                <col class="w-[10rem]">
-                                <col class="w-[8rem]">
-                                <col class="w-[13rem]">
-                            </colgroup>
-                            <thead class="bg-slate-50 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-                                <tr>
-                                    <th class="px-4 py-3">
-                                        Account
-                                    </th>
-                                    <th class="px-4 py-3">
-                                        Username
-                                    </th>
-                                    <th class="px-4 py-3">
-                                        Contact
-                                    </th>
-                                    <th class="px-4 py-3">
-                                        Role
-                                    </th>
-                                    <th class="px-4 py-3">
-                                        Status
-                                    </th>
-                                    <th class="px-4 py-3">
-                                        Registered
-                                    </th>
-                                    <th class="px-4 py-3 text-right">
-                                        Actions
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100 bg-white">
-                                <tr
-                                    v-for="user in users"
-                                    :key="user.id"
-                                    class="hover:bg-slate-50"
+                    <div class="mt-4 flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div class="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                            <div class="relative w-full sm:max-w-sm">
+                                <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
+                                <input
+                                    v-model="search"
+                                    type="search"
+                                    placeholder="Search name, email, or username"
+                                    class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                                 >
-                                    <td class="px-4 py-3 align-top">
-                                        <p :title="user.name" class="truncate font-semibold text-slate-950">
-                                            {{ user.name }}
-                                        </p>
-                                        <p :title="user.email" class="mt-1 truncate text-xs text-slate-500">
-                                            {{ user.email }}
-                                        </p>
-                                    </td>
-                                    <td class="px-4 py-3 align-top text-slate-600">
-                                        <p :title="user.username || '-'" class="truncate">
-                                            {{ user.username || '-' }}
-                                        </p>
-                                    </td>
-                                    <td class="px-4 py-3 align-top text-slate-600">
-                                        <p :title="user.contact_number || '-'" class="truncate">
-                                            {{ user.contact_number || '-' }}
-                                        </p>
-                                    </td>
-                                    <td class="px-4 py-3 align-top">
+                            </div>
+                            <button
+                                type="button"
+                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+                                @click="loadAdminData(pagination.current_page)"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+                        <p class="text-xs font-semibold text-slate-500">
+                            {{ stats.suspended_users }} suspended &middot; {{ stats.password_resets_required }} reset required
+                        </p>
+                    </div>
+
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <button
+                            v-for="filter in roleFilters"
+                            :key="filter.value"
+                            type="button"
+                            :class="[
+                                'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
+                                selectedRole === filter.value
+                                    ? 'border-slate-900 bg-slate-900 text-white'
+                                    : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'
+                            ]"
+                            @click="selectRole(filter.value)"
+                        >
+                            {{ filter.label }} ({{ filter.count }})
+                        </button>
+                    </div>
+
+                    <div v-if="isLoading" class="mt-5 rounded-md border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                        Loading users...
+                    </div>
+
+                    <div v-else-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
+                        {{ errorMessage }}
+                    </div>
+
+                    <div v-else-if="users.length" class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                        <article
+                            v-for="user in users"
+                            :key="user.id"
+                            class="flex flex-col gap-4 border-b border-slate-200 p-4 transition last:border-b-0 hover:bg-slate-50 lg:flex-row lg:items-center"
+                        >
+                            <div class="flex min-w-0 flex-1 items-start gap-3">
+                                <div class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold tracking-[0.08em] text-white">
+                                    {{ userInitials(user) }}
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h4 class="truncate text-sm font-bold text-slate-950 sm:text-base">{{ user.name }}</h4>
                                         <span
                                             :class="[
-                                                'inline-flex whitespace-nowrap rounded-md px-2 py-1 text-xs font-bold',
+                                                'rounded-md px-2 py-1 text-[10px] font-bold uppercase',
                                                 user.role === 'admin'
                                                     ? 'bg-amber-100 text-amber-800'
                                                     : user.role === 'provider'
-                                                        ? 'bg-slate-100 text-slate-700'
+                                                        ? 'bg-slate-200 text-slate-700'
                                                         : 'bg-emerald-100 text-emerald-800'
                                             ]"
                                         >
                                             {{ roleLabel(user.role) }}
                                         </span>
-                                        <p v-if="user.account_title" class="mt-1 text-xs capitalize text-slate-500">
-                                            {{ user.account_title.replace(/_/g, ' ') }}
-                                        </p>
-                                    </td>
-                                    <td class="px-4 py-3 align-top">
-                                        <div class="flex items-center gap-1.5 whitespace-nowrap">
-                                            <span
-                                                :class="[
-                                                    'whitespace-nowrap rounded-md px-2 py-1 text-xs font-bold',
-                                                    user.account_status === 'suspended'
-                                                        ? 'bg-rose-100 text-rose-800'
-                                                        : 'bg-emerald-100 text-emerald-800'
-                                                ]"
-                                            >
-                                                {{ statusLabel(user.account_status) }}
-                                            </span>
-                                            <span
-                                                v-if="user.must_reset_password"
-                                                class="whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs font-bold text-white"
-                                            >
-                                                Reset required
-                                            </span>
-                                            <span
-                                                v-if="user.role === 'applicant'"
-                                                :title="applicantVerificationState(user.applicant_verification_status).label"
-                                                :aria-label="applicantVerificationState(user.applicant_verification_status).label"
-                                                :class="['inline-grid h-6 w-6 shrink-0 place-items-center rounded-md text-xs', applicantVerificationState(user.applicant_verification_status).className]"
-                                            >
-                                                <i :class="applicantVerificationState(user.applicant_verification_status).icon" aria-hidden="true"></i>
-                                                <span class="sr-only">{{ applicantVerificationState(user.applicant_verification_status).label }}</span>
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-3 align-top text-slate-600">
-                                        {{ user.created_at }}
-                                    </td>
-                                    <td class="px-4 py-3 text-right align-top">
-                                        <div class="flex flex-wrap justify-end gap-1.5">
-                                            <button
-                                                type="button"
-                                                class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                :disabled="Boolean(activeAction)"
-                                                @click="forcePasswordReset(user)"
-                                            >
-                                                {{ isActionLoading(user, 'force-reset') ? 'Resetting...' : 'Reset' }}
-                                            </button>
-
-                                            <button
-                                                v-if="!user.email_verified"
-                                                type="button"
-                                                class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                :disabled="Boolean(activeAction)"
-                                                @click="verifyEmail(user)"
-                                            >
-                                                {{ isActionLoading(user, 'verify-email') ? 'Verifying...' : 'Verify' }}
-                                            </button>
-
-                                            <button
-                                                v-if="!user.email_verified"
-                                                type="button"
-                                                class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                :disabled="Boolean(activeAction)"
-                                                @click="resendVerificationEmail(user)"
-                                            >
-                                                {{ isActionLoading(user, 'resend-verification') ? 'Sending...' : 'Resend' }}
-                                            </button>
-
-                                            <a
-                                                :href="`/admin/accounts/${user.id}/edit`"
-                                                class="inline-flex rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                            >
-                                                Edit
-                                            </a>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        <div v-if="users.length === 0" class="p-6 text-sm text-slate-500">
-                            No users found.
-                        </div>
-
-                        <div
-                            v-if="pagination.last_page > 1"
-                            class="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                            <span>
-                                Page {{ pagination.current_page }} of {{ pagination.last_page }}
-                            </span>
-                            <div class="flex gap-2">
-                                <button
-                                    type="button"
-                                    class="rounded-md border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                    :disabled="pagination.current_page <= 1"
-                                    @click="goToPage(pagination.current_page - 1)"
-                                >
-                                    Previous
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded-md border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                    :disabled="pagination.current_page >= pagination.last_page"
-                                    @click="goToPage(pagination.current_page + 1)"
-                                >
-                                    Next
-                                </button>
+                                        <span
+                                            :class="[
+                                                'rounded-md px-2 py-1 text-[10px] font-bold uppercase',
+                                                user.account_status === 'suspended'
+                                                    ? 'bg-rose-100 text-rose-800'
+                                                    : 'bg-emerald-100 text-emerald-800'
+                                            ]"
+                                        >
+                                            {{ statusLabel(user.account_status) }}
+                                        </span>
+                                        <span
+                                            v-if="user.must_reset_password"
+                                            class="rounded-md bg-slate-900 px-2 py-1 text-[10px] font-bold uppercase text-white"
+                                        >
+                                            Reset required
+                                        </span>
+                                        <span
+                                            v-if="user.role === 'applicant'"
+                                            :title="applicantVerificationState(user.applicant_verification_status).label"
+                                            :aria-label="applicantVerificationState(user.applicant_verification_status).label"
+                                            :class="['inline-grid h-6 w-6 shrink-0 place-items-center rounded-md text-xs', applicantVerificationState(user.applicant_verification_status).className]"
+                                        >
+                                            <i :class="applicantVerificationState(user.applicant_verification_status).icon" aria-hidden="true"></i>
+                                            <span class="sr-only">{{ applicantVerificationState(user.applicant_verification_status).label }}</span>
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 truncate text-xs leading-5 text-slate-500">
+                                        {{ user.email }} &middot; @{{ user.username || 'no-username' }}
+                                        <template v-if="user.contact_number"> &middot; {{ user.contact_number }}</template>
+                                    </p>
+                                    <p class="mt-1 text-xs text-slate-400">
+                                        {{ user.account_title ? roleLabel(user.account_title) + ' · ' : '' }}Registered {{ user.created_at }}
+                                    </p>
+                                </div>
                             </div>
+
+                            <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+                                <button
+                                    type="button"
+                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    :disabled="Boolean(activeAction)"
+                                    @click="forcePasswordReset(user)"
+                                >
+                                    {{ isActionLoading(user, 'force-reset') ? 'Resetting...' : 'Reset password' }}
+                                </button>
+                                <button
+                                    v-if="!user.email_verified"
+                                    type="button"
+                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    :disabled="Boolean(activeAction)"
+                                    @click="verifyEmail(user)"
+                                >
+                                    {{ isActionLoading(user, 'verify-email') ? 'Verifying...' : 'Verify email' }}
+                                </button>
+                                <button
+                                    v-if="!user.email_verified"
+                                    type="button"
+                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    :disabled="Boolean(activeAction)"
+                                    @click="resendVerificationEmail(user)"
+                                >
+                                    {{ isActionLoading(user, 'resend-verification') ? 'Sending...' : 'Resend link' }}
+                                </button>
+                                <a
+                                    :href="`/admin/accounts/${user.id}/edit`"
+                                    class="inline-flex rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                >
+                                    Edit account
+                                </a>
+                            </div>
+                        </article>
+                    </div>
+
+                    <div v-else class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                        <p class="text-sm font-bold text-slate-900">No matching accounts</p>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Try another role or search term.</p>
+                    </div>
+
+                    <div
+                        v-if="pagination.last_page > 1"
+                        class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <span>Page {{ pagination.current_page }} of {{ pagination.last_page }}</span>
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                class="rounded-md border border-slate-300 px-3 py-2 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                :disabled="pagination.current_page <= 1"
+                                @click="goToPage(pagination.current_page - 1)"
+                            >
+                                Previous
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md border border-slate-300 px-3 py-2 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                :disabled="pagination.current_page >= pagination.last_page"
+                                @click="goToPage(pagination.current_page + 1)"
+                            >
+                                Next
+                            </button>
                         </div>
                     </div>
-                </div>
+                </section>
 
                 <AdminFooter />
             </div>

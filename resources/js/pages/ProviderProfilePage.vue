@@ -279,7 +279,7 @@ onMounted(loadProviderProfile);
         />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-6xl">
+            <div class="mx-auto max-w-7xl">
                 <header class="provider-hero">
                     <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                         Provider Profile

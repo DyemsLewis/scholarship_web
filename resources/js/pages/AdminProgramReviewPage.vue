@@ -381,21 +381,27 @@ onMounted(loadScholarship);
                 <header class="admin-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <a href="/admin/reviews" class="inline-flex text-sm font-bold text-amber-700 underline underline-offset-4">
-                                Back to review queue
-                            </a>
-                            <h2 class="mt-3 font-display text-3xl font-bold text-slate-950">Program review details</h2>
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Program Review</p>
+                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">Program review details</h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
                                 Confirm that applicants will see complete, accurate, and understandable scholarship information.
                             </p>
                         </div>
-                        <button
-                            type="button"
-                            class="w-fit rounded-md bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-200"
-                            @click="loadScholarship"
-                        >
-                            Refresh details
-                        </button>
+                        <div class="flex flex-wrap gap-2">
+                            <a
+                                href="/admin/reviews"
+                                class="inline-flex items-center rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                            >
+                                Back to reviews
+                            </a>
+                            <button
+                                type="button"
+                                class="w-fit rounded-md bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-200"
+                                @click="loadScholarship"
+                            >
+                                Refresh details
+                            </button>
+                        </div>
                     </div>
                 </header>
 

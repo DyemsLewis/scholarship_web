@@ -39,9 +39,9 @@ const {
 
 const detailSections = [
     { key: 'review', label: 'Review' },
-    { key: 'schedule', label: 'Schedule' },
     { key: 'documents', label: 'Documents' },
     { key: 'applicant', label: 'Applicant' },
+    { key: 'schedule', label: 'Schedule' },
     { key: 'history', label: 'History' },
 ];
 const scheduleTypeCatalog = [
@@ -760,8 +760,65 @@ onMounted(loadApplication);
                     </nav>
 
                     <div :class="usesDetailSidebar ? 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]' : 'block'">
-                        <div v-if="activeSection !== 'applicant'" class="space-y-5">
-                            <section v-if="activeSection === 'review' && application.exam" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div v-if="activeSection !== 'applicant'" class="flex flex-col gap-5">
+                            <section v-if="activeSection === 'review'" class="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="border-b border-slate-200 px-5 py-4">
+                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Review overview</p>
+                                    <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                        <div>
+                                            <h3 class="text-xl font-bold text-slate-950">Check the application before deciding</h3>
+                                            <p class="mt-1 text-sm leading-6 text-slate-600">Use these four review areas as a guide. The provider still makes the final decision.</p>
+                                        </div>
+                                        <span :class="['w-fit rounded-md px-2.5 py-1.5 text-xs font-bold uppercase', statusClass(application.status)]">
+                                            {{ statusLabel(application.status) }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="grid sm:grid-cols-2 xl:grid-cols-4">
+                                    <div class="border-b border-slate-200 p-4 sm:border-r xl:border-b-0">
+                                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                                            <i class="fa-solid fa-scale-balanced text-amber-700" aria-hidden="true"></i>
+                                            Eligibility signal
+                                        </div>
+                                        <p class="mt-2 text-lg font-bold text-slate-950">{{ application.dss_score ?? 0 }}% suitability</p>
+                                        <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}</p>
+                                    </div>
+
+                                    <button type="button" class="border-b border-slate-200 p-4 text-left transition hover:bg-slate-50 xl:border-b-0 xl:border-r" @click="activeSection = 'documents'">
+                                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                                            <i class="fa-solid fa-file-circle-check text-amber-700" aria-hidden="true"></i>
+                                            Documents
+                                        </div>
+                                        <p class="mt-2 text-lg font-bold text-slate-950">
+                                            {{ application.document_readiness?.uploaded ?? 0 }} of {{ application.document_readiness?.required ?? applicationRequirements.length }} uploaded
+                                        </p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">Open document review</p>
+                                    </button>
+
+                                    <button type="button" class="border-b border-slate-200 p-4 text-left transition hover:bg-slate-50 sm:border-r xl:border-b-0" @click="activeSection = 'applicant'">
+                                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                                            <i class="fa-solid fa-user-check text-amber-700" aria-hidden="true"></i>
+                                            Applicant profile
+                                        </div>
+                                        <p class="mt-2 text-lg font-bold text-slate-950">{{ profileVerificationLabel(application.applicant?.profile_verification_status) }}</p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">View profile and supporting proof</p>
+                                    </button>
+
+                                    <div class="p-4">
+                                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                                            <i class="fa-solid fa-list-check text-amber-700" aria-hidden="true"></i>
+                                            Review rubric
+                                        </div>
+                                        <p class="mt-2 text-lg font-bold text-slate-950">
+                                            {{ rubricDraftSummary.completed }} of {{ rubricDraftSummary.total }} scored
+                                        </p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ rubricDraftSummary.isComplete ? `${rubricDraftSummary.totalScore}% weighted score` : 'Complete scoring below' }}</p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section v-if="activeSection === 'review' && application.exam" class="order-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                                 <div class="grid sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center">
                                     <div class="flex h-36 items-center justify-center border-b border-slate-200 bg-slate-50 p-4 sm:border-b-0 sm:border-r">
                                         <img :src="application.exam.image_url" :alt="application.exam.title" class="h-full w-full object-contain">
@@ -783,17 +840,17 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'review'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'review'" class="order-5 rounded-lg border border-slate-300 bg-white p-5 shadow-sm">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                            Provider Review
+                                            Final Step
                                         </p>
                                         <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                            Review applicant
+                                            Record the final decision
                                         </h3>
                                         <p class="mt-1 text-sm leading-6 text-slate-600">
-                                            Check eligibility, requirements, profile proof, and the review rubric. Then approve or reject the applicant.
+                                            Choose an outcome only after reviewing the eligibility signal, documents, applicant profile, and rubric above.
                                         </p>
                                     </div>
                                     <div class="shrink-0 sm:text-right">
@@ -805,14 +862,14 @@ onMounted(loadApplication);
                                 </div>
 
                                 <div class="mt-5">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Decision</p>
+                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Available actions</p>
                                     <div v-if="suggestedReviewActions.length" class="mt-3 grid gap-3 md:grid-cols-2">
                                         <button
                                             v-for="action in suggestedReviewActions"
                                             :key="action.key"
                                             type="button"
                                             :class="[
-                                                'group flex min-h-32 flex-col rounded-md border p-4 text-left transition',
+                                                'group flex min-h-24 flex-col rounded-md border p-4 text-left transition',
                                                 isSelectedReviewAction(action)
                                                     ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
                                                     : action.tone === 'danger'
@@ -893,7 +950,7 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'review' && rubricReview.criteria?.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'review' && rubricReview.criteria?.length" class="order-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -974,11 +1031,11 @@ onMounted(loadApplication);
                                 </div>
 
                                 <p v-if="showRubricDetails" class="mt-3 text-xs leading-5 text-slate-500">
-                                    {{ rubricReview.decision_notice }} Use the review button above to save these scores.
+                                    {{ rubricReview.decision_notice }} Use the final decision section below to save these scores.
                                 </p>
                             </section>
 
-                            <section v-if="activeSection === 'review'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'review'" class="order-2 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Decision Support
                                 </p>

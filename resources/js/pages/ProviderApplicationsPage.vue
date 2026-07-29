@@ -717,8 +717,8 @@ onMounted(loadProviderData);
                     {{ errorMessage }}
                 </div>
 
-                <div v-else class="mt-6 space-y-6">
-                    <section v-if="hasProgramContext" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div v-else class="mt-6 flex flex-col gap-6">
+                    <section v-if="hasProgramContext" class="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex min-w-0 items-center gap-3">
                                 <img
@@ -764,7 +764,7 @@ onMounted(loadProviderData);
                         </dl>
                     </section>
 
-                    <section v-if="hasProgramContext" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-if="hasProgramContext" class="order-3 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program Schedule</p>
@@ -881,7 +881,7 @@ onMounted(loadProviderData);
                         </form>
                     </section>
 
-                    <section v-if="hasProgramContext" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section v-if="hasProgramContext" class="order-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Attendance & results</p>
@@ -1034,7 +1034,7 @@ onMounted(loadProviderData);
                         </template>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section class="order-2 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Review Queue

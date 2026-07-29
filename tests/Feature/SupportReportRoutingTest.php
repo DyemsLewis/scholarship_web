@@ -124,7 +124,7 @@ class SupportReportRoutingTest extends TestCase
             ->assertJsonCount(0, 'reports');
     }
 
-    public function test_program_provider_and_admin_can_resolve_a_report_but_other_providers_cannot(): void
+    public function test_program_provider_and_admin_complete_independent_report_states_without_conflict(): void
     {
         Mail::fake();
         $applicant = User::factory()->create();
@@ -139,6 +139,8 @@ class SupportReportRoutingTest extends TestCase
             'subject' => 'Program schedule question',
             'description' => 'The listed schedule needs clarification from the provider.',
             'status' => 'open',
+            'provider_status' => 'open',
+            'admin_status' => 'open',
         ]);
 
         $this->actingAs($otherProvider)
@@ -148,21 +150,96 @@ class SupportReportRoutingTest extends TestCase
         $this->actingAs($admin)
             ->patchJson("/admin/reports/{$report->id}/status", ['status' => 'resolved'])
             ->assertOk()
-            ->assertJsonPath('report.status', 'resolved');
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/reports/{$report->id}/status", ['status' => 'open'])
-            ->assertOk()
-            ->assertJsonPath('report.status', 'open');
+            ->assertJsonPath('report.status', 'resolved')
+            ->assertJsonPath('report.admin_status', 'resolved')
+            ->assertJsonPath('report.provider_status', 'open')
+            ->assertJsonPath('report.overall_status', 'open');
 
         $this->assertDatabaseHas('support_reports', [
             'id' => $report->id,
             'status' => 'open',
+            'provider_status' => 'open',
+            'admin_status' => 'resolved',
+            'admin_resolved_by' => $admin->id,
+        ]);
+        $this->assertDatabaseCount('portal_notifications', 0);
+
+        $this->actingAs($admin)
+            ->getJson('/admin/reports/data?status=resolved')
+            ->assertOk()
+            ->assertJsonPath('reports.0.id', $report->id);
+
+        $this->actingAs($provider)
+            ->getJson('/provider/reports/data?status=open')
+            ->assertOk()
+            ->assertJsonPath('reports.0.id', $report->id);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/reports/{$report->id}/status", ['status' => 'resolved'])
+            ->assertOk()
+            ->assertJsonPath('report.status', 'resolved')
+            ->assertJsonPath('report.overall_status', 'resolved');
+
+        $this->assertDatabaseHas('support_reports', [
+            'id' => $report->id,
+            'status' => 'resolved',
+            'provider_status' => 'resolved',
+            'admin_status' => 'resolved',
+            'resolved_by' => $provider->id,
+        ]);
+        $this->assertDatabaseCount('portal_notifications', 1);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/reports/{$report->id}/status", ['status' => 'open'])
+            ->assertOk()
+            ->assertJsonPath('report.status', 'open')
+            ->assertJsonPath('report.admin_status', 'resolved')
+            ->assertJsonPath('report.overall_status', 'open');
+
+        $this->assertDatabaseHas('support_reports', [
+            'id' => $report->id,
+            'status' => 'open',
+            'provider_status' => 'open',
+            'provider_resolved_by' => null,
+            'admin_status' => 'resolved',
+            'admin_resolved_by' => $admin->id,
             'resolved_by' => null,
         ]);
         $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $applicant->id,
             'type' => 'support_report_status',
+        ]);
+        $this->assertDatabaseCount('portal_notifications', 2);
+    }
+
+    public function test_admin_resolution_closes_an_admin_only_report_immediately(): void
+    {
+        Mail::fake();
+        $applicant = User::factory()->create();
+        $admin = User::factory()->create(['role' => 'admin']);
+        $report = SupportReport::create([
+            'applicant_id' => $applicant->id,
+            'assigned_role' => 'admin',
+            'category' => 'technical',
+            'subject' => 'Documents page issue',
+            'description' => 'The applicant cannot open the prepared documents page.',
+            'status' => 'open',
+            'provider_status' => 'not_required',
+            'admin_status' => 'open',
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/reports/{$report->id}/status", ['status' => 'resolved'])
+            ->assertOk()
+            ->assertJsonPath('report.status', 'resolved')
+            ->assertJsonPath('report.overall_status', 'resolved');
+
+        $this->assertDatabaseHas('support_reports', [
+            'id' => $report->id,
+            'status' => 'resolved',
+            'provider_status' => 'not_required',
+            'admin_status' => 'resolved',
+            'resolved_by' => $admin->id,
         ]);
     }
 }

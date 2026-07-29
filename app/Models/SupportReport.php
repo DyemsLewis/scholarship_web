@@ -23,6 +23,12 @@ class SupportReport extends Model
         'subject',
         'description',
         'status',
+        'provider_status',
+        'provider_resolved_by',
+        'provider_resolved_at',
+        'admin_status',
+        'admin_resolved_by',
+        'admin_resolved_at',
         'resolved_by',
         'resolved_at',
     ];
@@ -30,6 +36,8 @@ class SupportReport extends Model
     protected function casts(): array
     {
         return [
+            'provider_resolved_at' => 'datetime',
+            'admin_resolved_at' => 'datetime',
             'resolved_at' => 'datetime',
         ];
     }
@@ -52,5 +60,15 @@ class SupportReport extends Model
     public function resolver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'resolved_by');
+    }
+
+    public function providerResolver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'provider_resolved_by');
+    }
+
+    public function adminResolver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'admin_resolved_by');
     }
 }

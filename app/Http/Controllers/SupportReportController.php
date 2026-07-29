@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -87,6 +88,8 @@ class SupportReportController extends Controller
             'subject' => trim($validated['subject']),
             'description' => trim($validated['description']),
             'status' => 'open',
+            'provider_status' => $scholarship ? 'open' : 'not_required',
+            'admin_status' => 'open',
         ]);
 
         if ($scholarship) {
@@ -158,6 +161,7 @@ class SupportReportController extends Controller
             SupportReport::query()
                 ->where('assigned_role', 'provider')
                 ->where('provider_id', $request->user()->providerOrganizationId()),
+            'provider',
         );
     }
 
@@ -175,6 +179,7 @@ class SupportReportController extends Controller
         return $this->queueResponse(
             $request,
             SupportReport::query(),
+            'admin',
         );
     }
 
@@ -194,35 +199,85 @@ class SupportReportController extends Controller
         $validated = $request->validate([
             'status' => ['required', Rule::in(['open', 'resolved'])],
         ]);
-        $changed = $report->status !== $validated['status'];
 
-        $report->update([
-            'status' => $validated['status'],
-            'resolved_by' => $validated['status'] === 'resolved' ? $user->id : null,
-            'resolved_at' => $validated['status'] === 'resolved' ? now() : null,
-        ]);
+        $viewerRole = $user->isAdmin() ? 'admin' : 'provider';
+        $roleStatusColumn = "{$viewerRole}_status";
+        $roleResolverColumn = "{$viewerRole}_resolved_by";
+        $roleResolvedAtColumn = "{$viewerRole}_resolved_at";
 
-        if ($changed) {
+        [$report, $roleStatusChanged, $overallStatusChanged] = DB::transaction(function () use (
+            $report,
+            $user,
+            $validated,
+            $roleStatusColumn,
+            $roleResolverColumn,
+            $roleResolvedAtColumn,
+        ): array {
+            $lockedReport = SupportReport::query()
+                ->whereKey($report->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $previousOverallStatus = $lockedReport->status;
+            $roleStatusChanged = $lockedReport->{$roleStatusColumn} !== $validated['status'];
+
+            $lockedReport->{$roleStatusColumn} = $validated['status'];
+            $lockedReport->{$roleResolverColumn} = $validated['status'] === 'resolved' ? $user->id : null;
+            $lockedReport->{$roleResolvedAtColumn} = $validated['status'] === 'resolved' ? now() : null;
+
+            $providerComplete = $lockedReport->assigned_role !== 'provider'
+                || $lockedReport->provider_status === 'resolved';
+            $adminComplete = $lockedReport->admin_status === 'resolved';
+            $lockedReport->status = $providerComplete && $adminComplete ? 'resolved' : 'open';
+            $overallStatusChanged = $previousOverallStatus !== $lockedReport->status;
+
+            if ($overallStatusChanged) {
+                $lockedReport->resolved_by = $lockedReport->status === 'resolved' ? $user->id : null;
+                $lockedReport->resolved_at = $lockedReport->status === 'resolved' ? now() : null;
+            }
+
+            $lockedReport->save();
+
+            return [$lockedReport, $roleStatusChanged, $overallStatusChanged];
+        });
+
+        if ($overallStatusChanged) {
             PortalNotification::create([
                 'user_id' => $report->applicant_id,
                 'type' => 'support_report_status',
-                'title' => $validated['status'] === 'resolved' ? 'Report marked resolved' : 'Report reopened',
-                'message' => "Your report '{$report->subject}' is now {$validated['status']}.",
+                'title' => $report->status === 'resolved' ? 'Report resolved' : 'Report reopened',
+                'message' => $report->status === 'resolved'
+                    ? "Your report '{$report->subject}' has been resolved by the responsible support teams."
+                    : "Your report '{$report->subject}' was reopened for further review.",
                 'action_url' => '/dashboard/reports',
             ]);
+        }
 
+        if ($roleStatusChanged) {
             ActivityLog::record(
                 $user,
                 'support_report_status_updated',
-                "{$user->name} marked support report #{$report->id} as {$validated['status']}.",
+                "{$user->name} marked the {$viewerRole} handling state for support report #{$report->id} as {$validated['status']}.",
                 $request,
-                ['support_report_id' => $report->id, 'status' => $validated['status']],
+                [
+                    'support_report_id' => $report->id,
+                    'handler_role' => $viewerRole,
+                    'role_status' => $validated['status'],
+                    'overall_status' => $report->status,
+                ],
             );
         }
 
+        $waitingForOtherRole = $validated['status'] === 'resolved' && $report->status !== 'resolved';
+
         return response()->json([
-            'message' => $validated['status'] === 'resolved' ? 'Report marked resolved.' : 'Report reopened.',
-            'report' => $this->reportPayload($report->fresh()->load(['applicant:id,first_name,last_name,email', 'scholarship:id,title'])),
+            'message' => $waitingForOtherRole
+                ? 'Your part is complete. The report remains open for the other support team.'
+                : ($validated['status'] === 'resolved' ? 'Report resolved.' : 'Report reopened for your team.'),
+            'report' => $this->reportPayload(
+                $report->fresh()->load(['applicant:id,first_name,last_name,email', 'scholarship:id,title']),
+                true,
+                $viewerRole,
+            ),
         ]);
     }
 
@@ -237,45 +292,69 @@ class SupportReportController extends Controller
             });
     }
 
-    private function queueResponse(Request $request, $query): JsonResponse
+    private function queueResponse(Request $request, $query, string $viewerRole): JsonResponse
     {
         $status = in_array($request->query('status'), ['open', 'resolved', 'all'], true)
             ? $request->query('status')
             : 'open';
+        $roleStatusColumn = "{$viewerRole}_status";
         $counts = [
-            'open' => (clone $query)->where('status', 'open')->count(),
-            'resolved' => (clone $query)->where('status', 'resolved')->count(),
+            'open' => (clone $query)->where($roleStatusColumn, 'open')->count(),
+            'resolved' => (clone $query)->where($roleStatusColumn, 'resolved')->count(),
             'all' => (clone $query)->count(),
         ];
 
         if ($status !== 'all') {
-            $query->where('status', $status);
+            $query->where($roleStatusColumn, $status);
         }
 
         $reports = $query
-            ->with(['applicant:id,first_name,last_name,email', 'scholarship:id,title'])
+            ->with([
+                'applicant:id,first_name,last_name,email',
+                'scholarship:id,title',
+                'providerResolver:id,role,username,email',
+                'adminResolver:id,role,username,email',
+            ])
             ->latest()
             ->paginate(8);
 
         return response()->json([
             'reports' => collect($reports->items())
-                ->map(fn (SupportReport $report): array => $this->reportPayload($report, true))
+                ->map(fn (SupportReport $report): array => $this->reportPayload($report, true, $viewerRole))
                 ->values(),
             'counts' => $counts,
             'pagination' => $this->paginationPayload($reports),
         ]);
     }
 
-    private function reportPayload(SupportReport $report, bool $includeApplicant = false): array
+    private function reportPayload(
+        SupportReport $report,
+        bool $includeApplicant = false,
+        ?string $viewerRole = null,
+    ): array
     {
+        $roleStatus = $viewerRole ? $report->{"{$viewerRole}_status"} : $report->status;
         $payload = [
             'id' => $report->id,
             'category' => $report->category,
             'category_label' => SupportReport::CATEGORIES[$report->category] ?? 'Concern',
             'subject' => $report->subject,
             'description' => $report->description,
-            'status' => $report->status,
-            'status_label' => ucfirst($report->status),
+            'status' => $roleStatus,
+            'status_label' => ucfirst($roleStatus),
+            'overall_status' => $report->status,
+            'overall_status_label' => ucfirst($report->status),
+            'provider_status' => $report->assigned_role === 'provider' ? $report->provider_status : null,
+            'provider_status_label' => $report->assigned_role === 'provider'
+                ? ucfirst($report->provider_status)
+                : 'Not required',
+            'provider_resolved_at' => $report->provider_resolved_at?->format('M d, Y h:i A'),
+            'provider_resolved_by' => $viewerRole ? $report->providerResolver?->name : null,
+            'admin_status' => $report->admin_status,
+            'admin_status_label' => ucfirst($report->admin_status),
+            'admin_resolved_at' => $report->admin_resolved_at?->format('M d, Y h:i A'),
+            'admin_resolved_by' => $viewerRole ? $report->adminResolver?->name : null,
+            'requires_both_roles' => $report->assigned_role === 'provider',
             'sent_to' => $report->assigned_role === 'provider'
                 ? 'Program provider and platform support'
                 : 'Platform support',

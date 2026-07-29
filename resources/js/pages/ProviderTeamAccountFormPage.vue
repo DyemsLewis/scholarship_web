@@ -156,12 +156,12 @@ onMounted(loadAccount);
         <ProviderSidebar />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-5xl">
+            <div class="mx-auto max-w-7xl">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Team Access</p>
-                            <h1 class="mt-2 font-display text-2xl font-bold text-slate-950">{{ isEditMode ? 'Edit team account' : 'Create team account' }}</h1>
+                            <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ isEditMode ? 'Edit team account' : 'Create team account' }}</h1>
                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Add the staff member's details, choose a role, and set their provider access.</p>
                         </div>
                         <a href="/provider/team" class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100">

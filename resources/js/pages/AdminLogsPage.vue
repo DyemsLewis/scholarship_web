@@ -49,6 +49,26 @@ function actionClass(action) {
     return 'bg-slate-100 text-slate-700';
 }
 
+function actionIcon(action) {
+    if (action === 'login_failed') {
+        return 'fa-triangle-exclamation';
+    }
+
+    if (action === 'account_created' || action === 'registered') {
+        return 'fa-user-plus';
+    }
+
+    if (action === 'login') {
+        return 'fa-right-to-bracket';
+    }
+
+    if (action === 'logout') {
+        return 'fa-right-from-bracket';
+    }
+
+    return 'fa-clock-rotate-left';
+}
+
 async function loadLogs(page = 1) {
     isLoading.value = true;
     errorMessage.value = '';
@@ -110,88 +130,83 @@ onMounted(() => loadLogs());
                     </div>
                 </header>
 
-                <div class="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
-                    <div class="flex flex-col gap-4 border-b border-slate-200 p-4">
-                        <div>
-                            <h3 class="text-lg font-bold text-slate-950">
-                                Recent Activity
-                            </h3>
-                            <p class="mt-1 text-sm text-slate-500">
-                                Showing {{ pagination.from ?? 0 }} to {{ pagination.to ?? 0 }} of {{ pagination.total }} records.
-                            </p>
-                        </div>
-
-                        <div class="flex flex-wrap gap-2">
-                            <button
-                                v-for="filter in actionFilters"
-                                :key="filter.value"
-                                type="button"
-                                :class="[
-                                    'rounded-md border px-3 py-2 text-sm font-semibold transition',
-                                    selectedAction === filter.value
-                                        ? 'border-slate-900 bg-slate-900 text-white'
-                                        : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'
-                                ]"
-                                @click="applyAction(filter.value)"
-                            >
-                                {{ filter.label }} ({{ filter.count }})
-                            </button>
-                        </div>
+                <section class="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <div>
+                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Activity Trail</p>
+                        <h3 class="mt-2 text-xl font-bold text-slate-950">Recent platform activity</h3>
+                        <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                            Showing {{ pagination.from ?? 0 }} to {{ pagination.to ?? 0 }} of {{ pagination.total }} records.
+                        </p>
                     </div>
 
-                    <div v-if="isLoading" class="p-6 text-sm text-slate-500">
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <button
+                            v-for="filter in actionFilters"
+                            :key="filter.value"
+                            type="button"
+                            :class="[
+                                'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
+                                selectedAction === filter.value
+                                    ? 'border-slate-900 bg-slate-900 text-white'
+                                    : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'
+                            ]"
+                            @click="applyAction(filter.value)"
+                        >
+                            {{ filter.label }} ({{ filter.count }})
+                        </button>
+                    </div>
+
+                    <div v-if="isLoading" class="mt-5 rounded-md border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
                         Loading activity logs...
                     </div>
 
-                    <div v-else-if="errorMessage" class="p-6">
-                        <p class="rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
-                            {{ errorMessage }}
-                        </p>
+                    <div v-else-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
+                        {{ errorMessage }}
                     </div>
 
-                    <div v-else class="divide-y divide-slate-100">
-                        <div
+                    <div v-else-if="entries.length" class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                        <article
                             v-for="entry in entries"
                             :key="entry.id"
-                            class="grid gap-4 p-4 lg:grid-cols-[12rem_1fr_10rem]"
+                            class="flex items-start gap-3 border-b border-slate-200 p-4 transition last:border-b-0 hover:bg-slate-50"
                         >
-                            <div>
-                                <span :class="['inline-flex rounded-md px-2 py-1 text-xs font-bold uppercase', actionClass(entry.action)]">
-                                    {{ actionLabel(entry.action) }}
-                                </span>
-                                <p class="mt-2 text-xs text-slate-500">
-                                    {{ entry.created_at }}
-                                </p>
+                            <div :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm', actionClass(entry.action)]">
+                                <i :class="['fa-solid', actionIcon(entry.action)]" aria-hidden="true"></i>
                             </div>
 
-                            <div>
-                                <p class="text-sm font-bold text-slate-950">
-                                    {{ entry.description }}
-                                </p>
-                                <p class="mt-1 text-sm text-slate-500">
-                                    Actor: {{ entry.actor_name }}
-                                </p>
-                                <p v-if="entry.metadata_summary" class="mt-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h4 class="text-sm font-bold text-slate-950 sm:text-base">{{ entry.description }}</h4>
+                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', actionClass(entry.action)]">
+                                                {{ actionLabel(entry.action) }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            {{ entry.actor_name }} &middot; {{ actionLabel(entry.actor_role || 'system') }}
+                                            <template v-if="entry.ip_address"> &middot; {{ entry.ip_address }}</template>
+                                        </p>
+                                    </div>
+                                    <time class="shrink-0 text-xs font-semibold text-slate-400">{{ entry.created_at }}</time>
+                                </div>
+                                <p v-if="entry.metadata_summary" class="mt-2 line-clamp-2 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
                                     {{ entry.metadata_summary }}
                                 </p>
                             </div>
-
-                            <div class="text-sm text-slate-500 lg:text-right">
-                                <p>{{ entry.actor_role || 'system' }}</p>
-                                <p class="mt-1">{{ entry.ip_address || 'No IP' }}</p>
-                            </div>
-                        </div>
-
-                        <div v-if="entries.length === 0" class="p-6 text-sm text-slate-500">
-                            No activity logs found for this filter.
-                        </div>
+                        </article>
                     </div>
 
-                    <div class="flex flex-col gap-3 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <p class="text-sm text-slate-500">
-                            Page {{ pagination.current_page }} of {{ pagination.last_page }}
-                        </p>
+                    <div v-else class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                        <p class="text-sm font-bold text-slate-900">No activity for this filter</p>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Choose another activity type to see other records.</p>
+                    </div>
 
+                    <div
+                        v-if="pagination.last_page > 1"
+                        class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <p class="text-sm text-slate-500">Page {{ pagination.current_page }} of {{ pagination.last_page }}</p>
                         <div class="flex gap-2">
                             <button
                                 type="button"
@@ -211,7 +226,7 @@ onMounted(() => loadLogs());
                             </button>
                         </div>
                     </div>
-                </div>
+                </section>
 
                 <AdminFooter />
             </div>

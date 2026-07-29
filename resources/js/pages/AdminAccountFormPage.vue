@@ -493,14 +493,14 @@ onMounted(loadAccount);
         />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-5xl">
+            <div class="mx-auto max-w-7xl">
                 <header class="admin-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                                 User Access
                             </p>
-                            <h2 class="mt-2 font-display text-2xl font-bold text-slate-950">
+                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 {{ isEditMode ? 'Edit user account' : 'Create user account' }}
                             </h2>
                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">

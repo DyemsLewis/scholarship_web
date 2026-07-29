@@ -25,6 +25,15 @@ const permissionLabels = {
     manage_team: 'Team accounts',
 };
 
+function accountInitials(name) {
+    return String(name ?? 'Team member')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join('');
+}
+
 async function loadTeam() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -81,7 +90,7 @@ onMounted(loadTeam);
         <ProviderSidebar />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-6xl">
+            <div class="mx-auto max-w-7xl">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -102,9 +111,20 @@ onMounted(loadTeam);
                 </div>
 
                 <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                    <div class="border-b border-slate-200 px-5 py-4">
-                        <h2 class="text-lg font-bold text-slate-950">Team members</h2>
-                        <p class="mt-1 text-sm text-slate-500">Primary provider ownership stays separate from these delegated accounts.</p>
+                    <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
+                                <i class="fa-solid fa-users-gear" aria-hidden="true"></i>
+                            </span>
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Access directory</p>
+                                <h2 class="mt-1 text-lg font-bold text-slate-950">Team members</h2>
+                                <p class="mt-0.5 text-sm text-slate-500">Delegated accounts only; primary provider ownership stays separate.</p>
+                            </div>
+                        </div>
+                        <span class="w-fit rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                            {{ accounts.length }} account{{ accounts.length === 1 ? '' : 's' }}
+                        </span>
                     </div>
 
                     <div v-if="isLoading" class="p-6 text-sm text-slate-500">Loading team accounts...</div>
@@ -114,16 +134,21 @@ onMounted(loadTeam);
                         <p class="mt-1 text-sm text-slate-500">Create one when another staff member needs provider access.</p>
                     </div>
                     <div v-else class="divide-y divide-slate-200">
-                        <article v-for="account in accounts" :key="account.id" class="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] lg:items-center">
-                            <div class="min-w-0">
+                        <article v-for="account in accounts" :key="account.id" class="grid gap-4 p-4 transition hover:bg-slate-50 sm:p-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] lg:items-center">
+                            <div class="flex min-w-0 items-center gap-3">
+                                <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-900 text-xs font-black text-amber-200">
+                                    {{ accountInitials(account.name) }}
+                                </span>
+                                <div class="min-w-0">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <h3 class="truncate text-sm font-bold text-slate-950">{{ account.name }}</h3>
                                     <span :class="['rounded px-2 py-1 text-[0.68rem] font-bold uppercase tracking-wide', account.account_status === 'suspended' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800']">
                                         {{ account.account_status === 'suspended' ? 'Suspended' : 'Active' }}
                                     </span>
                                 </div>
-                                <p class="mt-1 truncate text-sm text-slate-500">{{ account.email }} · @{{ account.username }}</p>
+                                <p class="mt-1 truncate text-sm text-slate-500">{{ account.email }} - @{{ account.username }}</p>
                                 <p class="mt-1 text-xs font-semibold text-amber-700">{{ account.team_role_label }}</p>
+                                </div>
                             </div>
 
                             <div>

@@ -155,15 +155,22 @@ onMounted(loadInsights);
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
                 <header class="provider-hero">
-                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                        Provider Review
-                    </p>
-                    <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                        Program and applicant review
-                    </h2>
-                    <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                        Review program activity, application movement, and document patterns without opening every record.
-                    </p>
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
+                                Provider Review
+                            </p>
+                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
+                                Review center
+                            </h2>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                                Start with applicant files that need attention, then use the summaries for additional context.
+                            </p>
+                        </div>
+                        <a href="/provider/applications" class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800">
+                            Open applications
+                        </a>
+                    </div>
                 </header>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
@@ -174,9 +181,9 @@ onMounted(loadInsights);
                     {{ errorMessage }}
                 </div>
 
-                <div v-else class="mt-6 space-y-6">
-                    <section class="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-                        <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <div v-else class="mt-6 flex flex-col gap-6">
+                    <section class="order-3 grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Application Funnel
                             </p>
@@ -199,7 +206,7 @@ onMounted(loadInsights);
                             </div>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Program Review
                             </p>
@@ -236,7 +243,7 @@ onMounted(loadInsights);
                         </article>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                    <section class="order-1 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -354,8 +361,8 @@ onMounted(loadInsights);
                         </div>
                     </section>
 
-                    <section class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-                        <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                    <section class="order-2 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Document Issues
                             </p>
@@ -403,7 +410,7 @@ onMounted(loadInsights);
                             </div>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 DSS Summary
                             </p>

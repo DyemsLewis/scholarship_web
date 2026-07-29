@@ -56,9 +56,9 @@ const formSections = [
     { id: 'overview', label: 'Overview', help: 'Name and describe the program.' },
     { id: 'offer', label: 'Offer', help: 'Set the benefits, deadline, and submission method.' },
     { id: 'audience', label: 'Applicants', help: 'Choose who the program is intended for.' },
-    { id: 'process', label: 'Process', help: 'Set review stages, confirmed schedules, and applicant contact.' },
     { id: 'location', label: 'Location', help: 'Add an address and optional map pin.' },
     { id: 'documents', label: 'Documents', help: 'Start with common files, then adjust if needed.' },
+    { id: 'process', label: 'Process', help: 'Set review stages, confirmed schedules, and applicant contact.' },
     { id: 'scoring', label: 'Scoring', help: 'Use the standard rubric or customize it.' },
     { id: 'finish', label: 'Finish', help: 'Review readiness and choose what happens next.' },
 ];
@@ -73,7 +73,7 @@ const applicationModeOptions = [
 const selectionStageOptions = [
     {
         value: 'screening',
-        label: 'Screening',
+        label: 'Review',
         description: 'Review eligibility, profile details, and submitted requirements.',
         icon: 'fa-solid fa-list-check',
         required: true,
@@ -1624,14 +1624,14 @@ onMounted(loadFormData);
         />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-6xl">
+            <div class="mx-auto max-w-7xl">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                                 {{ isEditMode ? 'Edit Program' : 'New Program' }}
                             </p>
-                            <h2 class="mt-2 font-display text-2xl font-bold text-slate-950 sm:text-3xl">
+                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 {{ isEditMode ? 'Update scholarship details' : 'Create a scholarship program' }}
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
