@@ -215,8 +215,7 @@ onMounted(loadApplicant);
                     <p class="mt-1 text-sm leading-6 text-rose-700">{{ loadError }}</p>
                 </div>
 
-                <div v-else class="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
-                    <div class="space-y-5">
+                <div v-else class="mt-6 space-y-5">
                         <article class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                             <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                                 <div class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
@@ -234,16 +233,16 @@ onMounted(loadApplicant);
 
                             <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-2 lg:grid-cols-4">
                                 <div class="border-b border-slate-200 p-4 sm:border-r lg:border-b-0">
-                                    <dt class="text-xs font-semibold text-slate-500">Education level</dt>
-                                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ statusLabel(applicant.education_level || 'not provided') }}</dd>
+                                    <dt class="text-xs font-semibold text-slate-500">Username</dt>
+                                    <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ applicant.username || 'Not provided' }}</dd>
                                 </div>
                                 <div class="border-b border-slate-200 p-4 lg:border-b-0 lg:border-r">
-                                    <dt class="text-xs font-semibold text-slate-500">Grade / year</dt>
-                                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ applicant.year_level || 'Not provided' }}</dd>
+                                    <dt class="text-xs font-semibold text-slate-500">Contact number</dt>
+                                    <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ applicant.contact_number || 'Not provided' }}</dd>
                                 </div>
                                 <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
-                                    <dt class="text-xs font-semibold text-slate-500">Location</dt>
-                                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ [applicant.city, applicant.province].filter(Boolean).join(', ') || 'Not provided' }}</dd>
+                                    <dt class="text-xs font-semibold text-slate-500">Account managed by</dt>
+                                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ statusLabel(applicant.account_managed_by || 'applicant') }}</dd>
                                 </div>
                                 <div class="p-4">
                                     <dt class="text-xs font-semibold text-slate-500">Registered</dt>
@@ -252,15 +251,20 @@ onMounted(loadApplicant);
                             </dl>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Profile information</p>
-                                <h3 class="mt-1 text-xl font-bold text-slate-950">Applicant record</h3>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">Check the saved details against the submitted proof.</p>
+                        <article id="applicant-details" class="scroll-mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <div class="flex items-start gap-3 border-b border-slate-200 p-5">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-white">
+                                    <i class="fa-solid fa-user-check" aria-hidden="true"></i>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 1 - Applicant details</p>
+                                    <h3 class="mt-1 text-xl font-bold text-slate-950">Profile information</h3>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">Compare these saved details with the proof files below.</p>
+                                </div>
                             </div>
 
-                            <div class="mt-4 grid overflow-hidden rounded-md border border-slate-200 lg:grid-cols-2">
-                                <section class="p-4 lg:border-r lg:border-slate-200">
+                            <div class="grid gap-4 bg-slate-50/70 p-4 sm:p-5 lg:grid-cols-2">
+                                <section class="rounded-md border border-slate-200 bg-white p-4">
                                     <div class="flex items-center gap-3">
                                         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
                                             <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i>
@@ -269,21 +273,29 @@ onMounted(loadApplicant);
                                     </div>
                                     <dl class="mt-3 divide-y divide-slate-200 text-sm">
                                         <div class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
+                                            <dt class="text-slate-500">Education level</dt>
+                                            <dd class="break-words font-bold text-slate-950 sm:text-right">{{ statusLabel(applicant.education_level || 'not provided') }}</dd>
+                                        </div>
+                                        <div class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
                                             <dt class="text-slate-500">School</dt>
                                             <dd class="break-words font-bold text-slate-950 sm:text-right">{{ applicant.school || 'Not provided' }}</dd>
                                         </div>
-                                        <div v-if="applicant.course_or_strand" class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
-                                            <dt class="text-slate-500">Track / course</dt>
-                                            <dd class="break-words font-bold text-slate-950 sm:text-right">{{ applicant.course_or_strand }}</dd>
+                                        <div class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
+                                            <dt class="text-slate-500">Grade / year</dt>
+                                            <dd class="break-words font-bold text-slate-950 sm:text-right">{{ applicant.year_level || 'Not provided' }}</dd>
                                         </div>
-                                        <div v-if="applicant.learner_reference_number" class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
+                                        <div class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
+                                            <dt class="text-slate-500">Track / course</dt>
+                                            <dd class="break-words font-bold text-slate-950 sm:text-right">{{ applicant.course_or_strand || 'Not applicable' }}</dd>
+                                        </div>
+                                        <div class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
                                             <dt class="text-slate-500">Learner number</dt>
-                                            <dd class="break-words font-bold text-slate-950 sm:text-right">{{ applicant.learner_reference_number }}</dd>
+                                            <dd class="break-words font-bold text-slate-950 sm:text-right">{{ applicant.learner_reference_number || 'Not provided' }}</dd>
                                         </div>
                                     </dl>
                                 </section>
 
-                                <section class="border-t border-slate-200 p-4 lg:border-t-0">
+                                <section class="rounded-md border border-slate-200 bg-white p-4">
                                     <div class="flex items-center gap-3">
                                         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
                                             <i class="fa-solid fa-address-card" aria-hidden="true"></i>
@@ -299,22 +311,22 @@ onMounted(loadApplicant);
                                             </dd>
                                         </div>
                                         <div class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
-                                            <dt class="text-slate-500">Contact</dt>
-                                            <dd class="break-words font-bold text-slate-950 sm:text-right">{{ applicant.contact_number || 'Not provided' }}</dd>
-                                        </div>
-                                        <div class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
                                             <dt class="text-slate-500">Full location</dt>
                                             <dd class="break-words font-bold text-slate-950 sm:text-right">{{ [applicant.city, applicant.province, applicant.region].filter(Boolean).join(', ') || 'Not provided' }}</dd>
                                         </div>
                                         <div class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
-                                            <dt class="text-slate-500">Managed by</dt>
-                                            <dd class="font-bold text-slate-950 sm:text-right">{{ statusLabel(applicant.account_managed_by || 'applicant') }}</dd>
+                                            <dt class="text-slate-500">Income bracket</dt>
+                                            <dd class="break-words font-bold text-slate-950 sm:text-right">{{ applicant.income_bracket || 'Not provided' }}</dd>
+                                        </div>
+                                        <div class="grid gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
+                                            <dt class="text-slate-500">Household size</dt>
+                                            <dd class="font-bold text-slate-950 sm:text-right">{{ applicant.household_size || 'Not provided' }}</dd>
                                         </div>
                                     </dl>
                                 </section>
                             </div>
 
-                            <section v-if="applicant.guardian_name" class="mt-4 overflow-hidden rounded-md border border-slate-200">
+                            <section v-if="applicant.guardian_name" class="mx-4 mb-4 overflow-hidden rounded-md border border-slate-200 sm:mx-5 sm:mb-5">
                                 <div class="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
                                     <i class="fa-solid fa-people-roof text-slate-600" aria-hidden="true"></i>
                                     <h4 class="text-sm font-bold text-slate-950">Parent or guardian</h4>
@@ -334,12 +346,21 @@ onMounted(loadApplicant);
                                     </div>
                                 </dl>
                             </section>
+                            <div class="flex justify-end border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
+                                <a
+                                    href="#verification-files"
+                                    class="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                >
+                                    Next: Review proof
+                                    <i class="fa-solid fa-arrow-down text-xs" aria-hidden="true"></i>
+                                </a>
+                            </div>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article id="verification-files" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Submitted proof</p>
+                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 2 - Submitted proof</p>
                                     <h3 class="mt-1 text-xl font-bold text-slate-950">Verification files</h3>
                                     <p class="mt-1 text-sm text-slate-600">Open each file and compare it with the applicant record.</p>
                                 </div>
@@ -382,13 +403,21 @@ onMounted(loadApplicant);
                             <p v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
                                 No proof has been uploaded. This applicant cannot be verified yet.
                             </p>
+                            <div class="mt-4 flex justify-end border-t border-slate-200 pt-4">
+                                <a
+                                    href="#verification-decision"
+                                    class="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                >
+                                    Next: Make decision
+                                    <i class="fa-solid fa-arrow-down text-xs" aria-hidden="true"></i>
+                                </a>
+                            </div>
                         </article>
-                    </div>
 
-                    <aside class="h-fit rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-8">
+                    <section id="verification-decision" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 3 - Final decision</p>
                                 <h3 class="mt-1 text-xl font-bold text-slate-950">Verification decision</h3>
                             </div>
                             <span :class="['shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(applicantReviewStatus(applicant))]">
@@ -399,7 +428,7 @@ onMounted(loadApplicant);
                             Confirm that the profile and proof belong to the same applicant.
                         </p>
 
-                        <div v-if="applicant.verification_documents?.length">
+                        <div v-if="applicant.verification_documents?.length" class="max-w-3xl">
                             <div class="mt-4 flex items-center gap-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700 ring-1 ring-slate-200">
                                 <i class="fa-solid fa-file-circle-check text-slate-500" aria-hidden="true"></i>
                                 <span><strong>{{ applicant.verification_documents.length }}</strong> proof file{{ applicant.verification_documents.length === 1 ? '' : 's' }} available</span>
@@ -441,7 +470,7 @@ onMounted(loadApplicant);
                         <div v-else class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
                             Wait for the applicant to upload proof before making a verification decision.
                         </div>
-                    </aside>
+                    </section>
                 </div>
 
                 <AdminFooter />

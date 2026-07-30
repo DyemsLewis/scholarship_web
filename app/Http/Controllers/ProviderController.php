@@ -1132,15 +1132,22 @@ class ProviderController extends Controller
             ]);
         }
 
+        $participantCount = ApplicationSchedule::query()
+            ->where('type', $event->type)
+            ->where('status', 'scheduled')
+            ->whereHas('application', fn ($query) => $query->where('scholarship_id', $scholarship->id))
+            ->count();
+
+        if ($participantCount === 0) {
+            throw ValidationException::withMessages([
+                'event' => 'No applicants are assigned to this activity yet. Approve applicants for this stage before marking it complete.',
+            ]);
+        }
+
         $event->update([
             'status' => 'completed',
             'updated_by' => $request->user()->id,
         ]);
-
-        $participantCount = ApplicationSchedule::query()
-            ->where('type', $event->type)
-            ->whereHas('application', fn ($query) => $query->where('scholarship_id', $scholarship->id))
-            ->count();
 
         ActivityLog::record(
             $request->user(),
@@ -1207,6 +1214,18 @@ class ProviderController extends Controller
         if ($missingSchedule) {
             throw ValidationException::withMessages([
                 'application_ids' => 'One or more selected applicants have not reached this program stage.',
+            ]);
+        }
+
+        $closedSchedule = $applications->first(function (ScholarshipApplication $application) use ($event): bool {
+            $schedule = $application->schedules->firstWhere('type', $event->type);
+
+            return $schedule->status !== 'scheduled' || ($schedule->attendance_status ?? 'pending') !== 'pending';
+        });
+
+        if ($closedSchedule) {
+            throw ValidationException::withMessages([
+                'application_ids' => 'One or more selected participant records are already completed. Select only applicants with a pending result.',
             ]);
         }
 
@@ -1344,6 +1363,10 @@ class ProviderController extends Controller
             throw ValidationException::withMessages([
                 'decision' => 'This stage must be completed or tracked before another applicant decision can be recorded.',
             ]);
+        }
+
+        if ($validated['decision'] === 'approve') {
+            $this->ensureStageParticipationReadyForApproval($application);
         }
 
         $decisionReason = $validated['decision_reason'] ?? match ($nextStatus) {
@@ -3691,6 +3714,29 @@ class ProviderController extends Controller
             ]);
         }
 
+    }
+
+    private function ensureStageParticipationReadyForApproval(ScholarshipApplication $application): void
+    {
+        $stageType = match ($application->status) {
+            'exam_taken', 'exam_passed' => 'exam',
+            'interview' => 'interview',
+            default => null,
+        };
+
+        if ($stageType === null) {
+            return;
+        }
+
+        $schedule = $application->schedules()->where('type', $stageType)->first();
+
+        if ($schedule?->status === 'completed' && $schedule->attendance_status === 'attended') {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'decision' => 'Complete the '.ScholarshipSelectionPlan::label($stageType).' activity and mark the applicant as attended before approving them for the next stage.',
+        ]);
     }
 
     private function scheduleTypeLabel(string $type): string

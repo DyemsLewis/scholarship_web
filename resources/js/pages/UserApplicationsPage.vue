@@ -1,7 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
-import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
@@ -30,6 +29,7 @@ const profileReadiness = ref({
     missing: [],
 });
 const currentStep = ref(0);
+const activeWorkspace = ref('applications');
 const selectedScholarshipId = ref('');
 const documentChecklist = ref([]);
 const notes = ref('');
@@ -39,42 +39,16 @@ const documentFileInput = ref(null);
 const activeUploadRequirement = ref('');
 
 const steps = [
-    { label: 'Program', detail: 'Selected scholarship' },
-    { label: 'Details', detail: 'Quick review' },
-    { label: 'Documents', detail: 'Upload files' },
-    { label: 'Submit', detail: 'Final check' },
-];
-const applicationGuideItems = [
-    {
-        title: 'Start from a program',
-        text: 'Pick one scholarship.',
-        icon: 'fa-solid fa-graduation-cap',
-    },
-    {
-        title: 'Upload requirements',
-        text: 'Add or replace files.',
-        icon: 'fa-solid fa-folder-tree',
-    },
-    {
-        title: 'Track progress',
-        text: 'Follow schedules and review status.',
-        icon: 'fa-solid fa-timeline',
-    },
+    { label: 'Program', detail: 'Your choice', icon: 'fa-solid fa-graduation-cap' },
+    { label: 'Review', detail: 'Check details', icon: 'fa-solid fa-user-check' },
+    { label: 'Documents', detail: 'Prepare files', icon: 'fa-solid fa-folder-open' },
+    { label: 'Submit', detail: 'Final check', icon: 'fa-solid fa-paper-plane' },
 ];
 const applicationModeOptions = [
     { value: 'online', label: 'Online submission' },
     { value: 'onsite', label: 'On-site submission' },
     { value: 'hybrid', label: 'Online and on-site' },
     { value: 'provider_review', label: 'Provider review only' },
-];
-const dssApplicationGuideItems = [
-    { label: 'Eligibility', weight: '65%', detail: 'Profile fit against provider rules.' },
-    { label: 'Academic', weight: '20%', detail: 'Grade or GWA compared with the requirement.' },
-    { label: 'Financial need', weight: '15%', detail: 'Income context for assistance-focused programs.' },
-];
-const dssApplicationSupportItems = [
-    { label: 'Documents', detail: 'Shown as readiness so you know what to upload.' },
-    { label: 'Review stage', detail: 'Shown as progress after the provider starts checking.' },
 ];
 const selectedScholarship = computed(() => scholarships.value.find((scholarship) => scholarship.id === Number(selectedScholarshipId.value)));
 const selectedRequirements = computed(() => documentRequirements(selectedScholarship.value?.requirements));
@@ -145,9 +119,9 @@ const activeApplicationCount = computed(() => applications.value.filter((applica
     'exam_failed',
     'interview_failed',
 ].includes(application.status ?? 'submitted')).length);
-const pendingScheduleCount = computed(() => applications.value.reduce(
+const upcomingScheduleCount = computed(() => applications.value.reduce(
     (total, application) => total + applicationSchedules(application)
-        .filter((schedule) => scheduleNeedsAcknowledgmentValue(schedule))
+        .filter((schedule) => schedule.status === 'scheduled')
         .length,
     0,
 ));
@@ -214,6 +188,9 @@ const wizardReadinessItems = computed(() => [
     },
 ]);
 const wizardReadinessPercent = computed(() => Math.round((wizardReadinessItems.value.filter((item) => item.complete).length / wizardReadinessItems.value.length) * 100));
+const nextStepLabel = computed(() => steps[currentStep.value + 1]?.label
+    ? `Continue to ${steps[currentStep.value + 1].label}`
+    : 'Continue');
 const canGoNext = computed(() => {
     if (!selectedCanStartApplication.value) {
         return false;
@@ -292,6 +269,11 @@ function goToWizardStep(index) {
     }
 
     errorMessage.value = 'Complete the current application step before moving forward.';
+}
+
+function openWorkspace(workspace) {
+    activeWorkspace.value = workspace;
+    errorMessage.value = '';
 }
 
 function formatAmount(amount) {
@@ -404,6 +386,18 @@ function scheduleModeLabel(mode) {
         hybrid: 'On-site and online',
         provider_managed: 'Provider-managed',
     }[mode] ?? labelFromKey(mode);
+}
+
+function schedulePreviewLabel(schedule) {
+    if (schedule?.status === 'scheduled') {
+        return 'Upcoming activity';
+    }
+
+    if (schedule?.status === 'completed') {
+        return 'Latest completed activity';
+    }
+
+    return 'Latest schedule update';
 }
 
 function timelineStepClass(state) {
@@ -616,6 +610,8 @@ async function loadApplications() {
 
         const requestedScholarshipId = new URLSearchParams(window.location.search).get('scholarship');
 
+        activeWorkspace.value = requestedScholarshipId ? 'new' : 'applications';
+
         if (requestedScholarshipId) {
             const requestedScholarship = scholarships.value.find((scholarship) => scholarship.id === Number(requestedScholarshipId));
 
@@ -685,6 +681,7 @@ async function submitApplication() {
 
         await loadApplications();
         resetWizard();
+        activeWorkspace.value = 'applications';
     } catch (error) {
         if (error.response?.data?.profile_readiness) {
             profileReadiness.value = error.response.data.profile_readiness;
@@ -727,17 +724,60 @@ watch(selectedScholarship, (scholarship) => {
         <section class="student-page">
             <div class="student-container">
                 <ApplicantPageHeader
-                    eyebrow="Application Desk"
-                    title="Apply step by step"
-                    description="Choose a program, submit files, and track provider updates."
-                    icon="fa-solid fa-route"
+                    eyebrow="Applications"
+                    title="Manage your applications"
+                    description="Start an application or check what happens next."
+                    icon="fa-solid fa-file-signature"
                     action-href="/dashboard/scholarships"
-                    action-label="Choose scholarship"
+                    action-label="Browse scholarships"
                     secondary-href="/dashboard/documents"
                     secondary-label="Prepare documents"
                 />
 
-                <ApplicantGuideStrip class="mt-5" :items="applicationGuideItems" />
+                <nav class="student-card mt-5 grid gap-1.5 p-1.5 sm:grid-cols-2" aria-label="Application workspace">
+                    <button
+                        type="button"
+                        :class="[
+                            'flex min-h-14 items-center justify-between gap-3 rounded-md px-4 py-3 text-left transition',
+                            activeWorkspace === 'applications'
+                                ? 'bg-slate-900 text-white shadow-sm'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                        ]"
+                        :aria-pressed="activeWorkspace === 'applications'"
+                        @click="openWorkspace('applications')"
+                    >
+                        <span class="flex items-center gap-3">
+                            <i class="fa-solid fa-layer-group text-sm" aria-hidden="true"></i>
+                            <span>
+                                <span class="block text-sm font-bold">My applications</span>
+                                <span class="mt-0.5 block text-xs opacity-70">Track status and schedules</span>
+                            </span>
+                        </span>
+                        <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', activeWorkspace === 'applications' ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600']">
+                            {{ applications.length }}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        :class="[
+                            'flex min-h-14 items-center justify-between gap-3 rounded-md px-4 py-3 text-left transition',
+                            activeWorkspace === 'new'
+                                ? 'bg-slate-900 text-white shadow-sm'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                        ]"
+                        :aria-pressed="activeWorkspace === 'new'"
+                        @click="openWorkspace('new')"
+                    >
+                        <span class="flex items-center gap-3">
+                            <i class="fa-solid fa-plus text-sm" aria-hidden="true"></i>
+                            <span>
+                                <span class="block text-sm font-bold">Start an application</span>
+                                <span class="mt-0.5 block text-xs opacity-70">Review, prepare, and submit</span>
+                            </span>
+                        </span>
+                        <span v-if="selectedScholarship" :class="['h-2.5 w-2.5 rounded-full', activeWorkspace === 'new' ? 'bg-amber-300' : 'bg-amber-500']" title="Scholarship selected"></span>
+                    </button>
+                </nav>
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading application wizard...
@@ -748,6 +788,7 @@ watch(selectedScholarship, (scholarship) => {
                         {{ errorMessage }}
                     </div>
 
+                    <template v-if="activeWorkspace === 'new'">
                     <div v-if="!canApply" class="student-card border-amber-200 bg-amber-50/90 p-5">
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div>
@@ -771,19 +812,19 @@ watch(selectedScholarship, (scholarship) => {
                         </div>
                     </div>
 
-                    <section class="student-card p-4">
+                    <section class="student-card overflow-hidden">
                         <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div>
+                            <div class="p-4 sm:p-5">
                                 <p class="student-kicker">
-                                    Application Readiness
+                                    Ready check
                                 </p>
                                 <h3 class="mt-1 text-lg font-bold text-slate-950">
                                     {{ selectedScholarship ? selectedScholarship.title : 'Choose a scholarship to start' }}
                                 </h3>
                             </div>
-                            <div class="w-full lg:max-w-xs">
+                            <div class="w-full px-4 pb-4 sm:px-5 lg:max-w-xs lg:py-5 lg:pr-5">
                                 <div class="flex items-center justify-between text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                    <span>Ready to submit</span>
+                                    <span>Application readiness</span>
                                     <span>{{ wizardReadinessPercent }}%</span>
                                 </div>
                                 <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -792,51 +833,21 @@ watch(selectedScholarship, (scholarship) => {
                             </div>
                         </div>
 
-                        <details class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm">
-                            <summary class="cursor-pointer font-bold text-slate-950">
-                                Suitability score guide
-                            </summary>
-                            <p class="mt-2 leading-6 text-slate-600">
-                                DSS suitability uses eligibility, academic merit, and financial need. Documents and review stage are shown separately so the score is easier to understand.
-                            </p>
-                            <div class="mt-3 grid gap-2 md:grid-cols-3">
-                                <div
-                                    v-for="item in dssApplicationGuideItems"
-                                    :key="item.label"
-                                    class="rounded-md border border-slate-200 bg-white p-3"
-                                >
-                                    <div class="flex items-center justify-between gap-2">
-                                        <p class="font-bold text-slate-950">{{ item.label }}</p>
-                                        <span class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
-                                            {{ item.weight }}
-                                        </span>
-                                    </div>
-                                    <p class="mt-1 text-xs leading-5 text-slate-600">
-                                        {{ item.detail }}
-                                    </p>
+                        <div class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-3">
+                            <div
+                                v-for="(item, index) in wizardReadinessItems"
+                                :key="item.label"
+                                :class="['flex items-start gap-3 p-4 sm:p-5', index ? 'border-t border-slate-200 sm:border-l sm:border-t-0' : '']"
+                            >
+                                <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm', item.complete ? 'bg-slate-900 text-white' : 'bg-white text-slate-400 ring-1 ring-slate-200']">
+                                    <i :class="item.complete ? 'fa-solid fa-check' : 'fa-solid fa-minus'" aria-hidden="true"></i>
+                                </span>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold text-slate-900">{{ item.label }}</p>
+                                    <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ item.detail }}</p>
                                 </div>
                             </div>
-                            <div class="mt-3 grid gap-2 md:grid-cols-2">
-                                <div
-                                    v-for="item in dssApplicationSupportItems"
-                                    :key="item.label"
-                                    class="rounded-md border border-slate-200 bg-white p-3"
-                                >
-                                    <div class="flex items-center justify-between gap-2">
-                                        <p class="font-bold text-slate-950">{{ item.label }}</p>
-                                        <span class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
-                                            Separate
-                                        </span>
-                                    </div>
-                                    <p class="mt-1 text-xs leading-5 text-slate-600">
-                                        {{ item.detail }}
-                                    </p>
-                                </div>
-                            </div>
-                            <p class="mt-3 text-xs font-semibold leading-5 text-slate-500">
-                                Providers still make the final scholarship decision.
-                            </p>
-                        </details>
+                        </div>
                     </section>
 
                     <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -851,30 +862,30 @@ watch(selectedScholarship, (scholarship) => {
                                     </h3>
                                 </div>
 
-                                <nav class="flex gap-2 overflow-x-auto pb-1" aria-label="Application process">
+                                <nav class="grid grid-cols-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-50" aria-label="Application process">
                                     <button
                                         v-for="(step, index) in steps"
                                         :key="step.label"
                                         type="button"
                                         :disabled="!canOpenWizardStep(index)"
+                                        :aria-current="currentStep === index ? 'step' : undefined"
                                         :class="[
-                                            'min-w-[7.75rem] flex-1 rounded-md border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50',
+                                            'relative flex min-w-0 flex-col items-center gap-1 border-l border-slate-200 px-2 py-3 text-center transition first:border-l-0 disabled:cursor-not-allowed disabled:opacity-45 sm:flex-row sm:justify-center sm:gap-2.5 sm:px-3',
                                             currentStep === index
-                                                ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                                                ? 'bg-slate-900 text-white'
                                                 : index < currentStep
-                                                    ? 'border-slate-300 bg-slate-100 text-slate-800'
-                                                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-950',
+                                                    ? 'bg-white text-slate-800'
+                                                    : 'text-slate-500 hover:bg-white hover:text-slate-950',
                                         ]"
                                         @click="goToWizardStep(index)"
                                     >
-                                        <span class="text-xs font-bold uppercase tracking-[0.14em] opacity-70">
-                                            Step {{ index + 1 }}
+                                        <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold', currentStep === index ? 'bg-white text-slate-900' : index < currentStep ? 'bg-emerald-100 text-emerald-700' : 'bg-white text-slate-500 ring-1 ring-slate-200']">
+                                            <i v-if="index < currentStep" class="fa-solid fa-check" aria-hidden="true"></i>
+                                            <i v-else :class="step.icon" aria-hidden="true"></i>
                                         </span>
-                                        <span class="mt-1 block font-bold">
-                                            {{ step.label }}
-                                        </span>
-                                        <span class="mt-1 block text-xs leading-4 opacity-70">
-                                            {{ step.detail }}
+                                        <span class="min-w-0">
+                                            <span class="block truncate text-xs font-bold sm:text-sm">{{ step.label }}</span>
+                                            <span class="mt-0.5 hidden truncate text-[10px] opacity-65 md:block">{{ step.detail }}</span>
                                         </span>
                                     </button>
                                 </nav>
@@ -1440,10 +1451,11 @@ watch(selectedScholarship, (scholarship) => {
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <button
                                     type="button"
-                                    class="w-full rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                                    class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                                     :disabled="currentStep === 0"
                                     @click="previousStep"
                                 >
+                                    <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                                     Back
                                 </button>
 
@@ -1459,29 +1471,41 @@ watch(selectedScholarship, (scholarship) => {
                                         v-if="currentStep < steps.length - 1"
                                         type="button"
                                         :disabled="!canGoNext"
-                                        class="w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 sm:w-auto"
+                                        class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 sm:w-auto"
                                         @click="nextStep"
                                     >
-                                        Continue
+                                        {{ nextStepLabel }}
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </section>
 
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+                    </template>
+
+                    <section v-if="activeWorkspace === 'applications'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex flex-col gap-4 border-b border-slate-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <p class="student-kicker">
-                                    Submitted Applications
+                                    Application tracker
                                 </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Review timeline
+                                <h3 class="mt-1 text-xl font-bold text-slate-950">
+                                    Your submitted applications
                                 </h3>
+                                <p class="mt-1 text-sm text-slate-500">Open an application when a file, schedule, or decision needs your attention.</p>
                             </div>
-                            <span v-if="pendingScheduleCount" class="w-fit rounded-md bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
-                                {{ pendingScheduleCount }} schedule {{ pendingScheduleCount === 1 ? 'confirmation' : 'confirmations' }} needed
-                            </span>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
+                                    {{ activeApplicationCount }} active
+                                </span>
+                                <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
+                                    {{ readyApplicationCount }} files ready
+                                </span>
+                                <span v-if="upcomingScheduleCount" class="rounded-md bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
+                                    {{ upcomingScheduleCount }} upcoming {{ upcomingScheduleCount === 1 ? 'activity' : 'activities' }}
+                                </span>
+                            </div>
                         </div>
 
                         <div v-if="applications.length === 0" class="m-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
@@ -1553,55 +1577,39 @@ watch(selectedScholarship, (scholarship) => {
 
                                     <div
                                         v-if="primarySchedule(application)"
-                                        :class="[
-                                            'mt-4 rounded-lg border p-3',
-                                            scheduleNeedsAcknowledgment(application)
-                                                ? 'border-amber-200 bg-amber-50'
-                                                : 'border-slate-200 bg-slate-50',
-                                        ]"
+                                        class="mt-4 border-t border-slate-200 pt-3"
                                     >
                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                            <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md text-white', scheduleNeedsAcknowledgment(application) ? 'bg-amber-600' : 'bg-slate-900']">
+                                            <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md', primarySchedule(application).status === 'scheduled' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">
                                                 <i :class="scheduleTypeIcon(primarySchedule(application).type)" aria-hidden="true"></i>
                                             </span>
                                             <div class="min-w-0 flex-1">
                                                 <div class="flex flex-wrap items-center gap-2">
-                                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                                                        {{ scheduleTypeLabel(primarySchedule(application).type) }}
+                                                    <p :class="['text-[10px] font-bold uppercase tracking-[0.12em]', primarySchedule(application).status === 'scheduled' ? 'text-amber-700' : 'text-slate-500']">
+                                                        {{ schedulePreviewLabel(primarySchedule(application)) }}
                                                     </p>
-                                                    <span v-if="scheduleNeedsAcknowledgment(application)" class="rounded bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-900">
-                                                        Confirmation needed
-                                                    </span>
-                                                    <span v-else class="rounded bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600 ring-1 ring-slate-200">
+                                                    <span class="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
                                                         {{ labelFromKey(primarySchedule(application).status) }}
                                                     </span>
                                                 </div>
                                                 <p class="mt-1 truncate text-sm font-bold text-slate-950">
-                                                    {{ primarySchedule(application).title }}
+                                                    {{ scheduleTypeLabel(primarySchedule(application).type) }}
                                                 </p>
-                                                <p class="mt-1 text-xs leading-5 text-slate-600">
+                                                <p class="mt-0.5 text-xs leading-5 text-slate-500">
                                                     {{ primarySchedule(application).scheduled_label }}
                                                     <span class="px-1 text-slate-300">|</span>
                                                     {{ scheduleModeLabel(primarySchedule(application).mode) }}
-                                                    <template v-if="primarySchedule(application).venue">
-                                                        <span class="px-1 text-slate-300">|</span>
-                                                        {{ primarySchedule(application).venue }}
-                                                    </template>
                                                 </p>
-                                                <p v-if="primarySchedule(application).type === 'distribution'" class="mt-1 text-xs font-bold text-emerald-700">
-                                                    Award: {{ formatAmount(application.display_award_amount ?? application.awarded_amount ?? application.scholarship?.award_amount) }}
+                                                <p v-if="primarySchedule(application).venue" class="mt-0.5 truncate text-xs text-slate-500">
+                                                    {{ primarySchedule(application).venue }}
                                                 </p>
                                             </div>
                                             <a
                                                 :href="application.detail_url || `/dashboard/applications/${application.id}`"
-                                                :class="[
-                                                    'shrink-0 rounded-md px-3 py-2 text-center text-xs font-bold transition',
-                                                    scheduleNeedsAcknowledgment(application)
-                                                        ? 'bg-slate-900 text-white hover:bg-slate-800'
-                                                        : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-500',
-                                                ]"
+                                                class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
                                             >
-                                                {{ scheduleNeedsAcknowledgment(application) ? 'Review and confirm' : 'View schedule' }}
+                                                Open schedule
+                                                <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
                                             </a>
                                         </div>
                                     </div>
@@ -1630,16 +1638,18 @@ watch(selectedScholarship, (scholarship) => {
                                         </a>
                                     </div>
 
-                                    <div v-if="application.status_progress?.steps?.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                Program selection
-                                            </p>
-                                            <p class="text-xs font-semibold text-slate-500">
-                                                {{ application.status_progress.next_action }}
-                                            </p>
-                                        </div>
-                                        <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                    <details v-if="application.status_progress?.steps?.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-xs font-bold text-slate-700">
+                                            <span class="flex items-center gap-2">
+                                                <i class="fa-solid fa-route text-slate-400" aria-hidden="true"></i>
+                                                View application flow
+                                            </span>
+                                            <span class="flex min-w-0 items-center gap-2 text-slate-500">
+                                                <span class="hidden truncate font-semibold sm:block">{{ application.status_progress.next_action }}</span>
+                                                <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+                                            </span>
+                                        </summary>
+                                        <div class="grid gap-2 border-t border-slate-200 p-3 sm:grid-cols-2 lg:grid-cols-4">
                                             <div
                                                 v-for="step in application.status_progress.steps"
                                                 :key="step.key"
@@ -1649,7 +1659,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 <p class="mt-0.5 text-[9px] uppercase tracking-[0.08em] opacity-70">{{ progressStateLabel(step.state) }}</p>
                                             </div>
                                         </div>
-                                    </div>
+                                    </details>
                                 </div>
                             </article>
                         </div>

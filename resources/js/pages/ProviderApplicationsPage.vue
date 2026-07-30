@@ -7,6 +7,7 @@ import ProviderSidebar from '../components/ProviderSidebar.vue';
 const appElement = document.getElementById('app');
 const initialScholarshipId = appElement?.dataset.scholarshipId ?? new URLSearchParams(window.location.search).get('scholarship_id') ?? '';
 const initialScholarshipTitle = appElement?.dataset.scholarshipTitle ?? '';
+const requestedWorkspaceSection = new URLSearchParams(window.location.search).get('workspace');
 const isLoading = ref(true);
 const errorMessage = ref('');
 const applications = ref([]);
@@ -23,6 +24,9 @@ const applicationSearch = ref('');
 const applicationPage = ref(1);
 const selectedApplicationPreview = ref(null);
 const applicationsPerPage = 10;
+const activeWorkspaceSection = ref(['applications', 'schedule', 'results'].includes(requestedWorkspaceSection)
+    ? requestedWorkspaceSection
+    : 'applications');
 const programEvents = ref([]);
 const scheduleEditorType = ref('');
 const scheduleSaving = ref(false);
@@ -53,6 +57,11 @@ const scheduleModeOptions = [
     { value: 'hybrid', label: 'Hybrid' },
     { value: 'provider_managed', label: 'Provider managed' },
 ];
+const scheduleWaitingStatuses = {
+    exam: ['exam_qualified'],
+    interview: ['interview'],
+    distribution: ['approved', 'awarded'],
+};
 
 const selectedScholarshipId = computed(() => selectedScholarshipContext.value?.id || initialScholarshipId);
 const hasProgramContext = computed(() => Boolean(selectedScholarshipId.value));
@@ -80,6 +89,18 @@ const attendanceParticipants = computed(() => {
             schedule: applicationSchedule(application, event.type),
         }))
         .filter((record) => record.schedule);
+});
+const applicantsWaitingForActiveSchedule = computed(() => {
+    const event = activeAttendanceEvent.value;
+
+    if (!event) {
+        return [];
+    }
+
+    return applications.value.filter((application) => (
+        (scheduleWaitingStatuses[event.type] ?? []).includes(application.status)
+        && !applicationSchedule(application, event.type)
+    ));
 });
 const filteredAttendanceParticipants = computed(() => {
     const query = attendanceSearch.value.trim().toLowerCase();
@@ -109,8 +130,11 @@ const attendanceRange = computed(() => {
 
     return `${start}-${end} of ${filteredAttendanceParticipants.value.length}`;
 });
-const allVisibleAttendanceSelected = computed(() => visibleAttendanceParticipants.value.length > 0
-    && visibleAttendanceParticipants.value.every(({ application }) => selectedAttendanceIds.value.includes(application.id)));
+const selectableVisibleAttendanceParticipants = computed(() => visibleAttendanceParticipants.value.filter(({ schedule }) => (
+    schedule.status === 'scheduled' && (schedule.attendance_status ?? 'pending') === 'pending'
+)));
+const allVisibleAttendanceSelected = computed(() => selectableVisibleAttendanceParticipants.value.length > 0
+    && selectableVisibleAttendanceParticipants.value.every(({ application }) => selectedAttendanceIds.value.includes(application.id)));
 const attendanceSummary = computed(() => attendanceParticipants.value.reduce((summary, { schedule }) => {
     const status = schedule.attendance_status ?? 'pending';
 
@@ -118,6 +142,96 @@ const attendanceSummary = computed(() => attendanceParticipants.value.reduce((su
 
     return summary;
 }, {}));
+const pendingReviewCount = computed(() => applications.value.filter((application) => (
+    ['submitted', 'under_review'].includes(application.status ?? 'submitted')
+)).length);
+const waitingScheduleTypes = computed(() => {
+    return configuredScheduleTypes.value.filter((type) => (
+        scheduleEvent(type.value)?.status !== 'scheduled'
+        && applications.value.some((application) => (
+            (scheduleWaitingStatuses[type.value] ?? []).includes(application.status)
+            && !applicationSchedule(application, type.value)
+        ))
+    ));
+});
+const dueProgramEvents = computed(() => attendanceEvents.value.filter((event) => (
+    event.status === 'scheduled' && canCompleteEvent(event)
+)));
+const pendingProgramResults = computed(() => attendanceEvents.value.reduce((count, event) => {
+    if (event.status !== 'completed') {
+        return count;
+    }
+
+    return count + applications.value.filter((application) => {
+        const schedule = applicationSchedule(application, event.type);
+
+        return schedule && (schedule.attendance_status ?? 'pending') === 'pending';
+    }).length;
+}, 0));
+const workspaceTabs = computed(() => [
+    {
+        key: 'applications',
+        label: 'Applications',
+        meta: pendingReviewCount.value > 0 ? `${pendingReviewCount.value} to review` : `${applications.value.length} total`,
+        attention: pendingReviewCount.value > 0,
+    },
+    {
+        key: 'schedule',
+        label: 'Schedule',
+        meta: `${programEvents.value.length} set`,
+        attention: waitingScheduleTypes.value.length > 0,
+    },
+    {
+        key: 'results',
+        label: 'Results',
+        meta: pendingProgramResults.value > 0 ? `${pendingProgramResults.value} pending` : `${attendanceEvents.value.length} activities`,
+        attention: dueProgramEvents.value.length > 0 || pendingProgramResults.value > 0,
+    },
+]);
+const workspaceTasks = computed(() => {
+    const tasks = [];
+
+    if (pendingReviewCount.value > 0) {
+        tasks.push({
+            section: 'applications',
+            title: `${pendingReviewCount.value} application${pendingReviewCount.value === 1 ? '' : 's'} waiting for review`,
+            description: 'Check eligibility, files, and applicant details before deciding.',
+            action: 'Review applicants',
+        });
+    }
+
+    if (waitingScheduleTypes.value.length > 0) {
+        const labels = waitingScheduleTypes.value.map((type) => type.label).join(' and ');
+        const isNextSchedule = waitingScheduleTypes.value.some((type) => scheduleEvent(type.value)?.status === 'completed');
+        const scheduleLabel = `${labels.toLowerCase()} schedule${waitingScheduleTypes.value.length === 1 ? '' : 's'}`;
+        tasks.push({
+            section: 'schedule',
+            title: `Publish ${isNextSchedule ? (waitingScheduleTypes.value.length === 1 ? 'a new ' : 'new ') : 'the '}${scheduleLabel}`,
+            description: isNextSchedule
+                ? 'New applicants reached this stage after the earlier activity closed.'
+                : 'Applicants have reached this stage and are waiting for the shared details.',
+            action: 'Set schedule',
+        });
+    }
+
+    if (dueProgramEvents.value.length > 0) {
+        tasks.push({
+            section: 'results',
+            title: `${dueProgramEvents.value.length} activit${dueProgramEvents.value.length === 1 ? 'y is' : 'ies are'} ready to close`,
+            description: 'Complete the shared activity before recording participant results.',
+            action: 'Update results',
+        });
+    } else if (pendingProgramResults.value > 0) {
+        tasks.push({
+            section: 'results',
+            title: `${pendingProgramResults.value} participant result${pendingProgramResults.value === 1 ? '' : 's'} still pending`,
+            description: 'Update several applicants together instead of opening each application.',
+            action: 'Update results',
+        });
+    }
+
+    return tasks;
+});
 const bulkAttendanceOptions = computed(() => activeAttendanceEvent.value?.type === 'distribution'
     ? [
         { value: 'received', label: 'Received' },
@@ -140,7 +254,7 @@ const pageTitle = computed(() => (hasProgramContext.value
     ? selectedScholarshipContext.value?.title || 'Scholarship program'
     : 'Application review queue'));
 const pageDescription = computed(() => (hasProgramContext.value
-    ? 'Manage this program schedule and review its submitted applicants in one place.'
+    ? 'Review applicants, publish shared activities, and record results from one focused workspace.'
     : 'Review submitted applications, document status, and DSS guidance for your programs.'));
 const reviewFilterOptions = computed(() => [
     { value: 'all', label: 'All', count: applications.value.length },
@@ -379,6 +493,21 @@ function closeApplicationPreview() {
     selectedApplicationPreview.value = null;
 }
 
+function selectWorkspaceSection(section) {
+    activeWorkspaceSection.value = section;
+    scheduleError.value = '';
+    attendanceError.value = '';
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('workspace', section);
+    window.history.replaceState({}, '', url);
+}
+
+function openNextSchedule(type) {
+    selectWorkspaceSection('schedule');
+    openScheduleEditor(type);
+}
+
 function emptyScheduleForm(type = '') {
     return {
         type,
@@ -433,7 +562,7 @@ function canCompleteEvent(event) {
 }
 
 function toggleVisibleAttendance() {
-    const visibleIds = visibleAttendanceParticipants.value.map(({ application }) => application.id);
+    const visibleIds = selectableVisibleAttendanceParticipants.value.map(({ application }) => application.id);
 
     if (allVisibleAttendanceSelected.value) {
         selectedAttendanceIds.value = selectedAttendanceIds.value.filter((id) => !visibleIds.includes(id));
@@ -694,16 +823,10 @@ onMounted(loadProviderData);
                                 Edit program
                             </a>
                             <a
-                                href="/provider/applications"
-                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                            >
-                                All applications
-                            </a>
-                            <a
                                 href="/provider/programs"
                                 class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                             >
-                                Programs
+                                Back to programs
                             </a>
                         </div>
                     </div>
@@ -718,8 +841,8 @@ onMounted(loadProviderData);
                 </div>
 
                 <div v-else class="mt-6 flex flex-col gap-6">
-                    <section v-if="hasProgramContext" class="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <section v-if="hasProgramContext" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
                             <div class="flex min-w-0 items-center gap-3">
                                 <img
                                     :src="selectedScholarshipContext?.image_url || '/uploads/scholarship-default.jpg'"
@@ -727,44 +850,83 @@ onMounted(loadProviderData);
                                     class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                 >
                                 <div class="min-w-0">
-                                    <p class="truncate text-sm font-bold text-slate-950">{{ selectedScholarshipContext?.title }}</p>
-                                    <p class="mt-0.5 text-xs text-slate-500">{{ selectedScholarshipContext?.category || 'Scholarship program' }}</p>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <p class="truncate text-sm font-bold text-slate-950">{{ selectedScholarshipContext?.title }}</p>
+                                        <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', programStatusClass(selectedScholarshipContext?.status)]">
+                                            {{ statusLabel(selectedScholarshipContext?.status) }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 text-xs text-slate-500">
+                                        {{ selectedScholarshipContext?.category || 'Scholarship program' }}
+                                        <span class="mx-1 text-slate-300">/</span>
+                                        Deadline {{ selectedScholarshipContext?.deadline || 'not set' }}
+                                    </p>
                                 </div>
                             </div>
-                            <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', programStatusClass(selectedScholarshipContext?.status)]">
-                                {{ statusLabel(selectedScholarshipContext?.status) }}
+
+                            <div class="flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-slate-500">
+                                <span><strong class="text-sm text-slate-950">{{ applications.length }}</strong> applicants</span>
+                                <span><strong class="text-sm text-slate-950">{{ selectedScholarshipContext?.awarded_slots_count ?? 0 }}</strong> selected</span>
+                                <span v-if="Number(selectedScholarshipContext?.slots_available ?? 0) > 0">
+                                    <strong class="text-sm text-slate-950">{{ selectedScholarshipContext.slots_available }}</strong> slots
+                                </span>
+                            </div>
+                        </div>
+
+                        <nav class="flex gap-1 overflow-x-auto border-t border-slate-200 bg-slate-50 p-2" aria-label="Program workspace sections">
+                            <button
+                                v-for="tab in workspaceTabs"
+                                :key="tab.key"
+                                type="button"
+                                :aria-current="activeWorkspaceSection === tab.key ? 'page' : undefined"
+                                :class="[
+                                    'inline-flex min-w-fit flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-bold transition',
+                                    activeWorkspaceSection === tab.key
+                                        ? 'bg-slate-950 text-white shadow-sm'
+                                        : 'text-slate-600 hover:bg-white hover:text-slate-950',
+                                ]"
+                                @click="selectWorkspaceSection(tab.key)"
+                            >
+                                <span>{{ tab.label }}</span>
+                                <span :class="activeWorkspaceSection === tab.key ? 'text-slate-300' : 'text-slate-400'" class="text-xs font-semibold">
+                                    {{ tab.meta }}
+                                </span>
+                                <span v-if="tab.attention" class="h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-label="Needs attention"></span>
+                            </button>
+                        </nav>
+                    </section>
+
+                    <section v-if="hasProgramContext" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Next actions</p>
+                                <p class="mt-1 text-sm text-slate-500">
+                                    {{ workspaceTasks.length ? 'Items that currently need provider attention.' : 'Nothing needs immediate attention.' }}
+                                </p>
+                            </div>
+                            <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', workspaceTasks.length ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800']">
+                                {{ workspaceTasks.length ? `${workspaceTasks.length} open` : 'Up to date' }}
                             </span>
                         </div>
 
-                        <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-slate-200">
-                            <div class="p-3">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Benefits</dt>
-                                <dd class="mt-1 line-clamp-2 text-sm font-bold leading-5 text-slate-900">{{ selectedScholarshipContext?.benefit_summary || 'Not specified' }}</dd>
-                            </div>
-                            <div class="border-t border-slate-200 p-3 sm:border-l sm:border-t-0 xl:border-l-0">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Deadline</dt>
-                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedScholarshipContext?.deadline || 'Not set' }}</dd>
-                            </div>
-                            <div class="border-t border-slate-200 p-3 xl:border-t-0">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Applicant queue</dt>
-                                <dd class="mt-1 text-sm font-bold text-slate-900">
-                                    {{ selectedScholarshipContext?.applications_count ?? applications.length }} total
-                                    <span class="font-semibold text-amber-700">- {{ selectedScholarshipContext?.pending_review_applications_count ?? 0 }} to review</span>
-                                </dd>
-                            </div>
-                            <div class="border-t border-slate-200 p-3 sm:border-l xl:border-l-0 xl:border-t-0">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Slot usage</dt>
-                                <dd class="mt-1 text-sm font-bold text-slate-900">
-                                    {{ selectedScholarshipContext?.awarded_slots_count ?? 0 }} selected
-                                    <span v-if="Number(selectedScholarshipContext?.slots_available ?? 0) > 0" class="font-semibold text-slate-500">
-                                        of {{ selectedScholarshipContext.slots_available }}
-                                    </span>
-                                </dd>
-                            </div>
-                        </dl>
+                        <button
+                            v-for="task in workspaceTasks"
+                            :key="`${task.section}-${task.title}`"
+                            type="button"
+                            class="flex w-full items-center gap-3 border-b border-slate-200 px-4 py-3 text-left last:border-b-0 hover:bg-slate-50"
+                            @click="selectWorkspaceSection(task.section)"
+                        >
+                            <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-400"></span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-bold text-slate-950">{{ task.title }}</span>
+                                <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ task.description }}</span>
+                            </span>
+                            <span class="hidden shrink-0 text-xs font-bold text-slate-700 sm:inline">{{ task.action }}</span>
+                            <i class="fa-solid fa-arrow-right shrink-0 text-xs text-slate-400" aria-hidden="true"></i>
+                        </button>
                     </section>
 
-                    <section v-if="hasProgramContext" class="order-3 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-if="hasProgramContext && activeWorkspaceSection === 'schedule'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program Schedule</p>
@@ -881,13 +1043,13 @@ onMounted(loadProviderData);
                         </form>
                     </section>
 
-                    <section v-if="hasProgramContext" class="order-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section v-if="hasProgramContext && activeWorkspaceSection === 'results'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Attendance & results</p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">Update applicants in bulk</h3>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Participation tracking</p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">Record participation in bulk</h3>
                                 <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Complete the shared activity once, then record the same result for multiple applicants.
+                                    After the activity happens, close it once. Then record exam or interview attendance, or confirm distribution receipt.
                                 </p>
                             </div>
                             <span v-if="activeAttendanceEvent" class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
@@ -941,13 +1103,36 @@ onMounted(loadProviderData);
                                         class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                                         @click="completeProgramEvent(activeAttendanceEvent)"
                                     >
-                                        {{ completingEventId === activeAttendanceEvent.id ? 'Completing...' : 'Mark event complete' }}
+                                        {{ completingEventId === activeAttendanceEvent.id ? 'Closing activity...' : 'Close activity and unlock tracking' }}
                                     </button>
                                 </div>
 
                                 <p v-if="attendanceError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">
                                     {{ attendanceError }}
                                 </p>
+
+                                <div
+                                    v-if="applicantsWaitingForActiveSchedule.length"
+                                    class="mt-4 flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                    <div>
+                                        <p class="text-sm font-bold text-amber-950">
+                                            {{ applicantsWaitingForActiveSchedule.length }} applicant{{ applicantsWaitingForActiveSchedule.length === 1 ? '' : 's' }} waiting for a new {{ scheduleTypeLabel(activeAttendanceEvent.type).toLowerCase() }} schedule
+                                        </p>
+                                        <p class="mt-1 text-xs leading-5 text-amber-800">
+                                            {{ activeAttendanceEvent.status === 'completed'
+                                                ? 'They reached this stage after the current activity closed, so they are not part of the participant table below.'
+                                                : 'They are not assigned to the current activity yet. Review and republish the shared schedule before tracking participation.' }}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="shrink-0 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                        @click="openNextSchedule(activeAttendanceEvent.type)"
+                                    >
+                                        Set new schedule
+                                    </button>
+                                </div>
 
                                 <div v-if="activeAttendanceEvent.status === 'completed'" class="mt-5">
                                     <div class="flex flex-wrap gap-2 text-xs font-bold">
@@ -970,7 +1155,7 @@ onMounted(loadProviderData);
                                             <input v-model="attendanceSearch" type="search" placeholder="Search applicant" class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-slate-600">
                                         </label>
                                         <select v-model="bulkAttendanceStatus" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
-                                            <option value="">Choose result</option>
+                                            <option value="">{{ activeAttendanceEvent.type === 'distribution' ? 'Choose release result' : 'Choose attendance' }}</option>
                                             <option v-for="option in bulkAttendanceOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                                         </select>
                                         <input v-model="bulkAttendanceNotes" type="text" maxlength="1500" placeholder="Optional note for selected applicants" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
@@ -1005,9 +1190,20 @@ onMounted(loadProviderData);
                                         <label
                                             v-for="record in visibleAttendanceParticipants"
                                             :key="record.application.id"
-                                            class="grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0 hover:bg-slate-50"
+                                            :class="[
+                                                'grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0',
+                                                record.schedule.status === 'scheduled' && (record.schedule.attendance_status ?? 'pending') === 'pending'
+                                                    ? 'cursor-pointer hover:bg-slate-50'
+                                                    : 'bg-slate-50/70',
+                                            ]"
                                         >
-                                            <input v-model="selectedAttendanceIds" type="checkbox" :value="record.application.id" class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500">
+                                            <input
+                                                v-model="selectedAttendanceIds"
+                                                type="checkbox"
+                                                :value="record.application.id"
+                                                :disabled="record.schedule.status !== 'scheduled' || (record.schedule.attendance_status ?? 'pending') !== 'pending'"
+                                                class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
+                                            >
                                             <span class="min-w-0">
                                                 <span class="block truncate text-sm font-bold text-slate-900">{{ record.application.applicant?.name || 'Applicant' }}</span>
                                                 <span class="block truncate text-xs text-slate-500">{{ record.application.applicant?.email }}</span>
@@ -1028,13 +1224,13 @@ onMounted(loadProviderData);
                                 </div>
 
                                 <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-                                    Applicant results become available after the shared event is completed.
+                                    Participation tracking unlocks after the shared activity is closed.
                                 </div>
                             </div>
                         </template>
                     </section>
 
-                    <section class="order-2 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Review Queue

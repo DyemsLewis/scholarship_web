@@ -322,6 +322,88 @@ class ApplicationScheduleWorkflowTest extends TestCase
         $this->assertNull($schedule->fresh()->applicant_acknowledged_at);
     }
 
+    public function test_program_event_cannot_be_closed_without_assigned_participants(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Empty Exam Schedule',
+            'description' => 'An exam that does not have approved participants yet.',
+            'selection_stages' => ['screening', 'exam', 'distribution'],
+            'status' => 'published',
+        ]);
+        $event = ScholarshipEvent::create([
+            'scholarship_id' => $scholarship->id,
+            'type' => 'exam',
+            'title' => 'Qualifying exam',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'venue' => 'Provider office',
+            'instructions' => 'Bring a school ID.',
+            'status' => 'scheduled',
+            'created_by' => $provider->id,
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/complete")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('event');
+
+        $this->assertSame('scheduled', $event->fresh()->status);
+    }
+
+    public function test_interview_approval_requires_completed_attendance(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Interview Attendance Scholarship',
+            'description' => 'Tests the interview decision sequence.',
+            'selection_stages' => ['screening', 'interview', 'distribution'],
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'interview',
+            'submitted_at' => now(),
+        ]);
+        $schedule = $application->schedules()->create([
+            'type' => 'interview',
+            'title' => 'Applicant interview',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'venue' => 'Provider office',
+            'instructions' => 'Bring a school ID.',
+            'status' => 'scheduled',
+            'attendance_status' => 'pending',
+            'created_by' => $provider->id,
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/decision", [
+                'decision' => 'approve',
+                'review_notes' => 'Interview review completed.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('decision');
+
+        $schedule->update([
+            'status' => 'completed',
+            'attendance_status' => 'attended',
+            'completed_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/decision", [
+                'decision' => 'approve',
+                'review_notes' => 'Applicant passed the interview review.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'approved');
+    }
+
     public function test_provider_can_complete_one_program_event_and_record_attendance_in_bulk(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);
@@ -388,6 +470,14 @@ class ApplicationScheduleWorkflowTest extends TestCase
                 'attendance_status' => 'attended',
             ]);
         }
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/attendance", [
+                'application_ids' => [$selectedIds[0]],
+                'attendance_status' => 'attended',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('application_ids');
 
         $unselectedApplication = $applications->last();
         $this->assertDatabaseHas('application_schedules', [

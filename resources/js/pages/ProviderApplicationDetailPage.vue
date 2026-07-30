@@ -139,6 +139,58 @@ const rubricDraftSummary = computed(() => {
 });
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
+const programWorkspaceAction = computed(() => {
+    const pendingResult = schedules.value.find((schedule) => (
+        schedule.status === 'completed' && (schedule.attendance_status ?? 'pending') === 'pending'
+    ));
+
+    if (pendingResult) {
+        return {
+            section: 'results',
+            title: `${scheduleTypeLabel(pendingResult.type)} result still pending`,
+            description: 'Record this applicant together with the other participants in the Program Workspace.',
+        };
+    }
+
+    const dueActivity = schedules.value.find((schedule) => (
+        schedule.status === 'scheduled'
+        && schedule.scheduled_at
+        && new Date(schedule.scheduled_at).getTime() <= Date.now()
+    ));
+
+    if (dueActivity) {
+        return {
+            section: 'results',
+            title: `${scheduleTypeLabel(dueActivity.type)} activity is ready to close`,
+            description: 'Complete the shared activity and update participant results in the Program Workspace.',
+        };
+    }
+
+    const waitingType = {
+        exam_qualified: 'exam',
+        interview: 'interview',
+        approved: 'distribution',
+        awarded: 'distribution',
+    }[application.value?.status];
+
+    if (waitingType && !schedules.value.some((schedule) => schedule.type === waitingType)) {
+        return {
+            section: 'schedule',
+            title: `${scheduleTypeLabel(waitingType)} schedule needs to be published`,
+            description: 'This applicant has reached the stage. Publish the shared details once for all eligible applicants.',
+        };
+    }
+
+    return null;
+});
+const programWorkspaceUrl = computed(() => {
+    const scholarshipId = application.value?.scholarship?.id;
+    const workspaceSection = programWorkspaceAction.value?.section ?? 'applications';
+
+    return scholarshipId
+        ? `/provider/programs/${scholarshipId}/applications?workspace=${workspaceSection}`
+        : '/provider/applications';
+});
 const applicantProfileProofs = computed(() => application.value?.applicant?.profile_proofs ?? []);
 const hasGuardianDetails = computed(() => {
     const applicant = application.value?.applicant;
@@ -176,6 +228,42 @@ const documentReviewComplete = computed(() => {
     const accepted = Number(readiness?.accepted ?? 0);
 
     return required === 0 || accepted >= required;
+});
+const approvalParticipationBlock = computed(() => {
+    const stageType = {
+        exam_taken: 'exam',
+        exam_passed: 'exam',
+        interview: 'interview',
+    }[application.value?.status];
+
+    if (!stageType) {
+        return null;
+    }
+
+    const schedule = schedules.value.find((item) => item.type === stageType);
+
+    if (schedule?.status === 'completed' && schedule.attendance_status === 'attended') {
+        return null;
+    }
+
+    if (!schedule) {
+        return {
+            section: 'schedule',
+            message: `Publish the shared ${scheduleTypeLabel(stageType).toLowerCase()} schedule before approving the next stage.`,
+        };
+    }
+
+    if (schedule.status !== 'completed') {
+        return {
+            section: 'schedule',
+            message: `Close the ${scheduleTypeLabel(stageType).toLowerCase()} activity and record attendance before approving the next stage.`,
+        };
+    }
+
+    return {
+        section: 'schedule',
+        message: `This applicant is marked ${labelFromKey(schedule.attendance_status || 'pending').toLowerCase()}. Only an attended applicant can be approved for the next stage.`,
+    };
 });
 const documentReviewBlockMessage = computed(() => {
     const readiness = application.value?.document_readiness;
@@ -219,10 +307,12 @@ const suggestedReviewActions = computed(() => {
                 : `Applicant approved to proceed to ${nextLabel.toLowerCase()}.`,
             label: nextApprovalStatus.value === 'approved' ? 'Approve applicant' : `Approve for ${nextLabel.replace(/^Qualified for /, '')}`,
             description: nextApprovalStatus.value === 'approved'
-                ? 'Complete the provider review and approve this application.'
+                ? (approvalParticipationBlock.value?.message || 'Complete the provider review and approve this application.')
                 : `Move this applicant to the configured ${nextLabel.toLowerCase()} stage.`,
             confirmLabel: nextApprovalStatus.value === 'approved' ? 'Approve applicant' : `Approve for ${nextLabel.toLowerCase()}`,
-            blocked: !documentReviewComplete.value,
+            blocked: !documentReviewComplete.value || Boolean(approvalParticipationBlock.value),
+            blockedSection: !documentReviewComplete.value ? 'documents' : approvalParticipationBlock.value?.section,
+            blockedMessage: !documentReviewComplete.value ? documentReviewBlockMessage.value : approvalParticipationBlock.value?.message,
         });
     }
 
@@ -526,8 +616,8 @@ function closeProfileProof() {
 
 function selectReviewAction(action) {
     if (action.blocked) {
-        activeSection.value = 'documents';
-        errorMessage.value = documentReviewBlockMessage.value;
+        activeSection.value = action.blockedSection || 'review';
+        errorMessage.value = action.blockedMessage || 'Complete the required review steps before continuing.';
 
         return;
     }
@@ -613,8 +703,8 @@ async function updateStatus() {
     }
 
     if (selectedReviewAction.value?.blocked) {
-        activeSection.value = 'documents';
-        errorMessage.value = documentReviewBlockMessage.value;
+        activeSection.value = selectedReviewAction.value.blockedSection || 'review';
+        errorMessage.value = selectedReviewAction.value.blockedMessage || 'Complete the required review steps before continuing.';
         return;
     }
 
@@ -792,8 +882,36 @@ onMounted(loadApplication);
                             >
                                 {{ timeline.length }}
                             </span>
+                            <span
+                                v-if="section.key === 'schedule' && programWorkspaceAction"
+                                class="h-2 w-2 rounded-full bg-amber-400"
+                                aria-label="Program action needed"
+                            ></span>
                         </button>
                     </nav>
+
+                    <section
+                        v-if="programWorkspaceAction"
+                        class="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
+                                <i class="fa-solid fa-arrow-up-right-dots text-sm" aria-hidden="true"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Program action needed</p>
+                                <p class="mt-1 text-sm font-bold text-slate-950">{{ programWorkspaceAction.title }}</p>
+                                <p class="mt-0.5 text-xs leading-5 text-slate-600">{{ programWorkspaceAction.description }}</p>
+                            </div>
+                        </div>
+                        <a
+                            :href="programWorkspaceUrl"
+                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                        >
+                            Open Program Workspace
+                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                        </a>
+                    </section>
 
                     <div :class="usesDetailSidebar ? 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]' : 'block'">
                         <div v-if="activeSection !== 'applicant'" class="flex flex-col gap-5">
@@ -909,6 +1027,18 @@ onMounted(loadApplication);
                                         <span>
                                             <strong class="block">Document review must be completed first</strong>
                                             <span class="mt-0.5 block text-xs leading-5 text-amber-800">{{ documentReviewBlockMessage }} Open the Documents tab to continue.</span>
+                                        </span>
+                                    </button>
+                                    <button
+                                        v-if="nextApprovalStatus && documentReviewComplete && approvalParticipationBlock"
+                                        type="button"
+                                        class="mt-3 flex w-full items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-950 transition hover:bg-amber-100"
+                                        @click="activeSection = approvalParticipationBlock.section"
+                                    >
+                                        <i class="fa-solid fa-calendar-check mt-0.5 text-amber-700" aria-hidden="true"></i>
+                                        <span>
+                                            <strong class="block">Participation must be recorded first</strong>
+                                            <span class="mt-0.5 block text-xs leading-5 text-amber-800">{{ approvalParticipationBlock.message }} Open the Schedule tab to continue.</span>
                                         </span>
                                     </button>
                                     <div v-if="suggestedReviewActions.length" class="mt-3 grid gap-3 md:grid-cols-2">
@@ -1237,11 +1367,11 @@ onMounted(loadApplication);
                                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant schedule</p>
                                             <h3 class="mt-2 text-xl font-bold text-slate-950">Attendance and results</h3>
                                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                                Shared dates are managed from the program applicant page. Expand an activity to record attendance or release results.
+                                                Shared dates are managed from the Program Workspace. Attendance confirms participation only; passing or failing is decided in Review.
                                             </p>
                                         </div>
-                                        <a :href="`/provider/programs/${application.scholarship.id}/applications`" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-                                            Program schedule
+                                        <a :href="`/provider/programs/${application.scholarship.id}/applications?workspace=schedule`" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                            Open program schedule
                                             <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                         </a>
                                     </div>
@@ -1309,13 +1439,15 @@ onMounted(loadApplication);
 
                                         <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
                                             <div>
-                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Applicant result</p>
+                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                                                    {{ schedule.type === 'distribution' ? 'Release status' : 'Participation status' }}
+                                                </p>
                                                 <p class="mt-1 text-sm text-slate-600">
-                                                    {{ labelFromKey(schedule.attendance_status || 'pending') }}. Attendance is updated in bulk from the program workspace.
+                                                    {{ labelFromKey(schedule.attendance_status || 'pending') }}. Participation is updated in bulk from the Program Workspace.
                                                 </p>
                                             </div>
                                             <a
-                                                :href="`/provider/programs/${application.scholarship?.id}/applications`"
+                                                :href="`/provider/programs/${application.scholarship?.id}/applications?workspace=results`"
                                                 class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                                             >
                                                 Open attendance list
@@ -1327,6 +1459,13 @@ onMounted(loadApplication);
                                 <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
                                     <p class="text-sm font-bold text-slate-800">No schedule announced yet</p>
                                     <p class="mt-1 text-sm text-slate-500">Publish the shared stage from this program's applicant page.</p>
+                                    <a
+                                        :href="`/provider/programs/${application.scholarship?.id}/applications?workspace=schedule`"
+                                        class="mt-4 inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                    >
+                                        Set program schedule
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </a>
                                 </div>
                             </section>
 

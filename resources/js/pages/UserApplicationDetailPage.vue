@@ -82,6 +82,8 @@ const applicantNextStep = computed(() => applicantNextAction(application.value))
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
 const currentSchedule = computed(() => schedules.value.find((schedule) => schedule.status === 'scheduled') ?? null);
+const scheduleHistory = computed(() => schedules.value.filter((schedule) => schedule.status !== 'scheduled'));
+const currentScheduleDate = computed(() => formatScheduleDate(currentSchedule.value));
 const filesNeedingAction = computed(() => applicationFileRows.value.filter((row) => !row.document
     || ['needs_replacement', 'rejected'].includes(row.document.status)));
 const applicationIsClosed = computed(() => ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'disbursed'].includes(application.value?.status));
@@ -244,6 +246,24 @@ function scheduleStatusClass(status) {
     }
 
     return 'bg-amber-100 text-amber-800';
+}
+
+function formatScheduleDate(schedule) {
+    if (!schedule?.scheduled_at) {
+        return { month: '', day: '', time: schedule?.scheduled_label || 'Date to be announced' };
+    }
+
+    const date = new Date(schedule.scheduled_at);
+
+    if (Number.isNaN(date.getTime())) {
+        return { month: '', day: '', time: schedule.scheduled_label || 'Date to be announced' };
+    }
+
+    return {
+        month: new Intl.DateTimeFormat('en-PH', { month: 'short' }).format(date),
+        day: new Intl.DateTimeFormat('en-PH', { day: '2-digit' }).format(date),
+        time: new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' }).format(date),
+    };
 }
 
 function formatAwardAmount(value) {
@@ -746,38 +766,59 @@ onMounted(loadApplication);
                             </section>
 
                             <section v-if="activeSection === 'overview' && schedules.length" id="application-schedules" class="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="flex flex-col gap-2 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="flex flex-col gap-2 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
                                         <p class="student-kicker">Schedule</p>
-                                        <h3 class="mt-1 text-lg font-bold text-slate-950">Dates and instructions</h3>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">Open an activity when you need its complete location and instructions.</p>
+                                        <h3 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule ? 'Your next activity' : 'No upcoming activity' }}</h3>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">
+                                            {{ currentSchedule ? 'Check when, where, and what you need to prepare.' : 'Previous activities are kept below for reference.' }}
+                                        </p>
                                     </div>
-                                    <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                        {{ schedules.length }} {{ schedules.length === 1 ? 'activity' : 'activities' }}
+                                    <span v-if="currentSchedule" class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
+                                        Upcoming
                                     </span>
                                 </div>
 
-                                <div class="grid gap-2 p-3">
-                                    <details v-for="schedule in schedules" :key="schedule.id" class="group overflow-hidden rounded-md border border-slate-200 bg-white">
-                                        <summary class="flex cursor-pointer list-none items-center gap-3 p-3 [&::-webkit-details-marker]:hidden">
-                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-white">
-                                                <i :class="scheduleTypeIcon(schedule.type)" aria-hidden="true"></i>
-                                            </span>
-                                            <div class="min-w-0 flex-1">
-                                                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                                                    <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(schedule.type) }}</p>
-                                                    <h4 class="truncate text-sm font-bold text-slate-950">{{ schedule.title }}</h4>
-                                                </div>
-                                                <p class="mt-1 text-xs text-slate-500">{{ schedule.scheduled_label }} - {{ scheduleModeLabel(schedule.mode) }}</p>
+                                <div v-if="currentSchedule" class="p-4">
+                                    <article class="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                                        <div class="flex flex-col gap-4 bg-white p-4 sm:flex-row sm:items-center">
+                                            <div class="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-md bg-slate-950 text-white shadow-sm">
+                                                <span class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">{{ currentScheduleDate.month }}</span>
+                                                <span class="mt-0.5 text-3xl font-bold leading-none">{{ currentScheduleDate.day }}</span>
                                             </div>
-                                            <span :class="['hidden w-fit rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', scheduleStatusClass(schedule.status)]">
-                                                {{ labelFromKey(schedule.status) }}
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(currentSchedule.type) }}</p>
+                                                    <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', scheduleStatusClass(currentSchedule.status)]">
+                                                        {{ labelFromKey(currentSchedule.status) }}
+                                                    </span>
+                                                </div>
+                                                <h4 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule.title }}</h4>
+                                                <p class="mt-1 text-sm font-semibold text-slate-600">{{ currentSchedule.scheduled_label }}</p>
+                                            </div>
+                                            <span class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
+                                                <i class="fa-solid fa-location-arrow text-amber-700" aria-hidden="true"></i>
+                                                {{ scheduleModeLabel(currentSchedule.mode) }}
                                             </span>
-                                            <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
-                                        </summary>
+                                        </div>
 
-                                        <div class="border-t border-slate-200 p-3 text-sm">
-                                            <div v-if="schedule.type === 'distribution'" class="rounded-md bg-emerald-50 px-3 py-2.5 ring-1 ring-emerald-200">
+                                        <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-3">
+                                            <div class="p-3 sm:border-r sm:border-slate-200">
+                                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Time</dt>
+                                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ currentScheduleDate.time }}</dd>
+                                            </div>
+                                            <div class="border-t border-slate-200 p-3 sm:border-r sm:border-t-0">
+                                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Venue</dt>
+                                                <dd class="mt-1 line-clamp-2 text-sm font-bold text-slate-900">{{ currentSchedule.venue || (currentSchedule.mode === 'online' ? 'Online access' : 'See address below') }}</dd>
+                                            </div>
+                                            <div class="border-t border-slate-200 p-3 sm:border-t-0">
+                                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Your status</dt>
+                                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ currentSchedule.attendance_status === 'pending' ? 'Awaiting activity' : labelFromKey(currentSchedule.attendance_status) }}</dd>
+                                            </div>
+                                        </dl>
+
+                                        <div class="border-t border-slate-200 bg-white p-4">
+                                            <div v-if="currentSchedule.type === 'distribution'" class="rounded-md bg-emerald-50 px-3 py-2.5 ring-1 ring-emerald-200">
                                                 <p class="text-xs font-bold uppercase tracking-[0.12em] text-emerald-800">Benefit package</p>
                                                 <ScholarshipBenefitsPanel
                                                     v-if="application.scholarship?.benefits?.length || application.awarded_amount != null"
@@ -786,60 +827,88 @@ onMounted(loadApplication);
                                                     :cash-amount="application.awarded_amount"
                                                     compact
                                                 />
-                                                <p v-else class="mt-1 text-sm text-emerald-800">
-                                                    {{ application.scholarship?.benefit_summary || 'Benefit details have not been listed yet.' }}
-                                                </p>
+                                                <p v-else class="mt-1 text-sm text-emerald-800">{{ application.scholarship?.benefit_summary || 'Benefit details have not been listed yet.' }}</p>
                                             </div>
 
-                                            <div v-if="schedule.venue || schedule.location_address" :class="['rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5', schedule.type === 'distribution' ? 'mt-3' : '']">
-                                                <div class="flex items-start gap-2.5">
-                                                    <i class="fa-solid fa-location-dot mt-0.5 shrink-0 text-sm text-amber-700" aria-hidden="true"></i>
-                                                    <div class="min-w-0">
-                                                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Address</p>
-                                                        <p class="mt-0.5 text-sm font-bold leading-5 text-slate-800">{{ schedule.location_address || schedule.venue }}</p>
-                                                        <p v-if="schedule.location_address && schedule.venue" class="mt-0.5 text-xs text-slate-500">{{ schedule.venue }}</p>
+                                            <div class="mt-3 grid gap-3 lg:grid-cols-2">
+                                                <div v-if="currentSchedule.venue || currentSchedule.location_address" class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Address</p>
+                                                    <p class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ currentSchedule.location_address || currentSchedule.venue }}</p>
+                                                    <p v-if="currentSchedule.location_address && currentSchedule.venue" class="mt-1 text-xs text-slate-500">{{ currentSchedule.venue }}</p>
+                                                </div>
+                                                <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">What to prepare</p>
+                                                    <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ currentSchedule.instructions }}</p>
+                                                </div>
+                                            </div>
+
+                                            <div class="mt-3 flex flex-wrap gap-2">
+                                                <a
+                                                    v-if="currentSchedule.online_url"
+                                                    :href="currentSchedule.online_url"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="inline-flex items-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white hover:bg-slate-800"
+                                                >
+                                                    Open online access
+                                                    <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
+                                                </a>
+                                                <details
+                                                    v-if="hasCoordinates(currentSchedule.latitude, currentSchedule.longitude) || currentSchedule.location_address || currentSchedule.venue"
+                                                    class="group/map w-full"
+                                                >
+                                                    <summary class="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                                                        <i class="fa-solid fa-map-location-dot text-amber-700" aria-hidden="true"></i>
+                                                        View map
+                                                    </summary>
+                                                    <div class="mt-3 w-full overflow-hidden rounded-md border border-slate-200">
+                                                        <LeafletMapPreview
+                                                            :address="currentSchedule.location_address || currentSchedule.venue"
+                                                            :latitude="currentSchedule.latitude"
+                                                            :longitude="currentSchedule.longitude"
+                                                            :title="currentSchedule.venue || currentSchedule.title"
+                                                            :marker-text="currentSchedule.venue || currentSchedule.title"
+                                                            height="11rem"
+                                                            auto-geocode
+                                                        />
                                                     </div>
-                                                </div>
+                                                </details>
                                             </div>
+                                        </div>
+                                    </article>
+                                </div>
 
-                                            <a
-                                                v-if="schedule.online_url"
-                                                :href="schedule.online_url"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="mt-3 inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100"
-                                            >
-                                                Open access link
-                                                <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
-                                            </a>
+                                <div v-if="scheduleHistory.length" :class="currentSchedule ? 'border-t border-slate-200' : ''" class="p-4">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">Previous activities</p>
+                                            <p class="mt-0.5 text-xs text-slate-500">Completed and cancelled schedule records.</p>
+                                        </div>
+                                        <span class="text-xs font-bold text-slate-500">{{ scheduleHistory.length }}</span>
+                                    </div>
 
-                                            <p class="mt-3 whitespace-pre-line rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">{{ schedule.instructions }}</p>
-
-                                            <details
-                                                v-if="schedule.status !== 'cancelled' && (hasCoordinates(schedule.latitude, schedule.longitude) || schedule.location_address || schedule.venue)"
-                                                class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"
-                                            >
-                                                <summary class="cursor-pointer text-sm font-bold text-slate-700">View schedule map</summary>
-                                                <div class="mt-3 overflow-hidden rounded-md">
-                                                    <LeafletMapPreview
-                                                        :address="schedule.location_address || schedule.venue"
-                                                        :latitude="schedule.latitude"
-                                                        :longitude="schedule.longitude"
-                                                        :title="schedule.venue || schedule.title"
-                                                        :marker-text="schedule.venue || schedule.title"
-                                                        height="10rem"
-                                                        auto-geocode
-                                                    />
+                                    <div class="mt-3 overflow-hidden rounded-md border border-slate-200">
+                                        <details v-for="schedule in scheduleHistory" :key="schedule.id" class="group border-b border-slate-200 last:border-b-0">
+                                            <summary class="flex cursor-pointer list-none items-center gap-3 bg-white px-3 py-3 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
+                                                    <i :class="scheduleTypeIcon(schedule.type)" aria-hidden="true"></i>
+                                                </span>
+                                                <div class="min-w-0 flex-1">
+                                                    <p class="truncate text-sm font-bold text-slate-950">{{ scheduleTypeLabel(schedule.type) }}</p>
+                                                    <p class="mt-0.5 text-xs text-slate-500">{{ schedule.scheduled_label }}</p>
                                                 </div>
-                                            </details>
-
-                                            <div v-if="schedule.attendance_status !== 'pending'" class="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-                                                <span class="rounded-md bg-slate-100 px-2.5 py-1.5 text-slate-700">
+                                                <span :class="['hidden rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', scheduleStatusClass(schedule.status)]">{{ labelFromKey(schedule.status) }}</span>
+                                                <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                            </summary>
+                                            <div class="border-t border-slate-200 bg-slate-50 p-3 text-sm">
+                                                <p v-if="schedule.venue || schedule.location_address" class="font-semibold text-slate-700">{{ schedule.location_address || schedule.venue }}</p>
+                                                <p class="mt-2 whitespace-pre-line leading-6 text-slate-600">{{ schedule.instructions }}</p>
+                                                <span v-if="schedule.attendance_status !== 'pending'" class="mt-3 inline-flex rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
                                                     {{ schedule.type === 'distribution' ? 'Release' : 'Participation' }}: {{ labelFromKey(schedule.attendance_status) }}
                                                 </span>
                                             </div>
-                                        </div>
-                                    </details>
+                                        </details>
+                                    </div>
                                 </div>
                             </section>
 
