@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { showPortalToast } from '../support/portalToast';
 
 const props = defineProps({
@@ -65,7 +65,15 @@ async function resendVerificationEmail() {
     }
 }
 
-onMounted(checkVerificationReminder);
+function handleVerificationChanged(event) {
+    isVisible.value = event.detail?.email_verified === false;
+}
+
+onMounted(() => {
+    checkVerificationReminder();
+    window.addEventListener('portal:email-verification-changed', handleVerificationChanged);
+});
+onBeforeUnmount(() => window.removeEventListener('portal:email-verification-changed', handleVerificationChanged));
 </script>
 
 <template>

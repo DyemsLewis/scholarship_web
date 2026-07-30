@@ -12,6 +12,10 @@ const canManagePrograms = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_programs'),
 ));
+const canManageProfile = computed(() => Boolean(
+    window.portalUser?.has_full_access
+        || window.portalUser?.permissions?.includes('manage_profile'),
+));
 
 const recentPrograms = computed(() => scholarships.value.slice(0, 3));
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
@@ -19,10 +23,20 @@ const verificationPrompt = computed(() => {
     if (!user.value?.email_verified) {
         return {
             title: 'Verify your email to continue',
-            description: verificationDocumentCount.value
-                ? 'Your proof is saved. Verify your email so an admin can complete the provider review.'
-                : 'Verify your email, then upload organization proof for admin review.',
-            action: verificationDocumentCount.value ? 'View verification' : 'Upload proof',
+            description: !canManageProfile.value
+                ? 'Verify your email from the sidebar. An authorized provider manager can handle organization proof.'
+                : verificationDocumentCount.value
+                    ? 'Your proof is saved. Verify your email so an admin can complete the provider review.'
+                    : 'Verify your email, then upload organization proof for admin review.',
+            action: canManageProfile.value && !verificationDocumentCount.value ? 'Upload proof' : 'View verification',
+        };
+    }
+
+    if (!canManageProfile.value) {
+        return {
+            title: 'Provider verification needs an authorized manager',
+            description: 'Ask the provider owner or staff with organization profile access to complete the verification process.',
+            action: 'View verification status',
         };
     }
 

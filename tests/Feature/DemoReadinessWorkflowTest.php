@@ -124,6 +124,13 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('review_queue.0.id', $applicationId);
 
+        ApplicationDocument::query()
+            ->where('scholarship_application_id', $applicationId)
+            ->pluck('id')
+            ->each(fn (int $documentId) => $this->actingAs($provider)
+                ->patchJson("/provider/documents/{$documentId}/status", ['status' => 'accepted'])
+                ->assertOk());
+
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$applicationId}/status", [
                 'status' => 'under_review',

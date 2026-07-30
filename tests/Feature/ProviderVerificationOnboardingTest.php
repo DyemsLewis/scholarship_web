@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\ProviderVerificationDocument;
 use App\Models\User;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -102,5 +104,125 @@ class ProviderVerificationOnboardingTest extends TestCase
             'type' => 'provider_verification_document',
             'action_url' => '/admin/reviews',
         ]);
+    }
+
+    public function test_removing_approved_provider_proof_pauses_publishing_until_another_review(): void
+    {
+        Storage::fake('local');
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update([
+            'verification_status' => 'approved',
+            'verified_by' => $admin->id,
+            'verified_at' => now(),
+        ]);
+        $path = "provider-verification/{$provider->id}/registration.pdf";
+        Storage::disk('local')->put($path, 'organization registration');
+        $document = ProviderVerificationDocument::create([
+            'provider_id' => $provider->id,
+            'uploaded_by' => $provider->id,
+            'document_type' => 'organization_registration',
+            'original_name' => 'registration.pdf',
+            'path' => $path,
+            'mime_type' => 'application/pdf',
+            'size' => 25,
+            'status' => 'submitted',
+            'uploaded_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->deleteJson("/provider/verification-documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('returned_to_review', true)
+            ->assertJsonPath('user.verification_status', 'pending')
+            ->assertJsonPath('user.can_post_scholarships', false);
+
+        Storage::disk('local')->assertMissing($path);
+        $this->assertDatabaseMissing('provider_verification_documents', ['id' => $document->id]);
+        $this->assertDatabaseHas('provider_profiles', [
+            'user_id' => $provider->id,
+            'verification_status' => 'pending',
+            'verified_by' => null,
+            'verified_at' => null,
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $admin->id,
+            'type' => 'provider_verification_document',
+            'title' => 'Provider proof changed',
+        ]);
+    }
+
+    public function test_changing_provider_email_requires_verification_of_the_new_address(): void
+    {
+        Notification::fake();
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $profile = $provider->providerProfile;
+        $profile->update(['verification_status' => 'approved']);
+
+        $this->actingAs($provider)
+            ->patchJson('/provider/profile', [
+                'first_name' => $profile->first_name,
+                'last_name' => $profile->last_name,
+                'middle_initial' => $profile->middle_initial,
+                'email' => 'new-provider-email@example.test',
+                'username' => $provider->username,
+                'contact_number' => $profile->contact_number,
+                'provider_name' => $profile->provider_name,
+                'provider_type' => $profile->provider_type,
+                'provider_website' => $profile->provider_website,
+                'provider_address' => $profile->provider_address,
+                'provider_description' => $profile->provider_description,
+            ])
+            ->assertOk()
+            ->assertJsonPath('email_changed', true)
+            ->assertJsonPath('user.email', 'new-provider-email@example.test')
+            ->assertJsonPath('user.email_verified', false)
+            ->assertJsonPath('user.can_post_scholarships', false);
+
+        $this->assertDatabaseHas('users', [
+            'id' => $provider->id,
+            'email' => 'new-provider-email@example.test',
+            'email_verified_at' => null,
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $provider->id,
+            'type' => 'email_verification',
+            'title' => 'Verify your email address',
+        ]);
+        Notification::assertSentTo($provider, VerifyEmail::class);
+    }
+
+    public function test_provider_proof_metadata_is_hidden_from_staff_without_profile_permission(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $staff = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'permissions' => ['manage_programs'],
+        ]);
+        ProviderVerificationDocument::create([
+            'provider_id' => $provider->id,
+            'uploaded_by' => $provider->id,
+            'document_type' => 'valid_id',
+            'original_name' => 'private-owner-id.pdf',
+            'path' => "provider-verification/{$provider->id}/private-owner-id.pdf",
+            'mime_type' => 'application/pdf',
+            'size' => 100,
+            'status' => 'submitted',
+            'uploaded_at' => now(),
+        ]);
+
+        $this->actingAs($staff)
+            ->getJson('/provider/profile/data')
+            ->assertOk()
+            ->assertJsonCount(0, 'verification_documents')
+            ->assertJsonMissing(['original_name' => 'private-owner-id.pdf']);
+
+        $this->actingAs($provider)
+            ->getJson('/provider/profile/data')
+            ->assertOk()
+            ->assertJsonCount(1, 'verification_documents');
     }
 }

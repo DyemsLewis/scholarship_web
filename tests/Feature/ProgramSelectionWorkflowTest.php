@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ApplicationSchedule;
+use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipEvent;
@@ -66,6 +67,14 @@ class ProgramSelectionWorkflowTest extends TestCase
             'user_id' => $applicant->id,
             'type' => 'application_schedule',
         ]);
+        $this->assertStringNotContainsString(
+            'acknowledge',
+            PortalNotification::query()
+                ->where('user_id', $applicant->id)
+                ->where('type', 'application_schedule')
+                ->latest('id')
+                ->value('message'),
+        );
     }
 
     public function test_shared_distribution_is_automatically_released_to_newly_approved_applicants(): void
@@ -108,6 +117,92 @@ class ProgramSelectionWorkflowTest extends TestCase
             'user_id' => $applicant->id,
             'type' => 'application_schedule',
         ]);
+    }
+
+    public function test_schedules_added_after_stage_approval_are_applied_to_waiting_applicants(): void
+    {
+        $cases = [
+            [
+                'stages' => ['screening', 'exam', 'distribution'],
+                'status' => 'exam_qualified',
+                'type' => 'exam',
+                'expected_status' => 'exam_scheduled',
+            ],
+            [
+                'stages' => ['screening', 'interview', 'distribution'],
+                'status' => 'interview',
+                'type' => 'interview',
+                'expected_status' => 'interview',
+            ],
+            [
+                'stages' => ['screening', 'distribution'],
+                'status' => 'approved',
+                'type' => 'distribution',
+                'expected_status' => 'distribution_scheduled',
+            ],
+        ];
+
+        foreach ($cases as $index => $case) {
+            [$provider, $applicant, $scholarship, $application] = $this->applicationWithPlan(
+                $case['stages'],
+                $case['status'],
+            );
+
+            $this->actingAs($provider)
+                ->postJson("/provider/scholarships/{$scholarship->id}/events", [
+                    'type' => $case['type'],
+                    'title' => ucfirst($case['type']).' schedule',
+                    'scheduled_at' => now()->addDays($index + 2)->format('Y-m-d H:i:s'),
+                    'mode' => 'provider_managed',
+                    'instructions' => 'Open the application for the confirmed schedule details.',
+                ])
+                ->assertOk()
+                ->assertJsonPath('audience_count', 1);
+
+            $this->assertDatabaseHas('scholarship_applications', [
+                'id' => $application->id,
+                'status' => $case['expected_status'],
+            ]);
+            $this->assertDatabaseHas('application_schedules', [
+                'scholarship_application_id' => $application->id,
+                'type' => $case['type'],
+                'status' => 'scheduled',
+            ]);
+            $this->assertDatabaseHas('portal_notifications', [
+                'user_id' => $applicant->id,
+                'type' => 'application_schedule',
+            ]);
+        }
+    }
+
+    public function test_direct_status_updates_apply_an_existing_shared_schedule(): void
+    {
+        [$provider, $_applicant, $scholarship, $application] = $this->applicationWithPlan([
+            'screening',
+            'exam',
+            'distribution',
+        ]);
+
+        ScholarshipEvent::create([
+            'scholarship_id' => $scholarship->id,
+            'type' => 'exam',
+            'title' => 'Shared qualifying exam',
+            'scheduled_at' => now()->addDays(3),
+            'mode' => 'provider_managed',
+            'instructions' => 'Review the posted exam instructions.',
+            'status' => 'scheduled',
+            'created_by' => $provider->id,
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/status", [
+                'status' => 'exam_qualified',
+                'decision_reason' => 'for_exam',
+                'review_notes' => 'The applicant passed eligibility review.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'exam_scheduled')
+            ->assertJsonPath('application.schedules.0.type', 'exam');
     }
 
     public function test_online_distribution_can_use_instructions_without_a_link_but_interview_cannot(): void
@@ -183,14 +278,17 @@ class ProgramSelectionWorkflowTest extends TestCase
                 'online_url' => 'https://example.test/final-interview-room',
                 'instructions' => 'Use the updated meeting link.',
             ])
-            ->assertOk();
+            ->assertOk()
+            ->assertJsonPath('audience_count', 0);
 
         $schedule->refresh();
 
-        $this->assertSame('Final applicant interview', $schedule->title);
+        $this->assertSame('Applicant interview', $schedule->title);
+        $this->assertSame($firstDate->format('Y-m-d H:i:s'), $schedule->scheduled_at?->format('Y-m-d H:i:s'));
         $this->assertSame('completed', $schedule->status);
         $this->assertSame('attended', $schedule->attendance_status);
         $this->assertSame('Applicant completed the interview.', $schedule->attendance_notes);
+        $this->assertSame('Final applicant interview', $scholarship->events()->where('type', 'interview')->value('title'));
     }
 
     public function test_provider_cannot_publish_a_stage_that_is_not_in_the_program_plan(): void

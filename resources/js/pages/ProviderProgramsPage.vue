@@ -28,6 +28,10 @@ const canManagePrograms = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_programs'),
 ));
+const canManageProfile = computed(() => Boolean(
+    window.portalUser?.has_full_access
+        || window.portalUser?.permissions?.includes('manage_profile'),
+));
 const canReviewApplications = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('review_applications'),
@@ -67,9 +71,15 @@ const filteredScholarships = computed(() => {
 });
 const verificationMessage = computed(() => {
     if (!user.value?.email_verified) {
-        return verificationDocumentCount.value
-            ? 'Your proof is saved. Verify your email before an admin can complete the provider review.'
-            : 'Verify your email and upload organization proof before creating scholarship programs.';
+        return !canManageProfile.value
+            ? 'Verify your email from the sidebar. An authorized provider manager can handle organization proof.'
+            : verificationDocumentCount.value
+                ? 'Your proof is saved. Verify your email before an admin can complete the provider review.'
+                : 'Verify your email and upload organization proof before creating scholarship programs.';
+    }
+
+    if (!canManageProfile.value) {
+        return 'Ask the provider owner or staff with organization profile access to complete provider verification.';
     }
 
     if (user.value?.verification_status === 'rejected') {
@@ -309,7 +319,7 @@ onMounted(loadProviderData);
                             href="/provider/profile#verification-documents"
                             class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
                         >
-                            {{ verificationDocumentCount ? 'View verification' : 'Upload proof' }}
+                            {{ canManageProfile && !verificationDocumentCount ? 'Upload proof' : 'View verification' }}
                         </a>
                     </div>
 

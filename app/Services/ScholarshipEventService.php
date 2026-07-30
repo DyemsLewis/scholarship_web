@@ -14,7 +14,7 @@ class ScholarshipEventService
 {
     public function syncEligibleApplications(ScholarshipEvent $event): int
     {
-        if (! ScholarshipSelectionPlan::isSchedulable($event->type)) {
+        if ($event->status !== 'scheduled' || ! ScholarshipSelectionPlan::isSchedulable($event->type)) {
             return 0;
         }
 
@@ -48,7 +48,7 @@ class ScholarshipEventService
         ScholarshipEvent $event,
         ScholarshipApplication $application,
     ): ?ApplicationSchedule {
-        if (! ScholarshipSelectionPlan::isSchedulable($event->type)) {
+        if ($event->status !== 'scheduled' || ! ScholarshipSelectionPlan::isSchedulable($event->type)) {
             return null;
         }
 
@@ -56,7 +56,7 @@ class ScholarshipEventService
         $schedule = $application->schedules->firstWhere('type', $event->type);
         $isAtStage = in_array($application->status, ScholarshipSelectionPlan::stageStatuses($event->type), true);
 
-        if (! $schedule && ! $isAtStage) {
+        if (! $isAtStage || ($schedule && $schedule->status !== 'scheduled')) {
             return null;
         }
 
@@ -141,7 +141,7 @@ class ScholarshipEventService
                 'user_id' => $application->applicant_id,
                 'type' => 'application_schedule',
                 'title' => ucfirst($eventLabel).' schedule posted',
-                'message' => "Your {$eventLabel} for {$application->scholarship?->title} is scheduled for {$event->scheduled_at?->format('M d, Y h:i A')}{$destination}. Open the application to review and acknowledge it.",
+                'message' => "Your {$eventLabel} for {$application->scholarship?->title} is scheduled for {$event->scheduled_at?->format('M d, Y h:i A')}{$destination}. Open the application to review the details.",
                 'action_url' => route('dashboard.applications.show', $application, false),
             ]);
         }

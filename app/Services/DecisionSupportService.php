@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\ApplicationDocument;
 use App\Models\DssCalculationSnapshot;
-use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Support\AcademicRequirement;
 use App\Support\ScholarshipSelectionPlan;
@@ -92,7 +91,8 @@ class DecisionSupportService
         $score ??= $this->scoreApplication($application);
         $eligibility = $application->eligibility_breakdown ?? $this->currentEligibilitySnapshot($application) ?? [];
         $eligibilityCriteria = collect($eligibility['criteria'] ?? []);
-        $requirements = $this->documentRequirements($application->scholarship);
+        $requirements = app(ScholarshipEligibilityService::class)
+            ->applicationDocumentRequirements($application);
         $uploadedDocuments = $application->documents->pluck('document_name')->all();
         $acceptedDocuments = $application->documents
             ->filter(fn (ApplicationDocument $document) => $document->status === 'accepted')
@@ -175,7 +175,7 @@ class DecisionSupportService
             },
             'description' => match ($stage) {
                 'screening' => 'Eligibility and file review',
-            'exam' => 'Provider-managed exam',
+                'exam' => 'Provider-managed exam',
                 'interview' => 'Provider conversation',
                 'distribution' => 'Scholarship release',
                 default => 'Provider-managed stage',
@@ -504,25 +504,17 @@ class DecisionSupportService
 
     private function documentScore(ScholarshipApplication $application): int
     {
-        $requirements = $this->documentRequirements($application->scholarship);
-        $requiredCount = count($requirements);
+        $readiness = app(ScholarshipEligibilityService::class)
+            ->applicationDocumentReadiness($application);
+        $requiredCount = $readiness['required'];
 
         if ($requiredCount === 0) {
             return 100;
         }
 
-        $confirmed = collect($application->document_checklist ?? [])
-            ->map(fn (string $document) => trim($document))
-            ->filter();
-        $uploaded = $application->documents
-            ->map(fn (ApplicationDocument $document) => $document->document_name);
-        $accepted = $application->documents
-            ->filter(fn (ApplicationDocument $document) => $document->status === 'accepted')
-            ->map(fn (ApplicationDocument $document) => $document->document_name);
-
-        $confirmedPercent = $this->requirementPercent($requirements, $confirmed->all());
-        $uploadedPercent = $this->requirementPercent($requirements, $uploaded->all());
-        $acceptedPercent = $this->requirementPercent($requirements, $accepted->all());
+        $confirmedPercent = $readiness['percent'];
+        $uploadedPercent = $readiness['uploaded_percent'];
+        $acceptedPercent = $readiness['accepted_percent'];
 
         return $this->clamp((int) round(($confirmedPercent * 0.15) + ($uploadedPercent * 0.45) + ($acceptedPercent * 0.40)));
     }
@@ -819,17 +811,6 @@ class DecisionSupportService
         });
     }
 
-    private function documentRequirements(?Scholarship $scholarship): array
-    {
-        if (! $scholarship?->requirements) {
-            return [];
-        }
-
-        $requirements = $this->splitOptions($scholarship->requirements);
-
-        return $this->hasOpenOption($requirements) ? [] : $requirements;
-    }
-
     private function splitOptions(?string $value): array
     {
         if (! $value) {
@@ -929,22 +910,6 @@ class DecisionSupportService
             || str_contains($normalized, 'anywhere in the philippines')
             || str_contains($normalized, 'within the philippines')
             || str_contains($normalized, 'all over the philippines');
-    }
-
-    private function requirementPercent(array $requirements, array $completed): int
-    {
-        if ($requirements === []) {
-            return 100;
-        }
-
-        $completed = collect($completed)
-            ->map(fn (string $document) => trim($document))
-            ->filter();
-        $count = collect($requirements)
-            ->filter(fn (string $requirement) => $completed->contains($requirement))
-            ->count();
-
-        return (int) round(($count / count($requirements)) * 100);
     }
 
     private function clamp(int $score): int

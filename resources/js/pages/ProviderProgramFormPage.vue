@@ -16,6 +16,8 @@ const isSaving = ref(false);
 const errorMessage = ref('');
 const formError = ref('');
 const user = ref(null);
+const existingApplicationCount = ref(0);
+const awardedSlotsCount = ref(0);
 const scholarshipFormElement = ref(null);
 const imageInputElement = ref(null);
 const imageFile = ref(null);
@@ -465,6 +467,8 @@ const reviewRubricReady = computed(() => scholarshipForm.value.reviewRubric.leng
     && scholarshipForm.value.reviewRubric.every((criterion) => hasText(criterion.label))
     && rubricWeightTotal.value === 100);
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
+const selectionPlanLocked = computed(() => isEditMode.value && existingApplicationCount.value > 0);
+const minimumAwardSlots = computed(() => Math.max(1, awardedSlotsCount.value));
 const scholarshipImagePreview = computed(() => imagePreviewUrl.value || scholarshipForm.value.imageUrl || '/uploads/scholarship-default.jpg');
 const scholarshipFormMapAddress = computed(() => {
     const parts = [
@@ -985,7 +989,7 @@ function parseSelections(value, validOptions) {
 function toggleSelectionStage(stage) {
     const option = selectionStageOptions.find((item) => item.value === stage);
 
-    if (option?.required) {
+    if (option?.required || selectionPlanLocked.value) {
         return;
     }
 
@@ -1145,6 +1149,8 @@ async function applyTargetApplicantPresetByKey(event) {
 }
 
 function fillScholarshipForm(scholarship) {
+    existingApplicationCount.value = Number(scholarship.applications_count ?? 0);
+    awardedSlotsCount.value = Number(scholarship.awarded_slots_count ?? 0);
     scholarshipForm.value = {
         title: scholarship.title ?? '',
         category: scholarship.category ?? '',
@@ -1402,6 +1408,8 @@ function handleProgramEventLocationError(message) {
 
 function resetScholarshipForm() {
     scholarshipForm.value = emptyScholarshipForm();
+    existingApplicationCount.value = 0;
+    awardedSlotsCount.value = 0;
     activeFormSection.value = 'overview';
     showAudienceDetails.value = false;
     showProgramTerms.value = false;
@@ -1670,6 +1678,21 @@ onMounted(loadFormData);
                         </p>
                     </div>
 
+                    <div
+                        v-if="selectionPlanLocked"
+                        class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm"
+                    >
+                        <div class="flex items-start gap-3">
+                            <i class="fa-solid fa-shield-halved mt-0.5 text-amber-700" aria-hidden="true"></i>
+                            <div>
+                                <p class="font-bold text-slate-950">Existing applicant process protected</p>
+                                <p class="mt-1 leading-6">
+                                    {{ existingApplicationCount }} applicant{{ existingApplicationCount === 1 ? '' : 's' }} already use this review path. You can update schedules and other details, but exam and interview stages are locked. Duplicate the program for a different process.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <form
                         ref="scholarshipFormElement"
                         class="scroll-mt-4 space-y-4"
@@ -1921,13 +1944,18 @@ onMounted(loadFormData);
                                         id="scholarship-slots"
                                         v-model="scholarshipForm.slotsAvailable"
                                         type="number"
-                                        min="0"
+                                        :min="minimumAwardSlots"
                                         step="1"
                                         placeholder="Optional"
                                         :class="inputClass"
                                     >
                                     <p class="mt-2 text-xs leading-5 text-slate-500">
-                                        Limits final awards, not the number of applications you can receive.
+                                        <template v-if="awardedSlotsCount > 0">
+                                            {{ awardedSlotsCount }} slot{{ awardedSlotsCount === 1 ? ' is' : 's are' }} already occupied. Keep at least this many, or leave the field blank for no fixed limit.
+                                        </template>
+                                        <template v-else>
+                                            Limits final awards, not the number of applications you can receive. Leave blank for no fixed limit.
+                                        </template>
                                     </p>
                                 </div>
 
@@ -2038,13 +2066,14 @@ onMounted(loadFormData);
                                             :key="stage.value"
                                             type="button"
                                             :aria-pressed="scholarshipForm.selectionStages.includes(stage.value)"
-                                            :disabled="stage.required"
+                                            :disabled="stage.required || selectionPlanLocked"
                                             :class="[
                                                 'flex h-full flex-col rounded-md border p-3 text-left transition',
                                                 scholarshipForm.selectionStages.includes(stage.value)
                                                     ? 'border-slate-900 bg-white shadow-sm'
                                                     : 'border-dashed border-slate-300 bg-slate-50 text-slate-600 hover:border-slate-400 hover:bg-white',
-                                                stage.required ? 'cursor-default' : 'cursor-pointer',
+                                                stage.required || selectionPlanLocked ? 'cursor-default' : 'cursor-pointer',
+                                                selectionPlanLocked ? 'opacity-70' : '',
                                             ]"
                                             @click="toggleSelectionStage(stage.value)"
                                         >
@@ -2053,7 +2082,7 @@ onMounted(loadFormData);
                                                     <i :class="stage.icon" aria-hidden="true"></i>
                                                 </span>
                                                 <span :class="['text-[10px] font-bold uppercase tracking-[0.1em]', scholarshipForm.selectionStages.includes(stage.value) ? 'text-emerald-700' : 'text-slate-400']">
-                                                    {{ stage.required ? 'Always included' : (scholarshipForm.selectionStages.includes(stage.value) ? 'Included' : 'Add stage') }}
+                                                    {{ selectionPlanLocked ? 'Protected' : (stage.required ? 'Always included' : (scholarshipForm.selectionStages.includes(stage.value) ? 'Included' : 'Add stage')) }}
                                                 </span>
                                             </span>
                                             <span class="mt-3 block font-bold text-slate-950">{{ stage.label }}</span>

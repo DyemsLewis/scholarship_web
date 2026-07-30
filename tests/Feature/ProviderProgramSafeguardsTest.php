@@ -6,6 +6,7 @@ use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipEvent;
 use App\Models\User;
+use App\Services\ScholarshipEventService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -129,6 +130,124 @@ class ProviderProgramSafeguardsTest extends TestCase
 
         $this->assertDatabaseMissing('scholarship_events', [
             'id' => $event->id,
+        ]);
+    }
+
+    public function test_provider_cannot_remove_a_schedule_that_is_active_for_applicants(): void
+    {
+        $provider = $this->verifiedProvider();
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Active Distribution Schedule',
+            'description' => 'A program whose release schedule has already reached an applicant.',
+            'selection_stages' => ['screening', 'distribution'],
+            'status' => 'draft',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
+            'status' => 'approved',
+            'submitted_at' => now(),
+        ]);
+        $event = ScholarshipEvent::create([
+            'scholarship_id' => $scholarship->id,
+            'type' => 'distribution',
+            'title' => 'Benefit release',
+            'scheduled_at' => now()->addWeek(),
+            'mode' => 'provider_managed',
+            'instructions' => 'Review the release instructions.',
+            'status' => 'scheduled',
+            'created_by' => $provider->id,
+        ]);
+
+        app(ScholarshipEventService::class)->syncEligibleApplications($event);
+
+        $this->actingAs($provider)
+            ->putJson("/provider/scholarships/{$scholarship->id}", [
+                'title' => $scholarship->title,
+                'description' => $scholarship->description,
+                'selection_stages' => json_encode(['distribution']),
+                'program_events' => json_encode([]),
+                'status' => 'draft',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('program_events');
+
+        $this->assertDatabaseHas('scholarship_events', ['id' => $event->id]);
+        $this->assertDatabaseHas('application_schedules', [
+            'scholarship_application_id' => $application->id,
+            'type' => 'distribution',
+            'status' => 'scheduled',
+        ]);
+    }
+
+    public function test_a_completed_event_only_reopens_when_a_new_schedule_is_posted(): void
+    {
+        $provider = $this->verifiedProvider();
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'New Intake Distribution',
+            'description' => 'A program with an earlier release event already completed.',
+            'selection_stages' => ['screening', 'distribution'],
+            'status' => 'draft',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
+            'status' => 'approved',
+            'submitted_at' => now(),
+        ]);
+        $event = ScholarshipEvent::create([
+            'scholarship_id' => $scholarship->id,
+            'type' => 'distribution',
+            'title' => 'Earlier benefit release',
+            'scheduled_at' => now()->subWeek()->startOfHour(),
+            'mode' => 'provider_managed',
+            'instructions' => 'Earlier release instructions.',
+            'status' => 'completed',
+            'created_by' => $provider->id,
+        ]);
+
+        $this->actingAs($provider)
+            ->putJson("/provider/scholarships/{$scholarship->id}", [
+                'title' => $scholarship->title,
+                'description' => $scholarship->description,
+                'selection_stages' => json_encode(['distribution']),
+                'program_events' => json_encode([[
+                    'type' => 'distribution',
+                    'title' => $event->title,
+                    'scheduled_at' => $event->scheduled_at->format('Y-m-d H:i:s'),
+                    'mode' => $event->mode,
+                    'instructions' => $event->instructions,
+                ]]),
+                'status' => 'draft',
+            ])
+            ->assertOk();
+
+        $this->assertSame('completed', $event->fresh()->status);
+        $this->assertSame('approved', $application->fresh()->status);
+        $this->assertDatabaseMissing('application_schedules', [
+            'scholarship_application_id' => $application->id,
+            'type' => 'distribution',
+        ]);
+
+        $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/events", [
+                'type' => 'distribution',
+                'title' => 'New benefit release',
+                'scheduled_at' => now()->addWeek()->format('Y-m-d H:i:s'),
+                'mode' => 'provider_managed',
+                'instructions' => 'Review the new release instructions.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('event.status', 'scheduled')
+            ->assertJsonPath('audience_count', 1);
+
+        $this->assertSame('distribution_scheduled', $application->fresh()->status);
+        $this->assertDatabaseHas('application_schedules', [
+            'scholarship_application_id' => $application->id,
+            'type' => 'distribution',
+            'title' => 'New benefit release',
         ]);
     }
 

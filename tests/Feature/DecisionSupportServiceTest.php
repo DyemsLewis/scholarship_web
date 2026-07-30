@@ -84,7 +84,11 @@ class DecisionSupportServiceTest extends TestCase
             'scholarship_id' => $scholarship->id,
             'applicant_id' => $applicant->id,
             'status' => 'submitted',
-            'document_checklist' => [],
+            'document_checklist' => collect(preg_split('/\r\n|\r|\n|,/', $scholarship->requirements ?? ''))
+                ->map(fn (string $requirement) => trim($requirement))
+                ->filter()
+                ->values()
+                ->all(),
             'submitted_at' => now(),
         ]);
 

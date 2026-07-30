@@ -16,6 +16,7 @@ use App\Models\ScholarshipFunnelEvent;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipBenefitService as SB;
+use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationDecisionReason;
@@ -25,14 +26,17 @@ use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Throwable;
 
 class ProviderController extends Controller
 {
@@ -411,15 +415,18 @@ class ProviderController extends Controller
 
         $user = $request->user()->loadMissing(['providerProfile']);
         $providerOwner = $user->providerOrganizationOwner();
+        $canManageVerification = $user->hasPortalPermission('manage_profile');
 
         return response()->json([
             'user' => $this->providerStaffPayload($user),
-            'verification_documents' => $providerOwner
-                ->providerVerificationDocuments()
-                ->latest()
-                ->get()
-                ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))
-                ->values(),
+            'verification_documents' => $canManageVerification
+                ? $providerOwner
+                    ->providerVerificationDocuments()
+                    ->latest()
+                    ->get()
+                    ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))
+                    ->values()
+                : [],
         ]);
     }
 
@@ -452,13 +459,9 @@ class ProviderController extends Controller
         $validated = $request->validate($rules);
 
         $middleInitial = strtoupper($validated['middle_initial']);
-
-        $user->update([
-            'email' => $validated['email'],
-            'username' => $validated['username'],
-        ]);
-
+        $emailChanged = strcasecmp($user->email, $validated['email']) !== 0;
         $profile = $providerOwner->providerProfile;
+
         $organizationProfile = $canManageOrganization ? [
             'provider_name' => $validated['provider_name'],
             'provider_type' => $validated['provider_type'] ?? null,
@@ -471,25 +474,76 @@ class ProviderController extends Controller
             'verified_at' => $profile?->verified_at,
         ] : [];
 
-        $user->providerProfile()->updateOrCreate([
-            'user_id' => $user->id,
-        ], [
-            'first_name' => $validated['first_name'],
-            'last_name' => $validated['last_name'],
-            'middle_initial' => $middleInitial,
-            'contact_number' => $validated['contact_number'],
-            ...$organizationProfile,
-        ]);
+        DB::transaction(function () use (
+            $user,
+            $providerOwner,
+            $validated,
+            $middleInitial,
+            $organizationProfile,
+            $profile,
+            $canManageOrganization,
+            $emailChanged,
+        ): void {
+            $user->fill([
+                'email' => $validated['email'],
+                'username' => $validated['username'],
+            ]);
 
-        if ($canManageOrganization && ! $providerOwner->is($user)) {
-            $providerOwner->providerProfile()->updateOrCreate([
-                'user_id' => $providerOwner->id,
+            if ($emailChanged) {
+                $user->email_verified_at = null;
+            }
+
+            $user->save();
+
+            $user->providerProfile()->updateOrCreate([
+                'user_id' => $user->id,
             ], [
-                'first_name' => $profile?->first_name,
-                'last_name' => $profile?->last_name,
-                'middle_initial' => $profile?->middle_initial,
-                'contact_number' => $profile?->contact_number,
+                'first_name' => $validated['first_name'],
+                'last_name' => $validated['last_name'],
+                'middle_initial' => $middleInitial,
+                'contact_number' => $validated['contact_number'],
                 ...$organizationProfile,
+            ]);
+
+            if ($canManageOrganization && ! $providerOwner->is($user)) {
+                $providerOwner->providerProfile()->updateOrCreate([
+                    'user_id' => $providerOwner->id,
+                ], [
+                    'first_name' => $profile?->first_name,
+                    'last_name' => $profile?->last_name,
+                    'middle_initial' => $profile?->middle_initial,
+                    'contact_number' => $profile?->contact_number,
+                    ...$organizationProfile,
+                ]);
+            }
+        });
+
+        if ($emailChanged) {
+            $emailVerificationSent = false;
+
+            try {
+                $user->sendEmailVerificationNotification();
+                $emailVerificationSent = true;
+            } catch (Throwable $error) {
+                ActivityLog::record(
+                    $user,
+                    'email_verification_email_failed',
+                    "Email verification link could not be sent to {$user->email}.",
+                    $request,
+                    ['error' => $error->getMessage()],
+                );
+            }
+
+            PortalNotification::updateOrCreate([
+                'user_id' => $user->id,
+                'type' => 'email_verification',
+                'title' => 'Verify your email address',
+            ], [
+                'message' => $emailVerificationSent
+                    ? 'A verification link was sent to your new email address.'
+                    : 'Your new email address is not verified. Resend the verification link from the portal.',
+                'action_url' => null,
+                'read_at' => null,
             ]);
         }
 
@@ -502,8 +556,11 @@ class ProviderController extends Controller
         );
 
         return response()->json([
-            'message' => 'Provider profile updated successfully.',
+            'message' => $emailChanged
+                ? 'Profile updated. Verify your new email address before publishing programs.'
+                : 'Provider profile updated successfully.',
             'user' => $this->providerStaffPayload($user->fresh(['providerProfile'])),
+            'email_changed' => $emailChanged,
         ]);
     }
 
@@ -591,15 +648,58 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
         $providerOwner = $request->user()->providerOrganizationOwner();
         abort_unless($document->provider_id === $providerOwner->id, 403);
+        $returnedToReview = $providerOwner->providerProfile?->verification_status === 'approved';
+
+        DB::transaction(function () use ($document, $providerOwner, $returnedToReview): void {
+            $document->delete();
+
+            if ($returnedToReview) {
+                $providerOwner->providerProfile()->update([
+                    'verification_status' => 'pending',
+                    'verification_notes' => null,
+                    'verified_by' => null,
+                    'verified_at' => null,
+                ]);
+            }
+        });
 
         if (Storage::disk('local')->exists($document->path)) {
             Storage::disk('local')->delete($document->path);
         }
 
-        $document->delete();
+        if ($returnedToReview) {
+            User::query()
+                ->where('role', 'admin')
+                ->get()
+                ->filter(fn (User $admin) => $admin->hasPortalPermission('manage_reviews'))
+                ->each(fn (User $admin) => PortalNotification::create([
+                    'user_id' => $admin->id,
+                    'type' => 'provider_verification_document',
+                    'title' => 'Provider proof changed',
+                    'message' => "{$providerOwner->provider_name} removed verification proof and needs another review.",
+                    'action_url' => '/admin/reviews',
+                ]));
+        }
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_verification_document_deleted',
+            "{$request->user()->name} removed a provider verification document.",
+            $request,
+            [
+                'document_id' => $document->id,
+                'document_type' => $document->document_type,
+                'provider_id' => $providerOwner->id,
+                'returned_to_review' => $returnedToReview,
+            ],
+        );
 
         return response()->json([
-            'message' => 'Verification document removed.',
+            'message' => $returnedToReview
+                ? 'Verification document removed. Publishing is paused until an admin reviews the provider account again.'
+                : 'Verification document removed.',
+            'user' => $this->providerStaffPayload($request->user()->fresh(['providerProfile'])),
+            'returned_to_review' => $returnedToReview,
             'verification_documents' => $providerOwner
                 ->providerVerificationDocuments()
                 ->latest()
@@ -1221,14 +1321,6 @@ class ProviderController extends Controller
             'documents.reviewer',
             'schedules',
             'statusHistories.actor',
-            'scholarship.events',
-        ]);
-        app(ScholarshipEventService::class)->syncApplication($freshApplication);
-        $freshApplication = $freshApplication->fresh()->load([
-            'applicant.studentProfile',
-            'documents.reviewer',
-            'schedules',
-            'statusHistories.actor',
             'scholarship',
         ]);
 
@@ -1711,6 +1803,11 @@ class ProviderController extends Controller
 
         $previousStatus = $application->status;
         $isOutcomeStatus = in_array($validated['status'], $outcomeStatuses, true);
+
+        if ($previousStatus !== $validated['status']) {
+            $this->ensureApplicationDocumentsReadyForStatus($application, $validated['status']);
+        }
+
         $decisionReason = array_key_exists('decision_reason', $validated)
             ? $validated['decision_reason']
             : $application->decision_reason;
@@ -1844,7 +1941,21 @@ class ProviderController extends Controller
             ));
         }
 
-        $freshApplication = $application->fresh()->load(['applicant.studentProfile', 'documents.reviewer', 'statusHistories.actor', 'scholarship']);
+        $freshApplication = $application->fresh()->load([
+            'applicant.studentProfile',
+            'documents.reviewer',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.events',
+        ]);
+        app(ScholarshipEventService::class)->syncApplication($freshApplication);
+        $freshApplication = $application->fresh()->load([
+            'applicant.studentProfile',
+            'documents.reviewer',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship',
+        ]);
         app(DecisionSupportService::class)->syncApplication($freshApplication, 'provider_status_updated');
 
         return response()->json([
@@ -1883,6 +1994,47 @@ class ProviderController extends Controller
                 'status' => 'All available award slots have already been filled. Increase the program slots or review an existing award before approving another applicant.',
             ]);
         }
+    }
+
+    private function ensureApplicationDocumentsReadyForStatus(
+        ScholarshipApplication $application,
+        string $nextStatus,
+    ): void {
+        $statusesRequiringAcceptedDocuments = [
+            'qualified',
+            'shortlisted',
+            'exam_qualified',
+            'exam_scheduled',
+            'exam_taken',
+            'exam_passed',
+            'interview',
+            'approved',
+            'awarded',
+            'distribution_scheduled',
+            'disbursed',
+            'renewed',
+        ];
+
+        if (! in_array($nextStatus, $statusesRequiringAcceptedDocuments, true)) {
+            return;
+        }
+
+        $readiness = app(ScholarshipEligibilityService::class)
+            ->applicationDocumentReadiness($application);
+
+        if ($readiness['ready']) {
+            return;
+        }
+
+        $message = match (true) {
+            $readiness['missing'] !== [] => 'The applicant must upload every required file before this application can advance.',
+            $readiness['needs_attention'] !== [] => 'Resolve every rejected or replacement document before this application can advance.',
+            default => 'Review and accept every required document before this application can advance.',
+        };
+
+        throw ValidationException::withMessages([
+            'status' => $message,
+        ]);
     }
 
     public function updateDocumentStatus(Request $request, ApplicationDocument $document): JsonResponse
@@ -2050,17 +2202,31 @@ class ProviderController extends Controller
         abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
         $this->ensureProviderCanPost($request);
 
-        $duplicate = $scholarship->replicate([
-            'created_at',
-            'updated_at',
-        ]);
-        $duplicate->title = $this->duplicateScholarshipTitle($request->user()->providerOrganizationId(), $scholarship->title);
-        $duplicate->status = 'draft';
-        $duplicate->views_count = 0;
-        $duplicate->provider_terms_accepted_at = null;
-        $duplicate->provider_terms_version = null;
-        $duplicate->save();
-        app(SB::class)->copy($scholarship, $duplicate);
+        $copiedImagePath = $this->copyScholarshipImage($scholarship->image_path);
+
+        try {
+            $duplicate = DB::transaction(function () use ($request, $scholarship, $copiedImagePath): Scholarship {
+                $duplicate = $scholarship->replicate([
+                    'created_at',
+                    'updated_at',
+                ]);
+                $duplicate->title = $this->duplicateScholarshipTitle($request->user()->providerOrganizationId(), $scholarship->title);
+                $duplicate->image_path = $copiedImagePath;
+                $duplicate->status = 'draft';
+                $duplicate->views_count = 0;
+                $duplicate->provider_terms_accepted_at = null;
+                $duplicate->provider_terms_version = null;
+                $duplicate->save();
+                app(SB::class)->copy($scholarship, $duplicate);
+
+                return $duplicate;
+            });
+        } catch (Throwable $error) {
+            $this->deleteScholarshipImageIfUnused($copiedImagePath);
+
+            throw $error;
+        }
+
         $duplicate->loadCount('bookmarks');
 
         ActivityLog::record(
@@ -2102,21 +2268,27 @@ class ProviderController extends Controller
             $validated['provider_terms_version'] = Terms::VERSION;
         }
 
-        $scholarship = DB::transaction(function () use ($validated, $imagePath, $programEvents, $benefits, $request): Scholarship {
-            $scholarship = Scholarship::create([
-                ...$validated,
-                'image_path' => $imagePath,
-                'provider_id' => $request->user()->providerOrganizationId(),
-            ]);
+        try {
+            $scholarship = DB::transaction(function () use ($validated, $imagePath, $programEvents, $benefits, $request): Scholarship {
+                $scholarship = Scholarship::create([
+                    ...$validated,
+                    'image_path' => $imagePath,
+                    'provider_id' => $request->user()->providerOrganizationId(),
+                ]);
 
-            foreach ($programEvents ?? [] as $programEvent) {
-                $this->persistScholarshipEvent($scholarship, $programEvent, $request->user());
-            }
+                foreach ($programEvents ?? [] as $programEvent) {
+                    $this->persistScholarshipEvent($scholarship, $programEvent, $request->user());
+                }
 
-            app(SB::class)->sync($scholarship, $benefits);
+                app(SB::class)->sync($scholarship, $benefits);
 
-            return $scholarship;
-        });
+                return $scholarship;
+            });
+        } catch (Throwable $error) {
+            $this->deleteScholarshipImageIfUnused($imagePath);
+
+            throw $error;
+        }
 
         if ($scholarship->status === 'pending_review') {
             $this->notifyAdminsScholarshipSubmitted($request, $scholarship);
@@ -2152,7 +2324,10 @@ class ProviderController extends Controller
         [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request, $scholarship);
         $this->ensureScholarshipReadyForSubmission($validated, $benefits, $scholarship);
-        $imagePath = $this->storeScholarshipImage($request, $scholarship);
+        $benefitsChanged = $benefits !== null && app(SB::class)->changed($scholarship, $benefits);
+        $this->ensureScholarshipSelectionPlanIsStable($scholarship, $validated['selection_stages']);
+        $oldImagePath = $scholarship->image_path;
+        $imagePath = $this->storeScholarshipImage($request);
         $termsAccepted = $request->boolean('terms_accepted');
 
         unset($validated['image_file'], $validated['terms_accepted'], $validated['program_events']);
@@ -2169,33 +2344,49 @@ class ProviderController extends Controller
             $validated['image_path'] = $imagePath;
         }
 
-        $benefitsChanged = $benefits !== null && app(SB::class)->changed($scholarship, $benefits);
         $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status'], $validated, $benefitsChanged);
-        DB::transaction(function () use ($scholarship, $validated, $programEvents, $benefits, $request): void {
-            $scholarship->update($validated);
+        try {
+            DB::transaction(function () use ($scholarship, $validated, $programEvents, $benefits, $request): void {
+                $requestedSlots = array_key_exists('slots_available', $validated)
+                    ? $validated['slots_available']
+                    : $scholarship->slots_available;
 
-            if ($programEvents !== null) {
-                $submittedEventTypes = collect($programEvents)->pluck('type')->all();
-                $eventsToDelete = $scholarship->events()
-                    ->whereIn('type', ['exam', 'interview', 'distribution']);
+                $this->ensureScholarshipAwardCapacity($scholarship, $requestedSlots);
+                $scholarship->update($validated);
 
-                if ($submittedEventTypes !== []) {
-                    $eventsToDelete->whereNotIn('type', $submittedEventTypes);
+                if ($programEvents !== null) {
+                    $submittedEventTypes = collect($programEvents)->pluck('type')->all();
+                    $eventsToDelete = $scholarship->events()
+                        ->whereIn('type', ['exam', 'interview', 'distribution']);
+
+                    if ($submittedEventTypes !== []) {
+                        $eventsToDelete->whereNotIn('type', $submittedEventTypes);
+                    }
+
+                    $this->deleteScholarshipEventsSafely($scholarship, $eventsToDelete->get());
+                } else {
+                    $eventsToDelete = $scholarship->events()
+                        ->whereNotIn('type', ScholarshipSelectionPlan::normalize($scholarship->selection_stages))
+                        ->get();
+
+                    $this->deleteScholarshipEventsSafely($scholarship, $eventsToDelete);
                 }
 
-                $eventsToDelete->delete();
-            } else {
-                $scholarship->events()
-                    ->whereNotIn('type', ScholarshipSelectionPlan::normalize($scholarship->selection_stages))
-                    ->delete();
-            }
+                foreach ($programEvents ?? [] as $programEvent) {
+                    $this->persistScholarshipEvent($scholarship, $programEvent, $request->user());
+                }
 
-            foreach ($programEvents ?? [] as $programEvent) {
-                $this->persistScholarshipEvent($scholarship, $programEvent, $request->user());
-            }
+                app(SB::class)->sync($scholarship, $benefits);
+            });
+        } catch (Throwable $error) {
+            $this->deleteScholarshipImageIfUnused($imagePath);
 
-            app(SB::class)->sync($scholarship, $benefits);
-        });
+            throw $error;
+        }
+
+        if ($imagePath && $oldImagePath !== $imagePath) {
+            $this->deleteScholarshipImageIfUnused($oldImagePath);
+        }
 
         if ($scholarship->status === 'pending_review') {
             $this->notifyAdminsScholarshipSubmitted($request, $scholarship);
@@ -2370,7 +2561,7 @@ class ProviderController extends Controller
             'benefits' => ['nullable', 'string', 'max:20000', 'json'],
             'minimum_gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'minimum_grade_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
-            'slots_available' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'slots_available' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'application_mode' => ['nullable', Rule::in(['online', 'onsite', 'hybrid', 'provider_review'])],
             'selection_stages' => ['nullable', 'string', 'max:500', 'json'],
             'exam_duration_minutes' => ['nullable', 'integer', 'between:15,480'],
@@ -2559,7 +2750,7 @@ class ProviderController extends Controller
 
         $eventLabel = ScholarshipSelectionPlan::label($eventData['type']);
         $event = $scholarship->events()->firstOrNew(['type' => $eventData['type']]);
-        $event->fill([
+        $announcementData = [
             'title' => filled($eventData['title'] ?? null) ? trim($eventData['title']) : ucfirst($eventLabel).' schedule',
             'scheduled_at' => CarbonImmutable::parse($eventData['scheduled_at']),
             'mode' => $eventData['mode'],
@@ -2569,7 +2760,14 @@ class ProviderController extends Controller
             'longitude' => $eventData['longitude'] ?? null,
             'online_url' => $eventData['online_url'] ?? null,
             'instructions' => $eventData['instructions'],
-            'status' => 'scheduled',
+        ];
+        $event->fill($announcementData);
+        $announcementChanged = $event->isDirty(array_keys($announcementData));
+
+        $event->fill([
+            'status' => $event->exists && $event->status === 'completed' && ! $announcementChanged
+                ? 'completed'
+                : 'scheduled',
             'updated_by' => $provider->id,
         ]);
 
@@ -2585,6 +2783,32 @@ class ProviderController extends Controller
         ];
     }
 
+    private function deleteScholarshipEventsSafely(
+        Scholarship $scholarship,
+        EloquentCollection $events,
+    ): void {
+        if ($events->isEmpty()) {
+            return;
+        }
+
+        $activeScheduleTypes = ApplicationSchedule::query()
+            ->where('status', 'scheduled')
+            ->whereIn('type', $events->pluck('type'))
+            ->whereHas('application', fn ($query) => $query->where('scholarship_id', $scholarship->id))
+            ->pluck('type')
+            ->unique()
+            ->map(fn (string $type): string => ScholarshipSelectionPlan::label($type))
+            ->implode(', ');
+
+        if ($activeScheduleTypes !== '') {
+            throw ValidationException::withMessages([
+                'program_events' => "The {$activeScheduleTypes} schedule is already active for applicants. Update its details instead of removing it.",
+            ]);
+        }
+
+        ScholarshipEvent::query()->whereKey($events->modelKeys())->delete();
+    }
+
     private function providerScholarshipStatus(Scholarship $scholarship, string $requestedStatus, array $validated, bool $benefitsChanged = false): string
     {
         if ($requestedStatus === 'published' && $scholarship->status === 'published') {
@@ -2598,6 +2822,47 @@ class ProviderController extends Controller
         }
 
         return $requestedStatus === 'draft' ? 'draft' : 'pending_review';
+    }
+
+    private function ensureScholarshipSelectionPlanIsStable(
+        Scholarship $scholarship,
+        mixed $selectionStages,
+    ): void {
+        $currentStages = ScholarshipSelectionPlan::normalize($scholarship->selection_stages);
+        $nextStages = ScholarshipSelectionPlan::normalize($selectionStages);
+
+        if ($currentStages === $nextStages || ! $scholarship->applications()->exists()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'selection_stages' => 'The review, exam, and interview path cannot change after applications have been submitted. Duplicate this program for a new intake instead.',
+        ]);
+    }
+
+    private function ensureScholarshipAwardCapacity(
+        Scholarship $scholarship,
+        ?int $requestedSlots,
+    ): void {
+        if ($requestedSlots === null) {
+            return;
+        }
+
+        Scholarship::query()
+            ->whereKey($scholarship->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        $occupiedSlots = ScholarshipApplication::query()
+            ->where('scholarship_id', $scholarship->id)
+            ->whereIn('status', self::AWARD_SLOT_STATUSES)
+            ->count();
+
+        if ($requestedSlots < $occupiedSlots) {
+            throw ValidationException::withMessages([
+                'slots_available' => "This program already has {$occupiedSlots} awarded applicant(s). Keep at least {$occupiedSlots} award slot(s).",
+            ]);
+        }
     }
 
     private function scholarshipHasReviewableChanges(Scholarship $scholarship, array $validated): bool
@@ -2686,7 +2951,7 @@ class ProviderController extends Controller
             ]));
     }
 
-    private function storeScholarshipImage(Request $request, ?Scholarship $scholarship = null): ?string
+    private function storeScholarshipImage(Request $request): ?string
     {
         if (! $request->hasFile('image_file')) {
             return null;
@@ -2702,15 +2967,58 @@ class ProviderController extends Controller
         $filename = $file->hashName();
         $file->move($directory, $filename);
 
-        if ($scholarship?->image_path) {
-            $oldPath = public_path($scholarship->image_path);
+        return "uploads/scholarships/{$filename}";
+    }
 
-            if (is_file($oldPath)) {
-                @unlink($oldPath);
-            }
+    private function copyScholarshipImage(?string $imagePath): ?string
+    {
+        $normalizedPath = $this->managedScholarshipImagePath($imagePath);
+
+        if ($normalizedPath === null) {
+            return null;
         }
 
-        return "uploads/scholarships/{$filename}";
+        $sourcePath = public_path($normalizedPath);
+
+        if (! is_file($sourcePath)) {
+            return null;
+        }
+
+        $directory = public_path('uploads/scholarships');
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $extension = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION)) ?: 'jpg';
+        $relativePath = 'uploads/scholarships/'.Str::uuid().".{$extension}";
+
+        return copy($sourcePath, public_path($relativePath)) ? $relativePath : null;
+    }
+
+    private function deleteScholarshipImageIfUnused(?string $imagePath): void
+    {
+        $normalizedPath = $this->managedScholarshipImagePath($imagePath);
+
+        if ($normalizedPath === null
+            || Scholarship::query()->where('image_path', $normalizedPath)->exists()) {
+            return;
+        }
+
+        $absolutePath = public_path($normalizedPath);
+
+        if (is_file($absolutePath)) {
+            @unlink($absolutePath);
+        }
+    }
+
+    private function managedScholarshipImagePath(?string $imagePath): ?string
+    {
+        $normalizedPath = ltrim(str_replace('\\', '/', (string) $imagePath), '/');
+
+        return str_starts_with($normalizedPath, 'uploads/scholarships/')
+            ? $normalizedPath
+            : null;
     }
 
     private function applicationPayload(ScholarshipApplication $application, bool $includeApplicantProfile = false): array
@@ -2861,51 +3169,8 @@ class ProviderController extends Controller
 
     private function documentReadiness(ScholarshipApplication $application): array
     {
-        $requiredDocuments = $this->documentRequirements($application->scholarship);
-        $confirmedDocuments = collect($application->document_checklist ?? [])
-            ->map(fn (string $document) => trim($document))
-            ->filter()
-            ->values();
-        $requiredCount = count($requiredDocuments);
-        $confirmedRequiredCount = collect($requiredDocuments)
-            ->filter(fn (string $document) => $confirmedDocuments->contains($document))
-            ->count();
-        $uploadedDocuments = $application->documents
-            ->map(fn (ApplicationDocument $document) => $document->document_name)
-            ->values();
-        $uploadedRequiredCount = collect($requiredDocuments)
-            ->filter(fn (string $document) => $uploadedDocuments->contains($document))
-            ->count();
-        $acceptedRequiredCount = $application->documents
-            ->filter(fn (ApplicationDocument $document) => $document->status === 'accepted' && collect($requiredDocuments)->contains($document->document_name))
-            ->count();
-
-        return [
-            'required' => $requiredCount,
-            'confirmed' => $confirmedRequiredCount,
-            'percent' => $requiredCount === 0 ? 100 : (int) round(($confirmedRequiredCount / $requiredCount) * 100),
-            'uploaded' => $uploadedRequiredCount,
-            'uploaded_percent' => $requiredCount === 0 ? 100 : (int) round(($uploadedRequiredCount / $requiredCount) * 100),
-            'accepted' => $acceptedRequiredCount,
-            'accepted_percent' => $requiredCount === 0 ? 100 : (int) round(($acceptedRequiredCount / $requiredCount) * 100),
-            'missing' => collect($requiredDocuments)
-                ->reject(fn (string $document) => $confirmedDocuments->contains($document))
-                ->values()
-                ->all(),
-        ];
-    }
-
-    private function documentRequirements(?Scholarship $scholarship): array
-    {
-        if (! $scholarship?->requirements) {
-            return [];
-        }
-
-        return collect(preg_split('/\r\n|\r|\n|,/', $scholarship->requirements))
-            ->map(fn (string $requirement) => trim($requirement))
-            ->filter()
-            ->values()
-            ->all();
+        return app(ScholarshipEligibilityService::class)
+            ->applicationDocumentReadiness($application);
     }
 
     private function scholarshipPayload(Scholarship $scholarship): array

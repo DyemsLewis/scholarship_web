@@ -50,6 +50,7 @@ class ApplicationDocumentPreparationTest extends TestCase
             'Government-issued ID',
             'Recent 2x2 ID photo',
             'Admission or acceptance letter',
+            'Other identity or school proof',
         ], $documentOptions);
         $this->assertNotContains('Provider-specific essay form', $documentOptions);
     }

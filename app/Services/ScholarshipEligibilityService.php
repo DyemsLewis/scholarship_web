@@ -180,24 +180,56 @@ class ScholarshipEligibilityService
 
     public function applicationDocumentReadiness(ScholarshipApplication $application): array
     {
-        $requiredDocuments = $this->documentRequirements($application->scholarship);
+        $application->loadMissing(['documents', 'scholarship']);
+
+        $requiredDocuments = $this->applicationDocumentRequirements($application);
         $confirmedDocuments = collect($application->document_checklist ?? [])
             ->map(fn (string $document) => trim($document))
             ->filter()
             ->values();
-        $requiredCount = count($requiredDocuments);
-        $confirmedRequiredCount = collect($requiredDocuments)
-            ->filter(fn (string $document) => $confirmedDocuments->contains($document))
-            ->count();
-        $uploadedDocuments = $application->documents
-            ->map(fn (ApplicationDocument $document) => $document->document_name)
+        $normalizedName = static fn (mixed $document): string => str((string) $document)
+            ->lower()
+            ->squish()
+            ->toString();
+        $requiredByName = collect($requiredDocuments)
+            ->mapWithKeys(fn (string $document): array => [$normalizedName($document) => $document]);
+        $confirmedNames = $confirmedDocuments
+            ->map($normalizedName)
+            ->unique()
             ->values();
-        $uploadedRequiredCount = collect($requiredDocuments)
-            ->filter(fn (string $document) => $uploadedDocuments->contains($document))
+        $documentsByName = $application->documents
+            ->groupBy(fn (ApplicationDocument $document): string => $normalizedName($document->document_name));
+        $requiredCount = count($requiredDocuments);
+        $confirmedRequiredCount = $requiredByName
+            ->keys()
+            ->filter(fn (string $document) => $confirmedNames->contains($document))
             ->count();
-        $acceptedRequiredCount = $application->documents
-            ->filter(fn (ApplicationDocument $document) => $document->status === 'accepted' && collect($requiredDocuments)->contains($document->document_name))
-            ->count();
+        $uploadedRequiredNames = $requiredByName
+            ->keys()
+            ->filter(fn (string $document) => $documentsByName->has($document))
+            ->values();
+        $acceptedRequiredNames = $requiredByName
+            ->keys()
+            ->filter(fn (string $document) => $documentsByName
+                ->get($document, collect())
+                ->contains(fn (ApplicationDocument $file): bool => $file->status === 'accepted'))
+            ->values();
+        $uploadedRequiredCount = $uploadedRequiredNames->count();
+        $acceptedRequiredCount = $acceptedRequiredNames->count();
+        $missing = $requiredByName
+            ->except($uploadedRequiredNames->all())
+            ->values()
+            ->all();
+        $notAccepted = $requiredByName
+            ->except($acceptedRequiredNames->all())
+            ->values()
+            ->all();
+        $needsAttention = $requiredByName
+            ->filter(fn (string $_document, string $name): bool => $documentsByName
+                ->get($name, collect())
+                ->contains(fn (ApplicationDocument $file): bool => in_array($file->status, ['rejected', 'needs_replacement'], true)))
+            ->values()
+            ->all();
 
         return [
             'required' => $requiredCount,
@@ -207,11 +239,25 @@ class ScholarshipEligibilityService
             'uploaded_percent' => $requiredCount === 0 ? 100 : (int) round(($uploadedRequiredCount / $requiredCount) * 100),
             'accepted' => $acceptedRequiredCount,
             'accepted_percent' => $requiredCount === 0 ? 100 : (int) round(($acceptedRequiredCount / $requiredCount) * 100),
-            'missing' => collect($requiredDocuments)
-                ->reject(fn (string $document) => $confirmedDocuments->contains($document))
-                ->values()
-                ->all(),
+            'missing' => $missing,
+            'not_accepted' => $notAccepted,
+            'needs_attention' => $needsAttention,
+            'ready' => $requiredCount === 0 || $acceptedRequiredCount === $requiredCount,
         ];
+    }
+
+    public function applicationDocumentRequirements(ScholarshipApplication $application): array
+    {
+        if ($application->document_checklist === null) {
+            return $this->documentRequirements($application->scholarship);
+        }
+
+        return collect($application->document_checklist)
+            ->map(fn (mixed $document): string => trim((string) $document))
+            ->filter()
+            ->unique(fn (string $document): string => str($document)->lower()->squish()->toString())
+            ->values()
+            ->all();
     }
 
     public function preparedDocumentReadiness(Scholarship $scholarship, ?User $user): array

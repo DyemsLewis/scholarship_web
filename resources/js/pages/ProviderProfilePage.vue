@@ -95,6 +95,14 @@ const verificationGuidance = computed(() => {
         };
     }
 
+    if (!canManageProfile.value) {
+        return {
+            title: 'Verification is managed by authorized staff',
+            description: 'Ask the provider owner or a team member with organization profile access to manage verification proof.',
+            className: 'border-slate-200 bg-slate-50 text-slate-800',
+        };
+    }
+
     if (user.value?.verification_status === 'rejected') {
         return {
             title: 'Replacement proof needed',
@@ -241,6 +249,9 @@ async function deleteVerificationDocument(document) {
     try {
         const response = await window.axios.delete(`/provider/verification-documents/${document.id}`);
 
+        if (response.data.user) {
+            applyUser(response.data.user);
+        }
         applyVerificationDocuments(response.data.verification_documents);
     } catch (handledError) {
         void handledError;
@@ -258,6 +269,12 @@ async function saveProviderProfile() {
         const response = await window.axios.patch('/provider/profile', { ...form });
 
         applyUser(response.data.user);
+
+        if (response.data.email_changed) {
+            window.dispatchEvent(new CustomEvent('portal:email-verification-changed', {
+                detail: { email_verified: false },
+            }));
+        }
     } catch (error) {
         validationErrors.value = error.response?.data?.errors ?? {};
     } finally {
@@ -359,7 +376,7 @@ onMounted(loadProviderProfile);
                                 </div>
                             </div>
                             <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                                {{ verificationDocuments.length }} file{{ verificationDocuments.length === 1 ? '' : 's' }}
+                                {{ canManageProfile ? `${verificationDocuments.length} file${verificationDocuments.length === 1 ? '' : 's'}` : 'Restricted files' }}
                             </span>
                         </div>
 
@@ -414,7 +431,11 @@ onMounted(loadProviderProfile);
                             context="providerDocument"
                         />
 
-                        <div v-if="verificationDocuments.length === 0" class="mt-5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                        <div v-if="!canManageProfile" class="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+                            Organization proof files are visible only to the provider owner and staff with organization profile access.
+                        </div>
+
+                        <div v-else-if="verificationDocuments.length === 0" class="mt-5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                             No verification documents uploaded yet.
                         </div>
 

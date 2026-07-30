@@ -170,6 +170,28 @@ const nextApprovalStatus = computed(() => {
 
     return currentStatus === 'interview' ? 'approved' : null;
 });
+const documentReviewComplete = computed(() => {
+    const readiness = application.value?.document_readiness;
+    const required = Number(readiness?.required ?? 0);
+    const accepted = Number(readiness?.accepted ?? 0);
+
+    return required === 0 || accepted >= required;
+});
+const documentReviewBlockMessage = computed(() => {
+    const readiness = application.value?.document_readiness;
+    const required = Number(readiness?.required ?? 0);
+    const accepted = Number(readiness?.accepted ?? 0);
+
+    if (readiness?.missing?.length) {
+        return `${readiness.missing.length} required file${readiness.missing.length === 1 ? ' is' : 's are'} still missing.`;
+    }
+
+    if (readiness?.needs_attention?.length) {
+        return 'Resolve the rejected or replacement files before approving.';
+    }
+
+    return `${accepted} of ${required} required files accepted. Review the remaining files before approving.`;
+});
 const nextRejectionStatus = computed(() => (
     ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed'].includes(application.value?.status)
         ? 'exam_failed'
@@ -200,6 +222,7 @@ const suggestedReviewActions = computed(() => {
                 ? 'Complete the provider review and approve this application.'
                 : `Move this applicant to the configured ${nextLabel.toLowerCase()} stage.`,
             confirmLabel: nextApprovalStatus.value === 'approved' ? 'Approve applicant' : `Approve for ${nextLabel.toLowerCase()}`,
+            blocked: !documentReviewComplete.value,
         });
     }
 
@@ -502,6 +525,13 @@ function closeProfileProof() {
 }
 
 function selectReviewAction(action) {
+    if (action.blocked) {
+        activeSection.value = 'documents';
+        errorMessage.value = documentReviewBlockMessage.value;
+
+        return;
+    }
+
     selectedReviewActionKey.value = action.key;
     reviewForm.value.status = action.status;
     reviewForm.value.decisionReason = action.reason;
@@ -579,6 +609,12 @@ async function loadApplication() {
 
 async function updateStatus() {
     if (!application.value) {
+        return;
+    }
+
+    if (selectedReviewAction.value?.blocked) {
+        activeSection.value = 'documents';
+        errorMessage.value = documentReviewBlockMessage.value;
         return;
     }
 
@@ -863,14 +899,29 @@ onMounted(loadApplication);
 
                                 <div class="mt-5">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Available actions</p>
+                                    <button
+                                        v-if="nextApprovalStatus && !documentReviewComplete"
+                                        type="button"
+                                        class="mt-3 flex w-full items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-950 transition hover:bg-amber-100"
+                                        @click="activeSection = 'documents'"
+                                    >
+                                        <i class="fa-solid fa-file-circle-exclamation mt-0.5 text-amber-700" aria-hidden="true"></i>
+                                        <span>
+                                            <strong class="block">Document review must be completed first</strong>
+                                            <span class="mt-0.5 block text-xs leading-5 text-amber-800">{{ documentReviewBlockMessage }} Open the Documents tab to continue.</span>
+                                        </span>
+                                    </button>
                                     <div v-if="suggestedReviewActions.length" class="mt-3 grid gap-3 md:grid-cols-2">
                                         <button
                                             v-for="action in suggestedReviewActions"
                                             :key="action.key"
                                             type="button"
+                                            :disabled="action.blocked"
                                             :class="[
                                                 'group flex min-h-24 flex-col rounded-md border p-4 text-left transition',
-                                                isSelectedReviewAction(action)
+                                                action.blocked
+                                                    ? 'cursor-not-allowed border-slate-200 bg-slate-100 opacity-60'
+                                                    : isSelectedReviewAction(action)
                                                     ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
                                                     : action.tone === 'danger'
                                                         ? 'border-rose-200 bg-white hover:border-rose-300 hover:bg-rose-50'
@@ -939,7 +990,7 @@ onMounted(loadApplication);
                                             </button>
                                             <button
                                                 type="button"
-                                                :disabled="updatingId === application.id"
+                                                :disabled="updatingId === application.id || selectedReviewAction?.blocked"
                                                 class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
                                                 @click="updateStatus"
                                             >
