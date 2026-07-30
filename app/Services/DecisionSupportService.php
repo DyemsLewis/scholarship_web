@@ -73,7 +73,8 @@ class DecisionSupportService
             'dss_breakdown' => $score,
         ];
 
-        if ($eligibilitySnapshot !== null) {
+        if ($eligibilitySnapshot !== null
+            && ($application->eligibility_score === null || blank($application->eligibility_breakdown))) {
             $updates['eligibility_score'] = $eligibilitySnapshot['score'];
             $updates['eligibility_breakdown'] = $eligibilitySnapshot;
         }

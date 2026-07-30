@@ -21,6 +21,7 @@ use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationDecisionReason;
 use App\Support\ApplicationSchedulePayload;
+use App\Support\CsvExport;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
@@ -371,7 +372,8 @@ class ProviderController extends Controller
 
         $provider = $request->user()
             ->loadMissing(['studentProfile', 'providerProfile', 'adminProfile']);
-        $providerId = $provider->providerOrganizationId();
+        $providerOwner = $provider->providerOrganizationOwner()->loadMissing('providerProfile');
+        $providerId = $providerOwner->id;
         $verificationDocumentsCount = ProviderVerificationDocument::query()
             ->where('provider_id', $providerId)
             ->count();
@@ -382,6 +384,8 @@ class ProviderController extends Controller
             ->latest()
             ->get();
         $reviewQueue = $provider->hasPortalPermission('review_applications')
+            && $providerOwner->hasVerifiedEmail()
+            && $providerOwner->providerProfile?->isVerified()
             ? ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship'])
                 ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId))
@@ -473,6 +477,26 @@ class ProviderController extends Controller
             'verified_by' => $profile?->verified_by,
             'verified_at' => $profile?->verified_at,
         ] : [];
+        $organizationChanged = $canManageOrganization
+            && $profile?->verification_status === 'approved'
+            && collect([
+                'provider_name',
+                'provider_type',
+                'provider_website',
+                'provider_address',
+                'provider_description',
+            ])->contains(fn (string $field): bool => $this->comparableScholarshipValue($profile?->{$field})
+                !== $this->comparableScholarshipValue($organizationProfile[$field] ?? null));
+
+        if ($organizationChanged) {
+            $organizationProfile = [
+                ...$organizationProfile,
+                'verification_status' => 'pending',
+                'verification_notes' => null,
+                'verified_by' => null,
+                'verified_at' => null,
+            ];
+        }
 
         DB::transaction(function () use (
             $user,
@@ -483,6 +507,7 @@ class ProviderController extends Controller
             $profile,
             $canManageOrganization,
             $emailChanged,
+            $organizationChanged,
         ): void {
             $user->fill([
                 'email' => $validated['email'],
@@ -516,7 +541,29 @@ class ProviderController extends Controller
                     ...$organizationProfile,
                 ]);
             }
+
+            if ($organizationChanged) {
+                $providerOwner->providerVerificationDocuments()->update([
+                    'status' => 'submitted',
+                    'review_notes' => null,
+                ]);
+            }
         });
+
+        if ($organizationChanged) {
+            User::query()
+                ->where('role', 'admin')
+                ->where('account_status', 'active')
+                ->get()
+                ->filter(fn (User $admin) => $admin->hasPortalPermission('manage_reviews'))
+                ->each(fn (User $admin) => PortalNotification::create([
+                    'user_id' => $admin->id,
+                    'type' => 'provider_profile_verification',
+                    'title' => 'Verified provider profile changed',
+                    'message' => "{$organizationProfile['provider_name']} changed verified organization details and needs another review.",
+                    'action_url' => route('admin.providers.review.show', $providerOwner, false),
+                ]));
+        }
 
         if ($emailChanged) {
             $emailVerificationSent = false;
@@ -556,11 +603,14 @@ class ProviderController extends Controller
         );
 
         return response()->json([
-            'message' => $emailChanged
-                ? 'Profile updated. Verify your new email address before publishing programs.'
-                : 'Provider profile updated successfully.',
+            'message' => $organizationChanged
+                ? 'Provider profile updated and returned for admin verification.'
+                : ($emailChanged
+                    ? 'Profile updated. Verify your new email address before publishing programs.'
+                    : 'Provider profile updated successfully.'),
             'user' => $this->providerStaffPayload($user->fresh(['providerProfile'])),
             'email_changed' => $emailChanged,
+            'verification_reset' => $organizationChanged,
         ]);
     }
 
@@ -1566,7 +1616,7 @@ class ProviderController extends Controller
                 'user_id' => $application->applicant_id,
                 'type' => 'application_schedule',
                 'title' => "{$eventLabel} schedule posted",
-                'message' => "Your {$eventLabel} for {$application->scholarship?->title} is scheduled for {$scheduledAt->format('M d, Y h:i A')}{$destination}. Open the application and acknowledge the schedule.",
+                'message' => "Your {$eventLabel} for {$application->scholarship?->title} is scheduled for {$scheduledAt->format('M d, Y h:i A')}{$destination}. Open the application to review the schedule details.",
                 'action_url' => route('dashboard.applications.show', $application, false),
             ]);
         }
@@ -1805,6 +1855,7 @@ class ProviderController extends Controller
         $isOutcomeStatus = in_array($validated['status'], $outcomeStatuses, true);
 
         if ($previousStatus !== $validated['status']) {
+            $this->ensureApplicationStatusTransition($application, $validated['status']);
             $this->ensureApplicationDocumentsReadyForStatus($application, $validated['status']);
         }
 
@@ -1880,26 +1931,45 @@ class ProviderController extends Controller
             'rubric_scored_at' => $rubricResult && $rubricResult['completed'] > 0 ? now() : $application->rubric_scored_at,
         ];
 
-        DB::transaction(function () use ($application, $applicationUpdate, $previousStatus, $validated): void {
+        DB::transaction(function () use (
+            $application,
+            $applicationUpdate,
+            $previousStatus,
+            $validated,
+            $applicantFacingChanged,
+            $reviewNoteChanged,
+            $request,
+        ): void {
+            $currentStatus = ScholarshipApplication::query()
+                ->whereKey($application->id)
+                ->lockForUpdate()
+                ->value('status');
+
+            if ($currentStatus !== $previousStatus) {
+                throw ValidationException::withMessages([
+                    'status' => 'This application changed during review. Refresh the page before recording another decision.',
+                ]);
+            }
+
             $this->ensureScholarshipAwardSlotAvailable(
                 $application,
                 $previousStatus,
                 $validated['status'],
             );
             $application->update($applicationUpdate);
-        });
 
-        if ($applicantFacingChanged || $reviewNoteChanged) {
-            ApplicationStatusHistory::create([
-                'scholarship_application_id' => $application->id,
-                'changed_by' => $request->user()->id,
-                'from_status' => $previousStatus,
-                'to_status' => $validated['status'],
-                'decision_reason' => $validated['decision_reason'] ?? null,
-                'review_notes' => $validated['review_notes'] ?? null,
-                'changed_at' => now(),
-            ]);
-        }
+            if ($applicantFacingChanged || $reviewNoteChanged) {
+                ApplicationStatusHistory::create([
+                    'scholarship_application_id' => $application->id,
+                    'changed_by' => $request->user()->id,
+                    'from_status' => $previousStatus,
+                    'to_status' => $validated['status'],
+                    'decision_reason' => $validated['decision_reason'] ?? null,
+                    'review_notes' => $validated['review_notes'] ?? null,
+                    'changed_at' => now(),
+                ]);
+            }
+        });
 
         if ($previousStatus !== $validated['status']) {
             ScholarshipFunnelEvent::record(
@@ -1992,6 +2062,38 @@ class ProviderController extends Controller
         if ($occupiedSlots >= $scholarship->slots_available) {
             throw ValidationException::withMessages([
                 'status' => 'All available award slots have already been filled. Increase the program slots or review an existing award before approving another applicant.',
+            ]);
+        }
+    }
+
+    private function ensureApplicationStatusTransition(
+        ScholarshipApplication $application,
+        string $nextStatus,
+    ): void {
+        $currentStatus = $application->status;
+        $selectionStages = ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages);
+        $approvalStatus = ScholarshipSelectionPlan::nextApprovalStatus($currentStatus, $selectionStages);
+        $rejectionStatus = ScholarshipSelectionPlan::rejectionStatus($currentStatus);
+        $allowed = match ($currentStatus) {
+            'submitted' => array_filter(['under_review', $approvalStatus, $rejectionStatus]),
+            'under_review' => array_filter(['qualified', 'shortlisted', $approvalStatus, $rejectionStatus]),
+            'qualified' => array_filter(['shortlisted', $approvalStatus, $rejectionStatus]),
+            'shortlisted' => array_filter([$approvalStatus, $rejectionStatus]),
+            'exam_qualified' => ['exam_scheduled', 'exam_failed'],
+            'exam_scheduled' => ['exam_taken', 'exam_failed'],
+            'exam_taken' => array_filter(['exam_passed', $approvalStatus, $rejectionStatus]),
+            'exam_passed' => array_filter([$approvalStatus, $rejectionStatus]),
+            'interview' => ['approved', 'interview_failed'],
+            'approved' => ['awarded', 'distribution_scheduled', 'not_awarded'],
+            'awarded' => ['distribution_scheduled'],
+            'distribution_scheduled' => ['disbursed'],
+            'disbursed' => ['renewed'],
+            default => [],
+        };
+
+        if (! in_array($nextStatus, $allowed, true)) {
+            throw ValidationException::withMessages([
+                'status' => "The application cannot move from {$this->statusLabel($currentStatus)} to {$this->statusLabel($nextStatus)}.",
             ]);
         }
     }
@@ -2122,7 +2224,7 @@ class ProviderController extends Controller
 
         return response()->streamDownload(function () use ($providerId, $selectedScholarship) {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Distribution Date', 'Distribution Instructions', 'Outcome Date', 'Outcome Notes', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Review Notes']);
+            CsvExport::writeRow($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Distribution Date', 'Distribution Instructions', 'Outcome Date', 'Outcome Notes', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Review Notes']);
 
             $query = ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship'])
@@ -2138,7 +2240,7 @@ class ProviderController extends Controller
                         app(DecisionSupportService::class)->syncApplication($application);
                         $readiness = $this->documentReadiness($application);
 
-                        fputcsv($handle, [
+                        CsvExport::writeRow($handle, [
                             $application->id,
                             $application->scholarship?->title,
                             $application->applicant?->name,

@@ -52,14 +52,6 @@ class ProviderExamReviewWorkflowTest extends TestCase
                 'title' => 'Exam passed',
                 'message' => 'You passed the scholarship exam for Exam Workflow Scholarship. Your application will proceed to final review.',
             ],
-            [
-                'status' => 'exam_failed',
-                'reason' => 'failed_exam',
-                'note' => 'Applicant did not pass the scholarship exam.',
-                'label' => 'Failed exam',
-                'title' => 'Exam not passed',
-                'message' => 'Your application for Exam Workflow Scholarship did not pass the scholarship exam. Review the provider note for details. Reason: Failed exam.',
-            ],
         ];
 
         foreach ($cases as $case) {
@@ -95,6 +87,25 @@ class ProviderExamReviewWorkflowTest extends TestCase
                 'message' => $case['message'],
             ]);
         }
+
+        [, $failedApplicant, $failedApplication] = $this->examApplication();
+        $failedApplication->update(['status' => 'exam_taken']);
+
+        $this->actingAs($failedApplication->scholarship->provider)
+            ->patchJson("/provider/applications/{$failedApplication->id}/status", [
+                'status' => 'exam_failed',
+                'decision_reason' => 'failed_exam',
+                'review_notes' => 'Applicant did not pass the scholarship exam.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'exam_failed')
+            ->assertJsonPath('application.status_progress.label', 'Failed exam');
+
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $failedApplicant->id,
+            'type' => 'application_status',
+            'title' => 'Exam not passed',
+        ]);
     }
 
     public function test_failed_exam_requires_a_decision_reason(): void
@@ -167,6 +178,7 @@ class ProviderExamReviewWorkflowTest extends TestCase
             'provider_id' => $provider->id,
             'title' => 'Exam Workflow Scholarship',
             'description' => 'Used to verify exam screening workflow.',
+            'selection_stages' => ['screening', 'exam', 'distribution'],
             'status' => 'published',
         ]);
         $application = ScholarshipApplication::create([

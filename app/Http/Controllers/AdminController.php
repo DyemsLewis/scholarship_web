@@ -12,15 +12,19 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Services\PasswordResetLinkService;
+use App\Services\ScholarshipPublicationGuard;
 use App\Support\AcademicRequirement;
+use App\Support\CsvExport;
 use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Throwable;
 
@@ -470,10 +474,33 @@ class AdminController extends Controller
             'review_notes' => [Rule::requiredIf($request->input('status') === 'rejected'), 'nullable', 'string', 'max:1500'],
         ]);
 
-        $previousStatus = $scholarship->status;
-        $scholarship->update([
-            'status' => $validated['status'],
-        ]);
+        $allowedFrom = match ($validated['status']) {
+            'published' => ['pending_review', 'published'],
+            'rejected' => ['pending_review', 'published', 'rejected'],
+            'pending_review' => ['pending_review', 'published', 'rejected'],
+        };
+
+        [$scholarship, $previousStatus] = DB::transaction(function () use ($scholarship, $validated, $allowedFrom): array {
+            $lockedScholarship = Scholarship::query()
+                ->whereKey($scholarship->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! in_array($lockedScholarship->status, $allowedFrom, true)) {
+                throw ValidationException::withMessages([
+                    'status' => 'Only a program that has entered admin review can receive this decision.',
+                ]);
+            }
+
+            if ($validated['status'] === 'published') {
+                app(ScholarshipPublicationGuard::class)->assertPublishable($lockedScholarship);
+            }
+
+            $previousStatus = $lockedScholarship->status;
+            $lockedScholarship->update(['status' => $validated['status']]);
+
+            return [$lockedScholarship, $previousStatus];
+        });
 
         ActivityLog::record(
             $request->user(),
@@ -521,14 +548,37 @@ class AdminController extends Controller
             'verification_notes' => [Rule::requiredIf($request->input('verification_status') === 'rejected'), 'nullable', 'string', 'max:1500'],
         ]);
 
-        $provider->providerProfile()->updateOrCreate([
-            'user_id' => $provider->id,
-        ], [
-            'verification_status' => $validated['verification_status'],
-            'verification_notes' => $validated['verification_notes'] ?? null,
-            'verified_by' => $request->user()->id,
-            'verified_at' => $validated['verification_status'] === 'pending' ? null : now(),
-        ]);
+        if ($validated['verification_status'] === 'approved'
+            && ! $provider->providerVerificationDocuments()->exists()) {
+            return response()->json([
+                'message' => 'The provider must upload at least one proof before the account can be approved.',
+            ], 422);
+        }
+
+        $notes = $validated['verification_status'] === 'rejected'
+            ? $validated['verification_notes']
+            : null;
+        $documentStatus = match ($validated['verification_status']) {
+            'approved' => 'approved',
+            'rejected' => 'rejected',
+            default => 'submitted',
+        };
+
+        DB::transaction(function () use ($provider, $validated, $notes, $documentStatus, $request): void {
+            $provider->providerProfile()->updateOrCreate([
+                'user_id' => $provider->id,
+            ], [
+                'verification_status' => $validated['verification_status'],
+                'verification_notes' => $notes,
+                'verified_by' => $validated['verification_status'] === 'pending' ? null : $request->user()->id,
+                'verified_at' => $validated['verification_status'] === 'pending' ? null : now(),
+            ]);
+
+            $provider->providerVerificationDocuments()->update([
+                'status' => $documentStatus,
+                'review_notes' => $notes,
+            ]);
+        });
 
         ActivityLog::record(
             $request->user(),
@@ -587,17 +637,19 @@ class AdminController extends Controller
             ? trim($validated['verification_notes'])
             : null;
 
-        $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
-            'verification_status' => $validated['verification_status'],
-            'verification_notes' => $notes,
-            'verified_by' => $validated['verification_status'] === 'pending' ? null : $request->user()->id,
-            'verified_at' => $validated['verification_status'] === 'approved' ? now() : null,
-        ]);
+        DB::transaction(function () use ($applicant, $validated, $notes, $documentStatus, $request): void {
+            $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
+                'verification_status' => $validated['verification_status'],
+                'verification_notes' => $notes,
+                'verified_by' => $validated['verification_status'] === 'pending' ? null : $request->user()->id,
+                'verified_at' => $validated['verification_status'] === 'approved' ? now() : null,
+            ]);
 
-        $applicant->applicantVerificationDocuments()->update([
-            'status' => $documentStatus,
-            'review_notes' => $notes,
-        ]);
+            $applicant->applicantVerificationDocuments()->update([
+                'status' => $documentStatus,
+                'review_notes' => $notes,
+            ]);
+        });
 
         ActivityLog::record(
             $request->user(),
@@ -684,18 +736,6 @@ class AdminController extends Controller
         $middleInitial = strtoupper($validated['middle_initial']);
         $displayName = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
 
-        $user = User::create([
-            'parent_account_id' => $validated['role'] === 'admin' ? $actor->id : null,
-            'email' => $validated['email'],
-            'username' => $validated['username'],
-            'role' => $validated['role'],
-            'account_title' => $validated['role'] === 'admin' ? trim($validated['account_title']) : null,
-            'permissions' => $validated['role'] === 'admin'
-                ? array_values(array_unique($validated['permissions']))
-                : null,
-            'password' => $validated['password'],
-        ]);
-
         $profile = [
             'first_name' => $validated['first_name'],
             'last_name' => $validated['last_name'],
@@ -703,20 +743,34 @@ class AdminController extends Controller
             'contact_number' => $validated['contact_number'],
         ];
 
-        match ($user->role) {
-            'admin' => $user->adminProfile()->create([
-                ...$profile,
-                'display_name' => $displayName,
-            ]),
-            'provider' => $user->providerProfile()->create([
-                ...$profile,
-                'provider_name' => $displayName,
-                'verification_status' => 'approved',
-                'verified_by' => $request->user()->id,
-                'verified_at' => now(),
-            ]),
-            default => $user->studentProfile()->create($profile),
-        };
+        $user = DB::transaction(function () use ($validated, $actor, $profile, $displayName): User {
+            $user = User::create([
+                'parent_account_id' => $validated['role'] === 'admin' ? $actor->id : null,
+                'email' => $validated['email'],
+                'username' => $validated['username'],
+                'role' => $validated['role'],
+                'account_title' => $validated['role'] === 'admin' ? trim($validated['account_title']) : null,
+                'permissions' => $validated['role'] === 'admin'
+                    ? array_values(array_unique($validated['permissions']))
+                    : null,
+                'password' => $validated['password'],
+            ]);
+
+            match ($user->role) {
+                'admin' => $user->adminProfile()->create([
+                    ...$profile,
+                    'display_name' => $displayName,
+                ]),
+                'provider' => $user->providerProfile()->create([
+                    ...$profile,
+                    'provider_name' => $displayName,
+                    'verification_status' => 'pending',
+                ]),
+                default => $user->studentProfile()->create($profile),
+            };
+
+            return $user;
+        });
 
         ActivityLog::record(
             $request->user(),
@@ -772,6 +826,12 @@ class AdminController extends Controller
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
         ]);
 
+        if ($validated['role'] !== $user->role) {
+            return response()->json([
+                'message' => 'Account roles cannot be changed after registration. Create a separate account for a different portal role.',
+            ], 422);
+        }
+
         if ($validated['role'] === 'admin') {
             abort_if($actor->isManagedAccount(), 403, 'Only a primary administrator can manage admin accounts.');
 
@@ -784,6 +844,7 @@ class AdminController extends Controller
         }
 
         $previousRole = $user->role;
+        $emailChanged = strcasecmp($user->email, $validated['email']) !== 0;
 
         if ($previousRole !== $validated['role'] && $user->managedAccounts()->exists()) {
             return response()->json([
@@ -824,35 +885,86 @@ class AdminController extends Controller
             $userPayload['password'] = $validated['password'];
         }
 
-        $user->update($userPayload);
-
         $profile = [
             'first_name' => $validated['first_name'],
             'last_name' => $validated['last_name'],
             'middle_initial' => $middleInitial,
             'contact_number' => $validated['contact_number'],
         ];
+        $applicantVerificationReset = $user->isApplicant()
+            && $user->studentProfile?->verification_status === 'approved'
+            && collect($profile)->contains(fn ($value, string $field): bool => (string) ($user->studentProfile?->{$field} ?? '') !== (string) ($value ?? ''));
 
-        match ($user->role) {
-            'admin' => $user->adminProfile()->updateOrCreate([
+        if ($applicantVerificationReset) {
+            $profile += [
+                'verification_status' => $user->applicantVerificationDocuments()->exists() ? 'pending' : 'unsubmitted',
+                'verification_notes' => null,
+                'verified_by' => null,
+                'verified_at' => null,
+            ];
+        }
+
+        DB::transaction(function () use ($user, $userPayload, $profile, $displayName, $emailChanged, $applicantVerificationReset): void {
+            $user->fill($userPayload);
+
+            if ($emailChanged) {
+                $user->email_verified_at = null;
+            }
+
+            $user->save();
+
+            match ($user->role) {
+                'admin' => $user->adminProfile()->updateOrCreate([
+                    'user_id' => $user->id,
+                ], [
+                    ...$profile,
+                    'display_name' => $displayName,
+                ]),
+                'provider' => $user->providerProfile()->updateOrCreate([
+                    'user_id' => $user->id,
+                ], [
+                    ...$profile,
+                    'provider_name' => $user->providerProfile?->provider_name ?: $displayName,
+                    'verification_status' => $user->providerProfile?->verification_status ?: 'pending',
+                    'verified_by' => $user->providerProfile?->verified_by,
+                    'verified_at' => $user->providerProfile?->verified_at,
+                ]),
+                default => $user->studentProfile()->updateOrCreate([
+                    'user_id' => $user->id,
+                ], $profile),
+            };
+
+            if ($applicantVerificationReset) {
+                $user->applicantVerificationDocuments()->update([
+                    'status' => 'submitted',
+                    'review_notes' => null,
+                ]);
+            }
+        });
+
+        if ($emailChanged) {
+            try {
+                $user->sendEmailVerificationNotification();
+            } catch (Throwable $error) {
+                ActivityLog::record(
+                    $request->user(),
+                    'email_verification_email_failed',
+                    "Email verification link could not be sent to {$user->email}.",
+                    $request,
+                    ['updated_user_id' => $user->id, 'error' => $error->getMessage()],
+                );
+            }
+
+            PortalNotification::updateOrCreate([
                 'user_id' => $user->id,
+                'type' => 'email_verification',
+                'title' => 'Verify your email address',
             ], [
-                ...$profile,
-                'display_name' => $displayName,
-            ]),
-            'provider' => $user->providerProfile()->updateOrCreate([
-                'user_id' => $user->id,
-            ], [
-                ...$profile,
-                'provider_name' => $user->providerProfile?->provider_name ?: $displayName,
-                'verification_status' => $user->providerProfile?->verification_status ?: 'approved',
-                'verified_by' => $user->providerProfile?->verified_by ?: $request->user()->id,
-                'verified_at' => $user->providerProfile?->verified_at ?: now(),
-            ]),
-            default => $user->studentProfile()->updateOrCreate([
-                'user_id' => $user->id,
-            ], $profile),
-        };
+                'message' => 'Your email address was changed by an administrator. Verify the new address before using verification-protected actions.',
+                'action_url' => null,
+                'read_at' => null,
+            ]);
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -1129,14 +1241,14 @@ class AdminController extends Controller
 
         return response()->streamDownload(function () {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['ID', 'Name', 'Email', 'Email Verified', 'Username', 'Contact Number', 'Role', 'Account Status', 'Must Reset Password', 'Created At']);
+            CsvExport::writeRow($handle, ['ID', 'Name', 'Email', 'Email Verified', 'Username', 'Contact Number', 'Role', 'Account Status', 'Must Reset Password', 'Created At']);
 
             User::query()
                 ->with(['studentProfile', 'providerProfile', 'adminProfile'])
                 ->orderBy('id')
                 ->chunk(200, function ($users) use ($handle) {
                     foreach ($users as $user) {
-                        fputcsv($handle, [
+                        CsvExport::writeRow($handle, [
                             $user->id,
                             $user->name,
                             $user->email,
@@ -1161,7 +1273,7 @@ class AdminController extends Controller
 
         return response()->streamDownload(function () {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['ID', 'Scholarship', 'Provider', 'Applicant', 'Email', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Distribution Date', 'Distribution Instructions', 'Outcome Date', 'Outcome Notes', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Pending Documents', 'Applicant Notes', 'Review Notes']);
+            CsvExport::writeRow($handle, ['ID', 'Scholarship', 'Provider', 'Applicant', 'Email', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Distribution Date', 'Distribution Instructions', 'Outcome Date', 'Outcome Notes', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Pending Documents', 'Applicant Notes', 'Review Notes']);
 
             ScholarshipApplication::query()
                 ->with(['applicant.studentProfile', 'documents', 'scholarship.provider.providerProfile'])
@@ -1169,7 +1281,7 @@ class AdminController extends Controller
                 ->chunk(200, function ($applications) use ($handle) {
                     foreach ($applications as $application) {
                         app(DecisionSupportService::class)->syncApplication($application);
-                        fputcsv($handle, [
+                        CsvExport::writeRow($handle, [
                             $application->id,
                             $application->scholarship?->title,
                             $application->scholarship?->provider?->provider_name ?? $application->scholarship?->provider?->name,

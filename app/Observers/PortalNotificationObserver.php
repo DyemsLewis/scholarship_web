@@ -5,10 +5,11 @@ namespace App\Observers;
 use App\Mail\PortalNotificationMail;
 use App\Models\ActivityLog;
 use App\Models\PortalNotification;
+use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
-class PortalNotificationObserver
+class PortalNotificationObserver implements ShouldHandleEventsAfterCommit
 {
     public function created(PortalNotification $notification): void
     {
@@ -62,5 +63,4 @@ class PortalNotificationObserver
 
         return url($actionUrl);
     }
-
 }

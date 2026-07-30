@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ApplicationDocument;
 use App\Models\PortalNotification;
+use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\StudentDocument;
@@ -25,6 +26,19 @@ class DemoReadinessWorkflowTest extends TestCase
         $provider = User::factory()->create(['role' => 'provider']);
         $provider->providerProfile()->update(['verification_status' => 'pending']);
         $applicant = $this->completeApplicant();
+        $proofPath = "provider-verification/{$provider->id}/registration.pdf";
+        Storage::disk('local')->put($proofPath, 'Demo organization registration');
+        ProviderVerificationDocument::create([
+            'provider_id' => $provider->id,
+            'uploaded_by' => $provider->id,
+            'document_type' => 'organization_registration',
+            'original_name' => 'registration.pdf',
+            'path' => $proofPath,
+            'mime_type' => 'application/pdf',
+            'size' => 30,
+            'status' => 'submitted',
+            'uploaded_at' => now(),
+        ]);
 
         $this->actingAs($admin)
             ->patchJson("/admin/providers/{$provider->id}/verification", [

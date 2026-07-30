@@ -19,14 +19,18 @@ class SendScholarshipReminders extends Command
         foreach ([7, 3, 1, 0] as $daysRemaining) {
             Scholarship::query()
                 ->with(['provider', 'bookmarks.user', 'applications:id,scholarship_id,applicant_id'])
-                ->where('status', 'published')
+                ->acceptingApplications()
                 ->whereDate('deadline', now()->addDays($daysRemaining)->toDateString())
                 ->chunkById(100, function ($scholarships) use ($daysRemaining, &$created): void {
                     foreach ($scholarships as $scholarship) {
                         $applicantIds = $scholarship->applications->pluck('applicant_id');
 
                         foreach ($scholarship->bookmarks as $bookmark) {
-                            if (! $bookmark->user || $applicantIds->contains($bookmark->user_id)) {
+                            if (! $bookmark->user
+                                || ! $bookmark->user->isApplicant()
+                                || ! $bookmark->user->isActive()
+                                || ! $bookmark->user->hasVerifiedEmail()
+                                || $applicantIds->contains($bookmark->user_id)) {
                                 continue;
                             }
 

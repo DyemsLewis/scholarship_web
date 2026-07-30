@@ -14,8 +14,8 @@ use App\Models\ScholarshipBookmark;
 use App\Models\ScholarshipFunnelEvent;
 use App\Models\StudentDocument;
 use App\Models\User;
-use App\Services\DecisionSupportService;
 use App\Services\ApplicantDocumentLibraryService;
+use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
@@ -25,11 +25,13 @@ use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Throwable;
 
 class ApplicantDashboardController extends Controller
 {
@@ -62,7 +64,7 @@ class ApplicantDashboardController extends Controller
             return $redirect;
         }
 
-        abort_unless($scholarship->isAcceptingApplications(), 404);
+        abort_unless($scholarship->isPubliclyVisible(), 404);
 
         return view('dashboard-scholarship-detail', [
             'scholarship' => $scholarship,
@@ -72,7 +74,7 @@ class ApplicantDashboardController extends Controller
     public function scholarshipDetailData(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isApplicant(), 403);
-        abort_unless($scholarship->status === 'published', 404);
+        abort_unless($scholarship->isPubliclyVisible(), 404);
 
         $viewEvent = ScholarshipFunnelEvent::record(
             $request->user(),
@@ -303,24 +305,37 @@ class ApplicantDashboardController extends Controller
             ->where('user_id', $request->user()->id)
             ->where('document_name', $documentName)
             ->first();
+        $oldPath = $existing?->path;
+        $path = $file->store("student-documents/{$request->user()->id}", 'local');
 
-        if ($existing) {
-            Storage::disk('local')->delete($existing->path);
+        if (! is_string($path)) {
+            throw ValidationException::withMessages([
+                'document_file' => 'The document could not be stored. Please try again.',
+            ]);
         }
 
-        $path = $file->store("student-documents/{$request->user()->id}", 'local');
-        $document = StudentDocument::query()->updateOrCreate([
-            'user_id' => $request->user()->id,
-            'document_name' => $documentName,
-        ], [
-            'original_name' => $file->getClientOriginalName(),
-            'path' => $path,
-            'mime_type' => $file->getClientMimeType(),
-            'size' => $file->getSize(),
-            'uploaded_at' => now(),
-            'terms_accepted_at' => now(),
-            'terms_version' => Terms::VERSION,
-        ]);
+        try {
+            $document = DB::transaction(fn () => StudentDocument::query()->updateOrCreate([
+                'user_id' => $request->user()->id,
+                'document_name' => $documentName,
+            ], [
+                'original_name' => $file->getClientOriginalName(),
+                'path' => $path,
+                'mime_type' => $file->getClientMimeType(),
+                'size' => $file->getSize(),
+                'uploaded_at' => now(),
+                'terms_accepted_at' => now(),
+                'terms_version' => Terms::VERSION,
+            ]));
+        } catch (Throwable $error) {
+            Storage::disk('local')->delete($path);
+
+            throw $error;
+        }
+
+        if ($oldPath && $oldPath !== $path) {
+            Storage::disk('local')->delete($oldPath);
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -352,9 +367,10 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($document->user_id === $request->user()->id, 403);
 
-        Storage::disk('local')->delete($document->path);
+        $path = $document->path;
         $documentName = $document->document_name;
         $document->delete();
+        Storage::disk('local')->delete($path);
 
         ActivityLog::record(
             $request->user(),
@@ -422,38 +438,67 @@ class ApplicantDashboardController extends Controller
 
         $file = $validated['document_file'];
         $path = $file->store("applicant-verification/{$user->id}", 'local');
+        $oldPath = $existing?->path;
 
-        if ($existing && Storage::disk('local')->exists($existing->path)) {
-            Storage::disk('local')->delete($existing->path);
+        if (! is_string($path)) {
+            throw ValidationException::withMessages([
+                'document_file' => 'The verification proof could not be stored. Please try again.',
+            ]);
         }
 
-        $document = ApplicantVerificationDocument::query()->updateOrCreate([
-            'applicant_id' => $user->id,
-            'document_type' => $validated['document_type'],
-        ], [
-            'uploaded_by' => $user->id,
-            'original_name' => $file->getClientOriginalName(),
-            'path' => $path,
-            'mime_type' => $file->getMimeType(),
-            'size' => $file->getSize() ?: 0,
-            'status' => 'submitted',
-            'review_notes' => null,
-            'uploaded_at' => now(),
-            'terms_accepted_at' => now(),
-            'terms_version' => Terms::VERSION,
-        ]);
-        $preparedDocument = $this->documentLibraryService->ensureVerificationCopy($user, $document);
+        try {
+            $document = DB::transaction(function () use ($user, $validated, $file, $path): ApplicantVerificationDocument {
+                $document = ApplicantVerificationDocument::query()->updateOrCreate([
+                    'applicant_id' => $user->id,
+                    'document_type' => $validated['document_type'],
+                ], [
+                    'uploaded_by' => $user->id,
+                    'original_name' => $file->getClientOriginalName(),
+                    'path' => $path,
+                    'mime_type' => $file->getMimeType(),
+                    'size' => $file->getSize() ?: 0,
+                    'status' => 'submitted',
+                    'review_notes' => null,
+                    'uploaded_at' => now(),
+                    'terms_accepted_at' => now(),
+                    'terms_version' => Terms::VERSION,
+                ]);
 
-        $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
-            'verification_status' => 'pending',
-            'verification_notes' => null,
-            'verified_at' => null,
-            'verified_by' => null,
-        ]);
-        $user->applicantVerificationDocuments()->update([
-            'status' => 'submitted',
-            'review_notes' => null,
-        ]);
+                $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
+                    'verification_status' => 'pending',
+                    'verification_notes' => null,
+                    'verified_at' => null,
+                    'verified_by' => null,
+                ]);
+                $user->applicantVerificationDocuments()->update([
+                    'status' => 'submitted',
+                    'review_notes' => null,
+                ]);
+
+                return $document;
+            });
+        } catch (Throwable $error) {
+            Storage::disk('local')->delete($path);
+
+            throw $error;
+        }
+
+        if ($oldPath && $oldPath !== $path) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        try {
+            $preparedDocument = $this->documentLibraryService->ensureVerificationCopy($user, $document);
+        } catch (Throwable $error) {
+            $preparedDocument = null;
+            ActivityLog::record(
+                $user,
+                'verification_document_library_copy_failed',
+                "{$user->name}'s verification proof could not be copied to Documents.",
+                $request,
+                ['document_id' => $document->id, 'error' => $error->getMessage()],
+            );
+        }
 
         User::query()
             ->where('role', 'admin')
@@ -501,27 +546,29 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($document->applicant_id === $request->user()->id, 403);
 
-        if (Storage::disk('local')->exists($document->path)) {
-            Storage::disk('local')->delete($document->path);
-        }
-
-        $document->delete();
+        $path = $document->path;
         $user = $request->user();
-        $hasDocuments = $user->applicantVerificationDocuments()->exists();
+        $hasDocuments = DB::transaction(function () use ($document, $user): bool {
+            $document->delete();
+            $hasDocuments = $user->applicantVerificationDocuments()->exists();
 
-        $user->studentProfile()->update([
-            'verification_status' => $hasDocuments ? 'pending' : 'unsubmitted',
-            'verification_notes' => null,
-            'verified_at' => null,
-            'verified_by' => null,
-        ]);
-
-        if ($hasDocuments) {
-            $user->applicantVerificationDocuments()->update([
-                'status' => 'submitted',
-                'review_notes' => null,
+            $user->studentProfile()->update([
+                'verification_status' => $hasDocuments ? 'pending' : 'unsubmitted',
+                'verification_notes' => null,
+                'verified_at' => null,
+                'verified_by' => null,
             ]);
-        }
+
+            if ($hasDocuments) {
+                $user->applicantVerificationDocuments()->update([
+                    'status' => 'submitted',
+                    'review_notes' => null,
+                ]);
+            }
+
+            return $hasDocuments;
+        });
+        Storage::disk('local')->delete($path);
 
         ActivityLog::record(
             $user,
@@ -598,45 +645,120 @@ class ApplicantDashboardController extends Controller
             $validated['gwa'] = null;
         }
 
-        $request->user()->studentProfile()->updateOrCreate([
-            'user_id' => $request->user()->id,
-        ], [
+        $user = $request->user();
+        $profileValues = [
             ...$validated,
             'middle_initial' => filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null,
             'guardian_is_account_owner' => (bool) ($validated['guardian_is_account_owner'] ?? false),
-        ]);
-        $request->user()->unsetRelation('studentProfile');
+        ];
+        $studentProfile = $user->studentProfile()->firstOrNew(['user_id' => $user->id]);
+        $studentProfile->fill($profileValues);
+        $verifiedFields = [
+            'first_name',
+            'last_name',
+            'middle_initial',
+            'suffix',
+            'gender',
+            'contact_number',
+            'account_managed_by',
+            'education_level',
+            'school',
+            'school_type',
+            'learner_reference_number',
+            'course_or_strand',
+            'year_level',
+            'enrollment_status',
+            'gwa',
+            'grading_scale',
+            'income_bracket',
+            'household_size',
+            'address',
+            'barangay',
+            'city',
+            'province',
+            'region',
+            'latitude',
+            'longitude',
+            'birthdate',
+            'guardian_name',
+            'guardian_relationship',
+            'guardian_contact',
+            'guardian_email',
+            'guardian_is_account_owner',
+        ];
+        $verificationReset = $studentProfile->verification_status === 'approved'
+            && $studentProfile->isDirty($verifiedFields);
+
+        if ($verificationReset) {
+            $studentProfile->fill([
+                'verification_status' => $user->applicantVerificationDocuments()->exists() ? 'pending' : 'unsubmitted',
+                'verification_notes' => null,
+                'verified_at' => null,
+                'verified_by' => null,
+            ]);
+        }
+
+        DB::transaction(function () use ($studentProfile, $user, $verificationReset): void {
+            $studentProfile->save();
+
+            if ($verificationReset) {
+                $user->applicantVerificationDocuments()->update([
+                    'status' => 'submitted',
+                    'review_notes' => null,
+                ]);
+            }
+        });
+        $user->unsetRelation('studentProfile');
+
+        if ($verificationReset) {
+            User::query()
+                ->where('role', 'admin')
+                ->where('account_status', 'active')
+                ->get()
+                ->filter(fn (User $admin) => $admin->hasPortalPermission('manage_reviews'))
+                ->each(fn (User $admin) => PortalNotification::create([
+                    'user_id' => $admin->id,
+                    'type' => 'applicant_profile_verification',
+                    'title' => 'Verified applicant profile changed',
+                    'message' => "{$user->name} changed verified profile information and needs another review.",
+                    'action_url' => route('admin.applicants.review.show', $user, false),
+                ]));
+        }
 
         ScholarshipApplication::query()
             ->with(['applicant.studentProfile', 'documents', 'scholarship'])
-            ->where('applicant_id', $request->user()->id)
+            ->where('applicant_id', $user->id)
             ->get()
             ->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application, 'web_profile_updated'));
 
-        $profileReadiness = $request->user()->applicantProfileReadiness();
+        $profileReadiness = $user->applicantProfileReadiness();
 
         if ($profileReadiness['complete']) {
             ScholarshipFunnelEvent::record(
-                $request->user(),
+                $user,
                 'profile_completed',
                 source: 'web',
-                metadata: ['education_level' => $request->user()->studentProfile?->education_level],
-                deduplicationKey: "profile_completed:{$request->user()->id}",
+                metadata: ['education_level' => $user->studentProfile?->education_level],
+                deduplicationKey: "profile_completed:{$user->id}",
             );
         }
 
         ActivityLog::record(
-            $request->user(),
+            $user,
             'profile_updated',
-            "{$request->user()->name} updated their applicant profile.",
+            "{$user->name} updated their applicant profile.",
             $request,
+            ['verification_reset' => $verificationReset],
         );
 
         return response()->json([
-            'message' => 'Applicant profile updated.',
+            'message' => $verificationReset
+                ? 'Applicant profile updated and returned for verification.'
+                : 'Applicant profile updated.',
             'user' => $this->userPayload($request),
-            'profile_readiness' => $request->user()->applicantProfileReadiness(),
-            'match_summary' => $this->profileMatchSummary($request->user()),
+            'profile_readiness' => $user->applicantProfileReadiness(),
+            'match_summary' => $this->profileMatchSummary($user),
+            'verification_reset' => $verificationReset,
         ]);
     }
 
@@ -728,32 +850,68 @@ class ApplicantDashboardController extends Controller
         }
 
         $acceptedAt = now();
-        $application = ScholarshipApplication::create([
-            'scholarship_id' => $scholarship->id,
-            'applicant_id' => $request->user()->id,
-            'status' => 'submitted',
-            'document_checklist' => $requiredDocuments,
-            'eligibility_score' => $eligibilityMatch['score'],
-            'eligibility_breakdown' => $eligibilityMatch,
-            'review_rubric_snapshot' => $scholarship->review_rubric ?? [],
-            'notes' => $validated['notes'] ?? null,
-            'submitted_at' => $acceptedAt,
-            'terms_accepted_at' => $acceptedAt,
-            'terms_version' => Terms::VERSION,
-        ]);
+        $copiedDocumentPaths = [];
 
-        ApplicationStatusHistory::create([
-            'scholarship_application_id' => $application->id,
-            'changed_by' => $request->user()->id,
-            'from_status' => null,
-            'to_status' => 'submitted',
-            'review_notes' => 'Application submitted by applicant.',
-            'changed_at' => now(),
-        ]);
+        try {
+            $application = DB::transaction(function () use (
+                $scholarship,
+                $request,
+                $requiredDocuments,
+                $eligibilityMatch,
+                $validated,
+                $acceptedAt,
+                &$copiedDocumentPaths,
+            ): ScholarshipApplication {
+                $application = ScholarshipApplication::create([
+                    'scholarship_id' => $scholarship->id,
+                    'applicant_id' => $request->user()->id,
+                    'status' => 'submitted',
+                    'document_checklist' => $requiredDocuments,
+                    'eligibility_score' => $eligibilityMatch['score'],
+                    'eligibility_breakdown' => $eligibilityMatch,
+                    'review_rubric_snapshot' => $scholarship->review_rubric ?? [],
+                    'notes' => $validated['notes'] ?? null,
+                    'submitted_at' => $acceptedAt,
+                    'terms_accepted_at' => $acceptedAt,
+                    'terms_version' => Terms::VERSION,
+                ]);
 
-        $this->attachPreparedDocumentsToApplication($request->user(), $application, $requiredDocuments);
-        app(DecisionSupportService::class)->syncApplication($application, 'web_application_submitted');
-        app(ScholarshipEventService::class)->syncApplication($application->fresh());
+                ApplicationStatusHistory::create([
+                    'scholarship_application_id' => $application->id,
+                    'changed_by' => $request->user()->id,
+                    'from_status' => null,
+                    'to_status' => 'submitted',
+                    'review_notes' => 'Application submitted by applicant.',
+                    'changed_at' => now(),
+                ]);
+
+                $this->attachPreparedDocumentsToApplication(
+                    $request->user(),
+                    $application,
+                    $requiredDocuments,
+                    $copiedDocumentPaths,
+                );
+                app(DecisionSupportService::class)->syncApplication($application, 'web_application_submitted');
+                app(ScholarshipEventService::class)->syncApplication($application->fresh());
+
+                return $application;
+            });
+        } catch (Throwable $error) {
+            foreach ($copiedDocumentPaths as $copiedPath) {
+                Storage::disk('local')->delete($copiedPath);
+            }
+
+            if (ScholarshipApplication::query()
+                ->where('scholarship_id', $scholarship->id)
+                ->where('applicant_id', $request->user()->id)
+                ->exists()) {
+                return response()->json([
+                    'message' => 'You already submitted an application for this scholarship.',
+                ], 422);
+            }
+
+            throw $error;
+        }
 
         ScholarshipFunnelEvent::record(
             $request->user(),
@@ -802,7 +960,7 @@ class ApplicantDashboardController extends Controller
     public function saveScholarship(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isApplicant(), 403);
-        abort_unless($scholarship->status === 'published', 404);
+        abort_unless($scholarship->isAcceptingApplications(), 404);
 
         $bookmark = ScholarshipBookmark::query()->firstOrCreate([
             'scholarship_id' => $scholarship->id,
@@ -882,29 +1040,43 @@ class ApplicantDashboardController extends Controller
             ->where('scholarship_application_id', $application->id)
             ->where('document_name', $validated['document_name'])
             ->first();
+        $this->ensureApplicationDocumentsEditable($application, $existing);
+        $oldPath = $existing?->path;
+        $path = $file->store("application-documents/{$application->id}", 'local');
 
-        if ($existing) {
-            Storage::disk('local')->delete($existing->path);
+        if (! is_string($path)) {
+            throw ValidationException::withMessages([
+                'document_file' => 'The document could not be stored. Please try again.',
+            ]);
         }
 
-        $path = $file->store("application-documents/{$application->id}");
-        $document = ApplicationDocument::query()->updateOrCreate([
-            'scholarship_application_id' => $application->id,
-            'document_name' => $validated['document_name'],
-        ], [
-            'uploaded_by' => $request->user()->id,
-            'original_name' => $file->getClientOriginalName(),
-            'path' => $path,
-            'mime_type' => $file->getClientMimeType(),
-            'size' => $file->getSize(),
-            'status' => 'pending',
-            'review_notes' => null,
-            'reviewed_by' => null,
-            'reviewed_at' => null,
-            'uploaded_at' => now(),
-            'terms_accepted_at' => now(),
-            'terms_version' => Terms::VERSION,
-        ]);
+        try {
+            $document = DB::transaction(fn () => ApplicationDocument::query()->updateOrCreate([
+                'scholarship_application_id' => $application->id,
+                'document_name' => $validated['document_name'],
+            ], [
+                'uploaded_by' => $request->user()->id,
+                'original_name' => $file->getClientOriginalName(),
+                'path' => $path,
+                'mime_type' => $file->getClientMimeType(),
+                'size' => $file->getSize(),
+                'status' => 'pending',
+                'review_notes' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+                'uploaded_at' => now(),
+                'terms_accepted_at' => now(),
+                'terms_version' => Terms::VERSION,
+            ]));
+        } catch (Throwable $error) {
+            Storage::disk('local')->delete($path);
+
+            throw $error;
+        }
+
+        if ($oldPath && $oldPath !== $path) {
+            Storage::disk('local')->delete($oldPath);
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -922,6 +1094,15 @@ class ApplicantDashboardController extends Controller
             metadata: ['document_name' => $document->document_name],
         );
 
+        $application->loadMissing('scholarship');
+        PortalNotification::create([
+            'user_id' => $application->scholarship->provider_id,
+            'type' => 'application_document',
+            'title' => 'Application document updated',
+            'message' => "{$request->user()->name} uploaded {$document->document_name} for application #{$application->id}.",
+            'action_url' => route('provider.applications.show', $application, false),
+        ]);
+
         $freshApplication = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile', 'scholarship.events']);
         app(DecisionSupportService::class)->syncApplication($freshApplication, 'web_document_uploaded');
 
@@ -936,11 +1117,13 @@ class ApplicantDashboardController extends Controller
         $document->load('application');
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($document->application?->applicant_id === $request->user()->id, 403);
+        $this->ensureApplicationDocumentsEditable($document->application, null, false);
 
-        Storage::disk('local')->delete($document->path);
+        $path = $document->path;
         $application = $document->application;
         $documentName = $document->document_name;
         $document->delete();
+        Storage::disk('local')->delete($path);
 
         ActivityLog::record(
             $request->user(),
@@ -957,6 +1140,15 @@ class ApplicantDashboardController extends Controller
             source: 'web',
             metadata: ['document_name' => $documentName],
         );
+
+        $application->loadMissing('scholarship');
+        PortalNotification::create([
+            'user_id' => $application->scholarship->provider_id,
+            'type' => 'application_document',
+            'title' => 'Application document removed',
+            'message' => "{$request->user()->name} removed {$documentName} from application #{$application->id}.",
+            'action_url' => route('provider.applications.show', $application, false),
+        ]);
 
         $freshApplication = $application->fresh()->load(['documents', 'statusHistories.actor', 'scholarship.provider.providerProfile', 'scholarship.events']);
         app(DecisionSupportService::class)->syncApplication($freshApplication, 'web_document_deleted');
@@ -1352,8 +1544,32 @@ class ApplicantDashboardController extends Controller
         return $this->eligibilityService->preparedDocumentReadiness($scholarship, $user);
     }
 
-    private function attachPreparedDocumentsToApplication(User $user, ScholarshipApplication $application, array $confirmedDocuments): void
-    {
+    private function ensureApplicationDocumentsEditable(
+        ScholarshipApplication $application,
+        ?ApplicationDocument $document = null,
+        bool $allowRequestedReplacement = true,
+    ): void {
+        if (in_array($application->status, ['submitted', 'under_review', 'qualified', 'shortlisted'], true)) {
+            return;
+        }
+
+        if ($allowRequestedReplacement
+            && $document
+            && in_array($document->status, ['rejected', 'needs_replacement'], true)) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'document_file' => 'Application files are locked after the review stage. Contact the provider if a replacement is required.',
+        ]);
+    }
+
+    private function attachPreparedDocumentsToApplication(
+        User $user,
+        ScholarshipApplication $application,
+        array $confirmedDocuments,
+        array &$copiedPaths,
+    ): void {
         $application->loadMissing('scholarship');
         $requirements = $confirmedDocuments !== []
             ? collect($confirmedDocuments)->map(fn (string $document) => trim($document))->filter()->values()->all()
@@ -1376,7 +1592,11 @@ class ApplicantDashboardController extends Controller
             Storage::disk('local')->makeDirectory("application-documents/{$application->id}");
             $targetPath = 'application-documents/'.$application->id.'/'.(string) Str::uuid().($extension ? ".{$extension}" : '');
 
-            Storage::disk('local')->copy($studentDocument->path, $targetPath);
+            if (! Storage::disk('local')->copy($studentDocument->path, $targetPath)) {
+                throw new \RuntimeException("Unable to copy {$studentDocument->document_name} into the application.");
+            }
+
+            $copiedPaths[] = $targetPath;
             ApplicationDocument::query()->updateOrCreate([
                 'scholarship_application_id' => $application->id,
                 'document_name' => $studentDocument->document_name,
@@ -1691,7 +1911,7 @@ class ApplicantDashboardController extends Controller
         }
 
         Scholarship::query()
-            ->where('status', 'published')
+            ->acceptingApplications()
             ->whereDate('deadline', '>=', now()->toDateString())
             ->whereDate('deadline', '<=', now()->addDays(7)->toDateString())
             ->whereHas('bookmarks', fn ($query) => $query->where('user_id', $user->id))

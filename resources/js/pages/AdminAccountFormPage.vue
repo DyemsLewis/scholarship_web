@@ -136,9 +136,13 @@ const isCurrentAdminAccount = computed(() => Boolean(
     && Number(account.value?.id) === Number(window.portalUser?.id),
 ));
 const canChooseAdminRole = computed(() => !window.portalUser?.is_managed_account);
-const visibleAccountRoleOptions = computed(() => accountRoleOptions.filter((role) => (
-    role.value !== 'admin' || canChooseAdminRole.value
-)));
+const visibleAccountRoleOptions = computed(() => accountRoleOptions.filter((role) => {
+    if (isEditMode.value) {
+        return role.value === account.value?.role;
+    }
+
+    return role.value !== 'admin' || canChooseAdminRole.value;
+}));
 const selectableAdminRolePresets = computed(() => {
     const currentTitle = form.value.accountTitle;
 
@@ -608,7 +612,9 @@ onMounted(loadAccount);
                                 </span>
                                 <div>
                                     <h3 class="text-base font-bold text-slate-950">Role and access</h3>
-                                    <p class="mt-0.5 text-xs text-slate-500">Choose what kind of account this person needs.</p>
+                                    <p class="mt-0.5 text-xs text-slate-500">
+                                        {{ isEditMode ? 'The portal role is fixed after account creation.' : 'Choose what kind of account this person needs.' }}
+                                    </p>
                                 </div>
                             </div>
                             <span class="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">02</span>
@@ -631,6 +637,7 @@ onMounted(loadAccount);
                                         type="radio"
                                         name="admin-role"
                                         :value="role.value"
+                                        :disabled="isEditMode"
                                         class="sr-only"
                                         @change="handleRoleChange"
                                     >

@@ -140,10 +140,24 @@ class Scholarship extends Model
         return $this->hasMany(DssCalculationSnapshot::class);
     }
 
-    public function scopeAcceptingApplications(Builder $query): Builder
+    public function scopePubliclyVisible(Builder $query): Builder
     {
         return $query
             ->where('status', 'published')
+            ->whereHas('provider', function (Builder $providerQuery): void {
+                $providerQuery
+                    ->where('role', 'provider')
+                    ->where('account_status', 'active')
+                    ->whereNotNull('email_verified_at')
+                    ->whereHas('providerProfile', fn (Builder $profileQuery) => $profileQuery
+                        ->where('verification_status', 'approved'));
+            });
+    }
+
+    public function scopeAcceptingApplications(Builder $query): Builder
+    {
+        return $query
+            ->publiclyVisible()
             ->where(function (Builder $deadlineQuery): void {
                 $deadlineQuery
                     ->whereNull('deadline')
@@ -153,7 +167,19 @@ class Scholarship extends Model
 
     public function isAcceptingApplications(): bool
     {
-        return $this->status === 'published'
+        return $this->isPubliclyVisible()
             && ($this->deadline === null || ! $this->deadline->isBefore(now()->startOfDay()));
+    }
+
+    public function isPubliclyVisible(): bool
+    {
+        $this->loadMissing('provider.providerProfile');
+        $provider = $this->provider;
+
+        return $this->status === 'published'
+            && $provider?->isProvider()
+            && $provider->isActive()
+            && $provider->hasVerifiedEmail()
+            && $provider->providerProfile?->isVerified();
     }
 }
