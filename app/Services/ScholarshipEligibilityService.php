@@ -8,6 +8,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Support\AcademicRequirement;
+use App\Support\LearnerProgramPath;
 
 class ScholarshipEligibilityService
 {
@@ -439,7 +440,9 @@ class ScholarshipEligibilityService
             return;
         }
 
-        $matches = filled($studentValue) && $this->matchesAnyOption($studentValue, $options);
+        $matches = filled($studentValue) && ($key === 'course'
+            ? LearnerProgramPath::matchesAny($studentValue, $options)
+            : $this->matchesAnyOption($studentValue, $options));
         $addCriterion(
             $key,
             $label,

@@ -31,6 +31,22 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function documentStatusClass(status) {
+    if (['accepted', 'approved'].includes(status)) {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (status === 'needs_replacement') {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-slate-100 text-slate-700';
+}
+
 function documentTypeLabel(type) {
     return statusLabel(type || 'document');
 }
@@ -63,7 +79,7 @@ function providerActionOptions(currentProvider) {
         actions.push({
             status: 'approved',
             label: 'Approve provider',
-            className: 'bg-emerald-700 text-white hover:bg-emerald-800',
+            className: 'bg-slate-950 text-white hover:bg-slate-800',
         });
     }
 
@@ -71,7 +87,7 @@ function providerActionOptions(currentProvider) {
         actions.push({
             status: 'rejected',
             label: 'Reject provider',
-            className: 'bg-rose-700 text-white hover:bg-rose-800',
+            className: 'border border-rose-200 bg-white text-rose-700 hover:bg-rose-50',
         });
     }
 
@@ -180,39 +196,71 @@ onMounted(loadProvider);
                     <p class="mt-1 text-sm leading-6 text-rose-700">{{ loadError }}</p>
                 </div>
 
-                <div v-else class="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+                <div v-else class="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
                     <div class="space-y-5">
-                        <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <div class="flex items-start gap-4">
+                        <article class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                                 <div class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
                                     {{ providerInitials(provider) }}
                                 </div>
                                 <div class="min-w-0 flex-1">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <h3 class="text-xl font-bold text-slate-950">{{ provider.provider_name || provider.name }}</h3>
-                                        <span :class="['rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(provider.verification_status)]">
-                                            {{ statusLabel(provider.verification_status) }}
-                                        </span>
-                                    </div>
+                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Provider organization</p>
+                                    <h3 class="mt-1 text-xl font-bold text-slate-950">{{ provider.provider_name || provider.name }}</h3>
                                     <p class="mt-1 text-sm text-slate-500">{{ provider.email }}</p>
-                                    <p class="mt-3 text-sm leading-6 text-slate-600">
-                                        {{ provider.provider_description || 'No organization description provided.' }}
-                                    </p>
                                 </div>
+                                <span :class="['w-fit shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(provider.verification_status)]">
+                                    {{ statusLabel(provider.verification_status) }}
+                                </span>
                             </div>
 
-                            <dl class="mt-5 grid gap-4 border-t border-slate-200 pt-5 text-sm sm:grid-cols-2">
-                                <div>
+                            <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-2 lg:grid-cols-4">
+                                <div class="border-b border-slate-200 p-4 sm:border-r lg:border-b-0">
                                     <dt class="text-xs font-semibold text-slate-500">Provider type</dt>
-                                    <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(provider.provider_type || 'not provided') }}</dd>
+                                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ statusLabel(provider.provider_type || 'not provided') }}</dd>
                                 </div>
-                                <div>
+                                <div class="border-b border-slate-200 p-4 lg:border-b-0 lg:border-r">
+                                    <dt class="text-xs font-semibold text-slate-500">Contact person</dt>
+                                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.name || 'Not provided' }}</dd>
+                                </div>
+                                <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
+                                    <dt class="text-xs font-semibold text-slate-500">Contact number</dt>
+                                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.contact_number || 'Not provided' }}</dd>
+                                </div>
+                                <div class="p-4">
                                     <dt class="text-xs font-semibold text-slate-500">Registered</dt>
-                                    <dd class="mt-1 font-bold text-slate-950">{{ provider.created_at || 'Not provided' }}</dd>
+                                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.created_at || 'Not provided' }}</dd>
                                 </div>
-                                <div class="sm:col-span-2">
-                                    <dt class="text-xs font-semibold text-slate-500">Website</dt>
-                                    <dd class="mt-1 break-words font-bold text-slate-950">
+                            </dl>
+                        </article>
+
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Organization information</p>
+                                <h3 class="mt-1 text-xl font-bold text-slate-950">Provider record</h3>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">Confirm who the provider is and where applicants can verify its information.</p>
+                            </div>
+
+                            <section class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
+                                <div class="flex items-start gap-3">
+                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200">
+                                        <i class="fa-solid fa-building" aria-hidden="true"></i>
+                                    </span>
+                                    <div>
+                                        <h4 class="font-bold text-slate-950">About the organization</h4>
+                                        <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-600">
+                                            {{ provider.provider_description || 'No organization description provided.' }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <dl class="mt-4 grid overflow-hidden rounded-md border border-slate-200 text-sm md:grid-cols-2">
+                                <div class="border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+                                    <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                        <i class="fa-solid fa-globe" aria-hidden="true"></i>
+                                        Website
+                                    </dt>
+                                    <dd class="mt-2 break-words font-bold text-slate-950">
                                         <a
                                             v-if="providerWebsiteUrl(provider.provider_website)"
                                             :href="providerWebsiteUrl(provider.provider_website)"
@@ -225,18 +273,22 @@ onMounted(loadProvider);
                                         <span v-else>Not provided</span>
                                     </dd>
                                 </div>
-                                <div class="sm:col-span-2">
-                                    <dt class="text-xs font-semibold text-slate-500">Address</dt>
-                                    <dd class="mt-1 font-bold leading-6 text-slate-950">{{ provider.provider_address || 'Not provided' }}</dd>
+                                <div class="p-4">
+                                    <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                        <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                                        Address
+                                    </dt>
+                                    <dd class="mt-2 font-bold leading-6 text-slate-950">{{ provider.provider_address || 'Not provided' }}</dd>
                                 </div>
                             </dl>
-                        </section>
+                        </article>
 
-                        <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <div class="flex items-center justify-between gap-3">
+                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <div class="flex items-start justify-between gap-3">
                                 <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Verification proof</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">Organization files</h3>
+                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Verification proof</p>
+                                    <h3 class="mt-1 text-xl font-bold text-slate-950">Organization files</h3>
+                                    <p class="mt-1 text-sm text-slate-600">Review the files submitted to confirm the provider's identity.</p>
                                 </div>
                                 <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                     {{ provider.verification_documents?.length || 0 }} file{{ provider.verification_documents?.length === 1 ? '' : 's' }}
@@ -249,42 +301,68 @@ onMounted(loadProvider);
                                     :key="document.id"
                                     class="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between"
                                 >
-                                    <div class="min-w-0">
-                                        <p class="truncate text-sm font-bold text-slate-950">{{ documentTypeLabel(document.document_type) }}</p>
-                                        <p class="mt-1 truncate text-xs text-slate-500">
-                                            {{ document.original_name }} - {{ formatFileSize(document.size) }}
-                                        </p>
-                                        <p class="mt-1 text-xs text-slate-500">Uploaded {{ document.uploaded_at || 'recently' }}</p>
+                                    <div class="flex min-w-0 items-center gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
+                                            <i class="fa-solid fa-file-lines" aria-hidden="true"></i>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="truncate text-sm font-bold text-slate-950">{{ documentTypeLabel(document.document_type) }}</p>
+                                            <p class="mt-1 truncate text-xs text-slate-500">{{ document.original_name }} - {{ formatFileSize(document.size) }}</p>
+                                            <p class="mt-1 text-xs text-slate-500">Uploaded {{ document.uploaded_at || 'recently' }}</p>
+                                        </div>
                                     </div>
-                                    <a
-                                        :href="document.download_url"
-                                        class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                    >
-                                        Download file
-                                    </a>
+                                    <div class="flex shrink-0 items-center gap-2">
+                                        <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', documentStatusClass(document.status)]">
+                                            {{ statusLabel(document.status || 'submitted') }}
+                                        </span>
+                                        <a
+                                            :href="document.download_url"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                        >
+                                            Download file
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
                             <p v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
                                 No verification proof has been uploaded yet.
                             </p>
-                        </section>
+                        </article>
                     </div>
 
                     <aside class="h-fit rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-8">
-                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Admin decision</p>
-                        <h3 class="mt-1 text-lg font-bold text-slate-950">Verify this provider?</h3>
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>
+                                <h3 class="mt-1 text-xl font-bold text-slate-950">Verification decision</h3>
+                            </div>
+                            <span :class="['shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(provider.verification_status)]">
+                                {{ statusLabel(provider.verification_status) }}
+                            </span>
+                        </div>
                         <p class="mt-2 text-sm leading-6 text-slate-600">
-                            The result and your note will be sent to the provider.
+                            Confirm that the organization information and submitted proof are valid.
                         </p>
+
+                        <div
+                            v-if="provider.verification_documents?.length"
+                            class="mt-4 flex items-center gap-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700 ring-1 ring-slate-200"
+                        >
+                            <i class="fa-solid fa-file-circle-check text-slate-500" aria-hidden="true"></i>
+                            <span><strong>{{ provider.verification_documents.length }}</strong> proof file{{ provider.verification_documents.length === 1 ? '' : 's' }} available</span>
+                        </div>
+                        <div v-else class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                            No organization proof has been uploaded yet.
+                        </div>
 
                         <label class="mt-5 block text-xs font-bold text-slate-700">
                             Review note <span class="font-normal text-slate-500">(required when rejecting)</span>
                         </label>
                         <textarea
                             v-model="reviewNote"
-                            rows="5"
+                            rows="4"
                             maxlength="1500"
-                            placeholder="Explain any missing or invalid verification details."
+                            placeholder="Add context or explain any missing or invalid proof."
                             class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                             @input="decisionError = ''"
                         ></textarea>

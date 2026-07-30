@@ -59,6 +59,22 @@ class DecisionSupportServiceTest extends TestCase
         $this->assertNotSame($initial['review_progress']['score'], $updated['review_progress']['score']);
     }
 
+    public function test_course_aliases_receive_the_same_dss_eligibility_score(): void
+    {
+        [$application, $applicant] = $this->application([
+            'eligible_courses' => 'BSIT',
+        ]);
+        $applicant->studentProfile()->update([
+            'education_level' => 'college',
+            'course_or_strand' => 'BS Information Technology',
+        ]);
+
+        $score = app(DecisionSupportService::class)->scoreApplication($application);
+        $eligibility = collect($score['criteria'])->firstWhere('key', 'eligibility');
+
+        $this->assertSame(100, $eligibility['score']);
+    }
+
     private function application(array $scholarshipAttributes = []): array
     {
         $applicant = User::factory()->create();

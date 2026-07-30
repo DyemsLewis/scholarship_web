@@ -5,6 +5,7 @@ import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import { labelFromKey } from '../support/display';
+import { programPathListMatches } from '../support/learnerProgramPaths';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -129,7 +130,7 @@ const filteredScholarships = computed(() => scholarships.value
         const matchesCategory = selectedCategory.value === 'all' || scholarship.category === selectedCategory.value;
         const matchesGwa = matchesAcademicRequirement(scholarship, maxGwa.value);
         const matchesMinimum = !minimumMatch.value || matchScore >= Number(minimumMatch.value);
-        const matchesCourse = textMatches(scholarship.eligible_courses, courseFilter.value);
+        const matchesCourse = programPathListMatches(scholarship.eligible_courses, courseFilter.value);
         const matchesYear = textMatches(scholarship.eligible_year_levels, yearFilter.value);
         const matchesEducationLevel = selectedEducationLevel.value === 'all' || textMatches(scholarship.eligible_education_levels, selectedEducationLevel.value);
         const matchesSchoolType = selectedSchoolType.value === 'all' || textMatches(scholarship.eligible_school_types, selectedSchoolType.value);

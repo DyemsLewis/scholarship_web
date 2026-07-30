@@ -414,14 +414,14 @@ onMounted(loadScholarship);
                     <p class="mt-1 text-sm leading-6 text-rose-700">{{ loadError }}</p>
                 </div>
 
-                <div v-else class="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+                <div v-else class="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
                     <div class="space-y-5">
                         <article class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                            <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-start">
+                            <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                                 <img
                                     :src="scholarship.image_url || '/uploads/scholarship-default.jpg'"
                                     :alt="scholarship.title"
-                                    class="h-20 w-20 shrink-0 rounded-md bg-slate-50 object-contain p-2 ring-1 ring-slate-200"
+                                    class="h-16 w-16 shrink-0 rounded-md bg-slate-50 object-contain p-2 ring-1 ring-slate-200"
                                 >
                                 <div class="min-w-0 flex-1">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -429,7 +429,7 @@ onMounted(loadScholarship);
                                             <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
                                                 {{ scholarship.category || 'Scholarship program' }}
                                             </p>
-                                            <h1 class="mt-1 text-2xl font-bold text-slate-950">{{ scholarship.title }}</h1>
+                                            <h1 class="mt-1 text-xl font-bold text-slate-950">{{ scholarship.title }}</h1>
                                             <p class="mt-1 text-sm text-slate-500">
                                                 {{ scholarship.provider || 'Provider' }} - Updated {{ scholarship.updated_at || 'recently' }}
                                             </p>
@@ -444,250 +444,280 @@ onMounted(loadScholarship);
                                 </div>
                             </div>
 
-                            <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-slate-200">
-                                <div v-for="fact in summaryFacts" :key="fact.label" class="p-4">
+                            <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-2 lg:grid-cols-4">
+                                <div
+                                    v-for="(fact, index) in summaryFacts"
+                                    :key="fact.label"
+                                    :class="[
+                                        'p-4 lg:border-b-0',
+                                        index < summaryFacts.length - 1 ? 'border-b border-slate-200' : '',
+                                        index >= summaryFacts.length - 2 ? 'sm:border-b-0' : '',
+                                        index % 2 === 0 ? 'sm:border-r sm:border-slate-200' : '',
+                                        index < summaryFacts.length - 1 ? 'lg:border-r lg:border-slate-200' : '',
+                                    ]"
+                                >
                                     <dt class="text-xs font-semibold text-slate-500">{{ fact.label }}</dt>
                                     <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ fact.value }}</dd>
                                 </div>
                             </dl>
                         </article>
 
-                        <article v-if="scholarship.benefits?.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Benefit package</p>
-                            <h3 class="mt-1 text-xl font-bold text-slate-950">Support offered to recipients</h3>
-                            <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that every cash and non-cash benefit is clear before publishing.</p>
-                            <ScholarshipBenefitsPanel class="mt-4" :benefits="scholarship.benefits" />
-                        </article>
-
                         <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Publication check</p>
-                                <h3 class="mt-1 text-xl font-bold text-slate-950">What the admin should confirm</h3>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">
-                                    Review these items before making the program visible to applicants.
-                                </p>
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Publication readiness</p>
+                                    <h3 class="mt-1 text-xl font-bold text-slate-950">Review checklist</h3>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">Check the important items before choosing a review outcome.</p>
+                                </div>
+                                <span
+                                    :class="[
+                                        'w-fit shrink-0 rounded-md px-2.5 py-1 text-xs font-bold',
+                                        attentionCount ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-800',
+                                    ]"
+                                >
+                                    {{ attentionCount ? `${attentionCount} need attention` : 'Ready to review' }}
+                                </span>
                             </div>
 
-                            <div class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
+                            <div class="mt-4 grid overflow-hidden rounded-md border border-slate-200 md:grid-cols-2">
                                 <div
-                                    v-for="check in readinessChecks"
+                                    v-for="(check, index) in readinessChecks"
                                     :key="check.label"
-                                    class="flex items-start gap-3 p-3 sm:items-center"
+                                    :class="[
+                                        'flex items-start gap-3 p-3',
+                                        index < readinessChecks.length - 1 ? 'border-b border-slate-200' : '',
+                                        index >= readinessChecks.length - (readinessChecks.length % 2 === 0 ? 2 : 1) ? 'md:border-b-0' : '',
+                                        index % 2 === 0 ? 'md:border-r md:border-slate-200' : '',
+                                        readinessChecks.length % 2 === 1 && index === readinessChecks.length - 1 ? 'md:col-span-2 md:border-r-0' : '',
+                                    ]"
                                 >
                                     <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', readinessIconClass(check.tone)]">
                                         <i :class="check.icon" aria-hidden="true"></i>
                                     </span>
                                     <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-bold text-slate-950">{{ check.label }}</p>
-                                        <p class="mt-0.5 text-xs leading-5 text-slate-500">{{ check.detail }}</p>
-                                    </div>
-                                    <span :class="['shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase ring-1 ring-inset', readinessBadgeClass(check.tone)]">
-                                        {{ check.status }}
-                                    </span>
-                                </div>
-                            </div>
-                        </article>
-
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Eligibility</p>
-                            <h3 class="mt-1 text-xl font-bold text-slate-950">Who can apply</h3>
-                            <p class="mt-1 text-sm leading-6 text-slate-600">
-                                Confirm that the rules match the provider's intended applicants.
-                            </p>
-
-                            <dl class="mt-4 grid overflow-hidden rounded-md border border-slate-200 bg-slate-50 md:grid-cols-3 md:divide-x md:divide-slate-200">
-                                <div v-for="rule in eligibilityRules" :key="rule.label" class="p-4">
-                                    <dt class="text-xs font-semibold text-slate-500">{{ rule.label }}</dt>
-                                    <dd class="mt-1 break-words text-sm font-bold leading-6 text-slate-950">{{ rule.value }}</dd>
-                                </div>
-                            </dl>
-
-                            <div class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
-                                <div
-                                    v-for="group in targetGroups"
-                                    :key="group.label"
-                                    class="grid gap-2 p-3 sm:grid-cols-[15rem_minmax(0,1fr)] sm:items-start"
-                                >
-                                    <p class="text-sm font-bold text-slate-700">{{ group.label }}</p>
-                                    <div v-if="group.items.length" class="flex flex-wrap gap-2">
-                                        <span
-                                            v-for="item in group.items"
-                                            :key="item"
-                                            class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700"
-                                        >
-                                            {{ item }}
-                                        </span>
-                                    </div>
-                                    <p v-else class="text-sm text-slate-500">{{ group.empty }}</p>
-                                </div>
-                            </div>
-
-                            <div class="mt-4 border-l-4 border-amber-300 bg-amber-50 px-4 py-3">
-                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-800">Provider eligibility notes</p>
-                                <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">
-                                    {{ scholarship.eligibility || 'No additional eligibility notes provided.' }}
-                                </p>
-                            </div>
-                        </article>
-
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Application process</p>
-                            <h3 class="mt-1 text-xl font-bold text-slate-950">Documents and selection</h3>
-                            <p class="mt-1 text-sm leading-6 text-slate-600">
-                                Check what applicants must prepare and what happens after submission.
-                            </p>
-
-                            <div class="mt-4 grid gap-4 lg:grid-cols-2">
-                                <section class="rounded-md border border-slate-200 bg-slate-50 p-4">
-                                    <div class="flex items-center justify-between gap-3">
-                                        <h4 class="font-bold text-slate-950">Required documents</h4>
-                                        <span class="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                                            {{ documentItems.length }} item{{ documentItems.length === 1 ? '' : 's' }}
-                                        </span>
-                                    </div>
-                                    <ul v-if="documentItems.length" class="mt-3 space-y-2">
-                                        <li v-for="item in documentItems" :key="item" class="flex items-start gap-2 text-sm leading-6 text-slate-700">
-                                            <i class="fa-solid fa-check mt-1.5 text-xs text-emerald-700" aria-hidden="true"></i>
-                                            <span>{{ item }}</span>
-                                        </li>
-                                    </ul>
-                                    <p v-else class="mt-3 text-sm leading-6 text-slate-500">No document requirements listed.</p>
-                                </section>
-
-                                <section class="rounded-md border border-slate-200 bg-slate-50 p-4">
-                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <h4 class="font-bold text-slate-950">Selection process</h4>
-                                        <span class="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                                            {{ applicationModeLabel(scholarship.application_mode) }}
-                                        </span>
-                                    </div>
-
-                                    <div class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200 bg-white">
-                                        <div v-for="step in workflowSteps" :key="step.key" class="flex items-start gap-3 p-3">
-                                            <span class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold text-white">
-                                                {{ step.number }}
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <p class="text-sm font-bold text-slate-950">{{ check.label }}</p>
+                                            <span :class="['shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ring-1 ring-inset', readinessBadgeClass(check.tone)]">
+                                                {{ check.status }}
                                             </span>
-                                            <div class="min-w-0 flex-1">
-                                                <p class="text-sm font-bold text-slate-950">{{ step.label }}</p>
-                                                <template v-if="step.event">
-                                                    <p class="mt-1 text-xs font-bold text-slate-700">{{ step.event.title }}</p>
-                                                    <div class="mt-1 flex flex-wrap items-center gap-2">
-                                                        <p class="text-xs font-semibold text-amber-800">
-                                                            {{ step.event.scheduled_label || 'Schedule provided' }} - {{ statusLabel(step.event.mode) }}
+                                        </div>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ check.detail }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </article>
+
+                        <article class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <div class="p-5">
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Program record</p>
+                                <h3 class="mt-1 text-xl font-bold text-slate-950">Program information</h3>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">Review what applicants will see and what they must prepare.</p>
+                            </div>
+
+                            <section v-if="scholarship.benefits?.length" class="border-t border-slate-200 p-5">
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Benefit package</p>
+                                <h4 class="mt-1 text-lg font-bold text-slate-950">Benefits for recipients</h4>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that the support is understandable and complete.</p>
+                                <ScholarshipBenefitsPanel class="mt-4" :benefits="scholarship.benefits" />
+                            </section>
+
+                            <section class="border-t border-slate-200 p-5">
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Eligibility</p>
+                                <h4 class="mt-1 text-lg font-bold text-slate-950">Who can apply</h4>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that the rules match the provider's intended applicants.</p>
+
+                                <dl class="mt-4 grid overflow-hidden rounded-md border border-slate-200 bg-slate-50 md:grid-cols-3 md:divide-x md:divide-slate-200">
+                                    <div v-for="rule in eligibilityRules" :key="rule.label" class="p-4">
+                                        <dt class="text-xs font-semibold text-slate-500">{{ rule.label }}</dt>
+                                        <dd class="mt-1 break-words text-sm font-bold leading-6 text-slate-950">{{ rule.value }}</dd>
+                                    </div>
+                                </dl>
+
+                                <div class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
+                                    <div
+                                        v-for="group in targetGroups"
+                                        :key="group.label"
+                                        class="grid gap-2 p-3 sm:grid-cols-[15rem_minmax(0,1fr)] sm:items-start"
+                                    >
+                                        <p class="text-sm font-bold text-slate-700">{{ group.label }}</p>
+                                        <div v-if="group.items.length" class="flex flex-wrap gap-2">
+                                            <span
+                                                v-for="item in group.items"
+                                                :key="item"
+                                                class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700"
+                                            >
+                                                {{ item }}
+                                            </span>
+                                        </div>
+                                        <p v-else class="text-sm text-slate-500">{{ group.empty }}</p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 border-l-4 border-amber-300 bg-amber-50 px-4 py-3">
+                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-800">Provider eligibility notes</p>
+                                    <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">
+                                        {{ scholarship.eligibility || 'No additional eligibility notes provided.' }}
+                                    </p>
+                                </div>
+                            </section>
+
+                            <section class="border-t border-slate-200 p-5">
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Application process</p>
+                                <h4 class="mt-1 text-lg font-bold text-slate-950">Documents and selection</h4>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">Check what applicants must prepare and what happens after submission.</p>
+
+                                <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                                    <section class="rounded-md border border-slate-200 bg-slate-50 p-4">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <h5 class="font-bold text-slate-950">Required documents</h5>
+                                            <span class="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                                                {{ documentItems.length }} item{{ documentItems.length === 1 ? '' : 's' }}
+                                            </span>
+                                        </div>
+                                        <ul v-if="documentItems.length" class="mt-3 space-y-2">
+                                            <li v-for="item in documentItems" :key="item" class="flex items-start gap-2 text-sm leading-6 text-slate-700">
+                                                <i class="fa-solid fa-check mt-1.5 text-xs text-emerald-700" aria-hidden="true"></i>
+                                                <span>{{ item }}</span>
+                                            </li>
+                                        </ul>
+                                        <p v-else class="mt-3 text-sm leading-6 text-slate-500">No document requirements listed.</p>
+                                    </section>
+
+                                    <section class="rounded-md border border-slate-200 bg-slate-50 p-4">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <h5 class="font-bold text-slate-950">Selection process</h5>
+                                            <span class="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                                                {{ applicationModeLabel(scholarship.application_mode) }}
+                                            </span>
+                                        </div>
+
+                                        <div class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200 bg-white">
+                                            <div v-for="step in workflowSteps" :key="step.key" class="flex items-start gap-3 p-3">
+                                                <span class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold text-white">
+                                                    {{ step.number }}
+                                                </span>
+                                                <div class="min-w-0 flex-1">
+                                                    <p class="text-sm font-bold text-slate-950">{{ step.label }}</p>
+                                                    <template v-if="step.event">
+                                                        <p class="mt-1 text-xs font-bold text-slate-700">{{ step.event.title }}</p>
+                                                        <div class="mt-1 flex flex-wrap items-center gap-2">
+                                                            <p class="text-xs font-semibold text-amber-800">
+                                                                {{ step.event.scheduled_label || 'Schedule provided' }} - {{ statusLabel(step.event.mode) }}
+                                                            </p>
+                                                            <span :class="['rounded-md px-2 py-0.5 text-[10px] font-bold uppercase', statusClass(step.event.status)]">
+                                                                {{ statusLabel(step.event.status) }}
+                                                            </span>
+                                                        </div>
+                                                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ eventLocation(step.event) }}</p>
+                                                        <p v-if="step.event.instructions" class="mt-1 whitespace-pre-line text-xs leading-5 text-slate-600">
+                                                            {{ step.event.instructions }}
                                                         </p>
-                                                        <span :class="['rounded-md px-2 py-0.5 text-[10px] font-bold uppercase', statusClass(step.event.status)]">
-                                                            {{ statusLabel(step.event.status) }}
-                                                        </span>
-                                                    </div>
-                                                    <p class="mt-1 text-xs leading-5 text-slate-500">{{ eventLocation(step.event) }}</p>
-                                                    <p v-if="step.event.instructions" class="mt-1 whitespace-pre-line text-xs leading-5 text-slate-600">
-                                                        {{ step.event.instructions }}
+                                                        <a
+                                                            v-if="step.event.online_url"
+                                                            :href="step.event.online_url"
+                                                            target="_blank"
+                                                            rel="noopener"
+                                                            class="mt-2 inline-flex text-xs font-bold text-sky-700 underline underline-offset-2"
+                                                        >
+                                                            Check online link
+                                                        </a>
+                                                    </template>
+                                                    <p v-else class="mt-1 text-xs leading-5 text-slate-500">
+                                                        {{ ['exam', 'interview', 'distribution'].includes(step.key) ? 'No general schedule posted yet.' : 'Handled during provider review.' }}
                                                     </p>
-                                                    <a
-                                                        v-if="step.event.online_url"
-                                                        :href="step.event.online_url"
-                                                        target="_blank"
-                                                        rel="noopener"
-                                                        class="mt-2 inline-flex text-xs font-bold text-sky-700 underline underline-offset-2"
+                                                    <div
+                                                        v-if="step.key === 'exam'"
+                                                        class="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold text-slate-600"
                                                     >
-                                                        Check online link
-                                                    </a>
-                                                </template>
-                                                <p v-else class="mt-1 text-xs leading-5 text-slate-500">
-                                                    {{ ['exam', 'interview', 'distribution'].includes(step.key) ? 'No general schedule posted yet.' : 'Handled during provider review.' }}
-                                                </p>
-                                                <div
-                                                    v-if="step.key === 'exam'"
-                                                    class="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold text-slate-600"
-                                                >
-                                                    <span v-if="scholarship.exam_duration_minutes" class="rounded-md bg-slate-50 px-2 py-1 ring-1 ring-slate-200">
-                                                        {{ scholarship.exam_duration_minutes }} minutes
-                                                    </span>
-                                                    <span v-if="scholarship.exam_passing_score !== null" class="rounded-md bg-slate-50 px-2 py-1 ring-1 ring-slate-200">
-                                                        {{ Number(scholarship.exam_passing_score) }}% passing
-                                                    </span>
-                                                    <span class="rounded-md bg-slate-50 px-2 py-1 ring-1 ring-slate-200">Handled by provider</span>
+                                                        <span v-if="scholarship.exam_duration_minutes" class="rounded-md bg-slate-50 px-2 py-1 ring-1 ring-slate-200">
+                                                            {{ scholarship.exam_duration_minutes }} minutes
+                                                        </span>
+                                                        <span v-if="scholarship.exam_passing_score !== null" class="rounded-md bg-slate-50 px-2 py-1 ring-1 ring-slate-200">
+                                                            {{ Number(scholarship.exam_passing_score) }}% passing
+                                                        </span>
+                                                        <span class="rounded-md bg-slate-50 px-2 py-1 ring-1 ring-slate-200">Handled by provider</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
+                                    </section>
+                                </div>
+
+                                <dl class="mt-4 grid overflow-hidden rounded-md border border-slate-200 md:grid-cols-2 md:divide-x md:divide-slate-200">
+                                    <div class="p-4">
+                                        <dt class="text-xs font-semibold text-slate-500">Applicant contact email</dt>
+                                        <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ scholarship.contact_email || 'Not provided' }}</dd>
+                                    </div>
+                                    <div class="p-4">
+                                        <dt class="text-xs font-semibold text-slate-500">Applicant contact number</dt>
+                                        <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ scholarship.contact_number || 'Not provided' }}</dd>
+                                    </div>
+                                </dl>
+
+                                <section v-if="scholarship.review_rubric?.length" class="mt-5 border-t border-slate-200 pt-5">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <div>
+                                            <h5 class="font-bold text-slate-950">Provider scoring rubric</h5>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">Criteria used after applicants submit.</p>
+                                        </div>
+                                        <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', rubricTotal === 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']">
+                                            {{ rubricTotal }}% total
+                                        </span>
+                                    </div>
+                                    <div class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
+                                        <div
+                                            v-for="criterion in scholarship.review_rubric"
+                                            :key="criterion.key || criterion.label"
+                                            class="flex items-start justify-between gap-4 p-3"
+                                        >
+                                            <div>
+                                                <p class="text-sm font-bold text-slate-950">{{ criterion.label }}</p>
+                                                <p v-if="criterion.guidance" class="mt-1 whitespace-pre-line text-xs leading-5 text-slate-500">
+                                                    {{ criterion.guidance }}
+                                                </p>
+                                            </div>
+                                            <span class="shrink-0 text-sm font-bold text-slate-700">{{ criterion.weight || 0 }}%</span>
+                                        </div>
                                     </div>
                                 </section>
-                            </div>
+                            </section>
 
-                            <dl class="mt-4 grid overflow-hidden rounded-md border border-slate-200 md:grid-cols-2 md:divide-x md:divide-slate-200">
-                                <div class="p-4">
-                                    <dt class="text-xs font-semibold text-slate-500">Applicant contact email</dt>
-                                    <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ scholarship.contact_email || 'Not provided' }}</dd>
-                                </div>
-                                <div class="p-4">
-                                    <dt class="text-xs font-semibold text-slate-500">Applicant contact number</dt>
-                                    <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ scholarship.contact_number || 'Not provided' }}</dd>
-                                </div>
-                            </dl>
+                            <section v-if="hasTermsOrLocation" class="border-t border-slate-200 p-5">
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Conditions and coverage</p>
+                                <h4 class="mt-1 text-lg font-bold text-slate-950">What recipients should know</h4>
 
-                            <section v-if="scholarship.review_rubric?.length" class="mt-5 border-t border-slate-200 pt-5">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div>
-                                        <h4 class="font-bold text-slate-950">Provider scoring rubric</h4>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">Criteria used after applicants submit.</p>
-                                    </div>
-                                    <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', rubricTotal === 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']">
-                                        {{ rubricTotal }}% total
-                                    </span>
-                                </div>
-                                <div class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
-                                    <div
-                                        v-for="criterion in scholarship.review_rubric"
-                                        :key="criterion.key || criterion.label"
-                                        class="flex items-start justify-between gap-4 p-3"
-                                    >
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">{{ criterion.label }}</p>
-                                            <p v-if="criterion.guidance" class="mt-1 whitespace-pre-line text-xs leading-5 text-slate-500">
-                                                {{ criterion.guidance }}
-                                            </p>
+                                <div class="mt-4 grid gap-5 lg:grid-cols-2">
+                                    <section v-if="contractSections.length">
+                                        <h5 class="text-sm font-bold text-slate-950">Possible recipient commitments</h5>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">These are previews for applicants. Final terms should be explained after acceptance.</p>
+                                        <div class="mt-2 divide-y divide-slate-200 rounded-md border border-slate-200">
+                                            <div v-for="term in contractSections" :key="term.label" class="p-3">
+                                                <p class="text-xs font-semibold text-slate-500">{{ term.label }}</p>
+                                                <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ term.value }}</p>
+                                            </div>
                                         </div>
-                                        <span class="shrink-0 text-sm font-bold text-slate-700">{{ criterion.weight || 0 }}%</span>
-                                    </div>
+                                    </section>
+
+                                    <section v-if="hasLocationDetails">
+                                        <h5 class="text-sm font-bold text-slate-950">Program location</h5>
+                                        <div class="mt-2 rounded-md border border-slate-200 p-3">
+                                            <p class="font-bold text-slate-950">{{ scholarship.location_name || 'Location coverage' }}</p>
+                                            <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-600">
+                                                {{ scholarship.location_address || scholarship.eligible_locations || 'No address provided.' }}
+                                            </p>
+                                            <a
+                                                v-if="scholarship.map_url"
+                                                :href="scholarship.map_url"
+                                                target="_blank"
+                                                rel="noopener"
+                                                class="mt-3 inline-flex text-sm font-bold text-sky-700 underline underline-offset-2"
+                                            >
+                                                Open map
+                                            </a>
+                                        </div>
+                                    </section>
                                 </div>
                             </section>
-                        </article>
-
-                        <article v-if="hasTermsOrLocation" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Conditions and coverage</p>
-                            <h3 class="mt-1 text-xl font-bold text-slate-950">What recipients should know</h3>
-
-                            <div class="mt-4 grid gap-5 lg:grid-cols-2">
-                                <section v-if="contractSections.length">
-                                    <h4 class="text-sm font-bold text-slate-950">Possible recipient commitments</h4>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">These are previews for applicants. Final terms should be explained after acceptance.</p>
-                                    <div class="mt-2 divide-y divide-slate-200 rounded-md border border-slate-200">
-                                        <div v-for="term in contractSections" :key="term.label" class="p-3">
-                                            <p class="text-xs font-semibold text-slate-500">{{ term.label }}</p>
-                                            <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ term.value }}</p>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <section v-if="hasLocationDetails">
-                                    <h4 class="text-sm font-bold text-slate-950">Program location</h4>
-                                    <div class="mt-2 rounded-md border border-slate-200 p-3">
-                                        <p class="font-bold text-slate-950">{{ scholarship.location_name || 'Location coverage' }}</p>
-                                        <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-600">
-                                            {{ scholarship.location_address || scholarship.eligible_locations || 'No address provided.' }}
-                                        </p>
-                                        <a
-                                            v-if="scholarship.map_url"
-                                            :href="scholarship.map_url"
-                                            target="_blank"
-                                            rel="noopener"
-                                            class="mt-3 inline-flex text-sm font-bold text-sky-700 underline underline-offset-2"
-                                        >
-                                            Open map
-                                        </a>
-                                    </div>
-                                </section>
-                            </div>
                         </article>
                     </div>
 

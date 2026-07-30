@@ -6,6 +6,7 @@ use App\Models\ApplicationDocument;
 use App\Models\DssCalculationSnapshot;
 use App\Models\ScholarshipApplication;
 use App\Support\AcademicRequirement;
+use App\Support\LearnerProgramPath;
 use App\Support\ScholarshipSelectionPlan;
 
 class DecisionSupportService
@@ -436,7 +437,9 @@ class DecisionSupportService
                 return;
             }
 
-            $matches = filled($studentValue) && $this->matchesAnyOption($studentValue, $options);
+            $matches = filled($studentValue) && ($key === 'course'
+                ? LearnerProgramPath::matchesAny($studentValue, $options)
+                : $this->matchesAnyOption($studentValue, $options));
             $addCriterion(
                 $key,
                 $label,

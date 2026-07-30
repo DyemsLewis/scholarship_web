@@ -444,88 +444,113 @@ onMounted(loadProviderData);
         <div
             v-if="selectedPreviewScholarship"
             class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="provider-applicant-preview-title"
             @click.self="closePreviewModal"
         >
-            <section class="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white shadow-2xl">
-                <div class="flex items-start gap-4 border-b border-slate-200 p-5">
+            <section class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+                <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
                     <img
                         :src="selectedPreviewScholarship.image_url"
                         :alt="selectedPreviewScholarship.title"
-                        class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200"
+                        class="h-12 w-12 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
                     >
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Applicant preview</p>
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant preview</p>
                             <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', programStatusClass(selectedPreviewScholarship.status)]">
                                 {{ programStatusLabel(selectedPreviewScholarship.status) }}
                             </span>
                         </div>
-                        <h3 class="mt-1 text-xl font-bold text-slate-950">
+                        <h3 id="provider-applicant-preview-title" class="mt-1 text-lg font-bold text-slate-950 sm:text-xl">
                             {{ selectedPreviewScholarship.title }}
                         </h3>
                         <p class="mt-1 text-xs font-semibold text-slate-500">
-                            {{ selectedPreviewScholarship.category || 'Scholarship program' }} - {{ targetApplicantLabel(selectedPreviewScholarship) }}
+                            {{ selectedPreviewScholarship.category || 'Scholarship program' }}
                         </p>
                     </div>
                     <button
                         type="button"
-                        class="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                        class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
+                        aria-label="Close applicant preview"
                         @click="closePreviewModal"
                     >
-                        Close
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
                     </button>
-                </div>
+                </header>
 
-                <div class="space-y-4 p-5">
-                    <p class="text-sm leading-6 text-slate-600">
-                        {{ selectedPreviewScholarship.description || 'No public description has been added yet.' }}
-                    </p>
-
-                    <div class="grid gap-2 sm:grid-cols-3">
-                        <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Deadline</p>
-                            <p class="mt-1 text-sm font-bold text-slate-900">{{ programDeadlineLabel(selectedPreviewScholarship.deadline) }}</p>
-                        </div>
-                        <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Applicants</p>
-                            <p class="mt-1 text-sm font-bold text-slate-900">{{ selectedPreviewScholarship.applications_count ?? 0 }}</p>
-                        </div>
-                        <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Capacity</p>
-                            <p class="mt-1 text-sm font-bold text-slate-900">{{ programSlotLabel(selectedPreviewScholarship) }}</p>
-                        </div>
-                    </div>
-
-                    <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Benefits</p>
-                        <p class="mt-1 text-sm font-semibold leading-6 text-slate-900">
-                            {{ selectedPreviewScholarship.benefit_summary || 'Benefits will be confirmed by the provider.' }}
+                <div class="min-h-0 flex-1 overflow-y-auto">
+                    <section class="p-4 sm:p-5">
+                        <p class="text-sm leading-6 text-slate-600">
+                            {{ selectedPreviewScholarship.description || 'No public description has been added yet.' }}
                         </p>
-                    </div>
 
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Who can apply</p>
-                            <p class="mt-2 text-sm font-semibold text-slate-800">{{ targetApplicantLabel(selectedPreviewScholarship) }}</p>
-                            <p v-if="selectedPreviewScholarship.minimum_grade_label" class="mt-1 text-xs leading-5 text-slate-500">
-                                {{ selectedPreviewScholarship.minimum_grade_label }}
-                            </p>
+                        <dl class="mt-4 grid overflow-hidden rounded-md border border-slate-200 bg-slate-50 sm:grid-cols-3">
+                            <div class="border-b border-slate-200 p-3 sm:border-b-0 sm:border-r">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Deadline</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ programDeadlineLabel(selectedPreviewScholarship.deadline) }}</dd>
+                            </div>
+                            <div class="border-b border-slate-200 p-3 sm:border-b-0 sm:border-r">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Applicants</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedPreviewScholarship.applications_count ?? 0 }}</dd>
+                            </div>
+                            <div class="p-3">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Capacity</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ programSlotLabel(selectedPreviewScholarship) }}</dd>
+                            </div>
+                        </dl>
+                    </section>
+
+                    <section class="border-t border-slate-200 px-4 py-4 sm:px-5">
+                        <div class="flex items-start gap-3 border-l-4 border-amber-300 bg-amber-50 px-4 py-3">
+                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                <i class="fa-solid fa-gift" aria-hidden="true"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Benefits</p>
+                                <p class="mt-1 text-sm font-semibold leading-6 text-slate-900">
+                                    {{ selectedPreviewScholarship.benefit_summary || 'Benefits will be confirmed by the provider.' }}
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Main requirements</p>
-                            <ul v-if="previewRequirements(selectedPreviewScholarship).length" class="mt-2 space-y-1.5 text-sm text-slate-700">
-                                <li v-for="requirement in previewRequirements(selectedPreviewScholarship)" :key="requirement" class="flex gap-2">
-                                    <i class="fa-solid fa-check mt-1 text-[9px] text-emerald-600" aria-hidden="true"></i>
-                                    <span>{{ requirement }}</span>
-                                </li>
-                            </ul>
-                            <p v-else class="mt-2 text-sm text-slate-500">No document requirements added yet.</p>
+                    </section>
+
+                    <section class="border-t border-slate-200 p-4 sm:p-5">
+                        <div class="grid overflow-hidden rounded-md border border-slate-200 sm:grid-cols-2">
+                            <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
+                                        <i class="fa-solid fa-user-check text-xs" aria-hidden="true"></i>
+                                    </span>
+                                    <p class="text-sm font-bold text-slate-950">Who can apply</p>
+                                </div>
+                                <p class="mt-3 text-sm font-semibold leading-6 text-slate-800">{{ targetApplicantLabel(selectedPreviewScholarship) }}</p>
+                                <p v-if="selectedPreviewScholarship.minimum_grade_label" class="mt-1 text-xs leading-5 text-slate-500">
+                                    {{ selectedPreviewScholarship.minimum_grade_label }}
+                                </p>
+                            </div>
+                            <div class="p-4">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
+                                        <i class="fa-solid fa-file-circle-check text-xs" aria-hidden="true"></i>
+                                    </span>
+                                    <p class="text-sm font-bold text-slate-950">Main requirements</p>
+                                </div>
+                                <ul v-if="previewRequirements(selectedPreviewScholarship).length" class="mt-3 space-y-1.5 text-sm text-slate-700">
+                                    <li v-for="requirement in previewRequirements(selectedPreviewScholarship)" :key="requirement" class="flex gap-2">
+                                        <i class="fa-solid fa-check mt-1 text-[9px] text-emerald-600" aria-hidden="true"></i>
+                                        <span>{{ requirement }}</span>
+                                    </li>
+                                </ul>
+                                <p v-else class="mt-3 text-sm text-slate-500">No document requirements added yet.</p>
+                            </div>
                         </div>
-                    </div>
+                    </section>
                 </div>
 
                 <div class="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p class="text-xs text-slate-500">Read-only preview of the information applicants use to evaluate this program.</p>
+                    <p class="text-xs text-slate-500">This is the summary applicants use to evaluate the program.</p>
                     <div class="flex flex-wrap gap-2">
                         <button
                             v-if="hasScholarshipMapPreview(selectedPreviewScholarship)"

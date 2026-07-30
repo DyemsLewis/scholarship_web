@@ -22,6 +22,7 @@ use App\Support\AcademicRequirement;
 use App\Support\ApplicationDecisionReason;
 use App\Support\ApplicationSchedulePayload;
 use App\Support\CsvExport;
+use App\Support\LearnerProgramPath;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
@@ -2352,6 +2353,7 @@ class ProviderController extends Controller
 
         $validated = $this->validateScholarship($request);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
+        $validated = $this->normalizeScholarshipProgramPaths($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
         $validated = $this->normalizeScholarshipExamDetails($validated);
@@ -2420,6 +2422,7 @@ class ProviderController extends Controller
 
         $validated = $this->validateScholarship($request);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
+        $validated = $this->normalizeScholarshipProgramPaths($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipExamDetails($validated);
@@ -2705,6 +2708,15 @@ class ProviderController extends Controller
         }
 
         $validated['minimum_grade_scale'] = $scale;
+
+        return $validated;
+    }
+
+    private function normalizeScholarshipProgramPaths(array $validated): array
+    {
+        if (array_key_exists('eligible_courses', $validated)) {
+            $validated['eligible_courses'] = LearnerProgramPath::canonicalizeList($validated['eligible_courses']);
+        }
 
         return $validated;
     }

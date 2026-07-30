@@ -48,7 +48,7 @@ class ScholarshipEligibilityParityTest extends TestCase
             'minimum_gwa' => 85,
             'minimum_grade_scale' => 'percentage',
             'eligible_education_levels' => 'college',
-            'eligible_courses' => 'Any',
+            'eligible_courses' => 'BSIT',
             'eligible_school_types' => 'public, private',
             'eligible_year_levels' => '1st year',
             'eligible_locations' => 'Philippines',
@@ -77,5 +77,7 @@ class ScholarshipEligibilityParityTest extends TestCase
         $this->assertSame($webScholarship['prepared_documents'], $mobileScholarship['prepared_documents']);
         $this->assertArrayHasKey('student_value', $mobileScholarship['eligibility_match']['criteria'][0]);
         $this->assertArrayNotHasKey('studentValue', $mobileScholarship['eligibility_match']['criteria'][0]);
+        $courseCriterion = collect($webScholarship['eligibility_match']['criteria'])->firstWhere('key', 'course');
+        $this->assertSame('pass', $courseCriterion['status']);
     }
 }

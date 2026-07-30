@@ -8,6 +8,13 @@ import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
+import {
+    alsPathOptions,
+    collegePathOptions,
+    juniorHighPathOptions,
+    seniorHighPathOptions,
+    tvetPathOptions,
+} from '../support/learnerProgramPaths';
 import { showPortalToast } from '../support/portalToast';
 
 const isLoading = ref(true);
@@ -70,11 +77,6 @@ const guardianRelationshipOptions = ['Parent / guardian', 'Mother', 'Father', 'G
 const regionOptions = ['NCR', 'CAR', 'Region I', 'Region II', 'Region III', 'Region IV-A', 'MIMAROPA', 'Region V', 'Region VI', 'Region VII', 'Region VIII', 'Region IX', 'Region X', 'Region XI', 'Region XII', 'Region XIII', 'BARMM'];
 const provinceOptions = ['Metro Manila', 'Abra', 'Agusan del Norte', 'Agusan del Sur', 'Aklan', 'Albay', 'Antique', 'Apayao', 'Aurora', 'Bataan', 'Batangas', 'Benguet', 'Bohol', 'Bukidnon', 'Bulacan', 'Cagayan', 'Camarines Norte', 'Camarines Sur', 'Capiz', 'Cavite', 'Cebu', 'Davao del Norte', 'Davao del Sur', 'Davao Oriental', 'Iloilo', 'Isabela', 'Laguna', 'La Union', 'Leyte', 'Misamis Oriental', 'Negros Occidental', 'Negros Oriental', 'Nueva Ecija', 'Nueva Vizcaya', 'Pampanga', 'Pangasinan', 'Quezon', 'Rizal', 'South Cotabato', 'Tarlac', 'Zambales'];
 const preferredLocationOptions = ['Anywhere in the Philippines', 'Near my home address', 'Online-friendly', ...regionOptions, 'Cebu', 'Davao'];
-const juniorHighPathOptions = ['General curriculum', 'STE', 'SPA', 'Sports program', 'Special science class', 'Other'];
-const seniorHighPathOptions = ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL', 'Arts and Design', 'Sports Track', 'Other'];
-const collegePathOptions = ['Any course', 'BS Information Technology', 'BS Education', 'BS Nursing', 'BS Accountancy', 'BS Business Administration', 'Engineering', 'Criminology', 'Agriculture', 'Other'];
-const tvetPathOptions = ['Cookery NC II', 'ICT / Computer Systems Servicing', 'Automotive Servicing', 'Electrical Installation and Maintenance', 'Caregiving', 'Shielded Metal Arc Welding', 'Other'];
-const alsPathOptions = ['Basic Literacy', 'A&E Elementary', 'A&E Junior High School', 'Other'];
 const relocationOptions = [
     { value: 'yes', label: 'Yes, if needed' },
     { value: 'no', label: 'No, local only' },
@@ -1578,7 +1580,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.6fr)] lg:items-center">
                                 <div>
                                     <div class="flex items-center justify-between gap-3 text-sm">
-                                        <span class="font-bold text-slate-900">Application profile</span>
+                                        <span class="font-bold text-slate-900">Application readiness</span>
                                         <span class="font-bold text-slate-700">{{ profileCompletion }}%</span>
                                     </div>
                                     <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -1597,6 +1599,37 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <span class="mt-1 block text-sm font-bold text-slate-950">{{ profileRecommendedAction.label }}</span>
                                     <span class="mt-1 block text-xs leading-5 text-slate-500">{{ profileRecommendedAction.detail }}</span>
                                 </button>
+                            </div>
+
+                            <div class="mt-4 border-t border-slate-200 pt-4">
+                                <div class="flex flex-wrap items-center justify-between gap-3">
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-900">Scholarship matching</p>
+                                        <p class="mt-0.5 text-xs text-slate-500">Based on your saved profile and the current catalog.</p>
+                                    </div>
+                                    <a href="/dashboard/scholarships" class="flex items-center gap-2 text-xs font-bold text-slate-700 transition hover:text-slate-950">
+                                        View matches
+                                        <i class="fa-solid fa-chevron-right text-[10px]" aria-hidden="true"></i>
+                                    </a>
+                                </div>
+                                <div class="mt-3 grid grid-cols-2 overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-4">
+                                    <div class="border-b border-r border-slate-200 px-3 py-2.5 sm:border-b-0">
+                                        <p class="text-lg font-bold text-slate-950">{{ matchSummary.strong_matches }}</p>
+                                        <p class="text-[11px] font-semibold text-slate-500">Strong matches</p>
+                                    </div>
+                                    <div class="border-b border-slate-200 px-3 py-2.5 sm:border-b-0 sm:border-r">
+                                        <p class="text-lg font-bold text-slate-950">{{ matchSummary.eligible_programs }}</p>
+                                        <p class="text-[11px] font-semibold text-slate-500">Eligible</p>
+                                    </div>
+                                    <div class="border-r border-slate-200 px-3 py-2.5">
+                                        <p class="text-lg font-bold text-slate-950">{{ matchSummary.preference_matches }}</p>
+                                        <p class="text-[11px] font-semibold text-slate-500">Preference fit</p>
+                                    </div>
+                                    <div class="px-3 py-2.5">
+                                        <p class="text-lg font-bold text-slate-950">{{ matchSummary.available_programs }}</p>
+                                        <p class="text-[11px] font-semibold text-slate-500">Programs checked</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -1695,36 +1728,6 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </div>
                             </section>
 
-                            <section class="student-card overflow-hidden">
-                                <div class="flex items-center justify-between gap-4 border-b border-slate-200 p-5">
-                                    <div>
-                                        <p class="student-kicker">Current catalog</p>
-                                        <h3 class="mt-2 text-lg font-bold text-slate-950">Matching snapshot</h3>
-                                    </div>
-                                    <a href="/dashboard/scholarships" class="flex shrink-0 items-center gap-2 text-sm font-bold text-slate-700 transition hover:text-slate-950">
-                                        View matches
-                                        <i class="fa-solid fa-chevron-right text-xs" aria-hidden="true"></i>
-                                    </a>
-                                </div>
-                                <div class="grid grid-cols-2 lg:grid-cols-4">
-                                    <div class="border-b border-r border-slate-200 p-4 lg:border-b-0">
-                                        <p class="text-2xl font-bold text-slate-950">{{ matchSummary.strong_matches }}</p>
-                                        <p class="mt-1 text-xs font-semibold text-slate-500">Strong matches</p>
-                                    </div>
-                                    <div class="border-b border-slate-200 p-4 lg:border-b-0 lg:border-r">
-                                        <p class="text-2xl font-bold text-slate-950">{{ matchSummary.eligible_programs }}</p>
-                                        <p class="mt-1 text-xs font-semibold text-slate-500">Eligible</p>
-                                    </div>
-                                    <div class="border-r border-slate-200 p-4">
-                                        <p class="text-2xl font-bold text-slate-950">{{ matchSummary.preference_matches }}</p>
-                                        <p class="mt-1 text-xs font-semibold text-slate-500">Preference fit</p>
-                                    </div>
-                                    <div class="p-4">
-                                        <p class="text-2xl font-bold text-slate-950">{{ matchSummary.available_programs }}</p>
-                                        <p class="mt-1 text-xs font-semibold text-slate-500">Programs checked</p>
-                                    </div>
-                                </div>
-                            </section>
                         </aside>
                     </div>
                 </div>
@@ -2636,6 +2639,51 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </a>
                                     </div>
 
+                                    <div class="border-t border-slate-200 px-4 py-4 sm:px-5">
+                                        <div class="flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <p class="text-sm font-bold text-slate-950">Scholarship matching</p>
+                                                <p class="mt-0.5 text-xs text-slate-500">Your current profile compared with available programs.</p>
+                                            </div>
+                                            <a href="/dashboard/scholarships" class="flex items-center gap-2 text-xs font-bold text-slate-700 transition hover:text-slate-950">
+                                                Open finder
+                                                <i class="fa-solid fa-chevron-right text-[10px]" aria-hidden="true"></i>
+                                            </a>
+                                        </div>
+
+                                        <div class="mt-3 grid grid-cols-2 overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-4">
+                                            <div class="border-b border-r border-slate-200 px-3 py-2.5 sm:border-b-0">
+                                                <p class="text-lg font-bold text-slate-950">{{ matchSummary.strong_matches }}</p>
+                                                <p class="text-[11px] font-semibold text-slate-500">Strong matches</p>
+                                            </div>
+                                            <div class="border-b border-slate-200 px-3 py-2.5 sm:border-b-0 sm:border-r">
+                                                <p class="text-lg font-bold text-slate-950">{{ matchSummary.eligible_programs }}</p>
+                                                <p class="text-[11px] font-semibold text-slate-500">Eligible</p>
+                                            </div>
+                                            <div class="border-r border-slate-200 px-3 py-2.5">
+                                                <p class="text-lg font-bold text-slate-950">{{ matchSummary.preference_matches }}</p>
+                                                <p class="text-[11px] font-semibold text-slate-500">Preference fit</p>
+                                            </div>
+                                            <div class="px-3 py-2.5">
+                                                <p class="text-lg font-bold text-slate-950">{{ matchSummary.available_programs }}</p>
+                                                <p class="text-[11px] font-semibold text-slate-500">Programs checked</p>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="matchSummary.top_gaps?.length" class="mt-3 flex flex-wrap items-center gap-2">
+                                            <span class="text-xs font-semibold text-slate-500">Improve your matches:</span>
+                                            <button
+                                                v-for="gap in matchSummary.top_gaps"
+                                                :key="gap.key || gap.label"
+                                                type="button"
+                                                class="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200"
+                                                @click="openSection(sectionForMatchGap(gap))"
+                                            >
+                                                {{ gap.label }} ({{ gap.count }})
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <div v-if="missingProfileFields.length" class="border-t border-amber-200 px-4 py-3 sm:px-5">
                                         <p class="text-xs font-bold text-amber-900">Still needed</p>
                                         <div class="mt-2 flex flex-wrap gap-2">
@@ -2701,52 +2749,6 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
                                 </section>
 
-                                <section class="overflow-hidden rounded-lg bg-slate-950 text-white">
-                                    <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-200">Scholarship matching</p>
-                                            <h4 class="mt-1 text-lg font-bold">Current catalog snapshot</h4>
-                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-300">Matching checks structured eligibility. Documents and the provider's final decision are reviewed separately.</p>
-                                        </div>
-                                        <a href="/dashboard/scholarships" class="w-fit shrink-0 rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-slate-100">
-                                            Open finder
-                                        </a>
-                                    </div>
-
-                                    <div class="grid grid-cols-2 border-t border-white/10 sm:grid-cols-4">
-                                        <div class="border-b border-r border-white/10 p-4 sm:border-b-0">
-                                            <p class="text-xl font-bold text-amber-200">{{ matchSummary.strong_matches }}</p>
-                                            <p class="mt-1 text-xs font-semibold text-slate-300">Strong matches</p>
-                                        </div>
-                                        <div class="border-b border-white/10 p-4 sm:border-b-0 sm:border-r">
-                                            <p class="text-xl font-bold text-amber-200">{{ matchSummary.eligible_programs }}</p>
-                                            <p class="mt-1 text-xs font-semibold text-slate-300">Eligible</p>
-                                        </div>
-                                        <div class="border-r border-white/10 p-4">
-                                            <p class="text-xl font-bold text-amber-200">{{ matchSummary.preference_matches }}</p>
-                                            <p class="mt-1 text-xs font-semibold text-slate-300">Preference fit</p>
-                                        </div>
-                                        <div class="p-4">
-                                            <p class="text-xl font-bold text-amber-200">{{ matchSummary.available_programs }}</p>
-                                            <p class="mt-1 text-xs font-semibold text-slate-300">Programs checked</p>
-                                        </div>
-                                    </div>
-
-                                    <div v-if="matchSummary.top_gaps?.length" class="border-t border-white/10 px-4 py-3 sm:px-5">
-                                        <p class="text-xs font-bold text-slate-300">Details affecting current matches</p>
-                                        <div class="mt-2 flex flex-wrap gap-2">
-                                            <button
-                                                v-for="gap in matchSummary.top_gaps"
-                                                :key="gap.key || gap.label"
-                                                type="button"
-                                                class="rounded-md bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white ring-1 ring-white/10 transition hover:bg-white/15"
-                                                @click="openSection(sectionForMatchGap(gap))"
-                                            >
-                                                Review {{ gap.label }} ({{ gap.count }})
-                                            </button>
-                                        </div>
-                                    </div>
-                                </section>
                             </div>
                         </section>
 

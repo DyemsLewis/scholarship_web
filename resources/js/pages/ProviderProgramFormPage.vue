@@ -7,6 +7,14 @@ import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import {
+    canonicalProgramPath,
+    canonicalizeProgramPathList,
+    isOpenProgramPath,
+    normalizeProgramPath,
+    providerProgramPathOptionsForTarget,
+    splitProgramPaths,
+} from '../support/learnerProgramPaths';
 import { cashGrantAmount, normalizeScholarshipBenefits as normalizeBenefits } from '../support/scholarshipBenefits';
 
 const scholarshipId = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit$/)?.[1] ?? null;
@@ -33,6 +41,8 @@ const showProgramTerms = ref(false);
 const showLocationMap = ref(false);
 const customizeRubric = ref(false);
 const selectedTargetPresetKey = ref('');
+const programPathChoice = ref('');
+const customProgramPath = ref('');
 const {
     confirmation,
     requestConfirmation,
@@ -255,7 +265,7 @@ const targetApplicantPresets = [
         description: 'For skills training, qualification, and certification-focused scholarship programs.',
         educationLevels: ['tvet'],
         schoolTypes: ['tvet_center'],
-        courses: 'Cookery NC II\nICT\nAutomotive\nElectrical installation\nCaregiving',
+        courses: 'Cookery NC II\nICT / Computer Systems Servicing\nAutomotive Servicing\nElectrical Installation and Maintenance\nCaregiving',
         years: 'NC I\nNC II\nNC III\nNC IV\nFirst term\nSecond term',
         locations: 'Nationwide',
         eligibility: 'Open to TVET or vocational learners enrolled in eligible training programs or qualifications.',
@@ -351,7 +361,7 @@ const targetFormProfiles = {
         showProgramPath: true,
         programPathLabel: 'Eligible tracks or strands',
         programPathPlaceholder: 'Example: STEM, ABM, HUMSS, GAS, TVL',
-        programPathHelp: 'List one track or strand per line when the program is specific.',
+        programPathHelp: 'Choose each accepted track or strand. Use Any strand when there is no restriction.',
         programPathTemplate: 'STEM\nABM\nHUMSS\nGAS\nTVL',
         levelLabel: 'Eligible SHS grade levels',
         levelPlaceholder: 'Example: Grade 11, Grade 12',
@@ -372,7 +382,7 @@ const targetFormProfiles = {
         guidance: 'Course and year level are important matching fields for college scholarships.',
         showProgramPath: true,
         programPathLabel: 'Eligible courses or degree programs',
-        programPathPlaceholder: 'Example: BSIT, BSED, Engineering, Accountancy',
+        programPathPlaceholder: 'Choose one or more eligible courses',
         programPathHelp: 'Use Any course when the scholarship is not course-specific.',
         programPathTemplate: 'Any course',
         levelLabel: 'Eligible college year levels',
@@ -394,9 +404,9 @@ const targetFormProfiles = {
         guidance: 'Target the training qualification, certification level, or term instead of college course/year wording.',
         showProgramPath: true,
         programPathLabel: 'Eligible qualifications or training programs',
-        programPathPlaceholder: 'Example: Cookery NC II, ICT, Automotive, Caregiving',
-        programPathHelp: 'List qualification names or training programs accepted by the provider.',
-        programPathTemplate: 'Cookery NC II\nICT\nAutomotive\nElectrical installation\nCaregiving',
+        programPathPlaceholder: 'Choose one or more eligible training programs',
+        programPathHelp: 'Choose each qualification or training program accepted by the provider.',
+        programPathTemplate: 'Cookery NC II\nICT / Computer Systems Servicing\nAutomotive Servicing\nElectrical Installation and Maintenance\nCaregiving',
         levelLabel: 'Eligible certification or training level',
         levelPlaceholder: 'Example: NC I, NC II, First term',
         levelTemplate: 'NC I\nNC II\nNC III\nNC IV\nFirst term\nSecond term',
@@ -438,7 +448,7 @@ const targetFormProfiles = {
         guidance: 'You selected multiple learner groups. Keep labels broad and only restrict fields that apply to every selected group.',
         showProgramPath: true,
         programPathLabel: 'Eligible path, strand, course, or program',
-        programPathPlaceholder: 'Example: Any, STEM, BSIT, Cookery NC II',
+        programPathPlaceholder: 'Choose one or more eligible learner paths',
         programPathHelp: 'Use Any when the selected groups do not share one common path field.',
         programPathTemplate: 'Any',
         levelLabel: 'Eligible grade, year, or training levels',
@@ -630,6 +640,8 @@ const finderRuleSummary = computed(() => [
 ]);
 const activeTargetKey = computed(() => inferTargetFormKey(scholarshipForm.value.eligibleEducationLevels));
 const activeTargetForm = computed(() => targetFormProfiles[activeTargetKey.value] ?? targetFormProfiles.mixed);
+const programPathSelectOptions = computed(() => providerProgramPathOptionsForTarget(activeTargetKey.value));
+const selectedProgramPaths = computed(() => splitProgramPaths(scholarshipForm.value.eligibleCourses));
 const targetSchoolTypeOptions = computed(() => {
     const values = activeTargetForm.value.schoolTypeValues;
 
@@ -1079,11 +1091,68 @@ function selectAllOptions(field, options) {
     scholarshipForm.value[field] = options.map((option) => option.value);
 }
 
+function setEligibleProgramPaths(paths) {
+    scholarshipForm.value.eligibleCourses = canonicalizeProgramPathList(paths.join('\n'));
+}
+
+function isProgramPathSelected(path) {
+    const normalizedPath = normalizeProgramPath(canonicalProgramPath(path));
+
+    return selectedProgramPaths.value.some((selectedPath) => (
+        normalizeProgramPath(selectedPath) === normalizedPath
+    ));
+}
+
+function addEligibleProgramPath(path) {
+    const nextPath = canonicalProgramPath(path);
+
+    if (!nextPath || nextPath === 'Other') {
+        return;
+    }
+
+    if (isOpenProgramPath(nextPath)) {
+        setEligibleProgramPaths([nextPath]);
+        return;
+    }
+
+    const specificPaths = selectedProgramPaths.value.filter((selectedPath) => (
+        !isOpenProgramPath(selectedPath)
+        && normalizeProgramPath(selectedPath) !== normalizeProgramPath(nextPath)
+    ));
+
+    setEligibleProgramPaths([...specificPaths, nextPath]);
+}
+
+function chooseProgramPath() {
+    if (!programPathChoice.value || programPathChoice.value === 'Other') {
+        return;
+    }
+
+    addEligibleProgramPath(programPathChoice.value);
+    programPathChoice.value = '';
+}
+
+function addCustomProgramPath() {
+    if (!customProgramPath.value.trim()) {
+        return;
+    }
+
+    addEligibleProgramPath(customProgramPath.value);
+    customProgramPath.value = '';
+    programPathChoice.value = '';
+}
+
+function removeEligibleProgramPath(path) {
+    setEligibleProgramPaths(selectedProgramPaths.value.filter((selectedPath) => (
+        normalizeProgramPath(selectedPath) !== normalizeProgramPath(path)
+    )));
+}
+
 function applyActiveTargetDefaults() {
     const targetForm = activeTargetForm.value;
 
     if (targetForm.programPathTemplate !== undefined) {
-        scholarshipForm.value.eligibleCourses = targetForm.programPathTemplate;
+        scholarshipForm.value.eligibleCourses = canonicalizeProgramPathList(targetForm.programPathTemplate);
     }
 
     if (targetForm.levelTemplate) {
@@ -1105,7 +1174,7 @@ function clearHiddenSchoolTypes() {
 function applyTargetApplicantPreset(preset) {
     scholarshipForm.value.eligibleEducationLevels = [...preset.educationLevels];
     scholarshipForm.value.eligibleSchoolTypes = [...preset.schoolTypes];
-    scholarshipForm.value.eligibleCourses = preset.courses;
+    scholarshipForm.value.eligibleCourses = canonicalizeProgramPathList(preset.courses);
     scholarshipForm.value.eligibleYearLevels = preset.years;
     scholarshipForm.value.eligibleLocations = preset.locations;
     scholarshipForm.value.eligibility = preset.eligibility;
@@ -1157,7 +1226,7 @@ function fillScholarshipForm(scholarship) {
         description: scholarship.description ?? '',
         eligibility: scholarship.eligibility ?? '',
         eligibleEducationLevels: parseSelections(scholarship.eligible_education_levels, educationLevelOptions),
-        eligibleCourses: scholarship.eligible_courses ?? '',
+        eligibleCourses: canonicalizeProgramPathList(scholarship.eligible_courses),
         eligibleSchoolTypes: parseSelections(scholarship.eligible_school_types, schoolTypeOptions),
         eligibleYearLevels: scholarship.eligible_year_levels ?? '',
         eligibleLocations: scholarship.eligible_locations ?? '',
@@ -1549,7 +1618,7 @@ async function saveScholarship() {
         description: scholarshipForm.value.description,
         eligibility: scholarshipForm.value.eligibility,
         eligible_education_levels: scholarshipForm.value.eligibleEducationLevels.join('\n'),
-        eligible_courses: scholarshipForm.value.eligibleCourses,
+        eligible_courses: canonicalizeProgramPathList(scholarshipForm.value.eligibleCourses),
         eligible_school_types: scholarshipForm.value.eligibleSchoolTypes.join('\n'),
         eligible_year_levels: scholarshipForm.value.eligibleYearLevels,
         eligible_locations: scholarshipForm.value.eligibleLocations,
@@ -2563,13 +2632,54 @@ onMounted(loadFormData);
                                         <label :class="labelClass" for="scholarship-courses">
                                             {{ activeTargetForm.programPathLabel }}
                                         </label>
-                                        <textarea
+                                        <select
                                             id="scholarship-courses"
-                                            v-model="scholarshipForm.eligibleCourses"
-                                            rows="2"
-                                            :placeholder="activeTargetForm.programPathPlaceholder"
+                                            v-model="programPathChoice"
                                             :class="inputClass"
-                                        ></textarea>
+                                            @change="chooseProgramPath"
+                                        >
+                                            <option value="">Select an option to add</option>
+                                            <option
+                                                v-for="option in programPathSelectOptions"
+                                                :key="option"
+                                                :value="option"
+                                                :disabled="option !== 'Other' && isProgramPathSelected(option)"
+                                            >
+                                                {{ option }}
+                                            </option>
+                                        </select>
+                                        <div v-if="programPathChoice === 'Other'" class="mt-2 flex flex-col gap-2 sm:flex-row">
+                                            <input
+                                                v-model="customProgramPath"
+                                                type="text"
+                                                :placeholder="`Enter another ${activeTargetForm.programPathLabel.toLowerCase()}`"
+                                                :class="inputClass"
+                                                @keyup.enter.prevent="addCustomProgramPath"
+                                            >
+                                            <button
+                                                type="button"
+                                                class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                                @click="addCustomProgramPath"
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
+                                        <div v-if="selectedProgramPaths.length" class="mt-3 flex flex-wrap gap-2">
+                                            <button
+                                                v-for="path in selectedProgramPaths"
+                                                :key="path"
+                                                type="button"
+                                                class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left text-xs font-semibold text-slate-700 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                                                :title="`Remove ${path}`"
+                                                @click="removeEligibleProgramPath(path)"
+                                            >
+                                                <span>{{ path }}</span>
+                                                <i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
+                                        <p v-else class="mt-2 text-xs font-semibold text-emerald-700">
+                                            No restriction selected. All applicable learner paths can match.
+                                        </p>
                                         <p class="mt-2 text-xs leading-5 text-slate-500">
                                             {{ activeTargetForm.programPathHelp }}
                                         </p>
@@ -2585,7 +2695,7 @@ onMounted(loadFormData);
                                         <button
                                             type="button"
                                             class="mt-3 self-start rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-white"
-                                            @click="scholarshipForm.eligibleCourses = activeTargetForm.programPathTemplate"
+                                            @click="scholarshipForm.eligibleCourses = canonicalizeProgramPathList(activeTargetForm.programPathTemplate)"
                                         >
                                             Mark as not applicable
                                         </button>
