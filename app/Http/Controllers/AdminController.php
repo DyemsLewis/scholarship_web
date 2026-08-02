@@ -34,8 +34,9 @@ class AdminController extends Controller
         'Account manager' => ['manage_accounts'],
         'Review officer' => ['manage_reviews'],
         'Support officer' => ['manage_reports'],
+        'Billing officer' => ['manage_billing'],
         'Records officer' => ['view_logs', 'export_data'],
-        'Portal manager' => ['manage_accounts', 'manage_reviews', 'manage_reports', 'view_logs', 'export_data'],
+        'Portal manager' => ['manage_accounts', 'manage_reviews', 'manage_reports', 'manage_billing', 'view_logs', 'export_data'],
     ];
 
     public function index(Request $request): View|RedirectResponse

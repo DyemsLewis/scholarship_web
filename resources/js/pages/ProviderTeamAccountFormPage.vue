@@ -16,6 +16,7 @@ const allPermissions = [
     { value: 'manage_reports', label: 'Manage reports', description: 'Review and resolve applicant concerns about your programs.' },
     { value: 'manage_profile', label: 'Manage organization profile', description: 'Update provider details and verification documents.' },
     { value: 'manage_team', label: 'Manage team accounts', description: 'Create and maintain other provider staff accounts.' },
+    { value: 'manage_billing', label: 'Manage optional services', description: 'Start provider service payments and review order status.' },
 ];
 const availablePermissions = computed(() => allPermissions.filter((permission) => (
     window.portalUser?.has_full_access || window.portalUser?.permissions?.includes(permission.value)
@@ -25,13 +26,15 @@ const roleOptions = [
     { value: 'program_coordinator', label: 'Program coordinator', description: 'Creates and maintains scholarship programs.' },
     { value: 'application_reviewer', label: 'Application reviewer', description: 'Reviews applicant records and decisions.' },
     { value: 'support_staff', label: 'Support staff', description: 'Handles applicant concerns and reports.' },
+    { value: 'billing_staff', label: 'Billing staff', description: 'Manages optional provider service purchases.' },
     { value: 'custom', label: 'Custom role', description: 'Build a role by selecting permissions manually.' },
 ];
 const rolePresets = {
-    manager: ['manage_programs', 'review_applications', 'manage_reports', 'manage_profile', 'manage_team'],
+    manager: ['manage_programs', 'review_applications', 'manage_reports', 'manage_profile', 'manage_team', 'manage_billing'],
     program_coordinator: ['manage_programs'],
     application_reviewer: ['review_applications'],
     support_staff: ['manage_reports'],
+    billing_staff: ['manage_billing'],
     custom: [],
 };
 const selectedRoleOption = computed(() => roleOptions.find((role) => role.value === form.value.accountTitle));

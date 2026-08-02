@@ -47,14 +47,16 @@ class ProviderController extends Controller
         'program_coordinator' => 'Program coordinator',
         'application_reviewer' => 'Application reviewer',
         'support_staff' => 'Support staff',
+        'billing_staff' => 'Billing staff',
         'custom' => 'Custom role',
     ];
 
     private const PROVIDER_TEAM_ROLE_PERMISSION_PRESETS = [
-        'manager' => ['manage_programs', 'review_applications', 'manage_reports', 'manage_profile', 'manage_team'],
+        'manager' => ['manage_programs', 'review_applications', 'manage_reports', 'manage_profile', 'manage_team', 'manage_billing'],
         'program_coordinator' => ['manage_programs'],
         'application_reviewer' => ['review_applications'],
         'support_staff' => ['manage_reports'],
+        'billing_staff' => ['manage_billing'],
     ];
 
     private const AWARD_SLOT_STATUSES = [
@@ -1403,6 +1405,88 @@ class ProviderController extends Controller
                 ? 'Applicant approved for the next configured stage.'
                 : 'Applicant decision recorded as rejected.',
             'application' => $this->applicationPayload($freshApplication, true),
+        ]);
+    }
+
+    public function bulkAdvanceApplications(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+
+        $validated = $request->validate([
+            'application_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'application_ids.*' => ['required', 'integer', 'distinct'],
+            'target_stage' => ['required', Rule::in(['exam', 'distribution'])],
+        ]);
+        $applicationIds = collect($validated['application_ids'])->map(fn ($id) => (int) $id)->values();
+        $applications = ScholarshipApplication::query()
+            ->with(['applicant.studentProfile', 'documents.reviewer', 'schedules', 'scholarship.events'])
+            ->where('scholarship_id', $scholarship->id)
+            ->whereIn('id', $applicationIds)
+            ->orderBy('id')
+            ->get();
+
+        if ($applications->count() !== $applicationIds->unique()->count()) {
+            throw ValidationException::withMessages([
+                'application_ids' => 'One or more selected applications do not belong to this program.',
+            ]);
+        }
+
+        $targetStage = $validated['target_stage'];
+        $invalidApplications = $applications
+            ->reject(fn (ScholarshipApplication $application) => in_array(
+                $targetStage,
+                $this->bulkAdvanceTargets($application),
+                true,
+            ));
+
+        if ($invalidApplications->isNotEmpty()) {
+            $applicantNames = $invalidApplications
+                ->take(4)
+                ->map(fn (ScholarshipApplication $application) => $application->applicant?->name ?: "Application #{$application->id}")
+                ->implode(', ');
+            $message = $targetStage === 'distribution'
+                ? 'Only applicants already marked Approved can be bulk approved for distribution.'
+                : 'Only applications with accepted required documents that are ready for the configured exam can be selected.';
+
+            throw ValidationException::withMessages([
+                'application_ids' => "{$message} Review: {$applicantNames}.",
+            ]);
+        }
+
+        $targetStatus = $targetStage === 'exam' ? 'exam_qualified' : 'awarded';
+        $decisionReason = $targetStage === 'exam' ? 'for_exam' : 'approved_for_award';
+
+        DB::transaction(function () use ($applications, $request, $targetStatus, $decisionReason): void {
+            foreach ($applications as $application) {
+                $statusRequest = clone $request;
+                $statusRequest->replace([
+                    'status' => $targetStatus,
+                    'decision_reason' => $decisionReason,
+                ]);
+
+                $this->updateApplicationStatus($statusRequest, $application);
+            }
+        });
+
+        ActivityLog::record(
+            $request->user(),
+            'applications_bulk_advanced',
+            "{$request->user()->name} bulk approved {$applications->count()} application(s) for {$targetStage}.",
+            $request,
+            [
+                'scholarship_id' => $scholarship->id,
+                'target_stage' => $targetStage,
+                'application_ids' => $applicationIds->all(),
+            ],
+        );
+
+        return response()->json([
+            'message' => $targetStage === 'exam'
+                ? "Approved {$applications->count()} applicant(s) for the exam stage."
+                : "Approved {$applications->count()} applicant(s) for distribution.",
+            'updated_count' => $applications->count(),
+            'application_ids' => $applicationIds,
         ]);
     }
 
@@ -3182,6 +3266,7 @@ class ProviderController extends Controller
             'status' => $application->status,
             'document_checklist' => $application->document_checklist ?? [],
             'document_readiness' => $readiness,
+            'bulk_advance_targets' => $this->bulkAdvanceTargets($application, $readiness),
             'documents' => $application->documents->map(fn (ApplicationDocument $document) => $this->documentPayload($document))->values(),
             'eligibility_score' => $application->eligibility_score,
             'eligibility_breakdown' => $application->eligibility_breakdown,
@@ -3308,6 +3393,29 @@ class ProviderController extends Controller
     {
         return app(ScholarshipEligibilityService::class)
             ->applicationDocumentReadiness($application);
+    }
+
+    private function bulkAdvanceTargets(ScholarshipApplication $application, ?array $readiness = null): array
+    {
+        $readiness ??= $this->documentReadiness($application);
+
+        if (! ($readiness['ready'] ?? false)) {
+            return [];
+        }
+
+        $selectionStages = ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages);
+        $targets = [];
+
+        if (in_array('exam', $selectionStages, true)
+            && ScholarshipSelectionPlan::nextApprovalStatus($application->status, $selectionStages) === 'exam_qualified') {
+            $targets[] = 'exam';
+        }
+
+        if ($application->status === 'approved' && in_array('distribution', $selectionStages, true)) {
+            $targets[] = 'distribution';
+        }
+
+        return $targets;
     }
 
     private function scholarshipPayload(Scholarship $scholarship): array

@@ -111,6 +111,30 @@ Laravel exposes a basic health route:
 
 Use `https://your-domain.com/up` to confirm the hosted app responds.
 
+## Optional Provider Payments
+
+The portal uses PayMongo Hosted Checkout V2 for optional provider support services. Applicant registration, scholarship matching, applications, and awards remain free. Paying does not change program visibility, matching scores, or approval decisions.
+
+1. Create PayMongo test secret and webhook keys.
+2. Add these values to `.env`:
+
+```text
+PROVIDER_BILLING_ENABLED=true
+PAYMONGO_SECRET_KEY=sk_test_your_key
+PAYMONGO_WEBHOOK_SECRET=whsk_test_your_webhook_secret
+```
+
+3. In PayMongo, register this HTTPS webhook URL:
+
+```text
+https://your-domain.com/webhooks/paymongo
+```
+
+4. Subscribe the webhook to `checkout_session.payment.paid`.
+5. Run `php artisan optimize:clear` after changing environment values.
+
+Keep both secrets on the Laravel server. Do not place them in Vue, `VITE_*` variables, source control, or the mobile app. The signed webhook is the source of truth; returning to `/provider/billing` does not mark an order as paid.
+
 ## Build And Test
 
 Run these before pushing or deploying:

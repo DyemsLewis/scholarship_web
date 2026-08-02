@@ -29,6 +29,7 @@ const adminPermissionOptions = [
     { value: 'manage_accounts', label: 'Manage accounts', description: 'Create and maintain applicant and provider accounts.' },
     { value: 'manage_reviews', label: 'Manage reviews', description: 'Verify providers and applicants, and publish programs.' },
     { value: 'manage_reports', label: 'Manage reports', description: 'Review and resolve concerns submitted through the portal.' },
+    { value: 'manage_billing', label: 'Manage service payments', description: 'Review paid provider services and track fulfillment.' },
     { value: 'view_logs', label: 'View activity logs', description: 'Inspect recorded administrative and platform actions.' },
     { value: 'export_data', label: 'Export data', description: 'Download user and application CSV files.' },
 ];
@@ -50,6 +51,12 @@ const adminRolePresets = [
         label: 'Support officer',
         description: 'Reviews and resolves submitted platform concerns.',
         permissions: ['manage_reports'],
+    },
+    {
+        value: 'Billing officer',
+        label: 'Billing officer',
+        description: 'Tracks paid optional provider services through fulfillment.',
+        permissions: ['manage_billing'],
     },
     {
         value: 'Records officer',

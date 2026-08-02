@@ -9,6 +9,7 @@ const navLinks = [
     { href: '/provider/review', label: 'Review', icon: 'fa-solid fa-clipboard-list', permission: 'review_applications' },
     { href: '/provider/reports', label: 'Reports', icon: 'fa-solid fa-circle-exclamation', permission: 'manage_reports' },
     { href: '/provider/team', label: 'Team', icon: 'fa-solid fa-user-group', permission: 'manage_team' },
+    { href: '/provider/billing', label: 'Services', icon: 'fa-solid fa-receipt', permission: 'manage_billing' },
     { href: '/provider/profile', label: 'Profile', icon: 'fa-solid fa-building-user' },
 ];
 

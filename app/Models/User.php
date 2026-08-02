@@ -22,6 +22,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'manage_accounts',
         'manage_reviews',
         'manage_reports',
+        'manage_billing',
         'view_logs',
         'export_data',
     ];
@@ -32,6 +33,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'manage_reports',
         'manage_profile',
         'manage_team',
+        'manage_billing',
     ];
 
     /**
@@ -147,6 +149,16 @@ class User extends Authenticatable implements MustVerifyEmail
     public function providerAssessments(): HasMany
     {
         return $this->hasMany(ProviderAssessment::class, 'provider_id');
+    }
+
+    public function providerServicePurchases(): HasMany
+    {
+        return $this->hasMany(ProviderServicePurchase::class, 'provider_id');
+    }
+
+    public function initiatedProviderServicePurchases(): HasMany
+    {
+        return $this->hasMany(ProviderServicePurchase::class, 'created_by');
     }
 
     public function isAdmin(): bool

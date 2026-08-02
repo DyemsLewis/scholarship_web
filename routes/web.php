@@ -4,6 +4,7 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ApplicantDashboardController;
 use App\Http\Controllers\ApplicationDocumentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProviderController;
@@ -17,6 +18,7 @@ Route::get('/reset-password', [PageController::class, 'resetPassword'])->name('p
 Route::get('/register', [PageController::class, 'register'])->name('register');
 Route::get('/provider/register', [PageController::class, 'providerRegister'])->name('provider.register');
 Route::redirect('/terms', '/');
+Route::post('/webhooks/paymongo', [BillingController::class, 'webhook'])->middleware('throttle:60,1')->name('webhooks.paymongo');
 Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])->middleware(['signed', 'throttle:6,1'])->name('verification.verify');
 Route::post('/email/verification-notification', [AuthController::class, 'resendVerificationEmail'])->middleware(['auth', 'throttle:6,1'])->name('verification.send');
 Route::get('/account/setup', [PageController::class, 'accountSetup'])->middleware('auth')->name('account.setup');
@@ -78,6 +80,9 @@ Route::middleware(['auth', 'admin'])
         Route::get('/reports', [SupportReportController::class, 'adminPage'])->middleware('permission:manage_reports')->name('reports');
         Route::get('/reports/data', [SupportReportController::class, 'adminData'])->middleware('permission:manage_reports')->name('reports.data');
         Route::patch('/reports/{report}/status', [SupportReportController::class, 'updateStatus'])->middleware('permission:manage_reports')->name('reports.status');
+        Route::get('/billing', [BillingController::class, 'adminPage'])->middleware('permission:manage_billing')->name('billing');
+        Route::get('/billing/data', [BillingController::class, 'adminData'])->middleware('permission:manage_billing')->name('billing.data');
+        Route::patch('/billing/{purchase}/fulfillment', [BillingController::class, 'updateFulfillment'])->middleware('permission:manage_billing')->name('billing.fulfillment');
         Route::get('/users', [AdminController::class, 'users'])->middleware('permission:manage_accounts')->name('users');
         Route::post('/users', [AdminController::class, 'storeUser'])->middleware('permission:manage_accounts')->name('users.store');
         Route::get('/users/{user}', [AdminController::class, 'showUser'])->middleware('permission:manage_accounts')->name('users.show');
@@ -120,6 +125,9 @@ Route::middleware(['auth', 'provider'])
         Route::post('/team/accounts', [ProviderController::class, 'storeTeamAccount'])->middleware('permission:manage_team')->name('team.accounts.store');
         Route::patch('/team/accounts/{account}', [ProviderController::class, 'updateTeamAccount'])->middleware('permission:manage_team')->whereNumber('account')->name('team.accounts.update');
         Route::patch('/team/accounts/{account}/status', [ProviderController::class, 'updateTeamAccountStatus'])->middleware('permission:manage_team')->whereNumber('account')->name('team.accounts.status');
+        Route::get('/billing', [BillingController::class, 'providerPage'])->middleware(['permission:manage_billing', 'provider.approved'])->name('billing');
+        Route::get('/billing/data', [BillingController::class, 'providerData'])->middleware(['permission:manage_billing', 'provider.approved'])->name('billing.data');
+        Route::post('/billing/checkout', [BillingController::class, 'checkout'])->middleware(['permission:manage_billing', 'provider.approved', 'throttle:5,1'])->name('billing.checkout');
         Route::get('/reports', [SupportReportController::class, 'providerPage'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports');
         Route::get('/reports/data', [SupportReportController::class, 'providerData'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.data');
         Route::patch('/reports/{report}/status', [SupportReportController::class, 'updateStatus'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.status');
@@ -134,6 +142,7 @@ Route::middleware(['auth', 'provider'])
         Route::get('/applications/data', [ProviderController::class, 'applicationsData'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.data');
         Route::get('/applications/{application}', [ProviderController::class, 'applicationDetail'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('application')->name('applications.show');
         Route::get('/applications/{application}/data', [ProviderController::class, 'applicationDetailData'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('application')->name('applications.show.data');
+        Route::patch('/scholarships/{scholarship}/applications/bulk-advance', [ProviderController::class, 'bulkAdvanceApplications'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('applications.bulk-advance');
         Route::patch('/applications/{application}/reviewer', [ProviderController::class, 'assignApplicationReviewer'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('application')->name('applications.reviewer');
         Route::get('/applications/{application}/profile-proofs/{document}/view', [ProviderController::class, 'viewApplicantProfileProof'])
             ->whereNumber('application')

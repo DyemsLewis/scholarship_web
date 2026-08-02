@@ -23,6 +23,7 @@ const permissionLabels = {
     manage_reports: 'Reports',
     manage_profile: 'Organization profile',
     manage_team: 'Team accounts',
+    manage_billing: 'Optional services',
 };
 
 function accountInitials(name) {
