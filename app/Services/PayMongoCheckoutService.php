@@ -96,6 +96,47 @@ class PayMongoCheckoutService
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public function retrieveCheckout(string $checkoutSessionId): array
+    {
+        $secretKey = (string) config('billing.paymongo.secret_key');
+
+        if ($secretKey === '' || blank($checkoutSessionId)) {
+            throw new RuntimeException('PayMongo checkout retrieval is not configured.');
+        }
+
+        $baseUrl = rtrim((string) config('billing.paymongo.base_url'), '/');
+
+        try {
+            $response = Http::withBasicAuth($secretKey, '')
+                ->acceptJson()
+                ->timeout(20)
+                ->get("{$baseUrl}/v1/checkout_sessions/".rawurlencode($checkoutSessionId));
+        } catch (ConnectionException $error) {
+            report($error);
+
+            throw new RuntimeException('The payment gateway could not be reached.', previous: $error);
+        }
+
+        if (! $response->successful()) {
+            report(new RuntimeException("PayMongo checkout retrieval failed with HTTP {$response->status()}."));
+
+            throw new RuntimeException('The payment gateway could not confirm this checkout.');
+        }
+
+        $resource = $response->json('data');
+
+        if (! is_array($resource)
+            || ($resource['id'] ?? null) !== $checkoutSessionId
+            || ! is_array($resource['attributes'] ?? null)) {
+            throw new RuntimeException('The payment gateway returned an invalid checkout session.');
+        }
+
+        return $resource;
+    }
+
+    /**
      * @return array{valid: bool, livemode: bool}
      */
     public function verifyWebhookSignature(string $payload, ?string $signatureHeader): array

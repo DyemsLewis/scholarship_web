@@ -156,6 +156,92 @@ class ProviderBillingTest extends TestCase
         $this->assertSame('pending', $purchase->fresh()->status);
     }
 
+    public function test_provider_can_confirm_a_paid_checkout_without_a_webhook(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchase = $this->pendingPurchase($provider);
+        [$payload] = $this->paidWebhookPayload($purchase);
+        $resource = data_get($payload, 'data.attributes.data');
+        $resource['attributes']['livemode'] = false;
+
+        Http::fake([
+            "https://api.paymongo.com/v1/checkout_sessions/{$purchase->checkout_session_id}" => Http::response([
+                'data' => $resource,
+            ]),
+        ]);
+
+        $this->actingAs($provider)
+            ->postJson('/provider/billing/sync', [
+                'reference' => $purchase->reference_number,
+            ])
+            ->assertOk()
+            ->assertJsonPath('confirmed', true)
+            ->assertJsonPath('purchase.status', 'paid');
+
+        $purchase->refresh();
+        $this->assertSame('paid', $purchase->status);
+        $this->assertSame('pay_test_paid', $purchase->payment_id);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $provider->id,
+            'type' => 'provider_service_paid',
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $admin->id,
+            'type' => 'provider_service_queue',
+        ]);
+        Http::assertSent(function (ClientRequest $request) use ($purchase): bool {
+            return $request->method() === 'GET'
+                && $request->url() === "https://api.paymongo.com/v1/checkout_sessions/{$purchase->checkout_session_id}"
+                && $request->hasHeader('Authorization', 'Basic '.base64_encode('sk_test_portal:'));
+        });
+    }
+
+    public function test_checkout_sync_keeps_an_unpaid_session_pending(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $purchase = $this->pendingPurchase($provider);
+        [$payload] = $this->paidWebhookPayload($purchase);
+        $resource = data_get($payload, 'data.attributes.data');
+        $resource['attributes']['livemode'] = false;
+        $resource['attributes']['payments'][0]['attributes']['status'] = 'pending';
+
+        Http::fake([
+            "https://api.paymongo.com/v1/checkout_sessions/{$purchase->checkout_session_id}" => Http::response([
+                'data' => $resource,
+            ]),
+        ]);
+
+        $this->actingAs($provider)
+            ->postJson('/provider/billing/sync', [
+                'reference' => $purchase->reference_number,
+            ])
+            ->assertStatus(202)
+            ->assertJsonPath('confirmed', false)
+            ->assertJsonPath('purchase.status', 'pending');
+
+        $this->assertSame('pending', $purchase->fresh()->status);
+        $this->assertDatabaseCount('portal_notifications', 0);
+    }
+
+    public function test_provider_cannot_sync_another_providers_checkout(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $purchase = $this->pendingPurchase($provider);
+
+        Http::fake();
+
+        $this->actingAs($otherProvider)
+            ->postJson('/provider/billing/sync', [
+                'reference' => $purchase->reference_number,
+            ])
+            ->assertNotFound();
+
+        $this->assertSame('pending', $purchase->fresh()->status);
+        Http::assertNothingSent();
+    }
+
     public function test_billing_admin_can_track_fulfillment_and_provider_is_notified(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);

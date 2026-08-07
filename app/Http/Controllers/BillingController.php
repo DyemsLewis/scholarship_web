@@ -155,6 +155,84 @@ class BillingController extends Controller
         ], 201);
     }
 
+    public function syncCheckout(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $validated = $request->validate([
+            'reference' => ['required', 'string', 'max:80'],
+        ]);
+        $owner = $request->user()->providerOrganizationOwner();
+        $purchase = ProviderServicePurchase::query()
+            ->with(['provider.providerProfile', 'creator.providerProfile'])
+            ->where('provider_id', $owner->id)
+            ->where('reference_number', $validated['reference'])
+            ->first();
+
+        if (! $purchase) {
+            return response()->json(['message' => 'Payment reference was not found.'], 404);
+        }
+
+        if ($purchase->status === 'paid') {
+            return response()->json([
+                'message' => 'Payment is already confirmed.',
+                'confirmed' => true,
+                'purchase' => $this->purchasePayload($purchase),
+            ]);
+        }
+
+        if ($purchase->status !== 'pending' || blank($purchase->checkout_session_id)) {
+            return response()->json([
+                'message' => 'This order does not have a pending checkout to confirm.',
+            ], 422);
+        }
+
+        try {
+            $resource = $this->payMongo->retrieveCheckout($purchase->checkout_session_id);
+        } catch (Throwable $error) {
+            report($error);
+
+            return response()->json([
+                'message' => 'PayMongo could not confirm the payment right now. The order remains pending.',
+            ], 503);
+        }
+
+        $payments = data_get($resource, 'attributes.payments', []);
+        $hasPaidPayment = is_array($payments) && collect($payments)->contains(function ($payment): bool {
+            return data_get($payment, 'attributes.status', data_get($payment, 'status')) === 'paid';
+        });
+
+        if (! $hasPaidPayment) {
+            return response()->json([
+                'message' => 'PayMongo has not confirmed a paid payment yet. You can check again shortly.',
+                'confirmed' => false,
+                'purchase' => $this->purchasePayload($purchase),
+            ], 202);
+        }
+
+        $livemode = data_get($resource, 'attributes.livemode');
+
+        if (! is_bool($livemode) || $livemode !== (bool) $purchase->livemode) {
+            return response()->json([
+                'message' => 'Checkout mode does not match the original order.',
+            ], 422);
+        }
+
+        $recordingResponse = $this->recordPaidCheckout($request, $resource, null, $livemode);
+
+        if (! $recordingResponse->isSuccessful()) {
+            return $recordingResponse;
+        }
+
+        $purchase = $purchase->fresh(['provider.providerProfile', 'creator.providerProfile']);
+
+        return response()->json([
+            'message' => 'Payment confirmed by PayMongo.',
+            'confirmed' => $purchase->status === 'paid',
+            'purchase' => $this->purchasePayload($purchase),
+        ]);
+    }
+
     public function webhook(Request $request): JsonResponse
     {
         $rawPayload = $request->getContent();

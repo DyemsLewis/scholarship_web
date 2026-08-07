@@ -128,6 +128,7 @@ Route::middleware(['auth', 'provider'])
         Route::get('/billing', [BillingController::class, 'providerPage'])->middleware(['permission:manage_billing', 'provider.approved'])->name('billing');
         Route::get('/billing/data', [BillingController::class, 'providerData'])->middleware(['permission:manage_billing', 'provider.approved'])->name('billing.data');
         Route::post('/billing/checkout', [BillingController::class, 'checkout'])->middleware(['permission:manage_billing', 'provider.approved', 'throttle:5,1'])->name('billing.checkout');
+        Route::post('/billing/sync', [BillingController::class, 'syncCheckout'])->middleware(['permission:manage_billing', 'provider.approved', 'throttle:10,1'])->name('billing.sync');
         Route::get('/reports', [SupportReportController::class, 'providerPage'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports');
         Route::get('/reports/data', [SupportReportController::class, 'providerData'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.data');
         Route::patch('/reports/{report}/status', [SupportReportController::class, 'updateStatus'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.status');

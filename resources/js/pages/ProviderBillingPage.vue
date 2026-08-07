@@ -14,6 +14,7 @@ const plans = ref([]);
 const purchases = ref([]);
 const selectedPlan = ref(null);
 const acceptsTerms = ref(false);
+const syncingReference = ref('');
 
 function money(amount, currency = 'PHP') {
     return new Intl.NumberFormat('en-PH', {
@@ -152,6 +153,52 @@ async function loadBilling() {
     }
 }
 
+function clearCheckoutResult() {
+    const url = new URL(window.location.href);
+
+    url.searchParams.delete('checkout');
+    url.searchParams.delete('reference');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+async function syncPayment(reference, { clearResult = false } = {}) {
+    if (!reference || syncingReference.value) {
+        return;
+    }
+
+    syncingReference.value = reference;
+
+    try {
+        const response = await window.axios.post('/provider/billing/sync', {
+            reference,
+        }, {
+            portalToast: false,
+        });
+        const confirmed = Boolean(response.data.confirmed);
+
+        showPortalToast({
+            title: confirmed ? 'Payment confirmed' : 'Confirmation pending',
+            message: response.data.message,
+            duration: confirmed ? 5000 : 6000,
+        });
+    } catch (error) {
+        showPortalToast({
+            type: 'error',
+            title: 'Unable to confirm payment',
+            message: error.response?.data?.message ?? 'PayMongo could not be reached. The order remains pending.',
+            duration: 6000,
+        });
+    } finally {
+        syncingReference.value = '';
+
+        if (clearResult) {
+            clearCheckoutResult();
+        }
+
+        await loadBilling();
+    }
+}
+
 function handleKeydown(event) {
     if (event.key === 'Escape') {
         closePurchase();
@@ -159,24 +206,25 @@ function handleKeydown(event) {
 }
 
 onMounted(() => {
-    const checkoutResult = new URLSearchParams(window.location.search).get('checkout');
+    const searchParams = new URLSearchParams(window.location.search);
+    const checkoutResult = searchParams.get('checkout');
+    const checkoutReference = searchParams.get('reference');
 
-    if (checkoutResult === 'submitted') {
-        showPortalToast({
-            title: 'Payment submitted',
-            message: 'The order will update after PayMongo securely confirms the payment.',
-            duration: 6000,
-        });
+    if (checkoutResult === 'submitted' && checkoutReference) {
+        syncPayment(checkoutReference, { clearResult: true });
     } else if (checkoutResult === 'cancelled') {
         showPortalToast({
             type: 'error',
             title: 'Checkout cancelled',
             message: 'No service will start unless PayMongo confirms a payment.',
         });
+        clearCheckoutResult();
+        loadBilling();
+    } else {
+        loadBilling();
     }
 
     window.addEventListener('keydown', handleKeydown);
-    loadBilling();
 });
 
 onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
@@ -338,10 +386,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                 <div class="sm:text-right">
                                     <p class="text-sm font-black text-slate-950">{{ money(purchase.amount, purchase.currency) }}</p>
                                     <p class="mt-1 whitespace-nowrap text-[11px] text-slate-500">{{ dateTime(purchase.paid_at ?? purchase.created_at) }}</p>
-                                    <a v-if="purchase.checkout_url" :href="purchase.checkout_url" class="mt-2 inline-flex items-center gap-1 text-xs font-bold text-sky-700 hover:underline">
-                                        Continue checkout
-                                        <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
-                                    </a>
+                                    <div v-if="purchase.status === 'pending'" class="mt-2 flex flex-wrap gap-2 sm:justify-end">
+                                        <button
+                                            type="button"
+                                            :disabled="Boolean(syncingReference)"
+                                            class="text-xs font-bold text-slate-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                                            @click="syncPayment(purchase.reference_number)"
+                                        >
+                                            {{ syncingReference === purchase.reference_number ? 'Checking...' : 'Check payment' }}
+                                        </button>
+                                        <a v-if="purchase.checkout_url" :href="purchase.checkout_url" class="inline-flex items-center gap-1 text-xs font-bold text-sky-700 hover:underline">
+                                            Continue checkout
+                                            <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                        </a>
+                                    </div>
                                 </div>
                             </article>
                         </div>
