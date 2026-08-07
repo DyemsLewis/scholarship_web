@@ -84,15 +84,14 @@ onUnmounted(() => {
                             </span>
                             <h3 class="mt-4 font-bold text-slate-950">Preview is unavailable for this file type</h3>
                             <p class="mt-2 max-w-sm text-sm leading-6 text-slate-600">
-                                Open the original file in a compatible application to review it.
+                                Download the original file to review it in a compatible application.
                             </p>
                             <a
                                 :href="proof.view_url"
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                download
                                 class="mt-4 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                             >
-                                Open original
+                                Download original
                             </a>
                         </div>
                     </div>
@@ -123,11 +122,10 @@ onUnmounted(() => {
                         <div class="mt-5 grid gap-2">
                             <a
                                 :href="proof.view_url"
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                download
                                 class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                             >
-                                Open in new tab
+                                Download copy
                             </a>
                             <button
                                 type="button"

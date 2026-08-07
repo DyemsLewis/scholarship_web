@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import FilePreviewModal from '../components/FilePreviewModal.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
 
@@ -18,6 +19,7 @@ const accountAction = ref('');
 const suspensionReason = ref('');
 const supportLink = ref('');
 const verificationDocuments = ref([]);
+const previewDocument = ref(null);
 const applicantVerificationNotes = ref('');
 const {
     confirmation,
@@ -490,6 +492,14 @@ function applicantVerificationDocumentLabel(type) {
     return applicantVerificationDocumentOptions[type] ?? 'Verification proof';
 }
 
+function openDocumentPreview(document) {
+    previewDocument.value = document;
+}
+
+function closeDocumentPreview() {
+    previewDocument.value = null;
+}
+
 onMounted(loadAccount);
 </script>
 
@@ -501,6 +511,13 @@ onMounted(loadAccount);
             v-bind="confirmation"
             @confirm="confirmConfirmation"
             @cancel="cancelConfirmation"
+        />
+
+        <FilePreviewModal
+            :file="previewDocument"
+            :title="applicantVerificationDocumentLabel(previewDocument?.document_type)"
+            :context="account?.name || account?.username || 'Applicant'"
+            @close="closeDocumentPreview"
         />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -1011,14 +1028,13 @@ onMounted(loadAccount);
                                         {{ document.original_name }} - {{ formatFileSize(document.size) }} - {{ document.uploaded_at }}
                                     </p>
                                 </div>
-                                <a
-                                    :href="document.view_url"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                <button
+                                    type="button"
                                     class="w-fit rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                    @click="openDocumentPreview(document)"
                                 >
                                     View proof
-                                </a>
+                                </button>
                             </div>
                         </div>
                         <div v-else class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">

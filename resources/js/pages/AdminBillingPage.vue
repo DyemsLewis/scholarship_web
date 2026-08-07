@@ -245,7 +245,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
     </main>
 
     <div v-if="selectedPurchase" class="fixed inset-0 z-[90] grid place-items-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="service-status-title" @click.self="closeStatusEditor">
-        <section class="w-full max-w-lg rounded-lg bg-white p-6 shadow-2xl">
+        <section class="w-full max-w-lg rounded-lg bg-white p-6 text-slate-900 shadow-2xl [color-scheme:light]">
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">{{ selectedPurchase.reference_number }}</p>
@@ -259,16 +259,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 
             <label class="mt-5 block">
                 <span class="mb-2 block text-sm font-semibold text-slate-700">Service status</span>
-                <select v-model="editStatus" class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
-                    <option value="queued">Queued</option>
-                    <option value="in_progress">In progress</option>
-                    <option value="completed">Completed</option>
+                <select v-model="editStatus" class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
+                    <option class="bg-white text-slate-900" value="queued">Queued</option>
+                    <option class="bg-white text-slate-900" value="in_progress">In progress</option>
+                    <option class="bg-white text-slate-900" value="completed">Completed</option>
                 </select>
             </label>
 
             <label class="mt-4 block">
                 <span class="mb-2 block text-sm font-semibold text-slate-700">Provider note <span class="font-normal text-slate-400">(optional)</span></span>
-                <textarea v-model="editNotes" rows="4" maxlength="2000" class="w-full resize-y rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100" placeholder="Add a short progress or completion note"></textarea>
+                <textarea v-model="editNotes" rows="4" maxlength="2000" class="w-full resize-y rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100" placeholder="Add a short progress or completion note"></textarea>
             </label>
 
             <div class="mt-6 flex justify-end gap-3">

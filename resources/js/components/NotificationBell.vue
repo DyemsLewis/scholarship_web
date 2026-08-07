@@ -29,6 +29,7 @@ const errorMessage = ref('');
 const notifications = ref([]);
 const unreadCount = ref(0);
 const root = ref(null);
+const selectedNotification = ref(null);
 
 const isSidebar = computed(() => props.mode === 'sidebar');
 const isCentered = computed(() => props.centered);
@@ -86,6 +87,10 @@ function closeDropdown() {
     isOpen.value = false;
 }
 
+function closeNotificationModal() {
+    selectedNotification.value = null;
+}
+
 function closeOnOutsideClick(event) {
     if (!isOpen.value || !root.value || root.value.contains(event.target)) {
         return;
@@ -96,6 +101,11 @@ function closeOnOutsideClick(event) {
 
 function closeOnEscape(event) {
     if (event.key === 'Escape') {
+        if (selectedNotification.value) {
+            closeNotificationModal();
+            return;
+        }
+
         closeDropdown();
     }
 }
@@ -177,12 +187,19 @@ async function openNotification(notification) {
         }
     }
 
-    if (notification.action_url) {
-        window.location.href = notification.action_url;
+    closeDropdown();
+    selectedNotification.value = { ...notification };
+}
+
+function proceedToNotification() {
+    const actionUrl = selectedNotification.value?.action_url;
+
+    if (!actionUrl) {
+        closeNotificationModal();
         return;
     }
 
-    closeDropdown();
+    window.location.href = actionUrl;
 }
 
 async function markAllRead() {
@@ -357,6 +374,69 @@ onBeforeUnmount(() => {
                             </p>
                         </button>
                     </div>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div
+                v-if="selectedNotification"
+                class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="notification-detail-title"
+                @click.self="closeNotificationModal"
+            >
+                <section class="w-full max-w-lg overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-2xl">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                <i class="fa-solid fa-bell" aria-hidden="true"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Notification</p>
+                                <h2 id="notification-detail-title" class="mt-1 text-lg font-bold leading-6 text-slate-950">
+                                    {{ selectedNotification.title }}
+                                </h2>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
+                            aria-label="Close notification"
+                            @click="closeNotificationModal"
+                        >
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </header>
+
+                    <div class="px-5 py-5">
+                        <p class="text-sm leading-6 text-slate-700">
+                            {{ selectedNotification.message }}
+                        </p>
+                        <p v-if="selectedNotification.created_at" class="mt-4 text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+                            {{ formatDate(selectedNotification.created_at) }}
+                        </p>
+                    </div>
+
+                    <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+                        <button
+                            type="button"
+                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                            @click="closeNotificationModal"
+                        >
+                            Close
+                        </button>
+                        <button
+                            v-if="selectedNotification.action_url"
+                            type="button"
+                            class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                            @click="proceedToNotification"
+                        >
+                            Proceed
+                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                        </button>
+                    </footer>
                 </section>
             </div>
         </Teleport>

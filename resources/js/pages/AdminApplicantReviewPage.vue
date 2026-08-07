@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import FilePreviewModal from '../components/FilePreviewModal.vue';
 import { formatFileSize } from '../support/display';
 
 const appElement = document.getElementById('app');
@@ -12,6 +13,7 @@ const loadError = ref('');
 const decisionError = ref('');
 const applicant = ref(null);
 const reviewNote = ref('');
+const previewDocument = ref(null);
 
 function statusLabel(status) {
     return String(status ?? 'pending')
@@ -72,6 +74,14 @@ function documentStatusClass(status) {
 
 function documentTypeLabel(type) {
     return statusLabel(type || 'document');
+}
+
+function openDocumentPreview(document) {
+    previewDocument.value = document;
+}
+
+function closeDocumentPreview() {
+    previewDocument.value = null;
 }
 
 function applicantInitials(currentApplicant) {
@@ -176,6 +186,13 @@ onMounted(loadApplicant);
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <AdminSidebar active="reviews" />
+
+        <FilePreviewModal
+            :file="previewDocument"
+            :title="documentTypeLabel(previewDocument?.document_type)"
+            :context="applicant?.name || applicant?.username || 'Applicant'"
+            @close="closeDocumentPreview"
+        />
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
@@ -389,14 +406,13 @@ onMounted(loadApplicant);
                                         <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', documentStatusClass(document.status)]">
                                             {{ statusLabel(document.status || 'submitted') }}
                                         </span>
-                                        <a
-                                            :href="document.view_url"
-                                            target="_blank"
-                                            rel="noopener"
+                                        <button
+                                            type="button"
                                             class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                            @click="openDocumentPreview(document)"
                                         >
                                             View file
-                                        </a>
+                                        </button>
                                     </div>
                                 </div>
                             </div>

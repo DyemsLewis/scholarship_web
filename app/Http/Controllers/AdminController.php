@@ -1507,6 +1507,7 @@ class AdminController extends Controller
             'id' => $document->id,
             'document_type' => $document->document_type,
             'original_name' => $document->original_name,
+            'mime_type' => $document->mime_type,
             'size' => $document->size,
             'status' => $document->status,
             'review_notes' => $document->review_notes,
