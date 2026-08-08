@@ -299,7 +299,7 @@ onMounted(loadProviderProfile);
             <div class="mx-auto max-w-7xl">
                 <header class="provider-hero">
                     <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                        Provider Profile
+                        Organization Profile
                     </p>
                     <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                         Organization and account

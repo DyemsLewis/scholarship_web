@@ -417,6 +417,9 @@ onMounted(loadInsights);
                             <h3 class="mt-2 text-xl font-bold text-slate-950">
                                 Recommendation signals
                             </h3>
+                            <p class="mt-2 text-sm leading-6 text-slate-600">
+                                DSS summarizes how applicant profiles compare with your published program criteria. Use it to prioritize review, not as an automatic approval decision.
+                            </p>
                             <p class="mt-3 text-sm leading-6 text-slate-600">
                                 Average suitability score: <span class="font-bold text-slate-950">{{ dssSummary.average_score || 0 }}%</span>
                             </p>

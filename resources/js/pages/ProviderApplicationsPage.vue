@@ -7,9 +7,33 @@ import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const appElement = document.getElementById('app');
-const initialScholarshipId = appElement?.dataset.scholarshipId ?? new URLSearchParams(window.location.search).get('scholarship_id') ?? '';
+const pageSearchParams = new URLSearchParams(window.location.search);
+const initialScholarshipId = appElement?.dataset.scholarshipId ?? pageSearchParams.get('scholarship_id') ?? '';
 const initialScholarshipTitle = appElement?.dataset.scholarshipTitle ?? '';
-const requestedWorkspaceSection = new URLSearchParams(window.location.search).get('workspace');
+const requestedWorkspaceSection = pageSearchParams.get('workspace');
+const requestedQueueFilter = pageSearchParams.get('filter');
+const queueFilterValues = ['pending_review', 'document_issues', 'active_stages', 'decided', 'all'];
+const pendingReviewStatuses = ['submitted', 'under_review'];
+const activeStageStatuses = [
+    'qualified',
+    'shortlisted',
+    'interview',
+    'exam_qualified',
+    'exam_scheduled',
+    'exam_taken',
+    'exam_passed',
+    'distribution_scheduled',
+];
+const decidedStatuses = [
+    'approved',
+    'awarded',
+    'not_awarded',
+    'disbursed',
+    'renewed',
+    'rejected',
+    'exam_failed',
+    'interview_failed',
+];
 const isLoading = ref(true);
 const errorMessage = ref('');
 const applications = ref([]);
@@ -20,7 +44,7 @@ const selectedScholarshipContext = ref(initialScholarshipId ? {
     id: Number(initialScholarshipId),
     title: initialScholarshipTitle,
 } : null);
-const selectedQueueFilter = ref('all');
+const selectedQueueFilter = ref(queueFilterValues.includes(requestedQueueFilter) ? requestedQueueFilter : 'pending_review');
 const selectedQueueSort = ref('priority');
 const applicationSearch = ref('');
 const applicationPage = ref(1);
@@ -197,7 +221,7 @@ const pendingProgramResults = computed(() => attendanceEvents.value.reduce((coun
 const workspaceTabs = computed(() => [
     {
         key: 'applications',
-        label: 'Applications',
+        label: 'Applicants',
         meta: pendingReviewCount.value > 0 ? `${pendingReviewCount.value} to review` : `${applications.value.length} total`,
         attention: pendingReviewCount.value > 0,
     },
@@ -275,19 +299,18 @@ const exportApplicationsUrl = computed(() => {
 
     return `/provider/export/applications?scholarship_id=${encodeURIComponent(selectedScholarshipId.value)}`;
 });
-const pageKicker = computed(() => (hasProgramContext.value ? 'Program Workspace' : 'Application Review'));
+const pageKicker = computed(() => (hasProgramContext.value ? 'Program Workspace' : 'Applicant Workspace'));
 const pageTitle = computed(() => (hasProgramContext.value
     ? selectedScholarshipContext.value?.title || 'Scholarship program'
-    : 'Application review queue'));
+    : 'Applicants'));
 const pageDescription = computed(() => (hasProgramContext.value
     ? 'Review applicants, publish shared activities, and record results from one focused workspace.'
-    : 'Review submitted applications, document status, and DSS guidance for your programs.'));
+    : 'Review applicant records, resolve document issues, and manage selection stages in one place.'));
 const reviewFilterOptions = computed(() => [
-    { value: 'all', label: 'All', count: applications.value.length },
     {
         value: 'pending_review',
-        label: 'Pending review',
-        count: applications.value.filter((application) => ['submitted', 'under_review'].includes(application.status ?? 'submitted')).length,
+        label: 'Needs review',
+        count: applications.value.filter((application) => pendingReviewStatuses.includes(application.status ?? 'submitted')).length,
     },
     {
         value: 'document_issues',
@@ -295,11 +318,24 @@ const reviewFilterOptions = computed(() => [
         count: applications.value.filter((application) => documentIssueCount(application) > 0 || Number(application.document_readiness?.percent ?? 0) < 100).length,
     },
     {
-        value: 'strong_candidates',
-        label: 'Strong candidates',
-        count: applications.value.filter((application) => Number(application.dss_score ?? 0) >= 80 || Number(application.eligibility_score ?? 0) >= 80).length,
+        value: 'active_stages',
+        label: 'Active stages',
+        count: applications.value.filter((application) => activeStageStatuses.includes(application.status)).length,
     },
+    {
+        value: 'decided',
+        label: 'Decisions',
+        count: applications.value.filter((application) => decidedStatuses.includes(application.status)).length,
+    },
+    { value: 'all', label: 'All applicants', count: applications.value.length },
 ]);
+const emptyQueueMessage = computed(() => ({
+    pending_review: 'No applicants currently need an initial review.',
+    document_issues: 'No applicants currently have missing or unresolved document issues.',
+    active_stages: 'No applicants are currently in an exam, interview, or distribution stage.',
+    decided: 'No applicant decisions have been recorded yet.',
+    all: 'No applicants match this search.',
+}[selectedQueueFilter.value]));
 const rankedApplications = computed(() => {
     const query = applicationSearch.value.trim().toLowerCase();
     const filteredApplications = applications.value.filter((application) => {
@@ -314,15 +350,19 @@ const rankedApplications = computed(() => {
         }
 
         if (selectedQueueFilter.value === 'pending_review') {
-            return ['submitted', 'under_review'].includes(application.status ?? 'submitted');
+            return pendingReviewStatuses.includes(application.status ?? 'submitted');
         }
 
         if (selectedQueueFilter.value === 'document_issues') {
             return documentIssueCount(application) > 0 || Number(application.document_readiness?.percent ?? 0) < 100;
         }
 
-        if (selectedQueueFilter.value === 'strong_candidates') {
-            return Number(application.dss_score ?? 0) >= 80 || Number(application.eligibility_score ?? 0) >= 80;
+        if (selectedQueueFilter.value === 'active_stages') {
+            return activeStageStatuses.includes(application.status);
+        }
+
+        if (selectedQueueFilter.value === 'decided') {
+            return decidedStatuses.includes(application.status);
         }
 
         return true;
@@ -853,6 +893,13 @@ watch([selectedQueueFilter, selectedQueueSort, applicationSearch], () => {
     applicationPage.value = 1;
 });
 
+watch(selectedQueueFilter, (filter) => {
+    const url = new URL(window.location.href);
+
+    url.searchParams.set('filter', filter);
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+});
+
 watch(bulkAdvanceTarget, () => {
     selectedBulkApplicationIds.value = [];
     bulkAdvanceError.value = '';
@@ -925,7 +972,7 @@ onMounted(loadProviderData);
                 </header>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
-                    Loading application review page...
+                    Loading applicants...
                 </div>
 
                 <div v-else-if="errorMessage" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
@@ -1325,13 +1372,13 @@ onMounted(loadProviderData);
                     <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                Review Queue
+                                Applicant Queue
                             </p>
                             <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                {{ hasProgramContext ? 'Submitted applicants' : 'Submitted applications' }}
+                                {{ hasProgramContext ? 'Program applicants' : 'All applicants' }}
                             </h3>
                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                Review applicant details, document readiness, and decision-support guidance before recording a decision.
+                                Choose a work tab, check the applicant record, then open the full review when action is needed.
                             </p>
 
                             <div class="mt-4 flex flex-wrap gap-2">
@@ -1372,7 +1419,7 @@ onMounted(loadProviderData);
                                     >
                                         <option value="priority">Priority first</option>
                                         <option value="oldest">Oldest first</option>
-                                        <option value="dss">Highest DSS</option>
+                                        <option value="dss">Highest suitability</option>
                                         <option value="documents">Document issues</option>
                                     </select>
                                 </label>
@@ -1380,7 +1427,7 @@ onMounted(loadProviderData);
                                     :href="exportApplicationsUrl"
                                     class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                                 >
-                                    Export CSV
+                                    Export applicants
                                 </a>
                             </div>
                         </div>
@@ -1414,11 +1461,11 @@ onMounted(loadProviderData);
                         </div>
 
                         <div v-if="applications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
-                            <p class="text-sm font-bold text-slate-900">No applications to review yet</p>
+                            <p class="text-sm font-bold text-slate-900">No applicants yet</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
                                 {{ hasProgramContext
                                     ? 'Applicants for this program will appear here after eligible students submit the application wizard.'
-                                    : 'Applications will appear after an approved scholarship is published and an eligible applicant submits the application wizard.' }}
+                                    : 'Applicants will appear after a published scholarship receives a completed application.' }}
                             </p>
                             <div class="mt-4 flex flex-wrap gap-2">
                                 <a href="/provider/programs" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">Check programs</a>
@@ -1427,7 +1474,7 @@ onMounted(loadProviderData);
                         </div>
 
                         <div v-else-if="rankedApplications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                            No applications match this review filter.
+                            {{ emptyQueueMessage }}
                         </div>
 
                         <div v-else class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
@@ -1592,6 +1639,9 @@ onMounted(loadProviderData);
                                         {{ statusLabel(selectedApplicationPreview.dss_recommendation || 'needs_review') }}
                                     </span>
                                 </div>
+                                <p class="mt-2 text-[11px] leading-4 text-slate-500">
+                                    Compares the applicant profile with this program's criteria. It guides review but does not decide approval.
+                                </p>
                             </article>
 
                             <article class="rounded-md border border-slate-200 bg-white p-3">

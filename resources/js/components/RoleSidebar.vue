@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue';
 import ConfirmationDialog from './ConfirmationDialog.vue';
 import EmailVerificationReminder from './EmailVerificationReminder.vue';
 import NotificationBell from './NotificationBell.vue';
@@ -36,6 +37,19 @@ const props = defineProps({
 });
 
 const currentPath = window.location.pathname.replace(/\/$/, '') || props.homeHref;
+const navGroups = computed(() => props.navLinks.reduce((groups, link) => {
+    const label = link.section ?? '';
+    let group = groups.find((item) => item.label === label);
+
+    if (!group) {
+        group = { label, links: [] };
+        groups.push(group);
+    }
+
+    group.links.push(link);
+
+    return groups;
+}, []));
 const {
     confirmation,
     requestConfirmation,
@@ -91,27 +105,34 @@ async function requestLogout() {
                 </div>
             </a>
 
-            <nav class="mt-8 grid gap-1.5 lg:overflow-y-auto">
-                <a
-                    v-for="link in navLinks"
-                    :key="link.href"
-                    :href="link.href"
-                    :class="[
-                        'group relative rounded-md px-3 py-2.5 text-sm font-bold transition',
-                        isActive(link)
-                            ? 'bg-white text-slate-950'
-                            : 'text-slate-400 hover:bg-white/5 hover:text-white',
-                    ]"
-                >
-                    <span
-                        v-if="isActive(link)"
-                        class="absolute inset-y-2 left-0 w-1 rounded-r-full bg-amber-500"
-                    ></span>
-                    <span class="flex items-center gap-2 pl-2">
-                        <i :class="[link.icon, 'w-4 text-center text-xs']"></i>
-                        {{ link.label }}
-                    </span>
-                </a>
+            <nav class="mt-8 grid gap-5 lg:overflow-y-auto" aria-label="Portal navigation">
+                <section v-for="group in navGroups" :key="group.label || 'main'">
+                    <p v-if="group.label" class="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">
+                        {{ group.label }}
+                    </p>
+                    <div class="grid gap-1.5">
+                        <a
+                            v-for="link in group.links"
+                            :key="link.href"
+                            :href="link.href"
+                            :class="[
+                                'group relative rounded-md px-3 py-2.5 text-sm font-bold transition',
+                                isActive(link)
+                                    ? 'bg-white text-slate-950'
+                                    : 'text-slate-400 hover:bg-white/5 hover:text-white',
+                            ]"
+                        >
+                            <span
+                                v-if="isActive(link)"
+                                class="absolute inset-y-2 left-0 w-1 rounded-r-full bg-amber-500"
+                            ></span>
+                            <span class="flex items-center gap-2 pl-2">
+                                <i :class="[link.icon, 'w-4 text-center text-xs']"></i>
+                                {{ link.label }}
+                            </span>
+                        </a>
+                    </div>
+                </section>
             </nav>
 
             <div class="mt-6">

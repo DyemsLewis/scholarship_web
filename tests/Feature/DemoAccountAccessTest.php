@@ -74,7 +74,7 @@ class DemoAccountAccessTest extends TestCase
             $this->get('/provider/programs')->assertOk();
             $this->get('/provider/programs/create')->assertOk();
             $this->get('/provider/applications')->assertOk();
-            $this->get('/provider/review')->assertOk();
+            $this->get('/provider/review')->assertRedirect('/provider/applications?filter=pending_review');
             $this->get('/provider/profile')->assertOk();
             $this->getJson('/provider/dashboard/data')
                 ->assertOk()

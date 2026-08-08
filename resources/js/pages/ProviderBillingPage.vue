@@ -239,7 +239,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Provider Services</p>
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Optional Services</p>
                             <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Support when your team needs it</h1>
                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                                 Core portal tools remain free. Choose optional one-time help only when {{ organization?.name ?? 'your organization' }} needs extra support.
@@ -260,7 +260,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                 </div>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
-                    Loading provider services...
+                    Loading optional services...
                 </div>
 
                 <template v-else>

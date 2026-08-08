@@ -1220,6 +1220,9 @@ onMounted(loadApplication);
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Decision Support
                                 </p>
+                                <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                                    DSS compares the applicant's profile with the program's published criteria to highlight fit and items to check. It supports your review; it never approves or rejects an applicant.
+                                </p>
                                 <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <h3 class="text-xl font-bold text-slate-950">

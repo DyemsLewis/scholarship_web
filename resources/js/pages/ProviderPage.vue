@@ -193,13 +193,13 @@ onMounted(loadProviderData);
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Provider Dashboard
+                                Provider Overview
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Program workspace
+                                Your workspace
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Manage scholarship programs and applicant reviews from one focused view.
+                                Continue the work that needs attention across your programs and applicants.
                             </p>
                         </div>
 
@@ -275,14 +275,14 @@ onMounted(loadProviderData);
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Application Review
+                                    Applicants
                                 </p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Applications needing attention
+                                    Applicants needing attention
                                 </h3>
                             </div>
                             <a href="/provider/applications" class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800">
-                                View review queue
+                                Open applicants
                             </a>
                         </div>
 

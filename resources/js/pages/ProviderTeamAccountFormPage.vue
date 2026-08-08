@@ -12,8 +12,8 @@ const formElement = ref(null);
 
 const allPermissions = [
     { value: 'manage_programs', label: 'Manage programs', description: 'Create, edit, duplicate, and submit scholarship programs.' },
-    { value: 'review_applications', label: 'Review applications', description: 'Open applicant records, review files, and record decisions.' },
-    { value: 'manage_reports', label: 'Manage reports', description: 'Review and resolve applicant concerns about your programs.' },
+    { value: 'review_applications', label: 'Review applicants', description: 'Open applicant records, review files, and record decisions.' },
+    { value: 'manage_reports', label: 'Manage reported issues', description: 'Review and resolve applicant concerns about your programs.' },
     { value: 'manage_profile', label: 'Manage organization profile', description: 'Update provider details and verification documents.' },
     { value: 'manage_team', label: 'Manage team accounts', description: 'Create and maintain other provider staff accounts.' },
     { value: 'manage_billing', label: 'Manage optional services', description: 'Start provider service payments and review order status.' },

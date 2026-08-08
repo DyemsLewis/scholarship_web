@@ -25,11 +25,11 @@ const pagination = ref({
 
 const pageCopy = computed(() => ({
     eyebrow: isAdmin ? 'Platform Support' : 'Program Support',
-    title: isAdmin ? 'Applicant reports' : 'Program concerns',
+    title: isAdmin ? 'Applicant reports' : 'Reported issues',
     description: isAdmin
         ? 'Review concerns submitted by applicants and coordinate program reports with providers.'
         : 'Handle applicant concerns connected to programs managed by your organization.',
-    queueEyebrow: isAdmin ? 'Report Review Queue' : 'Program Report Queue',
+    queueEyebrow: isAdmin ? 'Report Review Queue' : 'Issue Queue',
     queueTitle: isAdmin ? 'Review applicant concerns' : 'Respond to program concerns',
     queueDescription: isAdmin
         ? 'Open a report to review its details and record the platform support response.'

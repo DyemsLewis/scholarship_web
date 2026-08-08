@@ -1,4 +1,4 @@
 @extends('layouts.app')
 
-@section('title', 'Provider Services')
+@section('title', 'Provider Optional Services')
 @section('page', 'providerBilling')

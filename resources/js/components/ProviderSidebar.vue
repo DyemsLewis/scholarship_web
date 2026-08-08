@@ -3,14 +3,13 @@ import { computed } from 'vue';
 import RoleSidebar from './RoleSidebar.vue';
 
 const navLinks = [
-    { href: '/provider', label: 'Dashboard', icon: 'fa-solid fa-gauge-high', exact: true },
-    { href: '/provider/programs', label: 'Programs', icon: 'fa-solid fa-graduation-cap' },
-    { href: '/provider/applications', label: 'Applications', icon: 'fa-solid fa-file-circle-check', permission: 'review_applications' },
-    { href: '/provider/review', label: 'Review', icon: 'fa-solid fa-clipboard-list', permission: 'review_applications' },
-    { href: '/provider/reports', label: 'Reports', icon: 'fa-solid fa-circle-exclamation', permission: 'manage_reports' },
-    { href: '/provider/team', label: 'Team', icon: 'fa-solid fa-user-group', permission: 'manage_team' },
-    { href: '/provider/billing', label: 'Services', icon: 'fa-solid fa-receipt', permission: 'manage_billing' },
-    { href: '/provider/profile', label: 'Profile', icon: 'fa-solid fa-building-user' },
+    { section: 'Workspace', href: '/provider', label: 'Dashboard', icon: 'fa-solid fa-gauge-high', exact: true },
+    { section: 'Workspace', href: '/provider/programs', label: 'Programs', icon: 'fa-solid fa-graduation-cap' },
+    { section: 'Workspace', href: '/provider/applications', label: 'Applicants', icon: 'fa-solid fa-user-check', permission: 'review_applications' },
+    { section: 'Workspace', href: '/provider/reports', label: 'Reported Issues', icon: 'fa-solid fa-circle-exclamation', permission: 'manage_reports' },
+    { section: 'Organization', href: '/provider/profile', label: 'Organization Profile', icon: 'fa-solid fa-building-user' },
+    { section: 'Organization', href: '/provider/team', label: 'Team & Access', icon: 'fa-solid fa-user-group', permission: 'manage_team' },
+    { section: 'Organization', href: '/provider/billing', label: 'Optional Services', icon: 'fa-solid fa-receipt', permission: 'manage_billing' },
 ];
 
 const visibleNavLinks = computed(() => navLinks.filter((link) => (

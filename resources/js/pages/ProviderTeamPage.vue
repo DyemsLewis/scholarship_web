@@ -20,7 +20,7 @@ const {
 const permissionLabels = {
     manage_programs: 'Programs',
     review_applications: 'Applications',
-    manage_reports: 'Reports',
+    manage_reports: 'Reported issues',
     manage_profile: 'Organization profile',
     manage_team: 'Team accounts',
     manage_billing: 'Optional services',
@@ -95,7 +95,7 @@ onMounted(loadTeam);
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Provider Team</p>
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Team & Access</p>
                             <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Accounts and access</h1>
                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                                 Give each staff member only the portal access needed for their work at {{ organization?.name ?? 'your organization' }}.

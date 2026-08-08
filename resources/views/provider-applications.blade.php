@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Provider Applications')
+@section('title', 'Provider Applicants')
 @section('page', 'providerApplications')
 @section('appAttributes')
     @isset($scholarship)
