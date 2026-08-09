@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { labelFromKey } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
@@ -733,6 +734,8 @@ watch(selectedScholarship, (scholarship) => {
                     secondary-href="/dashboard/documents"
                     secondary-label="Prepare documents"
                 />
+
+                <PrivacyNoticeCard context="applications" />
 
                 <nav class="student-card mt-5 grid gap-1.5 p-1.5 sm:grid-cols-2" aria-label="Application workspace">
                     <button

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import { formatFileSize } from '../support/display';
@@ -12,6 +12,24 @@ const loadError = ref('');
 const decisionError = ref('');
 const provider = ref(null);
 const reviewNote = ref('');
+const requestedSection = new URLSearchParams(window.location.search).get('section');
+const reviewSections = [
+    { key: 'organization', label: 'Organization' },
+    { key: 'proof', label: 'Proof files' },
+    { key: 'decision', label: 'Decision' },
+];
+const activeReviewSection = ref(reviewSections.some((section) => section.key === requestedSection) ? requestedSection : 'organization');
+const activeReviewSectionIndex = computed(() => reviewSections.findIndex((section) => section.key === activeReviewSection.value));
+const previousReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value - 1] ?? null);
+const nextReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value + 1] ?? null);
+
+function selectReviewSection(section) {
+    activeReviewSection.value = section;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('section', section);
+    window.history.replaceState(window.history.state, '', url);
+}
 
 function statusLabel(status) {
     return String(status ?? 'pending')
@@ -171,17 +189,25 @@ onMounted(loadProvider);
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <a
-                                href="/admin/reviews"
+                                href="/admin/reviews?type=providers"
                                 class="inline-flex items-center rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                             >
                                 Back to reviews
                             </a>
                             <button
                                 type="button"
-                                class="w-fit rounded-md bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-200"
+                                class="w-fit rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                                 @click="loadProvider"
                             >
-                                Refresh details
+                                Refresh
+                            </button>
+                            <button
+                                v-if="activeReviewSection !== 'decision'"
+                                type="button"
+                                class="w-fit rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                @click="selectReviewSection('decision')"
+                            >
+                                Record decision
                             </button>
                         </div>
                     </div>
@@ -196,9 +222,37 @@ onMounted(loadProvider);
                     <p class="mt-1 text-sm leading-6 text-rose-700">{{ loadError }}</p>
                 </div>
 
-                <div v-else class="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
-                    <div class="space-y-5">
-                        <article class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div v-else class="mt-6 space-y-5">
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <nav class="grid gap-1 p-2 sm:grid-cols-3" aria-label="Provider verification steps">
+                            <button
+                                v-for="(section, index) in reviewSections"
+                                :key="section.key"
+                                type="button"
+                                :aria-current="activeReviewSection === section.key ? 'step' : undefined"
+                                :class="[
+                                    'flex items-center gap-3 rounded-md px-3 py-3 text-left transition',
+                                    activeReviewSection === section.key
+                                        ? 'bg-slate-950 text-white'
+                                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                                ]"
+                                @click="selectReviewSection(section.key)"
+                            >
+                                <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold', activeReviewSection === section.key ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">{{ index + 1 }}</span>
+                                <span class="min-w-0">
+                                    <span class="block text-sm font-bold">{{ section.label }}</span>
+                                    <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
+                                        <template v-if="section.key === 'organization'">Identity and contact</template>
+                                        <template v-else-if="section.key === 'proof'">{{ provider.verification_documents?.length || 0 }} files</template>
+                                        <template v-else>{{ statusLabel(provider.verification_status) }}</template>
+                                    </span>
+                                </span>
+                            </button>
+                        </nav>
+                    </section>
+
+                    <div v-if="activeReviewSection !== 'decision'" class="space-y-5">
+                        <article v-if="activeReviewSection === 'organization'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                             <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                                 <div class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
                                     {{ providerInitials(provider) }}
@@ -233,7 +287,7 @@ onMounted(loadProvider);
                             </dl>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article v-if="activeReviewSection === 'organization'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div>
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Organization information</p>
                                 <h3 class="mt-1 text-xl font-bold text-slate-950">Provider record</h3>
@@ -283,7 +337,7 @@ onMounted(loadProvider);
                             </dl>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article v-if="activeReviewSection === 'proof'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Verification proof</p>
@@ -330,7 +384,7 @@ onMounted(loadProvider);
                         </article>
                     </div>
 
-                    <aside class="h-fit rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-8">
+                    <aside v-if="activeReviewSection === 'decision'" class="max-w-3xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>
@@ -387,6 +441,27 @@ onMounted(loadProvider);
                             </button>
                         </div>
                     </aside>
+
+                    <nav class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm" aria-label="Provider review navigation">
+                        <button
+                            type="button"
+                            :disabled="!previousReviewSection"
+                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:invisible"
+                            @click="previousReviewSection && selectReviewSection(previousReviewSection.key)"
+                        >
+                            Previous
+                        </button>
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Step {{ activeReviewSectionIndex + 1 }} of {{ reviewSections.length }}</p>
+                        <button
+                            v-if="nextReviewSection"
+                            type="button"
+                            class="rounded-md bg-slate-950 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800"
+                            @click="selectReviewSection(nextReviewSection.key)"
+                        >
+                            Next: {{ nextReviewSection.label }}
+                        </button>
+                        <a v-else href="/admin/reviews?type=providers" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Back to queue</a>
+                    </nav>
                 </div>
 
                 <AdminFooter />

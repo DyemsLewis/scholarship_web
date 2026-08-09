@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import ApplicantProfileProofModal from '../components/ApplicantProfileProofModal.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
@@ -19,9 +19,11 @@ const documentUpdatingId = ref(null);
 const errorMessage = ref('');
 const application = ref(null);
 const requestedSection = new URLSearchParams(window.location.search).get('section');
-const activeSection = ref(['review', 'schedule', 'documents', 'applicant', 'history'].includes(requestedSection)
-    ? requestedSection
-    : 'review');
+const normalizedRequestedSection = requestedSection === 'review' ? 'eligibility' : requestedSection;
+const validSections = ['applicant', 'eligibility', 'documents', 'decision', 'schedule', 'history'];
+const activeSection = ref(validSections.includes(normalizedRequestedSection)
+    ? normalizedRequestedSection
+    : 'applicant');
 const showRubricDetails = ref(false);
 const showDssDetails = ref(false);
 const reviewForm = ref(emptyReviewForm());
@@ -37,12 +39,15 @@ const {
     cancelConfirmation,
 } = useConfirmationDialog();
 
-const detailSections = [
-    { key: 'review', label: 'Review' },
-    { key: 'documents', label: 'Documents' },
-    { key: 'applicant', label: 'Applicant' },
-    { key: 'schedule', label: 'Schedule' },
-    { key: 'history', label: 'History' },
+const primaryDetailSections = [
+    { key: 'applicant', label: 'Applicant', icon: 'fa-solid fa-user' },
+    { key: 'eligibility', label: 'Eligibility', icon: 'fa-solid fa-scale-balanced' },
+    { key: 'documents', label: 'Documents', icon: 'fa-solid fa-file-circle-check' },
+    { key: 'decision', label: 'Decision', icon: 'fa-solid fa-gavel' },
+];
+const secondaryDetailSections = [
+    { key: 'schedule', label: 'Schedule', icon: 'fa-regular fa-calendar' },
+    { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
 ];
 const scheduleTypeCatalog = [
     { value: 'screening', label: 'Screening', icon: 'fa-solid fa-list-check' },
@@ -107,6 +112,7 @@ const customStatusLabels = {
     failed_interview: 'Failed interview',
 };
 
+const eligibilityCriteria = computed(() => application.value?.eligibility_breakdown?.criteria ?? []);
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
 const rubricReview = computed(() => application.value?.rubric_review ?? { criteria: [], completed: 0, total_criteria: 0 });
 const rubricDraftSummary = computed(() => {
@@ -204,6 +210,15 @@ const hasGuardianDetails = computed(() => {
     );
 });
 const usesDetailSidebar = computed(() => activeSection.value === 'history');
+const activePrimarySectionIndex = computed(() => primaryDetailSections.findIndex((section) => section.key === activeSection.value));
+const previousPrimarySection = computed(() => (
+    activePrimarySectionIndex.value > 0 ? primaryDetailSections[activePrimarySectionIndex.value - 1] : null
+));
+const nextPrimarySection = computed(() => (
+    activePrimarySectionIndex.value >= 0 && activePrimarySectionIndex.value < primaryDetailSections.length - 1
+        ? primaryDetailSections[activePrimarySectionIndex.value + 1]
+        : null
+));
 const selectionStages = computed(() => application.value?.scholarship?.selection_stages ?? ['screening', 'distribution']);
 const nextApprovalStatus = computed(() => {
     const currentStatus = application.value?.status;
@@ -465,6 +480,66 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function eligibilityStatusClass(status) {
+    if (status === 'pass') {
+        return 'bg-emerald-100 text-emerald-800';
+    }
+
+    if (status === 'fail') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (status === 'missing') {
+        return 'bg-amber-100 text-amber-800';
+    }
+
+    return 'bg-slate-100 text-slate-700';
+}
+
+function eligibilityStatusIcon(status) {
+    return {
+        pass: 'fa-solid fa-circle-check',
+        fail: 'fa-solid fa-circle-xmark',
+        missing: 'fa-solid fa-circle-exclamation',
+        info: 'fa-solid fa-circle-info',
+    }[status] ?? 'fa-solid fa-circle-info';
+}
+
+function eligibilityStatusTextClass(status) {
+    return {
+        pass: 'text-emerald-700',
+        fail: 'text-rose-700',
+        missing: 'text-amber-700',
+        info: 'text-slate-500',
+    }[status] ?? 'text-slate-500';
+}
+
+function sectionSummary(sectionKey) {
+    if (sectionKey === 'applicant') {
+        return profileVerificationLabel(application.value?.applicant?.profile_verification_status);
+    }
+
+    if (sectionKey === 'eligibility') {
+        return `${application.value?.eligibility_breakdown?.score ?? application.value?.dss_score ?? 0}% match`;
+    }
+
+    if (sectionKey === 'documents') {
+        const readiness = application.value?.document_readiness;
+
+        return `${readiness?.accepted ?? 0}/${readiness?.required ?? applicationRequirements.value.length} accepted`;
+    }
+
+    if (sectionKey === 'decision') {
+        return statusLabel(application.value?.status);
+    }
+
+    if (sectionKey === 'schedule') {
+        return `${schedules.value.length} ${schedules.value.length === 1 ? 'item' : 'items'}`;
+    }
+
+    return `${timeline.value.length} ${timeline.value.length === 1 ? 'event' : 'events'}`;
+}
+
 function scheduleStatusClass(status) {
     if (status === 'completed') {
         return 'bg-emerald-100 text-emerald-800';
@@ -616,7 +691,7 @@ function closeProfileProof() {
 
 function selectReviewAction(action) {
     if (action.blocked) {
-        activeSection.value = action.blockedSection || 'review';
+        activeSection.value = action.blockedSection || 'decision';
         errorMessage.value = action.blockedMessage || 'Complete the required review steps before continuing.';
 
         return;
@@ -703,7 +778,7 @@ async function updateStatus() {
     }
 
     if (selectedReviewAction.value?.blocked) {
-        activeSection.value = selectedReviewAction.value.blockedSection || 'review';
+        activeSection.value = selectedReviewAction.value.blockedSection || 'decision';
         errorMessage.value = selectedReviewAction.value.blockedMessage || 'Complete the required review steps before continuing.';
         return;
     }
@@ -792,6 +867,12 @@ async function updateDocumentStatus(review) {
     }
 }
 
+watch(activeSection, (section) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('section', section);
+    window.history.replaceState(window.history.state, '', url);
+});
+
 onMounted(loadApplication);
 </script>
 
@@ -811,10 +892,10 @@ onMounted(loadApplication);
                     <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <div class="max-w-3xl">
                             <a href="/provider/applications" class="inline-flex w-fit rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-                                Back to applications
+                                Back to applicants
                             </a>
                             <p class="mt-4 text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Application Details
+                                Applicant Review
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
                                 {{ application?.applicant?.name || 'Applicant record' }}
@@ -828,14 +909,25 @@ onMounted(loadApplication);
                                 <span>Submitted {{ application.submitted_at || 'recently' }}</span>
                             </div>
                         </div>
-                        <span v-if="application" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(application.status)]">
-                            {{ statusLabel(application.status) }}
-                        </span>
+                        <div v-if="application" class="flex flex-wrap items-center gap-2">
+                            <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(application.status)]">
+                                {{ statusLabel(application.status) }}
+                            </span>
+                            <button
+                                v-if="activeSection !== 'decision'"
+                                type="button"
+                                class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                @click="activeSection = 'decision'"
+                            >
+                                Record decision
+                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </div>
                 </header>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
-                    Loading application details...
+                    Loading applicant review...
                 </div>
 
                 <div v-else-if="errorMessage && !application" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700 shadow-sm">
@@ -846,49 +938,67 @@ onMounted(loadApplication);
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
-                    <nav class="flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Application detail sections">
-                        <button
-                            v-for="section in detailSections"
-                            :key="section.key"
-                            type="button"
-                            :aria-current="activeSection === section.key ? 'page' : undefined"
-                            :class="[
-                                'inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition',
-                                activeSection === section.key
-                                    ? 'bg-slate-900 text-white'
-                                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
-                            ]"
-                            @click="activeSection = section.key"
-                        >
-                            {{ section.label }}
-                            <span
-                                v-if="section.key === 'documents'"
-                                :class="activeSection === section.key ? 'text-slate-300' : 'text-slate-400'"
-                                class="text-xs"
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="border-b border-slate-200 px-4 py-3">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Review steps</p>
+                        </div>
+                        <nav class="grid gap-1 p-1.5 sm:grid-cols-2 xl:grid-cols-4" aria-label="Applicant review steps">
+                            <button
+                                v-for="(section, index) in primaryDetailSections"
+                                :key="section.key"
+                                type="button"
+                                :aria-current="activeSection === section.key ? 'step' : undefined"
+                                :class="[
+                                    'flex min-w-0 items-center gap-3 rounded-md px-3 py-3 text-left transition',
+                                    activeSection === section.key
+                                        ? 'bg-slate-950 text-white'
+                                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                                ]"
+                                @click="activeSection = section.key"
                             >
-                                {{ application.document_readiness?.uploaded ?? 0 }}/{{ application.document_readiness?.required ?? applicationRequirements.length }}
-                            </span>
-                            <span
-                                v-else-if="section.key === 'schedule'"
-                                :class="activeSection === section.key ? 'text-slate-300' : 'text-slate-400'"
-                                class="text-xs"
+                                <span
+                                    :class="[
+                                        'grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold',
+                                        activeSection === section.key ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-600',
+                                    ]"
+                                >
+                                    {{ index + 1 }}
+                                </span>
+                                <span class="min-w-0">
+                                    <span class="block truncate text-sm font-bold">{{ section.label }}</span>
+                                    <span :class="['mt-0.5 block truncate text-xs', activeSection === section.key ? 'text-slate-300' : 'text-slate-500']">
+                                        {{ sectionSummary(section.key) }}
+                                    </span>
+                                </span>
+                            </button>
+                        </nav>
+
+                        <nav class="flex flex-wrap items-center gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2" aria-label="Applicant follow-up sections">
+                            <span class="mr-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Follow-up</span>
+                            <button
+                                v-for="section in secondaryDetailSections"
+                                :key="section.key"
+                                type="button"
+                                :aria-current="activeSection === section.key ? 'page' : undefined"
+                                :class="[
+                                    'inline-flex items-center gap-2 rounded-md px-3 py-2 text-xs font-bold transition',
+                                    activeSection === section.key
+                                        ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
+                                        : 'text-slate-600 hover:bg-white hover:text-slate-950',
+                                ]"
+                                @click="activeSection = section.key"
                             >
-                                {{ schedules.length }}
-                            </span>
-                            <span
-                                v-else-if="section.key === 'history'"
-                                :class="activeSection === section.key ? 'text-slate-300' : 'text-slate-400'"
-                                class="text-xs"
-                            >
-                                {{ timeline.length }}
-                            </span>
-                            <span
-                                v-if="section.key === 'schedule' && programWorkspaceAction"
-                                class="h-2 w-2 rounded-full bg-amber-400"
-                                aria-label="Program action needed"
-                            ></span>
-                        </button>
-                    </nav>
+                                <i :class="section.icon" aria-hidden="true"></i>
+                                {{ section.label }}
+                                <span class="font-semibold text-slate-400">{{ sectionSummary(section.key) }}</span>
+                                <span
+                                    v-if="section.key === 'schedule' && programWorkspaceAction"
+                                    class="h-2 w-2 rounded-full bg-amber-400"
+                                    aria-label="Program action needed"
+                                ></span>
+                            </button>
+                        </nav>
+                    </section>
 
                     <section
                         v-if="programWorkspaceAction"
@@ -915,64 +1025,49 @@ onMounted(loadApplication);
 
                     <div :class="usesDetailSidebar ? 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]' : 'block'">
                         <div v-if="activeSection !== 'applicant'" class="flex flex-col gap-5">
-                            <section v-if="activeSection === 'review'" class="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="border-b border-slate-200 px-5 py-4">
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Review overview</p>
-                                    <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                                        <div>
-                                            <h3 class="text-xl font-bold text-slate-950">Check the application before deciding</h3>
-                                            <p class="mt-1 text-sm leading-6 text-slate-600">Use these four review areas as a guide. The provider still makes the final decision.</p>
-                                        </div>
-                                        <span :class="['w-fit rounded-md px-2.5 py-1.5 text-xs font-bold uppercase', statusClass(application.status)]">
-                                            {{ statusLabel(application.status) }}
-                                        </span>
+                            <section v-if="activeSection === 'eligibility'" class="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Eligibility check</p>
+                                        <h3 class="mt-2 text-xl font-bold text-slate-950">Published criteria comparison</h3>
+                                        <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                                            Compare the applicant profile with the program rules. Confirm important details against the submitted proof before deciding.
+                                        </p>
+                                    </div>
+                                    <div class="shrink-0 sm:text-right">
+                                        <p class="text-2xl font-bold text-slate-950">{{ application.eligibility_breakdown?.score ?? 0 }}%</p>
+                                        <p class="text-xs font-bold text-slate-500">{{ application.eligibility_breakdown?.label || 'Needs review' }}</p>
                                     </div>
                                 </div>
 
-                                <div class="grid sm:grid-cols-2 xl:grid-cols-4">
-                                    <div class="border-b border-slate-200 p-4 sm:border-r xl:border-b-0">
-                                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                                            <i class="fa-solid fa-scale-balanced text-amber-700" aria-hidden="true"></i>
-                                            Eligibility signal
+                                <div v-if="eligibilityCriteria.length" class="grid gap-px bg-slate-200 md:grid-cols-2">
+                                    <article v-for="criterion in eligibilityCriteria" :key="criterion.key" class="bg-white p-4">
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div class="flex min-w-0 items-center gap-2">
+                                                <i :class="[eligibilityStatusIcon(criterion.status), eligibilityStatusTextClass(criterion.status)]" aria-hidden="true"></i>
+                                                <p class="font-bold text-slate-950">{{ criterion.label }}</p>
+                                            </div>
+                                            <span :class="['shrink-0 rounded px-2 py-1 text-[10px] font-bold uppercase', eligibilityStatusClass(criterion.status)]">
+                                                {{ labelFromKey(criterion.status) }}
+                                            </span>
                                         </div>
-                                        <p class="mt-2 text-lg font-bold text-slate-950">{{ application.dss_score ?? 0 }}% suitability</p>
-                                        <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}</p>
-                                    </div>
-
-                                    <button type="button" class="border-b border-slate-200 p-4 text-left transition hover:bg-slate-50 xl:border-b-0 xl:border-r" @click="activeSection = 'documents'">
-                                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                                            <i class="fa-solid fa-file-circle-check text-amber-700" aria-hidden="true"></i>
-                                            Documents
-                                        </div>
-                                        <p class="mt-2 text-lg font-bold text-slate-950">
-                                            {{ application.document_readiness?.uploaded ?? 0 }} of {{ application.document_readiness?.required ?? applicationRequirements.length }} uploaded
-                                        </p>
-                                        <p class="mt-1 text-xs font-semibold text-slate-500">Open document review</p>
-                                    </button>
-
-                                    <button type="button" class="border-b border-slate-200 p-4 text-left transition hover:bg-slate-50 sm:border-r xl:border-b-0" @click="activeSection = 'applicant'">
-                                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                                            <i class="fa-solid fa-user-check text-amber-700" aria-hidden="true"></i>
-                                            Applicant profile
-                                        </div>
-                                        <p class="mt-2 text-lg font-bold text-slate-950">{{ profileVerificationLabel(application.applicant?.profile_verification_status) }}</p>
-                                        <p class="mt-1 text-xs font-semibold text-slate-500">View profile and supporting proof</p>
-                                    </button>
-
-                                    <div class="p-4">
-                                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                                            <i class="fa-solid fa-list-check text-amber-700" aria-hidden="true"></i>
-                                            Review rubric
-                                        </div>
-                                        <p class="mt-2 text-lg font-bold text-slate-950">
-                                            {{ rubricDraftSummary.completed }} of {{ rubricDraftSummary.total }} scored
-                                        </p>
-                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ rubricDraftSummary.isComplete ? `${rubricDraftSummary.totalScore}% weighted score` : 'Complete scoring below' }}</p>
-                                    </div>
+                                        <p class="mt-2 text-xs leading-5 text-slate-600">{{ criterion.note }}</p>
+                                        <dl class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                                            <div class="rounded-md bg-slate-50 p-2.5">
+                                                <dt class="font-semibold text-slate-500">Applicant</dt>
+                                                <dd class="mt-1 break-words font-bold text-slate-800">{{ criterion.student_value || 'Not provided' }}</dd>
+                                            </div>
+                                            <div class="rounded-md bg-slate-50 p-2.5">
+                                                <dt class="font-semibold text-slate-500">Program rule</dt>
+                                                <dd class="mt-1 break-words font-bold text-slate-800">{{ criterion.requirement || 'Open to all' }}</dd>
+                                            </div>
+                                        </dl>
+                                    </article>
                                 </div>
+                                <p v-else class="p-5 text-sm leading-6 text-slate-600">This program does not have structured eligibility rules to compare.</p>
                             </section>
 
-                            <section v-if="activeSection === 'review' && application.exam" class="order-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <section v-if="activeSection === 'eligibility' && application.exam" class="order-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                                 <div class="grid sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center">
                                     <div class="flex h-36 items-center justify-center border-b border-slate-200 bg-slate-50 p-4 sm:border-b-0 sm:border-r">
                                         <img :src="application.exam.image_url" :alt="application.exam.title" class="h-full w-full object-contain">
@@ -994,17 +1089,17 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'review'" class="order-5 rounded-lg border border-slate-300 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'decision'" class="order-5 rounded-lg border border-slate-300 bg-white p-5 shadow-sm">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                            Final Step
+                                            Decision
                                         </p>
                                         <h3 class="mt-2 text-xl font-bold text-slate-950">
                                             Record the final decision
                                         </h3>
                                         <p class="mt-1 text-sm leading-6 text-slate-600">
-                                            Choose an outcome only after reviewing the eligibility signal, documents, applicant profile, and rubric above.
+                                            Choose an outcome only after reviewing the applicant, eligibility, documents, and rubric.
                                         </p>
                                     </div>
                                     <div class="shrink-0 sm:text-right">
@@ -1131,7 +1226,7 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'review' && rubricReview.criteria?.length" class="order-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'decision' && rubricReview.criteria?.length" class="order-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -1216,7 +1311,7 @@ onMounted(loadApplication);
                                 </p>
                             </section>
 
-                            <section v-if="activeSection === 'review'" class="order-2 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'eligibility'" class="order-2 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Decision Support
                                 </p>
@@ -1370,7 +1465,7 @@ onMounted(loadApplication);
                                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant schedule</p>
                                             <h3 class="mt-2 text-xl font-bold text-slate-950">Attendance and results</h3>
                                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                                Shared dates are managed from the Program Workspace. Attendance confirms participation only; passing or failing is decided in Review.
+                                                Shared dates are managed from the Program Workspace. Attendance confirms participation only; passing or failing is recorded in Decision.
                                             </p>
                                         </div>
                                         <a :href="`/provider/programs/${application.scholarship.id}/applications?workspace=schedule`" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
@@ -1728,6 +1823,44 @@ onMounted(loadApplication);
                             </section>
                         </aside>
                     </div>
+
+                    <nav
+                        v-if="activePrimarySectionIndex >= 0"
+                        class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                        aria-label="Review step navigation"
+                    >
+                        <button
+                            type="button"
+                            :disabled="!previousPrimarySection"
+                            class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:invisible"
+                            @click="previousPrimarySection && (activeSection = previousPrimarySection.key)"
+                        >
+                            <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
+                            {{ previousPrimarySection ? previousPrimarySection.label : 'Previous' }}
+                        </button>
+
+                        <p class="text-center text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                            Step {{ activePrimarySectionIndex + 1 }} of {{ primaryDetailSections.length }}
+                        </p>
+
+                        <button
+                            v-if="nextPrimarySection"
+                            type="button"
+                            class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                            @click="activeSection = nextPrimarySection.key"
+                        >
+                            Next: {{ nextPrimarySection.label }}
+                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                        </button>
+                        <a
+                            v-else
+                            href="/provider/applications"
+                            class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                        >
+                            Back to applicants
+                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                        </a>
+                    </nav>
                 </div>
 
                 <ProviderFooter />

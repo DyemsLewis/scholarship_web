@@ -22,10 +22,13 @@ const form = ref({
 });
 
 const isProgramConcern = computed(() => form.value.category === 'program');
+const isPrivacyConcern = computed(() => form.value.category === 'privacy');
 const destinationMessage = computed(() => (
     isProgramConcern.value
         ? 'This report will go to the selected program provider and platform administrators.'
-        : 'This report will go to platform administrators.'
+        : isPrivacyConcern.value
+            ? 'This privacy request will go only to authorized platform administrators, not scholarship providers.'
+            : 'This report will go to platform administrators.'
 ));
 
 function resetForm() {

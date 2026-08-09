@@ -4,6 +4,7 @@ import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
@@ -615,6 +616,8 @@ onMounted(loadApplication);
                     secondary-href="/dashboard/documents"
                     secondary-label="Documents"
                 />
+
+                <PrivacyNoticeCard context="application" />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading application details...

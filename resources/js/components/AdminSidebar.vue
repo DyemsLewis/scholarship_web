@@ -10,13 +10,13 @@ defineProps({
 });
 
 const navLinks = [
-    { key: 'dashboard', href: '/admin', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
-    { key: 'users', href: '/admin/manage-users', label: 'Manage Users', icon: 'fa-solid fa-users-gear', permission: 'manage_accounts' },
-    { key: 'reviews', href: '/admin/reviews', label: 'Reviews', icon: 'fa-solid fa-clipboard-check', permission: 'manage_reviews' },
-    { key: 'reports', href: '/admin/reports', label: 'Reports', icon: 'fa-solid fa-circle-exclamation', permission: 'manage_reports' },
-    { key: 'billing', href: '/admin/billing', label: 'Service Payments', icon: 'fa-solid fa-receipt', permission: 'manage_billing' },
-    { key: 'logs', href: '/admin/logs', label: 'Logs', icon: 'fa-solid fa-clock-rotate-left', permission: 'view_logs' },
-    { key: 'profile', href: '/admin/profile', label: 'Profile', icon: 'fa-solid fa-id-badge' },
+    { section: 'Workspace', key: 'dashboard', href: '/admin', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
+    { section: 'Workspace', key: 'reviews', href: '/admin/reviews', label: 'Reviews', icon: 'fa-solid fa-clipboard-check', permission: 'manage_reviews' },
+    { section: 'Workspace', key: 'reports', href: '/admin/reports', label: 'Reported Issues', icon: 'fa-solid fa-circle-exclamation', permission: 'manage_reports' },
+    { section: 'Administration', key: 'users', href: '/admin/manage-users', label: 'Manage Users', icon: 'fa-solid fa-users-gear', permission: 'manage_accounts' },
+    { section: 'Administration', key: 'billing', href: '/admin/billing', label: 'Service Payments', icon: 'fa-solid fa-receipt', permission: 'manage_billing' },
+    { section: 'Administration', key: 'logs', href: '/admin/logs', label: 'Activity Logs', icon: 'fa-solid fa-clock-rotate-left', permission: 'view_logs' },
+    { section: 'Account', key: 'profile', href: '/admin/profile', label: 'Profile', icon: 'fa-solid fa-id-badge' },
 ];
 
 const visibleNavLinks = computed(() => navLinks.filter((link) => (

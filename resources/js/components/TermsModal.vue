@@ -48,13 +48,16 @@ onUnmounted(() => {
                         <span class="h-2 w-2 rounded-full bg-white/40"></span>
                     </div>
                     <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
-                        Terms and Conditions
+                        {{ selectedContent.eyebrow ?? 'Terms and Conditions' }}
                     </p>
                     <h2 class="mt-2 pr-16 font-display text-2xl font-bold leading-tight">
                         {{ selectedContent.title }}
                     </h2>
                     <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
                         {{ selectedContent.summary }}
+                    </p>
+                    <p v-if="selectedContent.effectiveDate" class="mt-2 text-xs font-semibold text-slate-400">
+                        {{ selectedContent.effectiveDate }}
                     </p>
                 </header>
 
@@ -88,6 +91,19 @@ onUnmounted(() => {
                                 {{ section.text }}
                             </p>
                         </article>
+                    </div>
+
+                    <div v-if="selectedContent.contact" class="mt-5 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">{{ selectedContent.contact.label }}</p>
+                            <p class="mt-1 text-sm text-slate-700">Contact the platform administrator for a privacy request or concern.</p>
+                        </div>
+                        <a
+                            :href="`mailto:${selectedContent.contact.email}`"
+                            class="break-all text-sm font-bold text-slate-950 underline decoration-amber-400 underline-offset-4"
+                        >
+                            {{ selectedContent.contact.email }}
+                        </a>
                     </div>
 
                 </div>

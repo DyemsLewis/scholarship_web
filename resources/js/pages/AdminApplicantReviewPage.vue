@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
@@ -14,6 +14,24 @@ const decisionError = ref('');
 const applicant = ref(null);
 const reviewNote = ref('');
 const previewDocument = ref(null);
+const requestedSection = new URLSearchParams(window.location.search).get('section');
+const reviewSections = [
+    { key: 'profile', label: 'Profile' },
+    { key: 'proof', label: 'Proof files' },
+    { key: 'decision', label: 'Decision' },
+];
+const activeReviewSection = ref(reviewSections.some((section) => section.key === requestedSection) ? requestedSection : 'profile');
+const activeReviewSectionIndex = computed(() => reviewSections.findIndex((section) => section.key === activeReviewSection.value));
+const previousReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value - 1] ?? null);
+const nextReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value + 1] ?? null);
+
+function selectReviewSection(section) {
+    activeReviewSection.value = section;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('section', section);
+    window.history.replaceState(window.history.state, '', url);
+}
 
 function statusLabel(status) {
     return String(status ?? 'pending')
@@ -207,17 +225,25 @@ onMounted(loadApplicant);
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <a
-                                href="/admin/reviews"
+                                href="/admin/reviews?type=applicants"
                                 class="inline-flex items-center rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                             >
                                 Back to reviews
                             </a>
                             <button
                                 type="button"
-                                class="w-fit rounded-md bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-200"
+                                class="w-fit rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                                 @click="loadApplicant"
                             >
-                                Refresh details
+                                Refresh
+                            </button>
+                            <button
+                                v-if="activeReviewSection !== 'decision'"
+                                type="button"
+                                class="w-fit rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                @click="selectReviewSection('decision')"
+                            >
+                                Record decision
                             </button>
                         </div>
                     </div>
@@ -233,7 +259,35 @@ onMounted(loadApplicant);
                 </div>
 
                 <div v-else class="mt-6 space-y-5">
-                        <article class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <nav class="grid gap-1 p-2 sm:grid-cols-3" aria-label="Applicant verification steps">
+                                <button
+                                    v-for="(section, index) in reviewSections"
+                                    :key="section.key"
+                                    type="button"
+                                    :aria-current="activeReviewSection === section.key ? 'step' : undefined"
+                                    :class="[
+                                        'flex items-center gap-3 rounded-md px-3 py-3 text-left transition',
+                                        activeReviewSection === section.key
+                                            ? 'bg-slate-950 text-white'
+                                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                                    ]"
+                                    @click="selectReviewSection(section.key)"
+                                >
+                                    <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold', activeReviewSection === section.key ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">{{ index + 1 }}</span>
+                                    <span class="min-w-0">
+                                        <span class="block text-sm font-bold">{{ section.label }}</span>
+                                        <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
+                                            <template v-if="section.key === 'profile'">Applicant details</template>
+                                            <template v-else-if="section.key === 'proof'">{{ applicant.verification_documents?.length || 0 }} files</template>
+                                            <template v-else>{{ applicantReviewStatusLabel(applicant) }}</template>
+                                        </span>
+                                    </span>
+                                </button>
+                            </nav>
+                        </section>
+
+                        <article v-if="activeReviewSection === 'profile'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                             <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                                 <div class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
                                     {{ applicantInitials(applicant) }}
@@ -268,7 +322,7 @@ onMounted(loadApplicant);
                             </dl>
                         </article>
 
-                        <article id="applicant-details" class="scroll-mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <article v-if="activeReviewSection === 'profile'" id="applicant-details" class="scroll-mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                             <div class="flex items-start gap-3 border-b border-slate-200 p-5">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-white">
                                     <i class="fa-solid fa-user-check" aria-hidden="true"></i>
@@ -364,17 +418,18 @@ onMounted(loadApplicant);
                                 </dl>
                             </section>
                             <div class="flex justify-end border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
-                                <a
-                                    href="#verification-files"
+                                <button
+                                    type="button"
                                     class="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                    @click="selectReviewSection('proof')"
                                 >
                                     Next: Review proof
-                                    <i class="fa-solid fa-arrow-down text-xs" aria-hidden="true"></i>
-                                </a>
+                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                </button>
                             </div>
                         </article>
 
-                        <article id="verification-files" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article v-if="activeReviewSection === 'proof'" id="verification-files" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 2 - Submitted proof</p>
@@ -420,17 +475,18 @@ onMounted(loadApplicant);
                                 No proof has been uploaded. This applicant cannot be verified yet.
                             </p>
                             <div class="mt-4 flex justify-end border-t border-slate-200 pt-4">
-                                <a
-                                    href="#verification-decision"
+                                <button
+                                    type="button"
                                     class="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                    @click="selectReviewSection('decision')"
                                 >
                                     Next: Make decision
-                                    <i class="fa-solid fa-arrow-down text-xs" aria-hidden="true"></i>
-                                </a>
+                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                </button>
                             </div>
                         </article>
 
-                    <section id="verification-decision" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-if="activeReviewSection === 'decision'" id="verification-decision" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 3 - Final decision</p>
@@ -487,6 +543,27 @@ onMounted(loadApplicant);
                             Wait for the applicant to upload proof before making a verification decision.
                         </div>
                     </section>
+
+                    <nav class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm" aria-label="Applicant review navigation">
+                        <button
+                            type="button"
+                            :disabled="!previousReviewSection"
+                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:invisible"
+                            @click="previousReviewSection && selectReviewSection(previousReviewSection.key)"
+                        >
+                            Previous
+                        </button>
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Step {{ activeReviewSectionIndex + 1 }} of {{ reviewSections.length }}</p>
+                        <button
+                            v-if="nextReviewSection"
+                            type="button"
+                            class="rounded-md bg-slate-950 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800"
+                            @click="selectReviewSection(nextReviewSection.key)"
+                        >
+                            Next: {{ nextReviewSection.label }}
+                        </button>
+                        <a v-else href="/admin/reviews?type=applicants" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Back to queue</a>
+                    </nav>
                 </div>
 
                 <AdminFooter />

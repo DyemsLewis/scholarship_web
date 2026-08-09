@@ -221,7 +221,7 @@ const pendingProgramResults = computed(() => attendanceEvents.value.reduce((coun
 const workspaceTabs = computed(() => [
     {
         key: 'applications',
-        label: 'Applicants',
+        label: 'Review',
         meta: pendingReviewCount.value > 0 ? `${pendingReviewCount.value} to review` : `${applications.value.length} total`,
         attention: pendingReviewCount.value > 0,
     },
@@ -268,7 +268,7 @@ const workspaceTasks = computed(() => {
         tasks.push({
             section: 'results',
             title: `${dueProgramEvents.value.length} activit${dueProgramEvents.value.length === 1 ? 'y is' : 'ies are'} ready to close`,
-            description: 'Complete the shared activity before recording participant results.',
+            description: 'Mark the shared activity complete before recording participant results.',
             action: 'Update results',
         });
     } else if (pendingProgramResults.value > 0) {
@@ -299,13 +299,13 @@ const exportApplicationsUrl = computed(() => {
 
     return `/provider/export/applications?scholarship_id=${encodeURIComponent(selectedScholarshipId.value)}`;
 });
-const pageKicker = computed(() => (hasProgramContext.value ? 'Program Workspace' : 'Applicant Workspace'));
+const pageKicker = computed(() => (hasProgramContext.value ? 'Program Applicants' : 'Applicants'));
 const pageTitle = computed(() => (hasProgramContext.value
     ? selectedScholarshipContext.value?.title || 'Scholarship program'
-    : 'Applicants'));
+    : 'Review applicants'));
 const pageDescription = computed(() => (hasProgramContext.value
-    ? 'Review applicants, publish shared activities, and record results from one focused workspace.'
-    : 'Review applicant records, resolve document issues, and manage selection stages in one place.'));
+    ? 'Review applicants first, then manage shared schedules and participant results when needed.'
+    : 'Find applicants needing attention and open a guided review of their profile, eligibility, and files.'));
 const reviewFilterOptions = computed(() => [
     {
         value: 'pending_review',
@@ -1035,16 +1035,14 @@ onMounted(loadProviderData);
                         </nav>
                     </section>
 
-                    <section v-if="hasProgramContext" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section v-if="hasProgramContext && workspaceTasks.length" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Next actions</p>
-                                <p class="mt-1 text-sm text-slate-500">
-                                    {{ workspaceTasks.length ? 'Items that currently need provider attention.' : 'Nothing needs immediate attention.' }}
-                                </p>
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Needs attention</p>
+                                <p class="mt-1 text-sm text-slate-500">Open the task that should be handled next.</p>
                             </div>
-                            <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', workspaceTasks.length ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800']">
-                                {{ workspaceTasks.length ? `${workspaceTasks.length} open` : 'Up to date' }}
+                            <span class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">
+                                {{ workspaceTasks.length }} open
                             </span>
                         </div>
 
@@ -1176,7 +1174,7 @@ onMounted(loadProviderData);
 
                             <div class="mt-4 flex justify-end">
                                 <button type="submit" :disabled="scheduleSaving" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60">
-                                    {{ scheduleSaving ? 'Publishing...' : 'Publish to eligible applicants' }}
+                                    {{ scheduleSaving ? 'Publishing...' : 'Publish schedule' }}
                                 </button>
                             </div>
                         </form>
@@ -1185,10 +1183,10 @@ onMounted(loadProviderData);
                     <section v-if="hasProgramContext && activeWorkspaceSection === 'results'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Participation tracking</p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">Record participation in bulk</h3>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Activity results</p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">Complete the activity, then update participants</h3>
                                 <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                    After the activity happens, close it once. Then record exam or interview attendance, or confirm distribution receipt.
+                                    After the scheduled activity happens, mark it complete once. Participant updates will then become available below.
                                 </p>
                             </div>
                             <span v-if="activeAttendanceEvent" class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
@@ -1242,7 +1240,7 @@ onMounted(loadProviderData);
                                         class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                                         @click="completeProgramEvent(activeAttendanceEvent)"
                                     >
-                                        {{ completingEventId === activeAttendanceEvent.id ? 'Closing activity...' : 'Close activity and unlock tracking' }}
+                                        {{ completingEventId === activeAttendanceEvent.id ? 'Updating...' : 'Mark activity complete' }}
                                     </button>
                                 </div>
 
@@ -1363,7 +1361,7 @@ onMounted(loadProviderData);
                                 </div>
 
                                 <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-                                    Participation tracking unlocks after the shared activity is closed.
+                                    Participant updates become available after the shared activity is marked complete.
                                 </div>
                             </div>
                         </template>
@@ -1371,14 +1369,11 @@ onMounted(loadProviderData);
 
                     <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                Applicant Queue
-                            </p>
-                            <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                {{ hasProgramContext ? 'Program applicants' : 'All applicants' }}
-                            </h3>
+                            <h3 class="text-xl font-bold text-slate-950">Review queue</h3>
                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                Choose a work tab, check the applicant record, then open the full review when action is needed.
+                                {{ hasProgramContext
+                                    ? 'Open an applicant to review the profile, eligibility, documents, and decision in order.'
+                                    : 'Filter the list by the work you need to complete, then open an applicant review.' }}
                             </p>
 
                             <div class="mt-4 flex flex-wrap gap-2">
@@ -1419,7 +1414,7 @@ onMounted(loadProviderData);
                                     >
                                         <option value="priority">Priority first</option>
                                         <option value="oldest">Oldest first</option>
-                                        <option value="dss">Highest suitability</option>
+                                        <option value="dss">Highest match</option>
                                         <option value="documents">Document issues</option>
                                     </select>
                                 </label>
@@ -1435,6 +1430,7 @@ onMounted(loadProviderData);
                         <div v-if="hasProgramContext && availableBulkAdvanceTargets.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
                             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                 <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                                    <span class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Bulk approval</span>
                                     <label class="shrink-0">
                                         <span class="sr-only">Bulk approval action</span>
                                         <select v-model="bulkAdvanceTarget" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-slate-500 sm:w-52">
@@ -1453,7 +1449,7 @@ onMounted(loadProviderData);
                                     </button>
                                     <span class="text-xs font-bold text-slate-500">{{ selectedBulkApplicationIds.length }} selected</span>
                                     <button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="selectedBulkApplicationIds.length === 0 || bulkAdvancing" @click="applyBulkAdvance">
-                                        {{ bulkAdvancing ? 'Approving...' : 'Apply approval' }}
+                                        {{ bulkAdvancing ? 'Approving...' : 'Approve selected' }}
                                     </button>
                                 </div>
                             </div>
@@ -1512,7 +1508,7 @@ onMounted(loadProviderData);
                                     <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
                                         <span>Submitted {{ application.submitted_at || 'recently' }}</span>
                                         <span v-if="showWaitingTime(application)">Waiting {{ application.waiting_days }}d</span>
-                                        <span>DSS {{ application.dss_score ?? 0 }}%</span>
+                                        <span>Match {{ application.dss_score ?? 0 }}%</span>
                                         <span>Files {{ application.document_readiness?.percent ?? 0 }}%</span>
                                         <span v-if="documentIssueCount(application)" class="text-amber-700">
                                             {{ documentIssueCount(application) }} file issue{{ documentIssueCount(application) === 1 ? '' : 's' }}
@@ -1541,7 +1537,7 @@ onMounted(loadProviderData);
                                         class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
                                         @click="openApplicationPreview(application)"
                                     >
-                                        View details
+                                        Review
                                     </button>
                                 </div>
                             </article>
@@ -1593,7 +1589,7 @@ onMounted(loadProviderData);
                         </span>
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Application overview</p>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Review summary</p>
                                 <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', statusClass(selectedApplicationPreview.status)]">
                                     {{ statusLabel(selectedApplicationPreview.status) }}
                                 </span>
@@ -1703,7 +1699,7 @@ onMounted(loadProviderData);
                                 :href="selectedApplicationPreview.detail_url || `/provider/applications/${selectedApplicationPreview.id}`"
                                 class="rounded-md bg-slate-950 px-3 py-2 text-center text-xs font-bold text-white transition hover:bg-slate-800"
                             >
-                                Open full review
+                                Continue review
                             </a>
                         </div>
                     </footer>

@@ -20,6 +20,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue']);
 
 const showTermsModal = ref(false);
+const activeModalContext = ref(props.context);
 const agreementLabels = {
     account: 'I agree to the terms and privacy notice.',
     application: 'I agree to the application terms.',
@@ -32,6 +33,11 @@ const agreementTitle = computed(() => agreementLabels[props.context] ?? 'I agree
 
 function updateValue(event) {
     emit('update:modelValue', event.target.checked);
+}
+
+function showNotice(context) {
+    activeModalContext.value = context;
+    showTermsModal.value = true;
 }
 </script>
 
@@ -51,13 +57,24 @@ function updateValue(event) {
                     type="button"
                     class="ml-1 font-bold text-amber-700 underline decoration-amber-300 underline-offset-2 hover:text-amber-800"
                     aria-haspopup="dialog"
-                    @click.stop.prevent="showTermsModal = true"
+                    @click.stop.prevent="showNotice(context)"
                 >
                     Read terms
                 </button>
+                <template v-if="context === 'account'">
+                    <span class="text-slate-400">|</span>
+                    <button
+                        type="button"
+                        class="ml-1 font-bold text-amber-700 underline decoration-amber-300 underline-offset-2 hover:text-amber-800"
+                        aria-haspopup="dialog"
+                        @click.stop.prevent="showNotice('privacy')"
+                    >
+                        Privacy notice
+                    </button>
+                </template>
             </span>
         </label>
 
-        <TermsModal v-model="showTermsModal" :context="context" />
+        <TermsModal v-model="showTermsModal" :context="activeModalContext" />
     </div>
 </template>

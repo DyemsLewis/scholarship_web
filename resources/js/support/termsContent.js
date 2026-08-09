@@ -1,3 +1,5 @@
+const privacyContactEmail = window.portalPrivacy?.contact_email || 'hello@example.com';
+
 export const termsContent = {
     general: {
         title: 'Terms and Privacy Notice',
@@ -29,6 +31,64 @@ export const termsContent = {
                 icon: 'fa-solid fa-building-columns',
             },
         ],
+    },
+    privacy: {
+        eyebrow: 'Privacy Notice',
+        title: 'How we handle personal information',
+        effectiveDate: 'Effective August 10, 2026',
+        summary: 'This notice explains what the scholarship portal collects, why it is needed, who may review it, and how applicants, parents or guardians, providers, and staff can raise a privacy request.',
+        details: [
+            'Personal information is used only to operate accounts, scholarship matching, verification, applications, notifications, reviews, support, and platform security. It is not displayed publicly or sold for advertising.',
+            'A provider may review an applicant profile and attached files only after that applicant submits an application to one of the provider\'s programs. Other providers cannot browse unrelated applicant records.',
+            'Applicants can update their profile and replace or delete prepared files. Information already attached to a submitted application or recorded in an audit history may remain when needed to preserve a reliable review record.',
+            `For questions, corrections, access requests, account closure, or deletion requests, use the Report button and choose Privacy and personal data concern, or email ${privacyContactEmail}.`,
+        ],
+        sections: [
+            {
+                title: 'Information collected',
+                text: 'Depending on how the portal is used, records may include account and contact details, learner and guardian information, education and household details, location, uploaded proofs, application activity, provider organization details, notifications, review decisions, and security or audit events.',
+                icon: 'fa-solid fa-database',
+            },
+            {
+                title: 'Why it is needed',
+                text: 'The portal uses this information to calculate eligibility guidance, recommend suitable programs, verify applicants and providers, prepare and review applications, communicate schedules or decisions, prevent misuse, and keep an accountable history of important actions.',
+                icon: 'fa-solid fa-bullseye',
+            },
+            {
+                title: 'Who may access it',
+                text: 'Applicants and authorized parents or guardians manage their own records. Authorized administrators review verification, safety, and support matters. A provider team receives only information connected to applications submitted to programs managed by that organization.',
+                icon: 'fa-solid fa-user-lock',
+            },
+            {
+                title: 'External services',
+                text: 'Email delivery services process addresses and message content. OpenStreetMap, Nominatim, and map delivery services may receive location searches and network information when maps are used. PayMongo processes optional provider service payments when billing is enabled; applicant scholarship applications are not payment transactions.',
+                icon: 'fa-solid fa-arrow-up-right-from-square',
+            },
+            {
+                title: 'Retention and deletion',
+                text: 'Records are kept while needed for account operation, active scholarship reviews, verification, support, dispute handling, and audit integrity. The current system does not automatically erase every record after a fixed period. An administrator reviews deletion or account-closure requests and explains any record that must remain for an active or completed process.',
+                icon: 'fa-solid fa-clock-rotate-left',
+            },
+            {
+                title: 'Your choices and requests',
+                text: 'Users can view and correct profile details, replace verification proofs, and manage prepared documents through the portal. Use the privacy concern category to request a copy, correction, restriction, account closure, or deletion review. Never include a password in a support report.',
+                icon: 'fa-solid fa-sliders',
+            },
+            {
+                title: 'Younger applicants',
+                text: 'A parent or guardian should create or support an account for a younger learner only when authorized to do so. They should provide only information needed for scholarship matching and applications, help the learner understand submissions, and keep guardian contact details current.',
+                icon: 'fa-solid fa-people-roof',
+            },
+            {
+                title: 'Security and incidents',
+                text: 'The portal uses authenticated access, role permissions, protected document routes, and activity records to limit and trace access. If information may have been exposed or an account was accessed without permission, change the password and submit a privacy concern immediately so administrators can investigate and notify affected users when appropriate.',
+                icon: 'fa-solid fa-shield-halved',
+            },
+        ],
+        contact: {
+            label: 'Privacy contact',
+            email: privacyContactEmail,
+        },
     },
     account: {
         title: 'Account Terms and Privacy Notice',

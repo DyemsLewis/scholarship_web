@@ -5,6 +5,7 @@ import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
@@ -1530,6 +1531,8 @@ watch(() => form.value.grading_scale, (scale) => {
                     secondary-href="/dashboard/documents"
                     secondary-label="Prepare files"
                 />
+
+                <PrivacyNoticeCard context="profile" />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading profile...

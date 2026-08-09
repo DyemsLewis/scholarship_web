@@ -14,6 +14,25 @@ const decisionError = ref('');
 const scholarship = ref(null);
 const reviewStatus = ref('pending_review');
 const reviewNotes = ref('');
+const requestedSection = new URLSearchParams(window.location.search).get('section');
+const reviewSections = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'offer', label: 'Offer & eligibility' },
+    { key: 'process', label: 'Process & requirements' },
+    { key: 'decision', label: 'Decision' },
+];
+const activeReviewSection = ref(reviewSections.some((section) => section.key === requestedSection) ? requestedSection : 'overview');
+const activeReviewSectionIndex = computed(() => reviewSections.findIndex((section) => section.key === activeReviewSection.value));
+const previousReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value - 1] ?? null);
+const nextReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value + 1] ?? null);
+
+function selectReviewSection(section) {
+    activeReviewSection.value = section;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('section', section);
+    window.history.replaceState(window.history.state, '', url);
+}
 
 const applicationModeOptions = [
     { value: 'online', label: 'Online submission' },
@@ -389,17 +408,25 @@ onMounted(loadScholarship);
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <a
-                                href="/admin/reviews"
+                                href="/admin/reviews?type=programs"
                                 class="inline-flex items-center rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                             >
                                 Back to reviews
                             </a>
                             <button
                                 type="button"
-                                class="w-fit rounded-md bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-200"
+                                class="w-fit rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                                 @click="loadScholarship"
                             >
-                                Refresh details
+                                Refresh
+                            </button>
+                            <button
+                                v-if="activeReviewSection !== 'decision'"
+                                type="button"
+                                class="w-fit rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                @click="selectReviewSection('decision')"
+                            >
+                                Record decision
                             </button>
                         </div>
                     </div>
@@ -414,9 +441,38 @@ onMounted(loadScholarship);
                     <p class="mt-1 text-sm leading-6 text-rose-700">{{ loadError }}</p>
                 </div>
 
-                <div v-else class="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
-                    <div class="space-y-5">
-                        <article class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div v-else class="mt-6 space-y-5">
+                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <nav class="grid gap-1 p-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="Program review steps">
+                            <button
+                                v-for="(section, index) in reviewSections"
+                                :key="section.key"
+                                type="button"
+                                :aria-current="activeReviewSection === section.key ? 'step' : undefined"
+                                :class="[
+                                    'flex min-w-0 items-center gap-3 rounded-md px-3 py-3 text-left transition',
+                                    activeReviewSection === section.key
+                                        ? 'bg-slate-950 text-white'
+                                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                                ]"
+                                @click="selectReviewSection(section.key)"
+                            >
+                                <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold', activeReviewSection === section.key ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">{{ index + 1 }}</span>
+                                <span class="min-w-0">
+                                    <span class="block truncate text-sm font-bold">{{ section.label }}</span>
+                                    <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
+                                        <template v-if="section.key === 'overview'">{{ attentionCount ? `${attentionCount} checks need attention` : 'Ready to review' }}</template>
+                                        <template v-else-if="section.key === 'offer'">{{ scholarship.benefits?.length || 0 }} benefits</template>
+                                        <template v-else-if="section.key === 'process'">{{ documentItems.length }} required files</template>
+                                        <template v-else>{{ statusLabel(scholarship.status) }}</template>
+                                    </span>
+                                </span>
+                            </button>
+                        </nav>
+                    </section>
+
+                    <div v-if="activeReviewSection !== 'decision'" class="space-y-5">
+                        <article v-if="activeReviewSection === 'overview'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                             <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                                 <img
                                     :src="scholarship.image_url || '/uploads/scholarship-default.jpg'"
@@ -462,7 +518,7 @@ onMounted(loadScholarship);
                             </dl>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article v-if="activeReviewSection === 'overview'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Publication readiness</p>
@@ -507,21 +563,21 @@ onMounted(loadScholarship);
                             </div>
                         </article>
 
-                        <article class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <article v-if="['offer', 'process'].includes(activeReviewSection)" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                             <div class="p-5">
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Program record</p>
-                                <h3 class="mt-1 text-xl font-bold text-slate-950">Program information</h3>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">Review what applicants will see and what they must prepare.</p>
+                                <h3 class="mt-1 text-xl font-bold text-slate-950">{{ activeReviewSection === 'offer' ? 'Offer and eligibility' : 'Requirements and selection process' }}</h3>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">{{ activeReviewSection === 'offer' ? 'Review what applicants receive and who can apply.' : 'Review what applicants prepare and what happens after submission.' }}</p>
                             </div>
 
-                            <section v-if="scholarship.benefits?.length" class="border-t border-slate-200 p-5">
+                            <section v-if="activeReviewSection === 'offer' && scholarship.benefits?.length" class="border-t border-slate-200 p-5">
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Benefit package</p>
                                 <h4 class="mt-1 text-lg font-bold text-slate-950">Benefits for recipients</h4>
                                 <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that the support is understandable and complete.</p>
                                 <ScholarshipBenefitsPanel class="mt-4" :benefits="scholarship.benefits" />
                             </section>
 
-                            <section class="border-t border-slate-200 p-5">
+                            <section v-if="activeReviewSection === 'offer'" class="border-t border-slate-200 p-5">
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Eligibility</p>
                                 <h4 class="mt-1 text-lg font-bold text-slate-950">Who can apply</h4>
                                 <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that the rules match the provider's intended applicants.</p>
@@ -561,7 +617,7 @@ onMounted(loadScholarship);
                                 </div>
                             </section>
 
-                            <section class="border-t border-slate-200 p-5">
+                            <section v-if="activeReviewSection === 'process'" class="border-t border-slate-200 p-5">
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Application process</p>
                                 <h4 class="mt-1 text-lg font-bold text-slate-950">Documents and selection</h4>
                                 <p class="mt-1 text-sm leading-6 text-slate-600">Check what applicants must prepare and what happens after submission.</p>
@@ -682,7 +738,7 @@ onMounted(loadScholarship);
                                 </section>
                             </section>
 
-                            <section v-if="hasTermsOrLocation" class="border-t border-slate-200 p-5">
+                            <section v-if="activeReviewSection === 'process' && hasTermsOrLocation" class="border-t border-slate-200 p-5">
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Conditions and coverage</p>
                                 <h4 class="mt-1 text-lg font-bold text-slate-950">What recipients should know</h4>
 
@@ -721,8 +777,8 @@ onMounted(loadScholarship);
                         </article>
                     </div>
 
-                    <aside class="space-y-4 xl:sticky xl:top-8 xl:self-start">
-                        <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <aside v-if="['overview', 'decision'].includes(activeReviewSection)" class="space-y-4">
+                        <section v-if="activeReviewSection === 'decision'" class="max-w-3xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>
@@ -782,7 +838,7 @@ onMounted(loadScholarship);
                             </button>
                         </section>
 
-                        <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <section v-if="activeReviewSection === 'overview'" class="max-w-3xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Provider</p>
@@ -830,6 +886,27 @@ onMounted(loadScholarship);
                             </a>
                         </section>
                     </aside>
+
+                    <nav class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm" aria-label="Program review navigation">
+                        <button
+                            type="button"
+                            :disabled="!previousReviewSection"
+                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:invisible"
+                            @click="previousReviewSection && selectReviewSection(previousReviewSection.key)"
+                        >
+                            Previous
+                        </button>
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Step {{ activeReviewSectionIndex + 1 }} of {{ reviewSections.length }}</p>
+                        <button
+                            v-if="nextReviewSection"
+                            type="button"
+                            class="rounded-md bg-slate-950 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800"
+                            @click="selectReviewSection(nextReviewSection.key)"
+                        >
+                            Next: {{ nextReviewSection.label }}
+                        </button>
+                        <a v-else href="/admin/reviews?type=programs" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Back to queue</a>
+                    </nav>
                 </div>
 
                 <AdminFooter />

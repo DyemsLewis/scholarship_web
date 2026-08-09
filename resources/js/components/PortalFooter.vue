@@ -33,6 +33,7 @@ const props = defineProps({
 
 const currentYear = new Date().getFullYear();
 const showTermsModal = ref(false);
+const footerModalContext = ref('general');
 const isDark = computed(() => props.variant === 'dark');
 const footerLayoutClass = computed(() => {
     if (!props.fullBleed) {
@@ -84,6 +85,11 @@ const contextDetails = computed(() => ({
         ],
     },
 })[props.context]);
+
+function showFooterNotice(context) {
+    footerModalContext.value = context;
+    showTermsModal.value = true;
+}
 </script>
 
 <template>
@@ -146,18 +152,29 @@ const contextDetails = computed(() => ({
                 ]"
             >
                 <p>&copy; {{ currentYear }} Scholarship Portal. All rights reserved.</p>
-                <button
-                    type="button"
-                    :class="isDark
-                        ? 'w-fit font-semibold text-slate-300 transition hover:text-amber-200'
-                        : 'w-fit font-semibold text-slate-700 transition hover:text-slate-950'"
-                    @click="showTermsModal = true"
-                >
-                    Terms &amp; Privacy
-                </button>
+                <div class="flex flex-wrap gap-x-4 gap-y-1">
+                    <button
+                        type="button"
+                        :class="isDark
+                            ? 'w-fit font-semibold text-slate-300 transition hover:text-amber-200'
+                            : 'w-fit font-semibold text-slate-700 transition hover:text-slate-950'"
+                        @click="showFooterNotice('general')"
+                    >
+                        Terms
+                    </button>
+                    <button
+                        type="button"
+                        :class="isDark
+                            ? 'w-fit font-semibold text-slate-300 transition hover:text-amber-200'
+                            : 'w-fit font-semibold text-slate-700 transition hover:text-slate-950'"
+                        @click="showFooterNotice('privacy')"
+                    >
+                        Privacy Notice
+                    </button>
+                </div>
             </div>
         </div>
 
-        <TermsModal v-model="showTermsModal" context="general" />
+        <TermsModal v-model="showTermsModal" :context="footerModalContext" />
     </footer>
 </template>

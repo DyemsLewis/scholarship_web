@@ -124,6 +124,51 @@ class SupportReportRoutingTest extends TestCase
             ->assertJsonCount(0, 'reports');
     }
 
+    public function test_privacy_report_is_available_and_routed_only_to_admin(): void
+    {
+        Mail::fake();
+        $applicant = User::factory()->create();
+        $provider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($applicant)
+            ->getJson('/dashboard/reports/data')
+            ->assertOk()
+            ->assertJsonFragment([
+                'value' => 'privacy',
+                'label' => 'Privacy and personal data concern',
+            ]);
+
+        $this->actingAs($applicant)
+            ->postJson('/dashboard/reports', [
+                'category' => 'privacy',
+                'subject' => 'Request to correct personal information',
+                'description' => 'Please help me review an incorrect personal detail in my account.',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('report.sent_to', 'Platform support');
+
+        $report = SupportReport::query()->firstOrFail();
+
+        $this->assertDatabaseHas('support_reports', [
+            'id' => $report->id,
+            'category' => 'privacy',
+            'assigned_role' => 'admin',
+            'provider_id' => null,
+            'provider_status' => 'not_required',
+        ]);
+
+        $this->actingAs($provider)
+            ->getJson('/provider/reports/data')
+            ->assertOk()
+            ->assertJsonCount(0, 'reports');
+
+        $this->actingAs($admin)
+            ->getJson('/admin/reports/data')
+            ->assertOk()
+            ->assertJsonPath('reports.0.id', $report->id);
+    }
+
     public function test_program_provider_and_admin_complete_independent_report_states_without_conflict(): void
     {
         Mail::fake();

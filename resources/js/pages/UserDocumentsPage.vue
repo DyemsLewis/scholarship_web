@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { labelFromKey } from '../support/display';
 
@@ -332,6 +333,8 @@ onBeforeUnmount(() => {
                     secondary-href="/dashboard/applications"
                     secondary-label="View applications"
                 />
+
+                <PrivacyNoticeCard context="documents" />
 
                 <div v-if="isLoading" class="student-card mt-5 p-6 text-sm text-slate-500">
                     Loading documents...

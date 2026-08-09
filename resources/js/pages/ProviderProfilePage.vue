@@ -12,6 +12,7 @@ const isSaving = ref(false);
 const errorMessage = ref('');
 const validationErrors = ref({});
 const user = ref(null);
+const activeProfileSection = ref(window.location.hash === '#verification-documents' ? 'verification' : 'details');
 const verificationDocuments = ref([]);
 const verificationDocumentType = ref('organization_registration');
 const verificationDocumentFile = ref(null);
@@ -172,6 +173,14 @@ function documentTypeLabel(type) {
         ?? String(type ?? 'Document').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function selectProfileSection(section) {
+    activeProfileSection.value = section;
+
+    const url = new URL(window.location.href);
+    url.hash = section === 'verification' ? 'verification-documents' : '';
+    window.history.replaceState(window.history.state, '', url);
+}
+
 function handleVerificationFile(event) {
     verificationDocumentFile.value = event.target.files?.[0] ?? null;
 }
@@ -305,7 +314,7 @@ onMounted(loadProviderProfile);
                         Organization and account
                     </h2>
                     <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                        Keep the public organization details and representative contact information accurate.
+                        Update public organization details or manage the proof used for provider verification.
                     </p>
                 </header>
 
@@ -317,7 +326,7 @@ onMounted(loadProviderProfile);
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
-                    <section class="order-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-sm">
+                    <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-sm">
                         <div class="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                             <div class="flex min-w-0 items-center gap-4">
                                 <div class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-amber-300 text-lg font-black text-slate-950">
@@ -364,7 +373,51 @@ onMounted(loadProviderProfile);
                         </div>
                     </section>
 
-                    <section id="verification-documents" class="order-3 scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <nav class="grid gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2" aria-label="Organization profile sections">
+                        <button
+                            type="button"
+                            :aria-current="activeProfileSection === 'details' ? 'page' : undefined"
+                            :class="[
+                                'flex items-center gap-3 rounded-md px-4 py-3 text-left transition',
+                                activeProfileSection === 'details'
+                                    ? 'bg-slate-950 text-white'
+                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                            ]"
+                            @click="selectProfileSection('details')"
+                        >
+                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', activeProfileSection === 'details' ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">
+                                <i class="fa-solid fa-building" aria-hidden="true"></i>
+                            </span>
+                            <span>
+                                <span class="block text-sm font-bold">Organization details</span>
+                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'details' ? 'text-slate-300' : 'text-slate-500']">Public profile and representative account</span>
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            :aria-current="activeProfileSection === 'verification' ? 'page' : undefined"
+                            :class="[
+                                'flex items-center gap-3 rounded-md px-4 py-3 text-left transition',
+                                activeProfileSection === 'verification'
+                                    ? 'bg-slate-950 text-white'
+                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                            ]"
+                            @click="selectProfileSection('verification')"
+                        >
+                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', activeProfileSection === 'verification' ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">
+                                <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+                            </span>
+                            <span class="min-w-0">
+                                <span class="flex flex-wrap items-center gap-2 text-sm font-bold">
+                                    Verification
+                                    <span :class="['rounded px-2 py-0.5 text-[9px] uppercase', verificationClass(user?.verification_status)]">{{ verificationLabel(user?.verification_status) }}</span>
+                                </span>
+                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'verification' ? 'text-slate-300' : 'text-slate-500']">Organization proof and admin review</span>
+                            </span>
+                        </button>
+                    </nav>
+
+                    <section v-show="activeProfileSection === 'verification'" id="verification-documents" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex items-center gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
@@ -475,7 +528,7 @@ onMounted(loadProviderProfile);
                         </div>
                     </section>
 
-                    <form class="order-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" @submit.prevent="saveProviderProfile">
+                    <form v-show="activeProfileSection === 'details'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" @submit.prevent="saveProviderProfile">
                         <div class="flex items-center gap-3 p-5 sm:p-6">
                             <span class="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800">
                                 <i class="fa-solid fa-building" aria-hidden="true"></i>

@@ -5,7 +5,6 @@ import AdminSidebar from '../components/AdminSidebar.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
-const activeAction = ref('');
 const search = ref('');
 const selectedRole = ref('all');
 const stats = ref({
@@ -88,14 +87,6 @@ function applicantVerificationState(status) {
     return applicantVerificationStates[status] ?? applicantVerificationStates.missing;
 }
 
-function actionKey(user, action) {
-    return `${user.id}:${action}`;
-}
-
-function isActionLoading(user, action) {
-    return activeAction.value === actionKey(user, action);
-}
-
 async function loadAdminData(page = 1, options = {}) {
     if (!options.silent) {
         isLoading.value = true;
@@ -123,45 +114,6 @@ async function loadAdminData(page = 1, options = {}) {
             isLoading.value = false;
         }
     }
-}
-
-async function runUserAction(user, action, request) {
-    activeAction.value = actionKey(user, action);
-    errorMessage.value = '';
-
-    try {
-        await request();
-
-        await loadAdminData(pagination.value.current_page, { silent: true });
-    } catch (handledError) {
-        void handledError;
-    } finally {
-        activeAction.value = '';
-    }
-}
-
-async function forcePasswordReset(user) {
-    await runUserAction(
-        user,
-        'force-reset',
-        () => window.axios.post(`/admin/users/${user.id}/force-password-reset`),
-    );
-}
-
-async function verifyEmail(user) {
-    await runUserAction(
-        user,
-        'verify-email',
-        () => window.axios.patch(`/admin/users/${user.id}/email-verification`),
-    );
-}
-
-async function resendVerificationEmail(user) {
-    await runUserAction(
-        user,
-        'resend-verification',
-        () => window.axios.post(`/admin/users/${user.id}/verification-email`),
-    );
 }
 
 function selectRole(role) {
@@ -194,10 +146,10 @@ onMounted(loadAdminData);
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Manage Users
+                                Accounts
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Registered Accounts
+                                Manage platform accounts
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
                                 Search, filter, and review applicant, provider, and admin accounts.
@@ -211,20 +163,13 @@ onMounted(loadAdminData);
                             >
                                 Create account
                             </a>
-                            <a
-                                href="/admin"
-                                class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
-                            >
-                                Back to Dashboard
-                            </a>
                         </div>
                     </div>
                 </header>
 
                 <section class="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                     <div>
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Account Directory</p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">Accounts and access</h3>
+                        <h3 class="text-xl font-bold text-slate-950">Account directory</h3>
                         <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
                             {{ paginationLabel }}
                         </p>
@@ -320,6 +265,9 @@ onMounted(loadAdminData);
                                         >
                                             Reset required
                                         </span>
+                                        <span v-if="!user.email_verified" class="rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">
+                                            Email unverified
+                                        </span>
                                         <span
                                             v-if="user.role === 'applicant'"
                                             :title="applicantVerificationState(user.applicant_verification_status).label"
@@ -335,43 +283,18 @@ onMounted(loadAdminData);
                                         <template v-if="user.contact_number"> &middot; {{ user.contact_number }}</template>
                                     </p>
                                     <p class="mt-1 text-xs text-slate-400">
-                                        {{ user.account_title ? roleLabel(user.account_title) + ' · ' : '' }}Registered {{ user.created_at }}
+                                        <template v-if="user.account_title">{{ roleLabel(user.account_title) }} - </template>
+                                        Registered {{ user.created_at }}
                                     </p>
                                 </div>
                             </div>
 
                             <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
-                                <button
-                                    type="button"
-                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                    :disabled="Boolean(activeAction)"
-                                    @click="forcePasswordReset(user)"
-                                >
-                                    {{ isActionLoading(user, 'force-reset') ? 'Resetting...' : 'Reset password' }}
-                                </button>
-                                <button
-                                    v-if="!user.email_verified"
-                                    type="button"
-                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                    :disabled="Boolean(activeAction)"
-                                    @click="verifyEmail(user)"
-                                >
-                                    {{ isActionLoading(user, 'verify-email') ? 'Verifying...' : 'Verify email' }}
-                                </button>
-                                <button
-                                    v-if="!user.email_verified"
-                                    type="button"
-                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                    :disabled="Boolean(activeAction)"
-                                    @click="resendVerificationEmail(user)"
-                                >
-                                    {{ isActionLoading(user, 'resend-verification') ? 'Sending...' : 'Resend link' }}
-                                </button>
                                 <a
                                     :href="`/admin/accounts/${user.id}/edit`"
                                     class="inline-flex rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
                                 >
-                                    Edit account
+                                    Manage
                                 </a>
                             </div>
                         </article>

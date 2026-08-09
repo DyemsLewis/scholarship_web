@@ -4,5 +4,5 @@ namespace App\Support;
 
 final class Terms
 {
-    public const VERSION = '2026-07-09';
+    public const VERSION = '2026-08-10';
 }

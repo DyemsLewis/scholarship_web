@@ -10,6 +10,7 @@ class SupportReport extends Model
     public const CATEGORIES = [
         'program' => 'Program concern',
         'account' => 'Account concern',
+        'privacy' => 'Privacy and personal data concern',
         'technical' => 'Technical problem',
         'other' => 'Other platform concern',
     ];

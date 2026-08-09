@@ -14,6 +14,10 @@
                     ? auth()->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload()
                     : null
             ) }};
+            window.portalPrivacy = {{ Illuminate\Support\Js::from([
+                'contact_email' => config('privacy.contact_email'),
+                'notice_version' => App\Support\Terms::VERSION,
+            ]) }};
         </script>
         <div id="app" data-page="@yield('page', 'landing')" @yield('appAttributes')></div>
     </body>
