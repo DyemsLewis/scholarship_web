@@ -39,6 +39,9 @@ const rolePresets = {
 };
 const selectedRoleOption = computed(() => roleOptions.find((role) => role.value === form.value.accountTitle));
 const permissionsLocked = computed(() => form.value.accountTitle !== 'custom');
+const selectedPermissions = computed(() => availablePermissions.value.filter((permission) => (
+    form.value.permissions.includes(permission.value)
+)));
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
@@ -279,7 +282,8 @@ onMounted(loadAccount);
                                     </option>
                                 </select>
                                 <p class="mt-2 text-xs leading-5 text-slate-500">
-                                    {{ selectedRoleOption?.description }} Recommended permissions are selected automatically and can be adjusted below.
+                                    {{ selectedRoleOption?.description }}
+                                    {{ permissionsLocked ? 'Permissions are applied automatically.' : 'Choose only the access this role needs.' }}
                                 </p>
                             </div>
 
@@ -294,13 +298,34 @@ onMounted(loadAccount);
                                     <span class="text-xs font-bold text-slate-500">{{ form.permissions.length }} selected</span>
                                 </div>
 
-                                <div class="mt-3 grid gap-2 md:grid-cols-2">
+                                <div v-if="permissionsLocked" class="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4">
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-slate-950">
+                                            <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-bold text-slate-950">{{ selectedRoleOption?.label }} access</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-600">The selected role controls these permissions. Choose Custom role only when a different combination is needed.</p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <span
+                                            v-for="permission in selectedPermissions"
+                                            :key="permission.value"
+                                            class="rounded-md border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700"
+                                        >
+                                            {{ permission.label }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div v-else class="mt-3 grid gap-2 md:grid-cols-2">
                                     <label
                                         v-for="permission in availablePermissions"
                                         :key="permission.value"
                                         :class="[
                                             'flex gap-3 rounded-md border p-3 transition',
-                                            permissionsLocked ? 'cursor-not-allowed' : 'cursor-pointer',
+                                            'cursor-pointer',
                                             form.permissions.includes(permission.value)
                                                 ? 'border-amber-400 bg-amber-50'
                                                 : 'border-slate-200 bg-slate-50 hover:border-slate-300',
@@ -310,7 +335,6 @@ onMounted(loadAccount);
                                             v-model="form.permissions"
                                             type="checkbox"
                                             :value="permission.value"
-                                            :disabled="permissionsLocked"
                                             class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-amber-400"
                                         >
                                         <span>

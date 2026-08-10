@@ -962,10 +962,15 @@ onMounted(loadApplication);
                                         activeSection === section.key ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-600',
                                     ]"
                                 >
-                                    {{ index + 1 }}
+                                    <i :class="section.icon" aria-hidden="true"></i>
                                 </span>
                                 <span class="min-w-0">
-                                    <span class="block truncate text-sm font-bold">{{ section.label }}</span>
+                                    <span class="flex items-center gap-2">
+                                        <span class="block truncate text-sm font-bold">{{ section.label }}</span>
+                                        <span :class="['shrink-0 text-[9px] font-bold uppercase tracking-[0.12em]', activeSection === section.key ? 'text-slate-300' : 'text-slate-400']">
+                                            Step {{ index + 1 }}
+                                        </span>
+                                    </span>
                                     <span :class="['mt-0.5 block truncate text-xs', activeSection === section.key ? 'text-slate-300' : 'text-slate-500']">
                                         {{ sectionSummary(section.key) }}
                                     </span>

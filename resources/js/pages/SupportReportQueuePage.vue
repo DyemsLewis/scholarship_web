@@ -60,6 +60,7 @@ function reportIcon(category) {
         program: 'fa-solid fa-graduation-cap',
         account: 'fa-solid fa-user-gear',
         technical: 'fa-solid fa-screwdriver-wrench',
+        privacy: 'fa-solid fa-user-shield',
         other: 'fa-solid fa-circle-question',
     }[category] ?? 'fa-solid fa-life-ring';
 }
@@ -169,7 +170,8 @@ onMounted(() => loadReports());
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ pageCopy.title }}</h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
                         </div>
-                        <button type="button" class="rounded-md bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-200" @click="loadReports(pagination.current_page)">
+                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50" @click="loadReports(pagination.current_page)">
+                            <i class="fa-solid fa-rotate-right text-xs" aria-hidden="true"></i>
                             Refresh reports
                         </button>
                     </div>

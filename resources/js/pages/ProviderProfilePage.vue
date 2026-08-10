@@ -79,6 +79,12 @@ const representativeName = computed(() => [
     user.value?.middle_initial ? `${user.value.middle_initial}.` : null,
     user.value?.last_name,
 ].filter(Boolean).join(' ') || user.value?.name || 'Not set');
+const verificationDocumentCount = computed(() => (
+    canManageProfile.value
+        ? verificationDocuments.value.length
+        : Number(user.value?.verification_documents_count ?? 0)
+));
+const hasVerificationDocument = computed(() => verificationDocumentCount.value > 0);
 const verificationGuidance = computed(() => {
     if (user.value?.can_post_scholarships) {
         return {
@@ -112,7 +118,7 @@ const verificationGuidance = computed(() => {
         };
     }
 
-    if (verificationDocuments.value.length > 0) {
+    if (hasVerificationDocument.value) {
         return {
             title: 'Proof submitted for admin review',
             description: 'You will be notified after an admin approves or requests changes to the provider account.',
@@ -433,6 +439,30 @@ onMounted(loadProviderProfile);
                             </span>
                         </div>
 
+                        <div class="mt-5 grid overflow-hidden rounded-md border border-slate-200 sm:grid-cols-3 sm:divide-x sm:divide-slate-200">
+                            <div class="flex items-center gap-3 border-b border-slate-200 p-3 sm:border-b-0">
+                                <i :class="['fa-solid text-sm', user?.email_verified ? 'fa-circle-check text-emerald-600' : 'fa-clock text-amber-600']" aria-hidden="true"></i>
+                                <div>
+                                    <p class="text-xs font-bold text-slate-900">Email</p>
+                                    <p class="text-[11px] text-slate-500">{{ user?.email_verified ? 'Verified' : 'Verification needed' }}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 border-b border-slate-200 p-3 sm:border-b-0">
+                                <i :class="['fa-solid text-sm', hasVerificationDocument ? 'fa-circle-check text-emerald-600' : 'fa-file-circle-plus text-amber-600']" aria-hidden="true"></i>
+                                <div>
+                                    <p class="text-xs font-bold text-slate-900">Organization proof</p>
+                                    <p class="text-[11px] text-slate-500">{{ hasVerificationDocument ? 'Submitted' : 'File needed' }}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 p-3">
+                                <i :class="['fa-solid text-sm', user?.verification_status === 'approved' ? 'fa-circle-check text-emerald-600' : 'fa-user-shield text-amber-600']" aria-hidden="true"></i>
+                                <div>
+                                    <p class="text-xs font-bold text-slate-900">Administrator review</p>
+                                    <p class="text-[11px] text-slate-500">{{ verificationLabel(user?.verification_status) }}</p>
+                                </div>
+                            </div>
+                        </div>
+
                         <div :class="['mt-5 rounded-md border p-4 text-sm', verificationGuidance.className]">
                             <p class="font-bold">
                                 {{ verificationGuidance.title }}
@@ -445,7 +475,14 @@ onMounted(loadProviderProfile);
                             </p>
                         </div>
 
-                        <div v-if="canManageProfile" class="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
+                        <TermsAgreement
+                            v-if="canManageProfile"
+                            v-model="verificationDocumentTermsAccepted"
+                            class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3"
+                            context="providerDocument"
+                        />
+
+                        <div v-if="canManageProfile" class="mt-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
                             <label>
                                 <span :class="labelClass">Document type</span>
                                 <select v-model="verificationDocumentType" :class="inputClass">
@@ -469,20 +506,13 @@ onMounted(loadProviderProfile);
                             </label>
                             <button
                                 type="button"
-                                :disabled="isUploadingDocument"
+                                :disabled="isUploadingDocument || !verificationDocumentTermsAccepted || !verificationDocumentFile"
                                 class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
                                 @click="uploadVerificationDocument"
                             >
-                                {{ isUploadingDocument ? 'Uploading...' : 'Upload proof' }}
+                                {{ isUploadingDocument ? 'Uploading...' : !verificationDocumentTermsAccepted ? 'Accept terms first' : 'Upload proof' }}
                             </button>
                         </div>
-
-                        <TermsAgreement
-                            v-if="canManageProfile"
-                            v-model="verificationDocumentTermsAccepted"
-                            class="mt-4"
-                            context="providerDocument"
-                        />
 
                         <div v-if="!canManageProfile" class="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
                             Organization proof files are visible only to the provider owner and staff with organization profile access.

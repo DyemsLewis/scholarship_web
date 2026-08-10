@@ -71,6 +71,7 @@ const selectedBulkApplicationIds = ref([]);
 const bulkAdvanceTarget = ref('exam');
 const bulkAdvancing = ref(false);
 const bulkAdvanceError = ref('');
+const showBulkActions = ref(false);
 const attendancePerPage = 25;
 const {
     confirmation,
@@ -282,6 +283,8 @@ const workspaceTasks = computed(() => {
 
     return tasks;
 });
+const primaryWorkspaceTask = computed(() => workspaceTasks.value[0] ?? null);
+const remainingWorkspaceTaskCount = computed(() => Math.max(workspaceTasks.value.length - 1, 0));
 const bulkAttendanceOptions = computed(() => activeAttendanceEvent.value?.type === 'distribution'
     ? [
         { value: 'received', label: 'Received' },
@@ -624,6 +627,15 @@ function selectWorkspaceSection(section) {
     const url = new URL(window.location.href);
     url.searchParams.set('workspace', section);
     window.history.replaceState({}, '', url);
+}
+
+function toggleBulkActions() {
+    showBulkActions.value = !showBulkActions.value;
+
+    if (!showBulkActions.value) {
+        selectedBulkApplicationIds.value = [];
+        bulkAdvanceError.value = '';
+    }
 }
 
 function openNextSchedule(type) {
@@ -1035,31 +1047,30 @@ onMounted(loadProviderData);
                         </nav>
                     </section>
 
-                    <section v-if="hasProgramContext && workspaceTasks.length" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-                            <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Needs attention</p>
-                                <p class="mt-1 text-sm text-slate-500">Open the task that should be handled next.</p>
+                    <section
+                        v-if="hasProgramContext && primaryWorkspaceTask"
+                        class="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
+                                <i class="fa-solid fa-bell text-sm" aria-hidden="true"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Next task</p>
+                                <p class="mt-1 text-sm font-bold text-slate-950">{{ primaryWorkspaceTask.title }}</p>
+                                <p class="mt-0.5 text-xs leading-5 text-slate-600">
+                                    {{ primaryWorkspaceTask.description }}
+                                    <span v-if="remainingWorkspaceTaskCount" class="font-semibold"> {{ remainingWorkspaceTaskCount }} more task{{ remainingWorkspaceTaskCount === 1 ? '' : 's' }} are marked in the tabs above.</span>
+                                </p>
                             </div>
-                            <span class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">
-                                {{ workspaceTasks.length }} open
-                            </span>
                         </div>
-
                         <button
-                            v-for="task in workspaceTasks"
-                            :key="`${task.section}-${task.title}`"
                             type="button"
-                            class="flex w-full items-center gap-3 border-b border-slate-200 px-4 py-3 text-left last:border-b-0 hover:bg-slate-50"
-                            @click="selectWorkspaceSection(task.section)"
+                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                            @click="selectWorkspaceSection(primaryWorkspaceTask.section)"
                         >
-                            <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-400"></span>
-                            <span class="min-w-0 flex-1">
-                                <span class="block text-sm font-bold text-slate-950">{{ task.title }}</span>
-                                <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ task.description }}</span>
-                            </span>
-                            <span class="hidden shrink-0 text-xs font-bold text-slate-700 sm:inline">{{ task.action }}</span>
-                            <i class="fa-solid fa-arrow-right shrink-0 text-xs text-slate-400" aria-hidden="true"></i>
+                            {{ primaryWorkspaceTask.action }}
+                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                         </button>
                     </section>
 
@@ -1418,6 +1429,20 @@ onMounted(loadProviderData);
                                         <option value="documents">Document issues</option>
                                     </select>
                                 </label>
+                                <button
+                                    v-if="hasProgramContext && availableBulkAdvanceTargets.length"
+                                    type="button"
+                                    :class="[
+                                        'rounded-md border px-4 py-2.5 text-center text-sm font-bold transition',
+                                        showBulkActions
+                                            ? 'border-slate-900 bg-slate-900 text-white'
+                                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100',
+                                    ]"
+                                    @click="toggleBulkActions"
+                                >
+                                    <i class="fa-solid fa-check-double mr-1.5" aria-hidden="true"></i>
+                                    Bulk actions
+                                </button>
                                 <a
                                     :href="exportApplicationsUrl"
                                     class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
@@ -1427,7 +1452,7 @@ onMounted(loadProviderData);
                             </div>
                         </div>
 
-                        <div v-if="hasProgramContext && availableBulkAdvanceTargets.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                        <div v-if="hasProgramContext && availableBulkAdvanceTargets.length && showBulkActions" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
                             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                 <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                                     <span class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Bulk approval</span>

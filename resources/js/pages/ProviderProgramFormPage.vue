@@ -1786,15 +1786,15 @@ onMounted(loadFormData);
                                 </div>
                             </div>
 
-                            <div class="overflow-x-auto border-t border-slate-200 bg-slate-50">
-                                <nav class="flex min-w-max gap-1 p-2" aria-label="Program form sections">
+                            <div class="border-t border-slate-200 bg-slate-50 p-2">
+                                <nav class="grid gap-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8" aria-label="Program form sections">
                                     <button
                                         v-for="(section, index) in formSections"
                                         :key="section.id"
                                         type="button"
                                         :aria-current="activeFormSection === section.id ? 'step' : undefined"
                                         :class="[
-                                            'flex min-w-28 items-center gap-2 rounded-md px-3 py-2.5 text-left transition',
+                                            'flex min-w-0 items-center gap-2 rounded-md px-3 py-2.5 text-left transition',
                                             activeFormSection === section.id
                                                 ? 'bg-slate-950 text-white'
                                                 : 'text-slate-600 hover:bg-white hover:text-slate-950',
@@ -3096,19 +3096,19 @@ onMounted(loadFormData);
                                         <button
                                             v-if="activeFormSectionIndex < formSections.length - 1"
                                             type="button"
-                                            class="rounded-md border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                            class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                                             @click="goToNextFormSection"
                                         >
-                                            Next
+                                            Next: {{ formSections[activeFormSectionIndex + 1]?.label }}
                                         </button>
                                         <button
                                             v-if="activeFormSection !== 'finish'"
                                             type="button"
                                             :disabled="!canPostScholarships"
-                                            class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                            class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
                                             @click="openFormSection('finish')"
                                         >
-                                            Review and save
+                                            Review
                                         </button>
                                         <button
                                             v-else

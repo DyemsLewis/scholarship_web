@@ -425,7 +425,12 @@ class ProviderController extends Controller
         $canManageVerification = $user->hasPortalPermission('manage_profile');
 
         return response()->json([
-            'user' => $this->providerStaffPayload($user),
+            'user' => [
+                ...$this->providerStaffPayload($user),
+                'verification_documents_count' => $providerOwner
+                    ->providerVerificationDocuments()
+                    ->count(),
+            ],
             'verification_documents' => $canManageVerification
                 ? $providerOwner
                     ->providerVerificationDocuments()
