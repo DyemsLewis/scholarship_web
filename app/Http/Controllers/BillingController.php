@@ -46,13 +46,7 @@ class BillingController extends Controller
             'gateway' => [
                 'name' => 'PayMongo',
                 'configured' => $this->payMongo->isConfigured(),
-                'mode' => $this->payMongo->isLiveMode() ? 'live' : 'test',
                 'payment_methods' => config('billing.paymongo.payment_methods', []),
-            ],
-            'free_core' => [
-                'Program publishing and applicant management',
-                'Eligibility matching and decision support',
-                'Applicant notifications and document review',
             ],
             'plans' => collect(config('billing.plans', []))
                 ->map(fn (array $plan, string $code) => [
@@ -60,6 +54,7 @@ class BillingController extends Controller
                     'name' => $plan['name'],
                     'short_name' => $plan['short_name'] ?? $plan['name'],
                     'description' => $plan['description'],
+                    'best_for' => $plan['best_for'] ?? null,
                     'amount' => (int) $plan['amount'],
                     'currency' => config('billing.currency', 'PHP'),
                     'features' => array_values($plan['features'] ?? []),
@@ -75,7 +70,7 @@ class BillingController extends Controller
 
         if (! $this->payMongo->isConfigured()) {
             return response()->json([
-                'message' => 'Provider payments are not configured yet. Add the PayMongo test keys before starting checkout.',
+                'message' => 'Online payment is temporarily unavailable. Please try again later or contact platform support.',
             ], 503);
         }
 

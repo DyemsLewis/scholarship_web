@@ -8,8 +8,7 @@ const isLoading = ref(true);
 const isOpeningCheckout = ref(false);
 const errorMessage = ref('');
 const organization = ref(null);
-const gateway = ref({ configured: false, mode: 'test', payment_methods: [] });
-const freeCore = ref([]);
+const gateway = ref({ configured: false, payment_methods: [] });
 const plans = ref([]);
 const purchases = ref([]);
 const selectedPlan = ref(null);
@@ -44,6 +43,61 @@ function statusLabel(value) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function purchaseProgress(purchase) {
+    if (purchase.status === 'failed') {
+        return {
+            label: 'Payment not confirmed',
+            description: 'The request did not start. You can select the service again whenever it is needed.',
+            percent: 0,
+            step: 0,
+            badgeClass: 'bg-rose-100 text-rose-800',
+            barClass: 'bg-rose-500',
+        };
+    }
+
+    if (purchase.status !== 'paid') {
+        return {
+            label: 'Payment pending',
+            description: 'Complete the secure checkout before support work can begin.',
+            percent: 20,
+            step: 1,
+            badgeClass: 'bg-amber-100 text-amber-800',
+            barClass: 'bg-amber-400',
+        };
+    }
+
+    if (purchase.fulfillment_status === 'completed') {
+        return {
+            label: 'Service completed',
+            description: purchase.fulfillment_notes || 'The support request has been completed.',
+            percent: 100,
+            step: 4,
+            badgeClass: 'bg-emerald-100 text-emerald-800',
+            barClass: 'bg-emerald-500',
+        };
+    }
+
+    if (purchase.fulfillment_status === 'in_progress') {
+        return {
+            label: 'Support in progress',
+            description: purchase.fulfillment_notes || 'The support team is currently working on this request.',
+            percent: 75,
+            step: 3,
+            badgeClass: 'bg-sky-100 text-sky-800',
+            barClass: 'bg-sky-500',
+        };
+    }
+
+    return {
+        label: 'Waiting for support',
+        description: purchase.fulfillment_notes || 'Payment is confirmed and the request is in the support queue.',
+        percent: 50,
+        step: 2,
+        badgeClass: 'bg-slate-200 text-slate-800',
+        barClass: 'bg-slate-700',
+    };
+}
+
 function planIcon(code) {
     return {
         assisted_setup: 'fa-list-check',
@@ -62,36 +116,12 @@ function paymentMethodsLabel(methods = []) {
     return methods.map((method) => labels[method] ?? statusLabel(method)).join(', ');
 }
 
-function paymentStatusClass(status) {
-    if (status === 'paid') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'failed') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
-function fulfillmentStatusClass(status) {
-    if (status === 'completed') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'in_progress') {
-        return 'bg-sky-100 text-sky-800';
-    }
-
-    return 'bg-slate-100 text-slate-700';
-}
-
 function openPurchase(plan) {
     if (!gateway.value.configured) {
         showPortalToast({
             type: 'error',
             title: 'Payments unavailable',
-            message: 'PayMongo test keys and the signed webhook must be configured first.',
+            message: 'Online payment is temporarily unavailable. Please try again later or contact platform support.',
         });
         return;
     }
@@ -143,7 +173,6 @@ async function loadBilling() {
         const response = await window.axios.get('/provider/billing/data');
         organization.value = response.data.organization;
         gateway.value = response.data.gateway ?? gateway.value;
-        freeCore.value = response.data.free_core ?? [];
         plans.value = response.data.plans ?? [];
         purchases.value = response.data.purchases ?? [];
     } catch (error) {
@@ -237,20 +266,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
                 <header class="provider-hero">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Optional Services</p>
-                            <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Support when your team needs it</h1>
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Provider Support</p>
+                            <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Support services for your team</h1>
                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                Core portal tools remain free. Choose optional one-time help only when {{ organization?.name ?? 'your organization' }} needs extra support.
+                                Request one-time help when {{ organization?.name ?? 'your organization' }} needs guidance with setup, application operations, or integration.
                             </p>
                         </div>
-                        <div class="w-fit rounded-md border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                            <p :class="['flex items-center gap-2 text-xs font-bold', gateway.configured ? 'text-emerald-700' : 'text-amber-700']">
-                                <span :class="['h-2 w-2 rounded-full', gateway.configured ? 'bg-emerald-500' : 'bg-amber-500']"></span>
-                                {{ gateway.configured ? 'Checkout ready' : 'Setup required' }}
-                            </p>
-                            <p class="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">PayMongo {{ gateway.mode }} mode</p>
+                        <div :class="['flex w-fit items-center gap-3 rounded-md border bg-white px-3.5 py-3 shadow-sm', gateway.configured ? 'border-emerald-200' : 'border-amber-200']">
+                            <span :class="['grid h-9 w-9 place-items-center rounded-md', gateway.configured ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']">
+                                <i :class="['fa-solid', gateway.configured ? 'fa-lock' : 'fa-clock']" aria-hidden="true"></i>
+                            </span>
+                            <div>
+                                <p class="text-xs font-bold text-slate-900">Secure online payment</p>
+                                <p :class="['mt-0.5 text-[11px] font-semibold', gateway.configured ? 'text-emerald-700' : 'text-amber-700']">
+                                    {{ gateway.configured ? 'Available' : 'Temporarily unavailable' }}
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </header>
@@ -260,86 +293,67 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                 </div>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
-                    Loading optional services...
+                    Loading support services...
                 </div>
 
                 <template v-else>
-                    <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="grid lg:grid-cols-[minmax(0,1fr)_19rem]">
-                            <div class="p-5 sm:p-6">
-                                <div class="flex items-start gap-3">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-amber-300">
-                                        <i class="fa-solid fa-shield-heart" aria-hidden="true"></i>
-                                    </span>
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Always included</p>
-                                        <h2 class="mt-1 text-lg font-bold text-slate-950">Your core workspace stays free</h2>
-                                        <p class="mt-1 text-sm leading-6 text-slate-500">Payment never changes program visibility, matching, or approval decisions.</p>
-                                    </div>
-                                </div>
-
-                                <ul class="mt-5 grid gap-3 sm:grid-cols-3">
-                                    <li v-for="item in freeCore" :key="item" class="flex items-start gap-2 text-sm leading-5 text-slate-700">
-                                        <i class="fa-solid fa-circle-check mt-0.5 text-emerald-600" aria-hidden="true"></i>
-                                        <span>{{ item }}</span>
-                                    </li>
-                                </ul>
-                            </div>
-
-                            <aside class="border-t border-slate-200 bg-slate-50 p-5 lg:border-l lg:border-t-0">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Secure checkout</p>
-                                <div class="mt-2 flex items-center gap-2">
-                                    <i class="fa-solid fa-lock text-sm text-slate-700" aria-hidden="true"></i>
-                                    <p class="text-sm font-bold text-slate-900">PayMongo hosted payment</p>
-                                </div>
-                                <p class="mt-2 text-xs leading-5 text-slate-500">{{ paymentMethodsLabel(gateway.payment_methods) || 'Payment methods will appear when configured.' }}</p>
-                                <p v-if="!gateway.configured" class="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
-                                    Test credentials and the webhook secret are required before checkout can open.
-                                </p>
-                                <p v-else class="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-700">
-                                    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
-                                    Test checkout is available
-                                </p>
-                            </aside>
+                    <section class="mt-6 flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3.5 shadow-sm sm:items-center">
+                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-amber-300">
+                            <i class="fa-solid fa-shield-heart" aria-hidden="true"></i>
+                        </span>
+                        <div>
+                            <p class="text-sm font-bold text-slate-950">Core portal tools remain free</p>
+                            <p class="mt-0.5 text-xs leading-5 text-slate-500">Program publishing, applicant review, matching, and notifications are not affected by service purchases.</p>
                         </div>
                     </section>
 
                     <section class="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                        <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Optional support</p>
-                            <h2 class="mt-1 text-xl font-bold text-slate-950">Choose a one-time service</h2>
-                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Each service has a clear scope and does not affect your access to the provider portal.</p>
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Available Support</p>
+                                <h2 class="mt-1 text-xl font-bold text-slate-950">Choose the help you need</h2>
+                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Review the scope and one-time price before opening secure checkout.</p>
+                            </div>
+                            <p class="text-xs font-semibold text-slate-500">No subscription required</p>
                         </div>
 
                         <div class="mt-5 grid gap-4 lg:grid-cols-3">
-                            <article v-for="plan in plans" :key="plan.code" class="flex min-h-full flex-col rounded-md border border-slate-200 bg-white p-4 transition hover:border-slate-400 hover:shadow-sm sm:p-5">
-                                <div class="flex items-start justify-between gap-3">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-800">
-                                        <i :class="['fa-solid', planIcon(plan.code)]" aria-hidden="true"></i>
-                                    </span>
-                                    <span class="rounded bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-amber-800">One-time</span>
+                            <article v-for="plan in plans" :key="plan.code" class="flex min-h-full flex-col overflow-hidden rounded-md border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md">
+                                <div class="flex-1 p-4 sm:p-5">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-amber-300">
+                                            <i :class="['fa-solid', planIcon(plan.code)]" aria-hidden="true"></i>
+                                        </span>
+                                        <span class="rounded bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-amber-800">One-time</span>
+                                    </div>
+
+                                    <h3 class="mt-4 text-base font-bold text-slate-950">{{ plan.name }}</h3>
+                                    <p class="mt-2 min-h-[3rem] text-sm leading-6 text-slate-500">{{ plan.description }}</p>
+
+                                    <div v-if="plan.best_for" class="mt-4 min-h-[4.25rem] rounded-md border border-amber-100 bg-amber-50/70 px-3 py-2.5">
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800">Best for</p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-700">{{ plan.best_for }}</p>
+                                    </div>
+
+                                    <p class="mt-4 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">What you receive</p>
+                                    <ul class="mt-2 space-y-2">
+                                        <li v-for="feature in plan.features" :key="feature" class="flex items-start gap-2 text-sm leading-5 text-slate-700">
+                                            <i class="fa-solid fa-check mt-1 text-[10px] text-emerald-600" aria-hidden="true"></i>
+                                            <span>{{ feature }}</span>
+                                        </li>
+                                    </ul>
                                 </div>
 
-                                <h3 class="mt-4 text-base font-bold text-slate-950">{{ plan.name }}</h3>
-                                <p class="mt-2 min-h-[3rem] text-sm leading-6 text-slate-500">{{ plan.description }}</p>
-
-                                <ul class="mt-4 flex-1 space-y-2 border-t border-slate-100 pt-4">
-                                    <li v-for="feature in plan.features" :key="feature" class="flex items-start gap-2 text-sm leading-5 text-slate-700">
-                                        <i class="fa-solid fa-check mt-1 text-[10px] text-emerald-600" aria-hidden="true"></i>
-                                        <span>{{ feature }}</span>
-                                    </li>
-                                </ul>
-
-                                <div class="mt-5 border-t border-slate-200 pt-4">
-                                    <div class="flex items-end justify-between gap-3">
+                                <div class="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
+                                    <div class="flex items-start justify-between gap-3">
                                         <div>
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Service price</p>
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">One-time price</p>
                                             <p class="mt-1 text-xl font-black text-slate-950">{{ money(plan.amount, plan.currency) }}</p>
                                         </div>
-                                        <i class="fa-solid fa-arrow-right text-sm text-slate-300" aria-hidden="true"></i>
+                                        <i class="fa-solid fa-lock mt-1 text-xs text-slate-400" aria-hidden="true"></i>
                                     </div>
                                     <button type="button" class="mt-4 w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!gateway.configured" @click="openPurchase(plan)">
-                                        {{ gateway.configured ? 'Select service' : 'Checkout unavailable' }}
+                                        {{ gateway.configured ? 'Review service' : 'Payment unavailable' }}
                                     </button>
                                 </div>
                             </article>
@@ -349,10 +363,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                     <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-5 py-4">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Service history</p>
-                                <h2 class="mt-1 text-lg font-bold text-slate-950">Orders and progress</h2>
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Your Requests</p>
+                                <h2 class="mt-1 text-lg font-bold text-slate-950">Payment and support progress</h2>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Each request shows its current stage and what happens next.</p>
                             </div>
-                            <span class="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">{{ purchases.length }} records</span>
+                            <span class="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">{{ purchases.length }} request{{ purchases.length === 1 ? '' : 's' }}</span>
                         </div>
 
                         <div v-if="purchases.length === 0" class="flex items-center gap-4 p-5 sm:p-6">
@@ -360,46 +375,53 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                 <i class="fa-solid fa-receipt" aria-hidden="true"></i>
                             </span>
                             <div>
-                                <p class="text-sm font-bold text-slate-900">No optional services purchased</p>
-                                <p class="mt-1 text-sm leading-5 text-slate-500">Continue using the free portal and request support only when it is useful.</p>
+                                <p class="text-sm font-bold text-slate-900">No support requests yet</p>
+                                <p class="mt-1 text-sm leading-5 text-slate-500">Choose a service above only when your team needs additional help.</p>
                             </div>
                         </div>
 
                         <div v-else class="divide-y divide-slate-200">
-                            <article v-for="purchase in purchases" :key="purchase.id" class="grid gap-4 px-5 py-4 transition hover:bg-slate-50/70 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(8rem,.7fr)_minmax(8rem,.7fr)_auto] lg:items-center">
+                            <article v-for="purchase in purchases" :key="purchase.id" class="grid gap-4 px-5 py-4 transition hover:bg-slate-50/70 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,1.35fr)_auto] lg:items-center">
                                 <div class="min-w-0">
                                     <p class="truncate text-sm font-bold text-slate-950">{{ purchase.plan_name }}</p>
                                     <p class="mt-1 font-mono text-[11px] text-slate-500">{{ purchase.reference_number }}</p>
-                                    <p v-if="purchase.fulfillment_notes" class="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{{ purchase.fulfillment_notes }}</p>
                                 </div>
 
-                                <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Payment</p>
-                                    <span :class="['mt-1 inline-flex rounded px-2 py-1 text-xs font-bold', paymentStatusClass(purchase.status)]">{{ statusLabel(purchase.status) }}</span>
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <span :class="['inline-flex rounded px-2 py-1 text-xs font-bold', purchaseProgress(purchase).badgeClass]">{{ purchaseProgress(purchase).label }}</span>
+                                        <span v-if="purchaseProgress(purchase).step" class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Step {{ purchaseProgress(purchase).step }} of 4</span>
+                                    </div>
+                                    <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                        <div :class="['h-full rounded-full transition-all', purchaseProgress(purchase).barClass]" :style="{ width: `${purchaseProgress(purchase).percent}%` }"></div>
+                                    </div>
+                                    <p class="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{{ purchaseProgress(purchase).description }}</p>
                                 </div>
 
-                                <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Service</p>
-                                    <span :class="['mt-1 inline-flex rounded px-2 py-1 text-xs font-bold', fulfillmentStatusClass(purchase.fulfillment_status)]">{{ statusLabel(purchase.fulfillment_status) }}</span>
-                                </div>
-
-                                <div class="sm:text-right">
+                                <div class="lg:text-right">
                                     <p class="text-sm font-black text-slate-950">{{ money(purchase.amount, purchase.currency) }}</p>
-                                    <p class="mt-1 whitespace-nowrap text-[11px] text-slate-500">{{ dateTime(purchase.paid_at ?? purchase.created_at) }}</p>
-                                    <div v-if="purchase.status === 'pending'" class="mt-2 flex flex-wrap gap-2 sm:justify-end">
+                                    <p class="mt-1 whitespace-nowrap text-[11px] text-slate-500">{{ purchase.paid_at ? `Paid ${dateTime(purchase.paid_at)}` : `Requested ${dateTime(purchase.created_at)}` }}</p>
+                                    <div v-if="purchase.status === 'pending'" class="mt-2 flex items-center gap-2 lg:justify-end">
+                                        <a v-if="purchase.checkout_url" :href="purchase.checkout_url" class="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">
+                                            Continue payment
+                                            <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                        </a>
                                         <button
                                             type="button"
                                             :disabled="Boolean(syncingReference)"
-                                            class="text-xs font-bold text-slate-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                                            :class="[
+                                                'inline-flex h-8 items-center justify-center rounded-md border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50',
+                                                purchase.checkout_url ? 'w-8' : 'px-3',
+                                            ]"
+                                            :aria-label="purchase.checkout_url ? 'Refresh payment status' : undefined"
+                                            :title="purchase.checkout_url ? 'Refresh payment status' : undefined"
                                             @click="syncPayment(purchase.reference_number)"
                                         >
-                                            {{ syncingReference === purchase.reference_number ? 'Checking...' : 'Check payment' }}
+                                            <i v-if="purchase.checkout_url" :class="['fa-solid fa-rotate-right', syncingReference === purchase.reference_number ? 'animate-spin' : '']" aria-hidden="true"></i>
+                                            <span v-else>{{ syncingReference === purchase.reference_number ? 'Checking...' : 'Check payment status' }}</span>
                                         </button>
-                                        <a v-if="purchase.checkout_url" :href="purchase.checkout_url" class="inline-flex items-center gap-1 text-xs font-bold text-sky-700 hover:underline">
-                                            Continue checkout
-                                            <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
-                                        </a>
                                     </div>
+                                    <p v-else-if="purchase.status === 'paid'" class="mt-2 text-[11px] font-semibold text-slate-500">No action needed</p>
                                 </div>
                             </article>
                         </div>
@@ -412,14 +434,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
     </main>
 
     <div v-if="selectedPlan" class="fixed inset-0 z-[90] grid place-items-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="service-checkout-title" @click.self="closePurchase">
-        <section class="w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-2xl">
+        <section class="flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
             <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
                 <div class="flex min-w-0 items-start gap-3">
                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-amber-300">
                         <i :class="['fa-solid', planIcon(selectedPlan.code)]" aria-hidden="true"></i>
                     </span>
                     <div class="min-w-0">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Confirm service</p>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Review Service Request</p>
                         <h2 id="service-checkout-title" class="mt-1 text-lg font-bold text-slate-950 sm:text-xl">{{ selectedPlan.name }}</h2>
                     </div>
                 </div>
@@ -428,32 +450,58 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                 </button>
             </header>
 
-            <div class="p-5 sm:p-6">
-                <div class="flex items-end justify-between gap-4 rounded-md bg-slate-50 px-4 py-3">
+            <div class="overflow-y-auto p-5 sm:p-6">
+                <div class="flex items-end justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
                     <div>
-                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">One-time service</p>
-                        <p class="mt-1 text-sm font-semibold text-slate-700">Paid through PayMongo</p>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Total one-time price</p>
+                        <p class="mt-1 text-xs font-semibold text-slate-600">Paid once through secure checkout</p>
                     </div>
                     <span class="text-xl font-black text-slate-950">{{ money(selectedPlan.amount, selectedPlan.currency) }}</span>
                 </div>
 
-                <ul class="mt-4 space-y-2">
-                    <li v-for="feature in selectedPlan.features" :key="feature" class="flex items-start gap-2 text-sm leading-5 text-slate-600">
-                        <i class="fa-solid fa-check mt-1 text-[10px] text-emerald-600" aria-hidden="true"></i>
-                        <span>{{ feature }}</span>
-                    </li>
-                </ul>
+                <div v-if="selectedPlan.best_for" class="mt-4 rounded-md border border-amber-100 bg-amber-50 px-4 py-3">
+                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800">Best for</p>
+                    <p class="mt-1 text-sm leading-6 text-slate-700">{{ selectedPlan.best_for }}</p>
+                </div>
+
+                <section class="mt-4">
+                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Included in this request</p>
+                    <ul class="mt-3 grid gap-2 sm:grid-cols-2">
+                        <li v-for="feature in selectedPlan.features" :key="feature" class="flex items-start gap-2 rounded-md border border-slate-200 px-3 py-2.5 text-sm leading-5 text-slate-600">
+                            <i class="fa-solid fa-check mt-1 text-[10px] text-emerald-600" aria-hidden="true"></i>
+                            <span>{{ feature }}</span>
+                        </li>
+                    </ul>
+                </section>
+
+                <section class="mt-4 rounded-md bg-slate-950 p-4 text-white">
+                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300">What happens after payment</p>
+                    <div class="mt-3 grid gap-3 sm:grid-cols-3">
+                        <div>
+                            <span class="grid h-6 w-6 place-items-center rounded bg-white/10 text-[10px] font-bold">1</span>
+                            <p class="mt-2 text-xs font-bold">Payment confirmed</p>
+                        </div>
+                        <div>
+                            <span class="grid h-6 w-6 place-items-center rounded bg-white/10 text-[10px] font-bold">2</span>
+                            <p class="mt-2 text-xs font-bold">Request queued</p>
+                        </div>
+                        <div>
+                            <span class="grid h-6 w-6 place-items-center rounded bg-white/10 text-[10px] font-bold">3</span>
+                            <p class="mt-2 text-xs font-bold">Progress updated here</p>
+                        </div>
+                    </div>
+                </section>
 
                 <label class="mt-5 flex cursor-pointer gap-3 rounded-md border border-slate-200 p-4 transition hover:bg-slate-50">
                     <input v-model="acceptsTerms" type="checkbox" class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-amber-400">
                     <span class="text-sm leading-6 text-slate-600">
-                        I agree that this optional service starts only after payment confirmation and does not affect scholarship visibility or decisions.
+                        I agree to the service scope and understand that support starts only after payment is confirmed.
                     </span>
                 </label>
 
                 <p class="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500">
                     <i class="fa-solid fa-lock mt-1 text-[10px]" aria-hidden="true"></i>
-                    <span>PayMongo handles the payment page. Card and e-wallet details are not stored in this portal.</span>
+                    <span>Secure checkout opens through PayMongo using {{ paymentMethodsLabel(gateway.payment_methods) || 'the available payment methods' }}. Payment details are not stored in this portal.</span>
                 </p>
 
                 <div class="mt-6 grid gap-3 sm:grid-cols-2">

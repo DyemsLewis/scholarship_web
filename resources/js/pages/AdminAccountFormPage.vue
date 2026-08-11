@@ -904,7 +904,7 @@ onMounted(loadAccount);
                                         Required since {{ account.password_reset_required_at }}
                                     </p>
                                     <p v-if="supportLink" class="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs leading-5 text-amber-900">
-                                        Local reset link:
+                                        Password reset link:
                                         <a :href="supportLink" class="break-all font-bold underline">{{ supportLink }}</a>
                                     </p>
                                 </div>

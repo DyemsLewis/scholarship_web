@@ -47,7 +47,7 @@ async function submitForm() {
             'Use a new password with at least eight characters.',
             'Return to the portal after your password is changed.'
         ]"
-        panel-note="For local testing, the reset link is shown after the request. In hosting, connect mail settings to email it."
+        panel-note="Password reset links expire after one hour and should not be shared."
     >
         <form ref="formElement" class="space-y-4" @submit.prevent="submitForm">
             <div>
@@ -79,7 +79,7 @@ async function submitForm() {
             :href="resetUrl"
             class="mt-3 block rounded-md border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-100"
         >
-            Open local reset link
+            Open password reset link
         </a>
 
     </AuthShell>
