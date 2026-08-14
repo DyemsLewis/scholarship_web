@@ -50,7 +50,7 @@ function purchaseProgress(purchase) {
             description: 'The request did not start. You can select the service again whenever it is needed.',
             percent: 0,
             step: 0,
-            badgeClass: 'bg-rose-100 text-rose-800',
+            badgeClass: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
             barClass: 'bg-rose-500',
         };
     }
@@ -61,7 +61,7 @@ function purchaseProgress(purchase) {
             description: 'Complete the secure checkout before support work can begin.',
             percent: 20,
             step: 1,
-            badgeClass: 'bg-amber-100 text-amber-800',
+            badgeClass: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200',
             barClass: 'bg-amber-400',
         };
     }
@@ -72,7 +72,7 @@ function purchaseProgress(purchase) {
             description: purchase.fulfillment_notes || 'The support request has been completed.',
             percent: 100,
             step: 4,
-            badgeClass: 'bg-emerald-100 text-emerald-800',
+            badgeClass: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
             barClass: 'bg-emerald-500',
         };
     }
@@ -83,7 +83,7 @@ function purchaseProgress(purchase) {
             description: purchase.fulfillment_notes || 'The support team is currently working on this request.',
             percent: 75,
             step: 3,
-            badgeClass: 'bg-sky-100 text-sky-800',
+            badgeClass: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
             barClass: 'bg-sky-500',
         };
     }
@@ -93,7 +93,7 @@ function purchaseProgress(purchase) {
         description: purchase.fulfillment_notes || 'Payment is confirmed and the request is in the support queue.',
         percent: 50,
         step: 2,
-        badgeClass: 'bg-slate-200 text-slate-800',
+        badgeClass: 'bg-slate-100 text-slate-700 ring-1 ring-slate-200',
         barClass: 'bg-slate-700',
     };
 }
@@ -268,7 +268,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Provider Support</p>
+                            <p class="text-sm font-semibold uppercase text-amber-700">Provider support</p>
                             <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Support services for your team</h1>
                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                                 Request one-time help when {{ organization?.name ?? 'your organization' }} needs guidance with setup, application operations, or integration.
@@ -307,35 +307,35 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                         </div>
                     </section>
 
-                    <section class="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Available Support</p>
+                                <p class="text-xs font-bold uppercase text-amber-700">Available support</p>
                                 <h2 class="mt-1 text-xl font-bold text-slate-950">Choose the help you need</h2>
                                 <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Review the scope and one-time price before opening secure checkout.</p>
                             </div>
                             <p class="text-xs font-semibold text-slate-500">No subscription required</p>
                         </div>
 
-                        <div class="mt-5 grid gap-4 lg:grid-cols-3">
-                            <article v-for="plan in plans" :key="plan.code" class="flex min-h-full flex-col overflow-hidden rounded-md border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md">
+                        <div class="grid gap-4 p-5 sm:p-6 lg:grid-cols-3">
+                            <article v-for="plan in plans" :key="plan.code" class="flex h-full flex-col overflow-hidden rounded-md border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md">
                                 <div class="flex-1 p-4 sm:p-5">
                                     <div class="flex items-start justify-between gap-3">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-amber-300">
                                             <i :class="['fa-solid', planIcon(plan.code)]" aria-hidden="true"></i>
                                         </span>
-                                        <span class="rounded bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-amber-800">One-time</span>
+                                        <span class="rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase text-amber-800 ring-1 ring-amber-200">One-time</span>
                                     </div>
 
                                     <h3 class="mt-4 text-base font-bold text-slate-950">{{ plan.name }}</h3>
                                     <p class="mt-2 min-h-[3rem] text-sm leading-6 text-slate-500">{{ plan.description }}</p>
 
                                     <div v-if="plan.best_for" class="mt-4 min-h-[4.25rem] rounded-md border border-amber-100 bg-amber-50/70 px-3 py-2.5">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800">Best for</p>
+                                        <p class="text-[10px] font-bold uppercase text-amber-800">Best for</p>
                                         <p class="mt-1 text-xs leading-5 text-slate-700">{{ plan.best_for }}</p>
                                     </div>
 
-                                    <p class="mt-4 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">What you receive</p>
+                                    <p class="mt-4 text-[10px] font-bold uppercase text-slate-500">What you receive</p>
                                     <ul class="mt-2 space-y-2">
                                         <li v-for="feature in plan.features" :key="feature" class="flex items-start gap-2 text-sm leading-5 text-slate-700">
                                             <i class="fa-solid fa-check mt-1 text-[10px] text-emerald-600" aria-hidden="true"></i>
@@ -347,7 +347,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                 <div class="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
                                     <div class="flex items-start justify-between gap-3">
                                         <div>
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">One-time price</p>
+                                            <p class="text-[10px] font-bold uppercase text-slate-500">One-time price</p>
                                             <p class="mt-1 text-xl font-black text-slate-950">{{ money(plan.amount, plan.currency) }}</p>
                                         </div>
                                         <i class="fa-solid fa-lock mt-1 text-xs text-slate-400" aria-hidden="true"></i>
@@ -363,11 +363,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                     <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-5 py-4">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Your Requests</p>
-                                <h2 class="mt-1 text-lg font-bold text-slate-950">Payment and support progress</h2>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Each request shows its current stage and what happens next.</p>
+                                <p class="text-xs font-bold uppercase text-amber-700">Your requests</p>
+                                <h2 class="mt-1 text-xl font-bold text-slate-950">Payment and support progress</h2>
+                                <p class="mt-1 text-sm leading-6 text-slate-500">Each request shows its current stage and what happens next.</p>
                             </div>
-                            <span class="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">{{ purchases.length }} request{{ purchases.length === 1 ? '' : 's' }}</span>
+                            <span class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">{{ purchases.length }} request{{ purchases.length === 1 ? '' : 's' }}</span>
                         </div>
 
                         <div v-if="purchases.length === 0" class="flex items-center gap-4 p-5 sm:p-6">
@@ -389,8 +389,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 
                                 <div class="min-w-0">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <span :class="['inline-flex rounded px-2 py-1 text-xs font-bold', purchaseProgress(purchase).badgeClass]">{{ purchaseProgress(purchase).label }}</span>
-                                        <span v-if="purchaseProgress(purchase).step" class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Step {{ purchaseProgress(purchase).step }} of 4</span>
+                                        <span :class="['inline-flex rounded-md px-2 py-1 text-xs font-bold', purchaseProgress(purchase).badgeClass]">{{ purchaseProgress(purchase).label }}</span>
+                                        <span v-if="purchaseProgress(purchase).step" class="text-[10px] font-bold uppercase text-slate-400">Step {{ purchaseProgress(purchase).step }} of 4</span>
                                     </div>
                                     <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
                                         <div :class="['h-full rounded-full transition-all', purchaseProgress(purchase).barClass]" :style="{ width: `${purchaseProgress(purchase).percent}%` }"></div>
@@ -441,7 +441,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                         <i :class="['fa-solid', planIcon(selectedPlan.code)]" aria-hidden="true"></i>
                     </span>
                     <div class="min-w-0">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Review Service Request</p>
+                        <p class="text-[10px] font-bold uppercase text-amber-700">Review service request</p>
                         <h2 id="service-checkout-title" class="mt-1 text-lg font-bold text-slate-950 sm:text-xl">{{ selectedPlan.name }}</h2>
                     </div>
                 </div>
@@ -453,19 +453,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
             <div class="overflow-y-auto p-5 sm:p-6">
                 <div class="flex items-end justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
                     <div>
-                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Total one-time price</p>
+                        <p class="text-[10px] font-bold uppercase text-slate-500">Total one-time price</p>
                         <p class="mt-1 text-xs font-semibold text-slate-600">Paid once through secure checkout</p>
                     </div>
                     <span class="text-xl font-black text-slate-950">{{ money(selectedPlan.amount, selectedPlan.currency) }}</span>
                 </div>
 
                 <div v-if="selectedPlan.best_for" class="mt-4 rounded-md border border-amber-100 bg-amber-50 px-4 py-3">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800">Best for</p>
+                    <p class="text-[10px] font-bold uppercase text-amber-800">Best for</p>
                     <p class="mt-1 text-sm leading-6 text-slate-700">{{ selectedPlan.best_for }}</p>
                 </div>
 
                 <section class="mt-4">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Included in this request</p>
+                    <p class="text-xs font-bold uppercase text-slate-500">Included in this request</p>
                     <ul class="mt-3 grid gap-2 sm:grid-cols-2">
                         <li v-for="feature in selectedPlan.features" :key="feature" class="flex items-start gap-2 rounded-md border border-slate-200 px-3 py-2.5 text-sm leading-5 text-slate-600">
                             <i class="fa-solid fa-check mt-1 text-[10px] text-emerald-600" aria-hidden="true"></i>
@@ -475,7 +475,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                 </section>
 
                 <section class="mt-4 rounded-md bg-slate-950 p-4 text-white">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300">What happens after payment</p>
+                    <p class="text-[10px] font-bold uppercase text-amber-300">What happens after payment</p>
                     <div class="mt-3 grid gap-3 sm:grid-cols-3">
                         <div>
                             <span class="grid h-6 w-6 place-items-center rounded bg-white/10 text-[10px] font-bold">1</span>
