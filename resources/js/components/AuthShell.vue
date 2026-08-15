@@ -47,13 +47,33 @@ defineProps({
         type: Boolean,
         default: true,
     },
+    wide: {
+        type: Boolean,
+        default: false,
+    },
+    backgroundImage: {
+        type: String,
+        default: '',
+    },
 });
 </script>
 
 <template>
     <main class="relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
-        <div class="absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,_rgba(252,211,77,0.16),_transparent_30%),radial-gradient(circle_at_86%_12%,_rgba(8,20,38,0.10),_transparent_28%),linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)]"></div>
-        <div class="absolute inset-0 bg-[linear-gradient(120deg,_rgba(255,255,255,0.56)_0%,_transparent_34%,_rgba(15,23,42,0.04)_100%)]"></div>
+        <template v-if="backgroundImage">
+            <img
+                :src="backgroundImage"
+                alt=""
+                class="absolute inset-0 h-full w-full object-cover object-center"
+                aria-hidden="true"
+            >
+            <div class="absolute inset-0 bg-[linear-gradient(135deg,_rgba(248,250,252,0.94)_0%,_rgba(241,245,249,0.83)_48%,_rgba(226,232,240,0.90)_100%)]"></div>
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_12%_12%,_rgba(250,204,21,0.22),_transparent_30%),linear-gradient(180deg,_rgba(255,255,255,0.12),_rgba(15,23,42,0.08))]"></div>
+        </template>
+        <template v-else>
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,_rgba(252,211,77,0.16),_transparent_30%),radial-gradient(circle_at_86%_12%,_rgba(8,20,38,0.10),_transparent_28%),linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)]"></div>
+            <div class="absolute inset-0 bg-[linear-gradient(120deg,_rgba(255,255,255,0.56)_0%,_transparent_34%,_rgba(15,23,42,0.04)_100%)]"></div>
+        </template>
 
         <div class="relative z-10 bg-slate-900">
             <SiteNavbar variant="transparent" show-icons />
@@ -65,7 +85,7 @@ defineProps({
                     'w-full overflow-hidden rounded-lg border border-slate-300/80 shadow-[0_28px_90px_rgba(15,23,42,0.24)]',
                     showPanel
                         ? 'grid bg-slate-950 lg:grid-cols-[0.92fr_1.08fr]'
-                        : 'mx-auto max-w-3xl bg-white',
+                        : wide ? 'mx-auto max-w-5xl bg-white' : 'mx-auto max-w-3xl bg-white',
                 ]"
             >
                 <aside v-if="showPanel" class="relative border-b border-white/10 bg-slate-950 px-6 py-8 text-white sm:px-8 lg:border-b-0 lg:border-r lg:px-10 lg:py-10">
@@ -119,7 +139,7 @@ defineProps({
                 </aside>
 
                 <section class="bg-white px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
-                    <div :class="['mx-auto', showPanel ? 'max-w-xl' : 'max-w-2xl']">
+                    <div :class="['mx-auto', showPanel ? 'max-w-xl' : wide ? 'max-w-4xl' : 'max-w-2xl']">
                         <div class="flex items-start justify-between gap-4">
                             <div>
                                 <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">

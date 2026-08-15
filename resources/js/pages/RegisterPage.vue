@@ -39,10 +39,11 @@ const providerTypeOptions = [
 ];
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
-const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
-const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-center text-slate-900 uppercase outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-slate-900 uppercase outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const toggleButtonClass = 'absolute inset-y-0 right-2 my-auto h-9 rounded-md px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900';
 const primaryButtonClass = 'w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80';
+const formSectionClass = 'rounded-md border border-slate-200 bg-white p-4 sm:p-5';
 
 const isSubmitting = ref(false);
 const isVerifying = ref(false);
@@ -330,7 +331,9 @@ onBeforeUnmount(() => {
         :panel-text="shellCopy.panelText"
         :panel-highlights="shellCopy.panelHighlights"
         :panel-note="shellCopy.panelNote"
-        :show-panel="registrationStep === 'details' && !isProviderRegistration"
+        :show-panel="false"
+        :wide="isProviderRegistration && registrationStep === 'details'"
+        background-image="/images/scholarship-cards.jpg"
     >
         <ToastMessage
             :show="toast.show"
@@ -340,272 +343,157 @@ onBeforeUnmount(() => {
             @close="closeToast"
         />
 
-        <form v-if="registrationStep === 'details'" ref="formElement" class="space-y-5" @submit.prevent="submitForm">
-            <div v-if="isProviderRegistration" class="rounded-md border border-slate-200 bg-slate-50 p-4">
-                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                    Provider Details
-                </p>
-                <p class="mt-1 text-sm leading-6 text-slate-500">
-                    These details identify the organization that will manage scholarship programs.
-                </p>
+        <form v-if="registrationStep === 'details'" ref="formElement" class="space-y-4" @submit.prevent="submitForm">
+            <div class="flex items-center gap-3 text-xs font-bold">
+                <span class="inline-flex items-center gap-2 text-slate-950">
+                    <span class="grid h-6 w-6 place-items-center rounded-full bg-amber-400 text-[10px]">1</span>
+                    Account details
+                </span>
+                <span class="h-px flex-1 bg-slate-200"></span>
+                <span class="inline-flex items-center gap-2 text-slate-400">
+                    <span class="grid h-6 w-6 place-items-center rounded-full border border-slate-300 bg-white text-[10px]">2</span>
+                    Email verification
+                </span>
+            </div>
+
+            <section v-if="isProviderRegistration" :class="formSectionClass">
+                <div class="flex items-start gap-3 border-b border-slate-200 pb-4">
+                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-amber-300">
+                        <i class="fa-solid fa-building-columns" aria-hidden="true"></i>
+                    </span>
+                    <div>
+                        <h2 class="font-bold text-slate-950">Organization</h2>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">Information shown on your provider profile and scholarship listings.</p>
+                    </div>
+                </div>
 
                 <div class="mt-4 grid gap-4 sm:grid-cols-2">
                     <div>
-                        <label :class="labelClass" for="provider-name">
-                            Organization name
-                        </label>
-                        <input
-                            id="provider-name"
-                            v-model="form.providerName"
-                            type="text"
-                            autocomplete="organization"
-                            required
-                            placeholder="Scholarship provider name"
-                            :class="inputClass"
-                        >
+                        <label :class="labelClass" for="provider-name">Organization name</label>
+                        <input id="provider-name" v-model="form.providerName" type="text" autocomplete="organization" required placeholder="Organization name" :class="inputClass">
                     </div>
-
                     <div>
-                        <label :class="labelClass" for="provider-type">
-                            Provider type
-                        </label>
-                        <select
-                            id="provider-type"
-                            v-model="form.providerType"
-                            required
-                            :class="inputClass"
-                        >
-                            <option value="" disabled>
-                                Select provider type
-                            </option>
-                            <option
-                                v-for="option in providerTypeOptions"
-                                :key="option.value"
-                                :value="option.value"
-                            >
-                                {{ option.label }}
-                            </option>
+                        <label :class="labelClass" for="provider-type">Provider type</label>
+                        <select id="provider-type" v-model="form.providerType" required :class="inputClass">
+                            <option value="" disabled>Select provider type</option>
+                            <option v-for="option in providerTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                         </select>
                     </div>
+                    <div>
+                        <label :class="labelClass" for="provider-address">Office address</label>
+                        <input id="provider-address" v-model="form.providerAddress" type="text" autocomplete="street-address" required placeholder="Office or campus address" :class="inputClass">
+                    </div>
+                    <div>
+                        <label :class="labelClass" for="provider-website">Website <span class="font-normal text-slate-400">(optional)</span></label>
+                        <input id="provider-website" v-model="form.providerWebsite" type="url" inputmode="url" autocomplete="url" placeholder="https://example.org" :class="inputClass">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label :class="labelClass" for="provider-description">Short description <span class="font-normal text-slate-400">(optional)</span></label>
+                        <textarea id="provider-description" v-model="form.providerDescription" rows="2" placeholder="Briefly describe your organization or scholarship office" :class="inputClass"></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <section :class="formSectionClass">
+                <div class="flex items-start gap-3 border-b border-slate-200 pb-4">
+                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-amber-300">
+                        <i class="fa-solid fa-user" aria-hidden="true"></i>
+                    </span>
+                    <div>
+                        <h2 class="font-bold text-slate-950">{{ isProviderRegistration ? 'Primary contact' : 'Personal information' }}</h2>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ isProviderRegistration ? 'The person responsible for this provider account.' : 'Your basic contact details for the applicant account.' }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-end">
+                    <div>
+                        <label :class="labelClass" for="first-name">First name</label>
+                        <input id="first-name" v-model="form.firstName" type="text" autocomplete="given-name" required placeholder="First name" :class="inputClass">
+                    </div>
+                    <div class="sm:mx-auto sm:w-[5.5rem]">
+                        <label :class="[labelClass, 'sm:text-center']" for="middle-initial">M.I.</label>
+                        <input id="middle-initial" :value="form.middleInitial" type="text" inputmode="text" maxlength="1" pattern="[A-Za-z]" required placeholder="M" :class="compactInputClass" @input="handleMiddleInitialInput">
+                    </div>
+                    <div>
+                        <label :class="labelClass" for="last-name">Last name</label>
+                        <input id="last-name" v-model="form.lastName" type="text" autocomplete="family-name" required placeholder="Last name" :class="inputClass">
+                    </div>
                 </div>
 
                 <div class="mt-4 grid gap-4 sm:grid-cols-2">
                     <div>
-                        <label :class="labelClass" for="provider-website">
-                            Website
-                        </label>
-                        <input
-                            id="provider-website"
-                            v-model="form.providerWebsite"
-                            type="url"
-                            inputmode="url"
-                            autocomplete="url"
-                            placeholder="https://example.edu"
-                            :class="inputClass"
-                        >
+                        <label :class="labelClass" for="email">Email address</label>
+                        <input id="email" v-model="form.email" type="email" autocomplete="email" required placeholder="name@example.com" :class="inputClass">
                     </div>
-
                     <div>
-                        <label :class="labelClass" for="provider-address">
-                            Office address
-                        </label>
-                        <input
-                            id="provider-address"
-                            v-model="form.providerAddress"
-                            type="text"
-                            autocomplete="street-address"
-                            required
-                            placeholder="Office or campus address"
-                            :class="inputClass"
-                        >
+                        <label :class="labelClass" for="number">Contact number</label>
+                        <input id="number" :value="form.number" type="tel" inputmode="numeric" autocomplete="tel" required placeholder="09XX XXX XXXX" :class="inputClass" @input="(event) => { event.target.setCustomValidity(''); handleNumberInput(event); }">
+                    </div>
+                </div>
+            </section>
+
+            <section :class="formSectionClass">
+                <div class="flex items-start gap-3 border-b border-slate-200 pb-4">
+                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-amber-300">
+                        <i class="fa-solid fa-key" aria-hidden="true"></i>
+                    </span>
+                    <div>
+                        <h2 class="font-bold text-slate-950">Account security</h2>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">Choose a username and a password with at least eight characters.</p>
                     </div>
                 </div>
 
-                <div class="mt-4">
-                    <label :class="labelClass" for="provider-description">
-                        Short description
-                    </label>
-                    <textarea
-                        id="provider-description"
-                        v-model="form.providerDescription"
-                        rows="3"
-                        placeholder="Briefly describe the provider or scholarship office"
-                        :class="inputClass"
-                    ></textarea>
-                </div>
-            </div>
-
-            <div v-if="isProviderRegistration" class="border-t border-slate-200 pt-5">
-                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Account Contact
-                </p>
-            </div>
-
-            <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-end">
-                <div>
-                    <label :class="labelClass" for="first-name">
-                        {{ isProviderRegistration ? 'Contact first name' : 'First name' }}
-                    </label>
-                    <input
-                        id="first-name"
-                        v-model="form.firstName"
-                        type="text"
-                        autocomplete="given-name"
-                        required
-                        :placeholder="isProviderRegistration ? 'Contact first name' : 'First name'"
-                        :class="inputClass"
-                    >
-                </div>
-
-                <div class="sm:mx-auto sm:w-[5.5rem]">
-                    <label :class="[labelClass, 'sm:text-center']" for="middle-initial">
-                        Middle initial
-                    </label>
-                    <input
-                        id="middle-initial"
-                        :value="form.middleInitial"
-                        type="text"
-                        inputmode="text"
-                        maxlength="1"
-                        pattern="[A-Za-z]"
-                        required
-                        placeholder="M"
-                        :class="compactInputClass"
-                        @input="handleMiddleInitialInput"
-                    >
-                </div>
-
-                <div>
-                    <label :class="labelClass" for="last-name">
-                        {{ isProviderRegistration ? 'Contact last name' : 'Last name' }}
-                    </label>
-                    <input
-                        id="last-name"
-                        v-model="form.lastName"
-                        type="text"
-                        autocomplete="family-name"
-                        required
-                        :placeholder="isProviderRegistration ? 'Contact last name' : 'Last name'"
-                        :class="inputClass"
-                    >
-                </div>
-            </div>
-
-            <div>
-                <label :class="labelClass" for="username">
-                    Username
-                </label>
-                <input
-                    id="username"
-                    v-model="form.username"
-                    type="text"
-                    autocomplete="username"
-                    pattern="[A-Za-z0-9_.-]{4,}"
-                    required
-                    placeholder="Username"
-                    :class="inputClass"
-                >
-            </div>
-
-            <div class="grid gap-4 sm:grid-cols-2">
-                <div>
-                    <label :class="labelClass" for="email">
-                        Email address
-                    </label>
-                    <input
-                        id="email"
-                        v-model="form.email"
-                        type="email"
-                        autocomplete="email"
-                        required
-                        placeholder="Email address"
-                        :class="inputClass"
-                    >
-                </div>
-
-                <div>
-                    <label :class="labelClass" for="number">
-                        Contact number
-                    </label>
-                    <input
-                        id="number"
-                        :value="form.number"
-                        type="tel"
-                        inputmode="numeric"
-                        autocomplete="tel"
-                        required
-                        placeholder="Contact number"
-                        :class="inputClass"
-                        @input="(event) => { event.target.setCustomValidity(''); handleNumberInput(event); }"
-                    >
-                </div>
-            </div>
-
-            <div class="grid gap-4 sm:grid-cols-2">
-                <div>
-                    <label :class="labelClass" for="password">
-                        Password
-                    </label>
-                    <div class="relative">
-                        <input
-                            id="password"
-                            v-model="form.password"
-                            :type="showPassword ? 'text' : 'password'"
-                            autocomplete="new-password"
-                            required
-                            minlength="8"
-                            placeholder="Password"
-                            :class="[inputClass, 'pr-16']"
-                        >
-                        <button
-                            type="button"
-                            :class="toggleButtonClass"
-                            @click="showPassword = !showPassword"
-                        >
-                            {{ showPassword ? 'Hide' : 'Show' }}
-                        </button>
+                <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div class="sm:col-span-2">
+                        <label :class="labelClass" for="username">Username</label>
+                        <input id="username" v-model="form.username" type="text" autocomplete="username" pattern="[A-Za-z0-9_.-]{4,}" required placeholder="Choose a username" :class="inputClass">
+                    </div>
+                    <div>
+                        <label :class="labelClass" for="password">Password</label>
+                        <div class="relative">
+                            <input id="password" v-model="form.password" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" required minlength="8" placeholder="At least 8 characters" :class="[inputClass, 'pr-16']">
+                            <button type="button" :class="toggleButtonClass" @click="showPassword = !showPassword">{{ showPassword ? 'Hide' : 'Show' }}</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label :class="labelClass" for="password-confirmation">Confirm password</label>
+                        <input id="password-confirmation" v-model="form.passwordConfirmation" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" required minlength="8" placeholder="Repeat password" :class="inputClass" @input="$event.target.setCustomValidity('')">
                     </div>
                 </div>
+            </section>
 
-                <div>
-                    <label :class="labelClass" for="password-confirmation">
-                        Confirm password
-                    </label>
-                    <input
-                        id="password-confirmation"
-                        v-model="form.passwordConfirmation"
-                        :type="showPassword ? 'text' : 'password'"
-                        autocomplete="new-password"
-                        required
-                        minlength="8"
-                        placeholder="Confirm password"
-                        :class="inputClass"
-                        @input="$event.target.setCustomValidity('')"
-                    >
-                </div>
+            <div class="rounded-md border border-slate-200 bg-slate-50 p-4">
+                <TermsAgreement v-model="form.termsAccepted" context="account" />
+                <button type="submit" :disabled="isSubmitting" :class="[primaryButtonClass, 'mt-4']">
+                    {{ isSubmitting ? 'Sending code...' : 'Continue to email verification' }}
+                </button>
             </div>
-
-            <TermsAgreement v-model="form.termsAccepted" context="account" />
-
-            <button
-                type="submit"
-                :disabled="isSubmitting"
-                :class="primaryButtonClass"
-            >
-                {{ isSubmitting ? 'Sending code...' : 'Continue to email verification' }}
-            </button>
         </form>
 
         <form v-else class="space-y-5" @submit.prevent="verifyRegistration">
-            <div class="rounded-md border border-amber-200 bg-amber-50 p-4 text-center">
-                <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-amber-200 text-amber-900">
+            <div class="flex items-center gap-3 text-xs font-bold">
+                <span class="inline-flex items-center gap-2 text-slate-500">
+                    <span class="grid h-6 w-6 place-items-center rounded-full bg-slate-900 text-[10px] text-white">
+                        <i class="fa-solid fa-check" aria-hidden="true"></i>
+                    </span>
+                    Account details
+                </span>
+                <span class="h-px flex-1 bg-slate-300"></span>
+                <span class="inline-flex items-center gap-2 text-slate-950">
+                    <span class="grid h-6 w-6 place-items-center rounded-full bg-amber-400 text-[10px]">2</span>
+                    Email verification
+                </span>
+            </div>
+
+            <div class="rounded-md border border-slate-200 bg-white p-5 text-center">
+                <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-900 text-amber-300">
                     <i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i>
                 </span>
                 <p class="mt-3 text-sm font-bold text-slate-950">
                     Code sent to {{ verificationEmail }}
                 </p>
-                <p class="mt-1 text-sm leading-6 text-slate-600">
-                    No account has been created yet. Enter the code below to finish registration.
+                <p class="mt-1 text-xs leading-5 text-slate-500">
+                    Enter the code to create your account. It expires after 10 minutes.
                 </p>
             </div>
 
@@ -627,9 +515,6 @@ onBeforeUnmount(() => {
                     class="w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-center text-2xl font-bold tracking-[0.45em] text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                     @input="handleVerificationCodeInput"
                 >
-                <p class="mt-2 text-center text-xs text-slate-500">
-                    The code expires in 10 minutes.
-                </p>
             </div>
 
             <button

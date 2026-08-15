@@ -9,7 +9,7 @@ import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
-import { progressStateLabel, progressStepIcon } from '../support/selectionPlan';
+import { progressStateLabel } from '../support/selectionPlan';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
@@ -730,42 +730,52 @@ onMounted(loadApplication);
 
                     <div :class="['grid gap-4', ['overview', 'files'].includes(activeSection) ? '' : 'lg:grid-cols-[minmax(0,1fr)_21rem]']">
                         <div class="space-y-4">
-                            <section v-if="activeSection === 'overview' && application.status_progress" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <section v-if="activeSection === 'overview' && application.status_progress" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
-                                        <p class="student-kicker">Selection journey</p>
+                                        <p class="student-kicker">Application flow</p>
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">
                                             {{ application.status_progress.current_stage_label }}
                                         </h3>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">This follows the process configured by the scholarship provider.</p>
+                                        <p class="mt-1 text-sm leading-5 text-slate-500">Follow your progress from review to the final decision.</p>
                                     </div>
-                                    <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                        {{ application.status_progress.completed_steps }} of {{ application.status_progress.total_steps }} complete
-                                    </span>
-                                </div>
-                                <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                                    <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${application.status_progress.percent}%` }"></div>
-                                </div>
-                                <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                                    <div
-                                        v-for="step in application.status_progress.steps"
-                                        :key="step.key"
-                                        :class="['rounded-md p-3 text-xs', stepClass(step.state)]"
-                                    >
-                                        <div class="flex items-start gap-2.5">
-                                            <span class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-current/10">
-                                                <i :class="progressStepIcon(step.key)" aria-hidden="true"></i>
-                                            </span>
-                                            <div class="min-w-0">
-                                                <p class="font-bold">{{ step.label }}</p>
-                                                <p class="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] opacity-70">{{ progressStateLabel(step.state) }}</p>
-                                            </div>
+                                    <div class="w-full sm:w-44">
+                                        <div class="flex items-center justify-between text-xs font-bold text-slate-600">
+                                            <span>Progress</span>
+                                            <span>{{ application.status_progress.percent }}%</span>
+                                        </div>
+                                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                            <div class="h-full rounded-full bg-amber-400 transition-all" :style="{ width: `${application.status_progress.percent}%` }"></div>
                                         </div>
                                     </div>
                                 </div>
-                                <p class="mt-3 rounded-md bg-slate-50 px-3 py-2.5 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
-                                    {{ application.status_progress.next_action }}
-                                </p>
+                                <div class="overflow-x-auto bg-slate-50/70">
+                                    <ol class="flex min-w-max divide-x divide-slate-200">
+                                        <li
+                                            v-for="(step, index) in application.status_progress.steps"
+                                            :key="step.key"
+                                            :class="['flex min-w-[11rem] flex-1 items-center gap-3 px-4 py-4 text-xs', stepClass(step.state)]"
+                                        >
+                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold', step.state === 'complete' ? 'bg-slate-900 text-white' : step.state === 'current' ? 'bg-amber-400 text-slate-950 ring-4 ring-amber-100' : ['stopped', 'skipped'].includes(step.state) ? 'bg-rose-100 text-rose-700' : 'border border-slate-300 bg-white text-slate-500']">
+                                                <i v-if="step.state === 'complete'" class="fa-solid fa-check" aria-hidden="true"></i>
+                                                <span v-else>{{ index + 1 }}</span>
+                                            </span>
+                                            <div class="min-w-0">
+                                                <p class="truncate font-bold">{{ step.label }}</p>
+                                                <p class="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] opacity-70">{{ progressStateLabel(step.state) }}</p>
+                                            </div>
+                                        </li>
+                                    </ol>
+                                </div>
+                                <div class="flex items-start gap-3 border-t border-slate-200 bg-white px-4 py-3.5">
+                                    <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-900 text-xs text-amber-300">
+                                        <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                                    </span>
+                                    <div>
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Next step</p>
+                                        <p class="mt-0.5 text-sm font-semibold leading-5 text-slate-700">{{ application.status_progress.next_action }}</p>
+                                    </div>
+                                </div>
                             </section>
 
                             <section v-if="activeSection === 'overview' && schedules.length" id="application-schedules" class="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

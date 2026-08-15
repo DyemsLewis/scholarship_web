@@ -41,8 +41,8 @@ onUnmounted(() => {
             @click.self="closeModal"
             @keydown.esc="closeModal"
         >
-            <section class="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-xl bg-white text-slate-900 shadow-2xl">
-                <header class="relative overflow-hidden bg-slate-950 px-5 py-5 text-white sm:px-6">
+            <section class="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white text-slate-900 shadow-2xl">
+                <header class="relative shrink-0 overflow-hidden bg-slate-950 px-5 py-5 text-white sm:px-6">
                     <div class="absolute right-5 top-5 flex gap-1 opacity-70">
                         <span class="h-2 w-8 rounded-full bg-amber-300"></span>
                         <span class="h-2 w-2 rounded-full bg-white/40"></span>
@@ -61,7 +61,7 @@ onUnmounted(() => {
                     </p>
                 </header>
 
-                <div class="max-h-[58vh] overflow-y-auto p-5 sm:p-6">
+                <div class="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
                     <div class="grid gap-3">
                         <div
                             v-for="detail in selectedContent.details"
@@ -108,13 +108,13 @@ onUnmounted(() => {
 
                 </div>
 
-                <footer class="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
+                <footer class="flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
                     <button
                         type="button"
                         class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                         @click="closeModal"
                     >
-                        I understand
+                        {{ context === 'privacy' ? 'Close privacy notice' : 'I understand' }}
                     </button>
                 </footer>
             </section>

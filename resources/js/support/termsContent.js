@@ -1,4 +1,4 @@
-const privacyContactEmail = window.portalPrivacy?.contact_email || 'hello@example.com';
+const privacyContactEmail = window.portalPrivacy?.contact_email || 'scholarshipfinder@email.com';
 
 export const termsContent = {
     general: {
