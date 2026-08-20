@@ -45,6 +45,11 @@ class StudentProfile extends Model
         'guardian_contact',
         'guardian_email',
         'guardian_is_account_owner',
+        'profile_photo_path',
+        'profile_photo_original_name',
+        'profile_photo_mime_type',
+        'profile_photo_size',
+        'profile_photo_updated_at',
         'verification_status',
         'verification_notes',
         'verified_at',
@@ -60,6 +65,8 @@ class StudentProfile extends Model
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
             'guardian_is_account_owner' => 'boolean',
+            'profile_photo_size' => 'integer',
+            'profile_photo_updated_at' => 'datetime',
             'verified_at' => 'datetime',
         ];
     }

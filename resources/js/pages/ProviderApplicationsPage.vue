@@ -1609,8 +1609,14 @@ onMounted(loadProviderData);
             >
                 <section class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
                     <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
-                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold tracking-[0.08em] text-white">
-                            {{ applicantInitials(selectedApplicationPreview) }}
+                        <span class="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-xs font-bold tracking-[0.08em] text-white">
+                            <img
+                                v-if="selectedApplicationPreview.applicant?.profile_photo_url"
+                                :src="selectedApplicationPreview.applicant.profile_photo_url"
+                                :alt="`${selectedApplicationPreview.applicant?.name || 'Applicant'} photo`"
+                                class="h-full w-full object-cover"
+                            >
+                            <span v-else>{{ applicantInitials(selectedApplicationPreview) }}</span>
                         </span>
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">

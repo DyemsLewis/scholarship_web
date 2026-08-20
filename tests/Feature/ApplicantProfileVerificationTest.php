@@ -102,6 +102,40 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertJsonPath('prepared_documents.0.document_name', 'School ID');
     }
 
+    public function test_academic_proof_is_saved_as_a_reusable_grade_document(): void
+    {
+        Storage::fake('local');
+
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $response = $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('latest-report-card.pdf', 120, 'application/pdf'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('verification_documents.0.document_type', 'academic_record')
+            ->assertJsonPath('prepared_document.document_name', 'Latest report card or grades')
+            ->assertJsonPath('prepared_documents_count', 1);
+
+        $verificationDocument = ApplicantVerificationDocument::query()->firstOrFail();
+        $preparedDocument = StudentDocument::query()->firstOrFail();
+
+        $this->assertSame('academic_record', $verificationDocument->document_type);
+        $this->assertSame('Latest report card or grades', $preparedDocument->document_name);
+        Storage::disk('local')->assertExists($verificationDocument->path);
+        Storage::disk('local')->assertExists($preparedDocument->path);
+
+        $this->actingAs($applicant)
+            ->getJson('/dashboard/documents/data')
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $response->json('prepared_document.id'),
+                'document_name' => 'Latest report card or grades',
+            ]);
+    }
+
     public function test_admin_verification_is_visible_in_provider_list_without_exposing_proof_files(): void
     {
         Storage::fake('local');
@@ -216,6 +250,10 @@ class ApplicantProfileVerificationTest extends TestCase
             'enrollment_status' => 'enrolled',
             'income_bracket' => 'Below PHP 250,000',
             'household_size' => 5,
+            'support_needs' => "Books and supplies\nTransportation",
+            'scholarship_goal' => 'Continue studying without interrupting enrollment.',
+            'preferred_categories' => 'Financial assistance',
+            'preferred_locations' => 'Near my home address',
             'city' => 'Manila',
             'province' => 'Metro Manila',
             'guardian_name' => 'Demo Guardian',
@@ -268,6 +306,8 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertOk()
             ->assertJsonPath('application.applicant.guardian_name', 'Demo Guardian')
             ->assertJsonPath('application.applicant.enrollment_status', 'enrolled')
+            ->assertJsonPath('application.applicant.support_needs', "Books and supplies\nTransportation")
+            ->assertJsonPath('application.applicant.scholarship_goal', 'Continue studying without interrupting enrollment.')
             ->assertJsonPath('application.applicant.profile_proofs.0.id', $proof->id)
             ->assertJsonPath('application.applicant.profile_proofs.0.view_url', $viewUrl);
 

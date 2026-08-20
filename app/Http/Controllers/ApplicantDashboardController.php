@@ -418,6 +418,7 @@ class ApplicantDashboardController extends Controller
                 'school_id',
                 'government_id',
                 'enrollment_certificate',
+                'academic_record',
                 'birth_certificate',
                 'other',
             ])],
@@ -594,6 +595,119 @@ class ApplicantDashboardController extends Controller
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
         return Storage::disk('local')->response($document->path, $document->original_name);
+    }
+
+    public function uploadProfilePhoto(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        $validated = $request->validate([
+            'profile_photo' => [
+                'required',
+                'image',
+                'mimes:jpg,jpeg,png',
+                'max:5120',
+                'dimensions:min_width=300,min_height=300,max_width=4000,max_height=4000,ratio=1/1',
+            ],
+        ], [
+            'profile_photo.dimensions' => 'Use a square 1x1 or 2x2-style photo between 300 x 300 and 4000 x 4000 pixels.',
+        ]);
+
+        $user = $request->user();
+        $profile = $user->studentProfile()->firstOrCreate(['user_id' => $user->id]);
+        $file = $validated['profile_photo'];
+        $path = $file->store("profile-photos/{$user->id}", 'local');
+
+        if (! is_string($path)) {
+            throw ValidationException::withMessages([
+                'profile_photo' => 'The applicant photo could not be stored. Please try again.',
+            ]);
+        }
+
+        $oldPath = $profile->profile_photo_path;
+
+        try {
+            $profile->update([
+                'profile_photo_path' => $path,
+                'profile_photo_original_name' => $file->getClientOriginalName(),
+                'profile_photo_mime_type' => $file->getMimeType(),
+                'profile_photo_size' => $file->getSize() ?: 0,
+                'profile_photo_updated_at' => now(),
+            ]);
+        } catch (Throwable $error) {
+            Storage::disk('local')->delete($path);
+
+            throw $error;
+        }
+
+        if ($oldPath && $oldPath !== $path) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        ActivityLog::record(
+            $user,
+            'applicant_profile_photo_updated',
+            "{$user->name} updated their applicant profile photo.",
+            $request,
+        );
+
+        $user->unsetRelation('studentProfile');
+
+        return response()->json([
+            'message' => 'Applicant photo updated.',
+            'user' => $this->userPayload($request),
+        ]);
+    }
+
+    public function viewProfilePhoto(Request $request)
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        $profile = $request->user()->studentProfile;
+        abort_unless($profile?->profile_photo_path, 404);
+        abort_unless(Storage::disk('local')->exists($profile->profile_photo_path), 404);
+
+        return Storage::disk('local')->response(
+            $profile->profile_photo_path,
+            $profile->profile_photo_original_name ?: 'applicant-photo',
+            [
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+        );
+    }
+
+    public function deleteProfilePhoto(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        $user = $request->user();
+        $profile = $user->studentProfile;
+        abort_unless($profile?->profile_photo_path, 404);
+
+        $path = $profile->profile_photo_path;
+        $profile->update([
+            'profile_photo_path' => null,
+            'profile_photo_original_name' => null,
+            'profile_photo_mime_type' => null,
+            'profile_photo_size' => null,
+            'profile_photo_updated_at' => null,
+        ]);
+        Storage::disk('local')->delete($path);
+
+        ActivityLog::record(
+            $user,
+            'applicant_profile_photo_deleted',
+            "{$user->name} removed their applicant profile photo.",
+            $request,
+        );
+
+        $user->unsetRelation('studentProfile');
+
+        return response()->json([
+            'message' => 'Applicant photo removed.',
+            'user' => $this->userPayload($request),
+        ]);
     }
 
     public function updateProfile(Request $request): JsonResponse

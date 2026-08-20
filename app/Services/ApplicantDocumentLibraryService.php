@@ -15,6 +15,7 @@ class ApplicantDocumentLibraryService
         'school_id' => 'School ID',
         'government_id' => 'Government-issued ID',
         'enrollment_certificate' => 'Certificate of enrollment',
+        'academic_record' => 'Latest report card or grades',
         'birth_certificate' => 'Birth certificate',
         'other' => 'Other identity or school proof',
     ];

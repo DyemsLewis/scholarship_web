@@ -35,6 +35,9 @@ Route::get('/dashboard/reports/data', [SupportReportController::class, 'applican
 Route::post('/dashboard/reports', [SupportReportController::class, 'store'])->middleware(['auth', 'throttle:6,1'])->name('dashboard.reports.store');
 Route::get('/dashboard/profile/data', [ApplicantDashboardController::class, 'profileData'])->middleware('auth')->name('dashboard.profile.data');
 Route::patch('/dashboard/profile', [ApplicantDashboardController::class, 'updateProfile'])->middleware('auth')->name('dashboard.profile.update');
+Route::post('/dashboard/profile/photo', [ApplicantDashboardController::class, 'uploadProfilePhoto'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.profile.photo.store');
+Route::get('/dashboard/profile/photo', [ApplicantDashboardController::class, 'viewProfilePhoto'])->middleware('auth')->name('dashboard.profile.photo');
+Route::delete('/dashboard/profile/photo', [ApplicantDashboardController::class, 'deleteProfilePhoto'])->middleware('auth')->name('dashboard.profile.photo.destroy');
 Route::post('/dashboard/profile/verification-documents', [ApplicantDashboardController::class, 'uploadApplicantVerificationDocument'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applicant-verification-documents.store');
 Route::get('/dashboard/profile/verification-documents/{document}/view', [ApplicantDashboardController::class, 'viewApplicantVerificationDocument'])->middleware('auth')->name('dashboard.applicant-verification-documents.view');
 Route::delete('/dashboard/profile/verification-documents/{document}', [ApplicantDashboardController::class, 'deleteApplicantVerificationDocument'])->middleware('auth')->name('dashboard.applicant-verification-documents.destroy');
@@ -152,6 +155,10 @@ Route::middleware(['auth', 'provider'])
             ->whereNumber('document')
             ->middleware(['permission:review_applications', 'provider.approved'])
             ->name('applications.profile-proofs.view');
+        Route::get('/applications/{application}/profile-photo', [ProviderController::class, 'viewApplicantProfilePhoto'])
+            ->whereNumber('application')
+            ->middleware(['permission:review_applications', 'provider.approved'])
+            ->name('applications.profile-photo.view');
         Route::post('/applications/{application}/schedules', [ProviderController::class, 'upsertApplicationSchedule'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.schedules.upsert');
         Route::patch('/applications/{application}/schedules/{schedule}', [ProviderController::class, 'updateApplicationScheduleTracking'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.schedules.tracking');
         Route::patch('/applications/{application}/decision', [ProviderController::class, 'decideApplication'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.decision');

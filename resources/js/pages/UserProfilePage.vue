@@ -26,6 +26,9 @@ const user = ref(null);
 const form = ref(emptyForm());
 const profileView = ref('overview');
 const activeSection = ref('personal');
+const showProviderPreview = ref(false);
+const isUploadingProfilePhoto = ref(false);
+const isDeletingProfilePhoto = ref(false);
 const addressLookupTrigger = ref(0);
 const savedFormSnapshot = ref('');
 const fieldErrors = ref({});
@@ -116,7 +119,7 @@ const genderOptions = [
     { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 const suffixOptions = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
-const verificationDocumentOptions = [
+const baseVerificationDocumentOptions = [
     {
         value: 'school_id',
         label: 'School or student ID',
@@ -193,10 +196,10 @@ const profileSections = [
         label: 'Personal',
         detail: 'Identity',
         icon: 'fa-solid fa-address-card',
-        impact: 'Applicant identity.',
+        impact: 'Identity, contact, and household context.',
         required: true,
-        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'gender', 'birthdate', 'contact_number', 'account_managed_by'],
-        requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number', 'account_managed_by'],
+        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'income_bracket', 'household_size', 'support_needs'],
+        requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number', 'account_managed_by', 'income_bracket'],
     },
     {
         id: 'academic',
@@ -207,16 +210,6 @@ const profileSections = [
         required: true,
         fields: ['education_level', 'school', 'school_type', 'learner_reference_number', 'course_or_strand', 'year_level', 'enrollment_status', 'grading_scale', 'gwa'],
         requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'grading_scale', 'gwa'],
-    },
-    {
-        id: 'household',
-        label: 'Household',
-        detail: 'Need and support',
-        icon: 'fa-solid fa-house',
-        impact: 'Financial context.',
-        required: true,
-        fields: ['income_bracket', 'household_size', 'support_needs'],
-        requiredFields: ['income_bracket'],
     },
     {
         id: 'location',
@@ -273,6 +266,77 @@ const guardianRequiredLevels = ['preschool', 'elementary', 'junior_high_school',
 const requiresProgramPath = computed(() => courseRequiredLevels.includes(form.value.education_level));
 const requiresGrades = computed(() => gradesRequiredLevels.includes(form.value.education_level));
 const requiresNumericGrade = computed(() => ['percentage', 'grade_point'].includes(form.value.grading_scale));
+const academicProofOption = computed(() => {
+    const educationLevel = form.value.education_level;
+    const gradingScale = form.value.grading_scale;
+    const educationLabel = educationLevelOptions.find((option) => option.value === educationLevel)?.label;
+    const gradingLabel = gradingScaleOptions.find((option) => option.value === gradingScale)?.label;
+    const recordCopy = {
+        preschool: {
+            label: 'Progress report or assessment',
+            detail: 'Upload the learner\'s latest progress report or school assessment.',
+        },
+        elementary: {
+            label: 'Latest report card',
+            detail: 'Upload the latest report card for the selected grade level.',
+        },
+        junior_high_school: {
+            label: 'Latest report card',
+            detail: 'Upload the latest report card for the selected grade level.',
+        },
+        senior_high_school: {
+            label: 'Latest report card',
+            detail: 'Upload the latest report card for the selected grade level.',
+        },
+        college: {
+            label: 'Latest grades or transcript',
+            detail: 'Upload a recent grade report or transcript for the selected year level.',
+        },
+        tvet: {
+            label: 'Training assessment record',
+            detail: 'Upload the latest training, competency, or assessment record.',
+        },
+        als: {
+            label: 'ALS assessment or progress record',
+            detail: 'Upload the latest assessment or progress record from the ALS learning center.',
+        },
+        other: {
+            label: 'Latest academic record',
+            detail: 'Upload an official record showing the learner\'s latest academic result.',
+        },
+    }[educationLevel] ?? {
+        label: 'Academic grade record',
+        detail: 'Select an education level in Learning to see the best academic record to upload.',
+    };
+    const gradingDetail = {
+        percentage: 'The file should clearly show the general average or percentage.',
+        grade_point: 'The file should clearly show the GWA or grade point.',
+        pass_fail: 'The file should clearly show the pass/fail or competency result.',
+        other: 'The file should show the result and the institution\'s grading system.',
+    }[gradingScale] ?? (requiresGrades.value ? 'Select the grading system in Learning so the correct result can be checked.' : '');
+    const context = [educationLabel, form.value.year_level, gradingLabel].filter(hasValue);
+
+    if (requiresNumericGrade.value && hasValue(form.value.gwa)) {
+        context.push(gradingScale === 'percentage'
+            ? `Saved average: ${form.value.gwa}%`
+            : `Saved GWA / grade point: ${form.value.gwa}`);
+    }
+
+    return {
+        value: 'academic_record',
+        label: recordCopy.label,
+        description: [recordCopy.detail, gradingDetail].filter(Boolean).join(' '),
+        icon: 'fa-solid fa-file-lines',
+        recommended: requiresGrades.value,
+        featured: true,
+        context,
+    };
+});
+const verificationDocumentOptions = computed(() => [
+    ...baseVerificationDocumentOptions.slice(0, 3),
+    academicProofOption.value,
+    ...baseVerificationDocumentOptions.slice(3),
+]);
 const applicantAge = computed(() => calculateAge(form.value.birthdate));
 const isMinor = computed(() => applicantAge.value !== null && applicantAge.value < 18);
 const needsGuardianContext = computed(() => isMinor.value
@@ -302,7 +366,7 @@ const profileCompletion = computed(() => requiredFieldData.value.length === 0 ? 
 const missingProfileFields = computed(() => requiredFieldData.value.filter((field) => !hasValue(field.value)));
 const profileComplete = computed(() => missingProfileFields.value.length === 0);
 const profileVerificationStatus = computed(() => user.value?.applicant_verification_status ?? 'unsubmitted');
-const verificationDocumentRows = computed(() => verificationDocumentOptions.map((option) => ({
+const verificationDocumentRows = computed(() => verificationDocumentOptions.value.map((option) => ({
     ...option,
     document: verificationDocuments.value.find((document) => document.document_type === option.value) ?? null,
 })));
@@ -318,7 +382,7 @@ const verificationSteps = computed(() => {
                 ? 'Upload a clearer or updated file.'
                 : proofCount
                     ? `${proofCount} proof file${proofCount === 1 ? '' : 's'} submitted.`
-                    : 'Choose an identity or enrollment file.',
+                    : 'Choose identity, enrollment, or academic proof.',
             state: ['pending', 'approved'].includes(status) ? 'complete' : 'current',
         },
         {
@@ -365,7 +429,9 @@ const verificationUploadCopy = computed(() => {
 
     return {
         title: 'Submit verification proof',
-        detail: 'One clear school ID or enrollment certificate is usually enough.',
+        detail: requiresGrades.value
+            ? 'Add identity or enrollment proof and an academic record that supports the grade saved in Learning.'
+            : 'Add a clear identity, enrollment, or learner progress document.',
     };
 });
 const hasUnsavedChanges = computed(() => savedFormSnapshot.value !== '' && savedFormSnapshot.value !== formSnapshot());
@@ -379,6 +445,9 @@ const profileInitials = computed(() => [form.value.first_name, form.value.last_n
     .filter(Boolean)
     .map((name) => name.trim().charAt(0).toUpperCase())
     .join('') || 'ST');
+const profilePhotoUrl = computed(() => user.value?.has_profile_photo
+    ? `/dashboard/profile/photo?v=${encodeURIComponent(user.value.profile_photo_updated_at ?? '')}`
+    : '');
 const profileEducationSummary = computed(() => [
     educationLevelLabel(form.value.education_level),
     form.value.course_or_strand,
@@ -764,7 +833,7 @@ function sectionForMatchGap(gap) {
     }
 
     if (gap?.key === 'income') {
-        return 'household';
+        return 'personal';
     }
 
     if (gap?.key === 'location') {
@@ -830,18 +899,14 @@ function overviewSectionSummary(sectionId) {
     const summaries = {
         personal: [
             applicantAge.value !== null ? `${applicantAge.value} years old` : '',
-            genderLabel(form.value.gender),
             form.value.contact_number,
+            form.value.income_bracket,
+            form.value.household_size ? `${form.value.household_size} household members` : '',
         ],
         academic: [
             educationLevelLabel(form.value.education_level),
             form.value.school,
             [form.value.course_or_strand, form.value.year_level].filter(hasValue).join(' - '),
-        ],
-        household: [
-            form.value.income_bracket,
-            form.value.household_size ? `${form.value.household_size} household members` : '',
-            listFromText(form.value.support_needs).slice(0, 2).join(', '),
         ],
         location: [form.value.city, form.value.province, form.value.region],
         preferences: [
@@ -1031,6 +1096,9 @@ const reviewGroups = computed(() => [
             ['Birthdate', form.value.birthdate],
             ['Contact', form.value.contact_number],
             ['Account managed by', accountManagerLabel(form.value.account_managed_by)],
+            ['Income bracket', form.value.income_bracket],
+            ['Household size', form.value.household_size],
+            ['Support needed', listFromText(form.value.support_needs).join(', ')],
         ],
     },
     {
@@ -1043,16 +1111,6 @@ const reviewGroups = computed(() => [
             [yearLabel.value, form.value.year_level],
             ...(isFieldRelevant('course_or_strand') ? [[courseLabel.value, form.value.course_or_strand]] : []),
             ...(isFieldRelevant('gwa') ? [[gwaLabel.value, form.value.gwa], ['Grading scale', gradingScaleLabel(form.value.grading_scale)]] : []),
-        ],
-    },
-    {
-        id: 'household',
-        title: 'Household',
-        icon: 'fa-solid fa-house',
-        items: [
-            ['Income bracket', form.value.income_bracket],
-            ['Household size', form.value.household_size],
-            ['Support needed', listFromText(form.value.support_needs).join(', ')],
         ],
     },
     {
@@ -1230,6 +1288,66 @@ function handleMiddleInitialInput(event) {
 
 function handlePhoneInput(key, event) {
     form.value[key] = event.target.value.replace(/[^\d+\s().-]/g, '');
+}
+
+async function uploadProfilePhoto(event) {
+    const input = event.target;
+    const file = input.files?.[0] ?? null;
+
+    if (!file) {
+        return;
+    }
+
+    isUploadingProfilePhoto.value = true;
+    errorMessage.value = '';
+    const payload = new FormData();
+    payload.append('profile_photo', file);
+
+    try {
+        const response = await window.axios.post('/dashboard/profile/photo', payload, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        user.value = response.data.user;
+    } catch (error) {
+        errorMessage.value = error.response?.data?.errors?.profile_photo?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to upload the applicant photo.';
+    } finally {
+        isUploadingProfilePhoto.value = false;
+        input.value = '';
+    }
+}
+
+async function deleteProfilePhoto() {
+    const confirmed = await requestConfirmation({
+        title: 'Remove applicant photo?',
+        message: 'The photo will no longer appear in your profile preview or provider application review.',
+        confirmLabel: 'Remove photo',
+        tone: 'danger',
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
+    isDeletingProfilePhoto.value = true;
+    errorMessage.value = '';
+
+    try {
+        const response = await window.axios.delete('/dashboard/profile/photo');
+        user.value = response.data.user;
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to remove the applicant photo.';
+    } finally {
+        isDeletingProfilePhoto.value = false;
+    }
+}
+
+function handleProfileEscape(event) {
+    if (event.key === 'Escape') {
+        showProviderPreview.value = false;
+    }
 }
 
 function clearProfileMapPoint() {
@@ -1495,11 +1613,13 @@ function handleBeforeUnload(event) {
 
 onMounted(() => {
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('keydown', handleProfileEscape);
     loadProfile();
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.removeEventListener('keydown', handleProfileEscape);
 });
 
 watch(() => form.value.grading_scale, (scale) => {
@@ -1518,6 +1638,150 @@ watch(() => form.value.grading_scale, (scale) => {
             @confirm="confirmConfirmation"
             @cancel="cancelConfirmation"
         />
+
+        <Teleport to="body">
+            <div
+                v-if="showProviderPreview"
+                class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-3 sm:p-6"
+                role="presentation"
+                @click.self="showProviderPreview = false"
+            >
+                <section
+                    class="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-slate-50 shadow-2xl"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="provider-preview-title"
+                >
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
+                        <div>
+                            <p class="student-kicker">Provider view</p>
+                            <h2 id="provider-preview-title" class="mt-1 text-xl font-bold text-slate-950">Applicant profile preview</h2>
+                            <p class="mt-1 text-sm text-slate-500">This is the profile summary a provider can review after you apply.</p>
+                        </div>
+                        <button
+                            type="button"
+                            class="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-100"
+                            aria-label="Close provider preview"
+                            @click="showProviderPreview = false"
+                        >
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </header>
+
+                    <div class="overflow-y-auto p-4 sm:p-6">
+                        <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                                <div class="flex min-w-0 items-center gap-4">
+                                    <div class="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-xl font-bold text-white">
+                                        <img
+                                            v-if="profilePhotoUrl"
+                                            :src="profilePhotoUrl"
+                                            :alt="`${profileDisplayName} applicant photo`"
+                                            class="h-full w-full object-cover"
+                                        >
+                                        <span v-else>{{ profileInitials }}</span>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h3 class="text-xl font-bold text-slate-950">{{ profileDisplayName }}</h3>
+                                            <span :class="['rounded-md px-2 py-1 text-xs font-bold', verificationStatusClass(profileVerificationStatus)]">
+                                                {{ verificationStatusLabel(profileVerificationStatus) }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-1 text-sm font-semibold text-slate-600">{{ profileEducationSummary }}</p>
+                                        <p class="mt-1 text-sm text-slate-500">{{ user?.email || 'Email not provided' }}</p>
+                                        <p class="mt-0.5 text-sm text-slate-500">{{ form.contact_number || 'Contact not provided' }}</p>
+                                    </div>
+                                </div>
+                                <div class="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600 sm:max-w-56">
+                                    <p class="font-bold text-slate-900">Application profile</p>
+                                    <p class="mt-1 text-xs leading-5">Providers see this only inside an application submitted to their program.</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <div class="mt-4 grid gap-4 md:grid-cols-2">
+                            <section class="rounded-lg border border-slate-200 bg-white p-4">
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Learning record</p>
+                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                                    <div>
+                                        <dt class="text-slate-500">School</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ form.school || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Grade / year</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ form.year_level || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Track / course</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ form.course_or_strand || 'Not applicable or not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Academic result</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">
+                                            {{ form.gwa ? `${form.gwa} - ${gradingScaleLabel(form.grading_scale)}` : gradingScaleLabel(form.grading_scale) || 'Not provided' }}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </section>
+
+                            <section class="rounded-lg border border-slate-200 bg-white p-4">
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Household and location</p>
+                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                                    <div>
+                                        <dt class="text-slate-500">Income bracket</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ form.income_bracket || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Household size</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ form.household_size || 'Not provided' }}</dd>
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <dt class="text-slate-500">Location</dt>
+                                        <dd class="mt-1 font-bold leading-6 text-slate-950">{{ profileLocationSummary }}</dd>
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <dt class="text-slate-500">Support needed</dt>
+                                        <dd class="mt-1 font-bold leading-6 text-slate-950">{{ listFromText(form.support_needs).join(', ') || 'Not provided' }}</dd>
+                                    </div>
+                                </dl>
+                            </section>
+
+                            <section v-if="needsGuardianContext || hasGuardianDetails" class="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Parent or guardian</p>
+                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                                    <div>
+                                        <dt class="text-slate-500">Name</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ form.guardian_name || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Relationship</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ form.guardian_relationship || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Contact</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ form.guardian_contact || 'Not provided' }}</dd>
+                                    </div>
+                                </dl>
+                            </section>
+                        </div>
+                    </div>
+
+                    <footer class="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                        <p class="text-xs leading-5 text-slate-500">
+                            Unsaved form changes appear in this preview but must be saved before a provider can receive them.
+                        </p>
+                        <button
+                            type="button"
+                            class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                            @click="showProviderPreview = false"
+                        >
+                            Close preview
+                        </button>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
 
         <section class="student-page">
             <div class="student-container">
@@ -1546,8 +1810,14 @@ watch(() => form.value.grading_scale, (scale) => {
                     <section class="student-card overflow-hidden">
                         <div class="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
                             <div class="flex min-w-0 items-start gap-4">
-                                <div class="grid h-16 w-16 shrink-0 place-items-center rounded-md bg-slate-950 text-xl font-bold text-white">
-                                    {{ profileInitials }}
+                                <div class="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-xl font-bold text-white">
+                                    <img
+                                        v-if="profilePhotoUrl"
+                                        :src="profilePhotoUrl"
+                                        :alt="`${profileDisplayName} applicant photo`"
+                                        class="h-full w-full object-cover"
+                                    >
+                                    <span v-else>{{ profileInitials }}</span>
                                 </div>
                                 <div class="min-w-0">
                                     <div class="flex flex-wrap items-center gap-2">
@@ -1569,14 +1839,24 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </div>
                             </div>
 
-                            <button
-                                type="button"
-                                class="w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
-                                @click="openProfileEditor(profileComplete ? 'personal' : profileRecommendedAction.section)"
-                            >
-                                <i class="fa-solid fa-pen mr-2" aria-hidden="true"></i>
-                                {{ profileComplete ? 'Edit profile' : 'Continue setup' }}
-                            </button>
+                            <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                                <button
+                                    type="button"
+                                    class="w-full rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto"
+                                    @click="showProviderPreview = true"
+                                >
+                                    <i class="fa-solid fa-eye mr-2" aria-hidden="true"></i>
+                                    Preview provider view
+                                </button>
+                                <button
+                                    type="button"
+                                    class="w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
+                                    @click="openProfileEditor(profileComplete ? 'personal' : profileRecommendedAction.section)"
+                                >
+                                    <i class="fa-solid fa-pen mr-2" aria-hidden="true"></i>
+                                    {{ profileComplete ? 'Edit profile' : 'Continue setup' }}
+                                </button>
+                            </div>
                         </div>
 
                         <div class="border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
@@ -1779,7 +2059,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
 
                             <nav aria-label="Profile sections">
-                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
                                     <li v-for="step in profileNavigationSteps" :key="step.id" class="min-w-0">
                                         <button
                                             type="button"
@@ -1845,8 +2125,8 @@ watch(() => form.value.grading_scale, (scale) => {
                             <div :class="sectionHeaderClass">
                                 <div>
                                     <p class="student-kicker">Required</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Personal details</h3>
-                                    <p class="mt-1 text-sm text-slate-500">Use the learner's official identity and current contact details.</p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Personal and household details</h3>
+                                    <p class="mt-1 text-sm text-slate-500">Add the learner's identity, current contact, and household context in one place.</p>
                                 </div>
                                 <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('personal'))]">
                                     {{ sectionStatusLabel(profileSection('personal')) }}
@@ -1890,6 +2170,61 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </div>
 
                                 <div :class="formPanelClass">
+                                    <div class="grid gap-4 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center lg:grid-cols-[6rem_minmax(0,1fr)_auto]">
+                                        <div class="grid aspect-square w-24 place-items-center overflow-hidden rounded-md border border-slate-200 bg-white text-lg font-bold text-slate-500">
+                                            <img
+                                                v-if="profilePhotoUrl"
+                                                :src="profilePhotoUrl"
+                                                :alt="`${profileDisplayName} applicant photo`"
+                                                class="h-full w-full object-cover"
+                                            >
+                                            <span v-else>{{ profileInitials }}</span>
+                                        </div>
+                                        <div>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <h4 :class="formPanelTitleClass">Applicant photo</h4>
+                                                <span class="rounded bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 ring-1 ring-slate-200">Optional</span>
+                                            </div>
+                                            <p :class="formPanelDescriptionClass">
+                                                Upload a recent square 1x1 or 2x2-style photo so a provider can identify the applicant during application review.
+                                            </p>
+                                            <p class="mt-1 text-xs font-semibold text-slate-500">JPG or PNG, 300 to 4000 pixels square, up to 5 MB.</p>
+                                        </div>
+                                        <div class="flex flex-wrap gap-2 sm:col-start-2 lg:col-start-auto">
+                                            <label
+                                                :class="[
+                                                    'inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-slate-900 px-3.5 text-xs font-bold text-white transition hover:bg-slate-800',
+                                                    isUploadingProfilePhoto ? 'pointer-events-none opacity-60' : '',
+                                                ]"
+                                            >
+                                                <input
+                                                    type="file"
+                                                    accept="image/jpeg,image/png"
+                                                    class="sr-only"
+                                                    :disabled="isUploadingProfilePhoto"
+                                                    @change="uploadProfilePhoto"
+                                                >
+                                                <i :class="isUploadingProfilePhoto ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-camera'" aria-hidden="true"></i>
+                                                {{ isUploadingProfilePhoto ? 'Uploading...' : profilePhotoUrl ? 'Replace photo' : 'Upload photo' }}
+                                            </label>
+                                            <button
+                                                v-if="profilePhotoUrl"
+                                                type="button"
+                                                class="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                :disabled="isDeletingProfilePhoto"
+                                                @click="deleteProfilePhoto"
+                                            >
+                                                <i :class="isDeletingProfilePhoto ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can'" aria-hidden="true"></i>
+                                                Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p class="mt-3 border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
+                                        The photo is private and appears only to authorized staff and a provider reviewing an application you submitted.
+                                    </p>
+                                </div>
+
+                                <div :class="formPanelClass">
                                     <div class="mb-4">
                                         <h4 :class="formPanelTitleClass">Basic information</h4>
                                         <p :class="formPanelDescriptionClass">Used for age-based eligibility and account communication.</p>
@@ -1916,9 +2251,9 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
                                 </div>
 
-                                <div :class="formPanelClass">
-                                    <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,1fr)] md:items-end">
-                                        <div>
+                                <div class="grid items-stretch gap-4 lg:grid-cols-2">
+                                    <div :class="formPanelClass">
+                                        <div class="mb-4">
                                             <h4 :class="formPanelTitleClass">Account responsibility</h4>
                                             <p :class="formPanelDescriptionClass">Choose who signs in, updates this profile, and manages applications.</p>
                                         </div>
@@ -1933,7 +2268,61 @@ watch(() => form.value.grading_scale, (scale) => {
                                             </select>
                                         </div>
                                     </div>
+
+                                    <div :class="formPanelClass">
+                                        <div class="mb-4">
+                                            <h4 :class="formPanelTitleClass">Household context</h4>
+                                            <p :class="formPanelDescriptionClass">Use the household's approximate current situation.</p>
+                                        </div>
+                                        <div class="grid gap-4 sm:grid-cols-2">
+                                            <div>
+                                                <label :class="labelClass" for="profile-income">Household income bracket</label>
+                                                <select id="profile-income" v-model="form.income_bracket" :class="inputClass">
+                                                    <option value="">Select income bracket</option>
+                                                    <option v-for="option in incomeOptions" :key="option" :value="option">{{ option }}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label :class="labelClass" for="profile-household-size">Household size <span class="font-normal text-slate-400">(optional)</span></label>
+                                                <input
+                                                    id="profile-household-size"
+                                                    v-model="form.household_size"
+                                                    type="number"
+                                                    min="1"
+                                                    max="30"
+                                                    placeholder="Number of people"
+                                                    :class="inputClass"
+                                                >
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
+
+                                <fieldset :class="formPanelClass">
+                                    <legend class="sr-only">Study support needs</legend>
+                                    <div class="mb-4">
+                                        <h4 :class="formPanelTitleClass">Study support needed <span class="font-normal text-slate-400">(optional)</span></h4>
+                                        <p :class="formPanelDescriptionClass">Choose the expenses that are relevant to the learner.</p>
+                                    </div>
+                                    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                        <button
+                                            v-for="option in supportNeedOptions"
+                                            :key="option"
+                                            type="button"
+                                            :aria-pressed="isOptionSelected('support_needs', option)"
+                                            :class="optionButtonClass(isOptionSelected('support_needs', option))"
+                                            @click="toggleListOption('support_needs', option)"
+                                        >
+                                            <span>{{ option }}</span>
+                                            <i v-if="isOptionSelected('support_needs', option)" class="fa-solid fa-check text-xs" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </fieldset>
+
+                                <p class="border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
+                                    <i class="fa-solid fa-lock mr-1.5" aria-hidden="true"></i>
+                                    Household details are used for eligibility and authorized provider review. They are not shown publicly.
+                                </p>
                             </div>
                         </section>
 
@@ -2062,79 +2451,6 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </section>
-
-                        <section v-if="activeSection === 'household'" id="profile-household" :class="sectionCardClass">
-                            <div :class="sectionHeaderClass">
-                                <div>
-                                    <p class="student-kicker">Required</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Household and support</h3>
-                                    <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        This context helps programs understand financial need and the expenses a scholarship would support.
-                                    </p>
-                                </div>
-                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('household'))]">
-                                    {{ sectionStatusLabel(profileSection('household')) }}
-                                </span>
-                            </div>
-
-                            <div :class="sectionBodyClass">
-                                <div class="grid items-stretch gap-4 lg:grid-cols-2">
-                                    <div :class="formPanelClass">
-                                        <div class="mb-4">
-                                            <h4 :class="formPanelTitleClass">Financial context</h4>
-                                            <p :class="formPanelDescriptionClass">Use the household's approximate current situation.</p>
-                                        </div>
-                                        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                                            <div>
-                                                <label :class="labelClass" for="profile-income">Household income bracket</label>
-                                                <select id="profile-income" v-model="form.income_bracket" :class="inputClass">
-                                                    <option value="">Select income bracket</option>
-                                                    <option v-for="option in incomeOptions" :key="option" :value="option">{{ option }}</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label :class="labelClass" for="profile-household-size">Household size <span class="font-normal text-slate-400">(optional)</span></label>
-                                                <input
-                                                    id="profile-household-size"
-                                                    v-model="form.household_size"
-                                                    type="number"
-                                                    min="1"
-                                                    max="30"
-                                                    placeholder="Number of people"
-                                                    :class="inputClass"
-                                                >
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <fieldset :class="formPanelClass">
-                                        <legend class="sr-only">Study support needs</legend>
-                                        <div class="mb-4">
-                                            <h4 :class="formPanelTitleClass">Study support needed <span class="font-normal text-slate-400">(optional)</span></h4>
-                                            <p :class="formPanelDescriptionClass">Choose every expense that is relevant.</p>
-                                        </div>
-                                        <div class="grid gap-2 sm:grid-cols-2">
-                                            <button
-                                                v-for="option in supportNeedOptions"
-                                                :key="option"
-                                                type="button"
-                                                :aria-pressed="isOptionSelected('support_needs', option)"
-                                                :class="optionButtonClass(isOptionSelected('support_needs', option))"
-                                                @click="toggleListOption('support_needs', option)"
-                                            >
-                                                <span>{{ option }}</span>
-                                                <i v-if="isOptionSelected('support_needs', option)" class="fa-solid fa-check text-xs" aria-hidden="true"></i>
-                                            </button>
-                                        </div>
-                                    </fieldset>
-                                </div>
-
-                                <p class="mt-4 border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
-                                    <i class="fa-solid fa-lock mr-1.5" aria-hidden="true"></i>
-                                    Financial details are used for eligibility and provider review. They are not shown publicly.
-                                </p>
                             </div>
                         </section>
 
@@ -2456,10 +2772,13 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <article
                                             v-for="row in verificationDocumentRows"
                                             :key="row.value"
-                                            class="flex flex-col gap-4 border-b border-slate-200 p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                                            :class="[
+                                                'flex flex-col gap-4 border-b border-slate-200 p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between',
+                                                row.featured ? 'bg-amber-50/40' : 'bg-white',
+                                            ]"
                                         >
                                             <div class="flex min-w-0 items-start gap-3">
-                                                <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm', row.document ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500']">
+                                                <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm', row.document ? 'bg-slate-900 text-white' : row.featured ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500']">
                                                     <i :class="row.icon" aria-hidden="true"></i>
                                                 </span>
                                                 <div class="min-w-0">
@@ -2471,6 +2790,15 @@ watch(() => form.value.grading_scale, (scale) => {
                                                         </span>
                                                     </div>
                                                     <p class="mt-1 text-xs leading-5 text-slate-500">{{ row.description }}</p>
+                                                    <div v-if="row.context?.length" class="mt-2 flex flex-wrap gap-1.5">
+                                                        <span
+                                                            v-for="item in row.context"
+                                                            :key="item"
+                                                            class="rounded border border-amber-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600"
+                                                        >
+                                                            {{ item }}
+                                                        </span>
+                                                    </div>
                                                     <p v-if="row.document" class="mt-1 max-w-xl truncate text-xs font-semibold text-slate-700">
                                                         {{ row.document.original_name }} <span class="font-normal text-slate-400">- {{ formatFileSize(row.document.size) }}</span>
                                                     </p>

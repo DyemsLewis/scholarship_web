@@ -1919,6 +1919,25 @@ class ProviderController extends Controller
         ]);
     }
 
+    public function viewApplicantProfilePhoto(Request $request, ScholarshipApplication $application)
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+
+        $profile = $application->applicant?->studentProfile;
+        abort_unless($profile?->profile_photo_path, 404);
+        abort_unless(Storage::disk('local')->exists($profile->profile_photo_path), 404);
+
+        return Storage::disk('local')->response(
+            $profile->profile_photo_path,
+            $profile->profile_photo_original_name ?: 'applicant-photo',
+            [
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+        );
+    }
+
     public function updateApplicationStatus(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -3363,6 +3382,9 @@ class ProviderController extends Controller
             'longitude' => $profile?->longitude,
             'profile_verification_status' => $profile?->verification_status ?? 'unsubmitted',
             'profile_verified_at' => $profile?->verified_at?->format('M d, Y'),
+            'profile_photo_url' => $profile?->profile_photo_path
+                ? route('provider.applications.profile-photo.view', $application)
+                : null,
         ];
 
         if (! $includeProfileDetails) {

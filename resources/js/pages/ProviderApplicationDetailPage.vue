@@ -198,6 +198,12 @@ const programWorkspaceUrl = computed(() => {
         : '/provider/applications';
 });
 const applicantProfileProofs = computed(() => application.value?.applicant?.profile_proofs ?? []);
+const applicantInitials = computed(() => String(application.value?.applicant?.name ?? 'Applicant')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || 'AP');
 const hasGuardianDetails = computed(() => {
     const applicant = application.value?.applicant;
 
@@ -1618,12 +1624,26 @@ onMounted(loadApplication);
 
                             <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div class="min-w-0">
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant profile</p>
-                                        <h3 class="mt-2 text-xl font-bold text-slate-950">{{ application.applicant?.name || 'Applicant' }}</h3>
-                                        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
-                                            <span>{{ application.applicant?.email || 'Email not provided' }}</span>
-                                            <span>{{ application.applicant?.contact_number || 'Contact not provided' }}</span>
+                                    <div class="flex min-w-0 items-center gap-4">
+                                        <div class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-lg font-bold text-white">
+                                            <img
+                                                v-if="application.applicant?.profile_photo_url"
+                                                :src="application.applicant.profile_photo_url"
+                                                :alt="`${application.applicant?.name || 'Applicant'} photo`"
+                                                class="h-full w-full object-cover"
+                                            >
+                                            <span v-else>{{ applicantInitials }}</span>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant profile</p>
+                                            <h3 class="mt-2 text-xl font-bold text-slate-950">{{ application.applicant?.name || 'Applicant' }}</h3>
+                                            <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+                                                <span>{{ application.applicant?.email || 'Email not provided' }}</span>
+                                                <span>{{ application.applicant?.contact_number || 'Contact not provided' }}</span>
+                                            </div>
+                                            <p v-if="application.applicant?.profile_photo_url" class="mt-2 text-xs leading-5 text-slate-500">
+                                                The applicant photo is for identification during review and is not verification proof.
+                                            </p>
                                         </div>
                                     </div>
                                     <span
@@ -1662,7 +1682,7 @@ onMounted(loadApplication);
 
                             <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Education
+                                    Learning record
                                 </p>
                                 <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                                     <div>
@@ -1699,7 +1719,7 @@ onMounted(loadApplication);
 
                             <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Household and location
+                                    Household, location, and support
                                 </p>
                                 <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                                     <div>
@@ -1718,6 +1738,10 @@ onMounted(loadApplication);
                                     <div class="sm:col-span-2">
                                         <dt class="font-semibold text-slate-500">Willing to relocate</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.willing_to_relocate || 'not provided') }}</dd>
+                                    </div>
+                                    <div class="sm:col-span-2 rounded-md bg-slate-50 p-3">
+                                        <dt class="font-semibold text-slate-500">Study support needed</dt>
+                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.support_needs || 'Not provided' }}</dd>
                                     </div>
                                 </dl>
                             </section>
@@ -1795,12 +1819,11 @@ onMounted(loadApplication);
                             </section>
 
                             <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Scholarship context</p>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant preferences</p>
                                 <div class="mt-3 grid gap-2 text-sm">
-                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Goal:</span> {{ application.applicant?.scholarship_goal || 'Not provided' }}</p>
-                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Support needs:</span> {{ application.applicant?.support_needs || 'Not provided' }}</p>
-                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Preferred categories:</span> {{ application.applicant?.preferred_categories || 'Not provided' }}</p>
-                                    <p class="rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Preferred locations:</span> {{ application.applicant?.preferred_locations || 'Not provided' }}</p>
+                                    <p class="whitespace-pre-line rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Goal:</span> {{ application.applicant?.scholarship_goal || 'Not provided' }}</p>
+                                    <p class="whitespace-pre-line rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Scholarship types:</span> {{ application.applicant?.preferred_categories || 'Not provided' }}</p>
+                                    <p class="whitespace-pre-line rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Preferred locations:</span> {{ application.applicant?.preferred_locations || 'Not provided' }}</p>
                                 </div>
                             </section>
 
