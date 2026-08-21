@@ -32,6 +32,7 @@ const selectedProfileProof = ref(null);
 const selectedReviewActionKey = ref('');
 const documentReviewError = ref('');
 const rubricScores = ref({});
+const postDecisionSummary = ref(null);
 const {
     confirmation,
     requestConfirmation,
@@ -447,7 +448,7 @@ const providerContractSections = computed(() => {
 
     return [
         { label: 'Possible service commitment', value: scholarship.return_service_contract },
-        { label: 'Other possible commitments', value: scholarship.other_contract_terms },
+        { label: 'Commitment preview', value: scholarship.other_contract_terms },
         { label: 'Possible renewal requirement', value: scholarship.renewal_policy },
     ].filter((section) => section.value && String(section.value).trim());
 });
@@ -802,6 +803,10 @@ async function updateStatus() {
         }
     }
 
+    const completedReviewAction = selectedReviewAction.value
+        ? { ...selectedReviewAction.value }
+        : null;
+
     updatingId.value = application.value.id;
     errorMessage.value = '';
 
@@ -824,6 +829,16 @@ async function updateStatus() {
             });
 
         applyApplication(response.data.application);
+
+        if (completedReviewAction?.decision) {
+            postDecisionSummary.value = {
+                actionLabel: completedReviewAction.label,
+                message: response.data.message || 'The applicant decision was saved.',
+                remainingCount: Number(response.data.review_navigation?.remaining_count ?? 0),
+                listUrl: response.data.review_navigation?.list_url || '/provider/applications',
+                nextApplication: response.data.review_navigation?.next_application ?? null,
+            };
+        }
     } catch (handledError) {
         void handledError;
     } finally {
@@ -1012,7 +1027,7 @@ onMounted(loadApplication);
                     </section>
 
                     <section
-                        v-if="programWorkspaceAction"
+                        v-if="programWorkspaceAction && !(postDecisionSummary && activeSection === 'decision')"
                         class="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
                     >
                         <div class="flex min-w-0 items-start gap-3">
@@ -1232,6 +1247,64 @@ onMounted(loadApplication);
                                             >
                                                 {{ reviewSubmitLabel }}
                                             </button>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        v-if="postDecisionSummary"
+                                        class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 md:col-span-2"
+                                    >
+                                        <div class="flex items-start justify-between gap-4">
+                                            <div class="flex min-w-0 items-start gap-3">
+                                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-emerald-600 text-white">
+                                                    <i class="fa-solid fa-check" aria-hidden="true"></i>
+                                                </span>
+                                                <div class="min-w-0">
+                                                    <p class="text-sm font-bold text-emerald-950">Decision saved</p>
+                                                    <p class="mt-1 text-xs leading-5 text-emerald-900">{{ postDecisionSummary.message }}</p>
+                                                    <p class="mt-1 text-xs font-semibold text-emerald-800">
+                                                        <template v-if="postDecisionSummary.remainingCount">
+                                                            {{ postDecisionSummary.remainingCount }} other applicant{{ postDecisionSummary.remainingCount === 1 ? '' : 's' }} still need{{ postDecisionSummary.remainingCount === 1 ? 's' : '' }} review in this program.
+                                                        </template>
+                                                        <template v-else>
+                                                            No other applicants are waiting for a decision in this program.
+                                                        </template>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                class="grid h-8 w-8 shrink-0 place-items-center rounded-md text-emerald-800 transition hover:bg-emerald-100"
+                                                aria-label="Dismiss decision follow-up"
+                                                @click="postDecisionSummary = null"
+                                            >
+                                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
+
+                                        <div class="mt-4 flex flex-col gap-2 border-t border-emerald-200 pt-4 sm:flex-row sm:flex-wrap">
+                                            <a
+                                                v-if="postDecisionSummary.nextApplication"
+                                                :href="postDecisionSummary.nextApplication.url"
+                                                class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                            >
+                                                Review next applicant
+                                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                            </a>
+                                            <a
+                                                :href="postDecisionSummary.listUrl"
+                                                class="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-300 bg-white px-4 py-2.5 text-sm font-bold text-emerald-950 transition hover:bg-emerald-100"
+                                            >
+                                                Back to applications
+                                            </a>
+                                            <a
+                                                v-if="programWorkspaceAction"
+                                                :href="programWorkspaceUrl"
+                                                class="inline-flex items-center justify-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-950 transition hover:bg-amber-100 sm:ml-auto"
+                                            >
+                                                {{ programWorkspaceAction.section === 'schedule' ? 'Set program schedule' : 'Open Program Workspace' }}
+                                                <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
+                                            </a>
                                         </div>
                                     </div>
                                 </div>

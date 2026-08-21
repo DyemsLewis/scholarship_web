@@ -39,7 +39,6 @@ const activeFormSection = ref('overview');
 const showAudienceDetails = ref(false);
 const showDocumentOptions = ref(false);
 const showStageSchedules = ref(false);
-const showProgramTerms = ref(false);
 const showLocationMap = ref(false);
 const customizeRubric = ref(false);
 const selectedTargetPresetKey = ref('');
@@ -74,6 +73,47 @@ const formSections = [
     { id: 'finish', label: 'Publish', help: 'Choose how to save this program.' },
 ];
 const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
+const defaultCommitmentText = 'The provider will explain any final recipient commitments after the applicant is accepted.';
+const commitmentOptions = [
+    {
+        value: 'provider_briefing',
+        label: 'Provider will explain after acceptance',
+        field: 'otherContractTerms',
+        text: defaultCommitmentText,
+    },
+    {
+        value: 'none',
+        label: 'No recipient commitment',
+        field: null,
+        text: '',
+    },
+    {
+        value: 'renewal',
+        label: 'Renewal requirement may apply',
+        field: 'renewalPolicy',
+        text: 'Renewal requirements may apply. The provider will explain the final conditions after acceptance.',
+    },
+    {
+        value: 'service',
+        label: 'Service or community duty may apply',
+        field: 'returnServiceContract',
+        text: 'A service or community commitment may apply. The provider will explain the final duties after acceptance.',
+    },
+    {
+        value: 'activities',
+        label: 'Progress updates or activities may apply',
+        field: 'otherContractTerms',
+        text: 'Progress updates or program activities may apply. The provider will explain the final expectations after acceptance.',
+    },
+    {
+        value: 'custom',
+        label: 'Custom short preview',
+        field: 'otherContractTerms',
+        text: null,
+    },
+];
+const selectedCommitmentOption = ref('provider_briefing');
+const customCommitmentText = ref('');
 const incomeOptions = ['Any', 'Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
 const applicationModeOptions = [
     { value: 'online', label: 'Online submission' },
@@ -927,7 +967,7 @@ function emptyScholarshipForm() {
         programEvents: emptyProgramEvents(),
         renewalPolicy: '',
         returnServiceContract: '',
-        otherContractTerms: '',
+        otherContractTerms: defaultCommitmentText,
         contactEmail: '',
         contactNumber: '',
         deadline: '',
@@ -1216,6 +1256,69 @@ async function applyTargetApplicantPresetByKey(event) {
     applyTargetApplicantPreset(preset);
 }
 
+function commitmentEntries() {
+    return [
+        { field: 'renewalPolicy', value: scholarshipForm.value.renewalPolicy },
+        { field: 'returnServiceContract', value: scholarshipForm.value.returnServiceContract },
+        { field: 'otherContractTerms', value: scholarshipForm.value.otherContractTerms },
+    ].filter((entry) => hasText(entry.value));
+}
+
+function clearCommitmentFields() {
+    scholarshipForm.value.renewalPolicy = '';
+    scholarshipForm.value.returnServiceContract = '';
+    scholarshipForm.value.otherContractTerms = '';
+}
+
+function syncCommitmentEditor() {
+    const entries = commitmentEntries();
+    const matchingPreset = commitmentOptions.find((option) => (
+        option.text !== null
+        && entries.length === (option.text ? 1 : 0)
+        && (!option.text || (entries[0]?.field === option.field && entries[0]?.value === option.text))
+    ));
+
+    if (matchingPreset) {
+        selectedCommitmentOption.value = matchingPreset.value;
+        customCommitmentText.value = '';
+        return;
+    }
+
+    selectedCommitmentOption.value = entries.length ? 'custom' : 'none';
+    customCommitmentText.value = entries.map((entry) => entry.value).join('\n\n');
+}
+
+function applySelectedCommitment() {
+    const option = commitmentOptions.find((item) => item.value === selectedCommitmentOption.value);
+
+    if (!option) {
+        return;
+    }
+
+    if (option.value === 'custom') {
+        if (!hasText(customCommitmentText.value)) {
+            customCommitmentText.value = commitmentEntries().map((entry) => entry.value).join('\n\n');
+        }
+
+        clearCommitmentFields();
+        scholarshipForm.value.otherContractTerms = customCommitmentText.value;
+        return;
+    }
+
+    clearCommitmentFields();
+
+    if (option.field && option.text) {
+        scholarshipForm.value[option.field] = option.text;
+    }
+
+    customCommitmentText.value = '';
+}
+
+function applyCustomCommitment() {
+    clearCommitmentFields();
+    scholarshipForm.value.otherContractTerms = customCommitmentText.value;
+}
+
 function fillScholarshipForm(scholarship) {
     existingApplicationCount.value = Number(scholarship.applications_count ?? 0);
     awardedSlotsCount.value = Number(scholarship.awarded_slots_count ?? 0);
@@ -1263,6 +1366,7 @@ function fillScholarshipForm(scholarship) {
     imageFile.value = null;
     imagePreviewUrl.value = '';
     selectedTargetPresetKey.value = inferTargetFormKey(scholarshipForm.value.eligibleEducationLevels);
+    syncCommitmentEditor();
 }
 
 function isRequirementSelected(requirement) {
@@ -1482,7 +1586,6 @@ function resetScholarshipForm() {
     showAudienceDetails.value = false;
     showDocumentOptions.value = false;
     showStageSchedules.value = false;
-    showProgramTerms.value = false;
     showLocationMap.value = false;
     eventLocationMapStage.value = '';
     eventLocationMapMessage.value = '';
@@ -1492,6 +1595,8 @@ function resetScholarshipForm() {
     imagePreviewUrl.value = '';
     formError.value = '';
     providerLocationMessage.value = '';
+    selectedCommitmentOption.value = 'provider_briefing';
+    customCommitmentText.value = '';
 
     if (imageInputElement.value) {
         imageInputElement.value.value = '';
@@ -2345,63 +2450,48 @@ onMounted(loadFormData);
                                         >
                                     </div>
 
-                                    <div class="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between lg:col-span-2">
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">Possible commitments after acceptance</p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">Optional. Give applicants a short preview. Explain the final agreement to accepted applicants before they sign.</p>
+                                    <div class="rounded-md border border-slate-200 bg-slate-50 p-4 lg:col-span-2">
+                                        <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.8fr)]">
+                                            <div>
+                                                <p class="text-sm font-bold text-slate-950">Possible commitment after acceptance</p>
+                                                <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                                                    This is only a short preview, not the final agreement. The provider will explain and confirm any commitment after the applicant is accepted.
+                                                </p>
+                                            </div>
+                                            <div :class="fieldStackClass">
+                                                <label :class="labelClass" for="scholarship-commitment-option">Commitment preview</label>
+                                                <select
+                                                    id="scholarship-commitment-option"
+                                                    v-model="selectedCommitmentOption"
+                                                    :class="inputClass"
+                                                    @change="applySelectedCommitment"
+                                                >
+                                                    <option v-for="option in commitmentOptions" :key="option.value" :value="option.value">
+                                                        {{ option.label }}
+                                                    </option>
+                                                </select>
+                                            </div>
                                         </div>
-                                        <button
-                                            type="button"
-                                            class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                            @click="showProgramTerms = !showProgramTerms"
-                                        >
-                                            {{ showProgramTerms ? 'Hide commitments' : ((scholarshipForm.renewalPolicy || scholarshipForm.returnServiceContract || scholarshipForm.otherContractTerms) ? 'Edit commitments' : 'Add commitments') }}
-                                        </button>
-                                    </div>
 
-                                    <div v-if="showProgramTerms" :class="[fieldStackClass, 'lg:col-span-2']">
-                                        <label :class="labelClass" for="scholarship-renewal">
-                                            Possible renewal requirement
-                                        </label>
-                                        <textarea
-                                            id="scholarship-renewal"
-                                            v-model="scholarshipForm.renewalPolicy"
-                                            rows="3"
-                                            placeholder="Example: Recipients may need to maintain eligibility and submit updated requirements for renewal."
-                                            :class="inputClass"
-                                        ></textarea>
-                                    </div>
-
-                                    <div v-if="showProgramTerms" :class="[fieldStackClass, 'lg:col-span-2']">
-                                        <label :class="labelClass" for="scholarship-return-service-contract">
-                                            Possible service commitment
-                                        </label>
-                                        <textarea
-                                            id="scholarship-return-service-contract"
-                                            v-model="scholarshipForm.returnServiceContract"
-                                            rows="4"
-                                            placeholder="Example: Accepted recipients may be asked to complete community service or another agreed responsibility."
-                                            :class="inputClass"
-                                        ></textarea>
-                                        <p class="mt-2 text-xs leading-5 text-slate-500">
-                                            Keep this as a short preview. Confirm the exact duties, duration, and conditions directly with accepted applicants.
-                                        </p>
-                                    </div>
-
-                                    <div v-if="showProgramTerms" :class="[fieldStackClass, 'lg:col-span-2']">
-                                        <label :class="labelClass" for="scholarship-other-contract-terms">
-                                            Other possible commitments
-                                        </label>
-                                        <textarea
-                                            id="scholarship-other-contract-terms"
-                                            v-model="scholarshipForm.otherContractTerms"
-                                            rows="4"
-                                            placeholder="Example: Attend required activities, submit progress updates, or follow program conduct rules."
-                                            :class="inputClass"
-                                        ></textarea>
-                                        <p class="mt-2 text-xs leading-5 text-slate-500">
-                                            List only responsibilities applicants should know in advance. The provider should explain and confirm the final agreement after acceptance.
-                                        </p>
+                                        <div v-if="selectedCommitmentOption === 'custom'" class="mt-4 border-t border-slate-200 pt-4">
+                                            <label :class="labelClass" for="scholarship-custom-commitment">
+                                                Custom short preview
+                                                <span :class="optionalHintClass">Optional</span>
+                                            </label>
+                                            <textarea
+                                                id="scholarship-custom-commitment"
+                                                v-model="customCommitmentText"
+                                                rows="3"
+                                                maxlength="600"
+                                                placeholder="Briefly state what may apply. The full agreement can be explained after acceptance."
+                                                :class="inputClass"
+                                                @input="applyCustomCommitment"
+                                            ></textarea>
+                                            <div class="mt-2 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                                                <span>Do not paste the complete contract or terms here.</span>
+                                                <span>{{ customCommitmentText.length }}/600</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </section>

@@ -2426,14 +2426,18 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </span>
                             </div>
 
-                            <div :class="sectionBodyClass">
-                                <div class="grid items-start gap-4 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.2fr)]">
-                                    <div :class="formPanelClass">
-                                        <div class="mb-4">
+                            <div :class="[sectionBodyClass, 'space-y-4']">
+                                <div :class="formPanelClass">
+                                    <div class="mb-5 flex items-start gap-3">
+                                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-950 text-amber-300">
+                                            <i class="fa-solid fa-house" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
                                             <h4 :class="formPanelTitleClass">Home address</h4>
                                             <p :class="formPanelDescriptionClass">City, province, and region are required for residency matching.</p>
                                         </div>
-                                        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                                    </div>
+                                    <div class="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
                                             <div>
                                                 <label :class="labelClass" for="profile-city">City / municipality</label>
                                                 <input id="profile-city" v-model="form.city" placeholder="City or municipality" :class="inputClass" @input="clearProfileMapPoint">
@@ -2467,44 +2471,52 @@ watch(() => form.value.grading_scale, (scale) => {
                                                 <label :class="labelClass" for="profile-barangay">Barangay <span class="font-normal text-slate-400">(optional)</span></label>
                                                 <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass" @input="clearProfileMapPoint">
                                             </div>
-                                            <div class="sm:col-span-2 xl:col-span-1 2xl:col-span-2">
+                                            <div class="md:col-span-2 xl:col-span-4">
                                                 <label :class="labelClass" for="profile-address">Street / home address <span class="font-normal text-slate-400">(optional)</span></label>
                                                 <input id="profile-address" v-model="form.address" placeholder="Street and house number" :class="inputClass" @input="clearProfileMapPoint">
                                             </div>
                                         </div>
-                                    </div>
+                                </div>
 
-                                    <div :class="formPanelClass">
-                                        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div :class="formPanelClass">
+                                    <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="flex items-start gap-3">
+                                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-amber-200 bg-amber-50 text-amber-700">
+                                                <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                                            </span>
                                             <div>
-                                                <h4 :class="formPanelTitleClass">Map pin</h4>
-                                                <p :class="formPanelDescriptionClass">Set the pin to improve travel-distance estimates.</p>
+                                                <h4 :class="formPanelTitleClass">Confirm your location on the map</h4>
+                                                <p :class="formPanelDescriptionClass">Find the address above, then adjust the pin if needed.</p>
                                             </div>
-                                            <button
-                                                type="button"
-                                                class="w-fit shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                                @click="lookupProfileAddress"
-                                            >
-                                                <i class="fa-solid fa-location-crosshairs mr-1.5" aria-hidden="true"></i>
-                                                Find address
-                                            </button>
                                         </div>
-
-                                        <LeafletMapPreview
-                                            :address="profileMapAddress"
-                                            :latitude="form.latitude"
-                                            :longitude="form.longitude"
-                                            title="Student address map preview"
-                                            marker-text="Student address"
-                                            :geocode-trigger="addressLookupTrigger"
-                                            picker
-                                            @resolved="handleProfileLocationResolved"
-                                            @picked="handleProfileLocationPicked"
-                                            @error="handleProfileLocationError"
-                                        />
-
-                                        <p v-if="locationMessage" class="mt-3 text-xs font-semibold text-slate-700">{{ locationMessage }}</p>
+                                        <button
+                                            type="button"
+                                            class="w-full shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800 sm:w-auto"
+                                            @click="lookupProfileAddress"
+                                        >
+                                            <i class="fa-solid fa-location-crosshairs mr-1.5 text-amber-300" aria-hidden="true"></i>
+                                            Find address
+                                        </button>
                                     </div>
+
+                                    <LeafletMapPreview
+                                        :address="profileMapAddress"
+                                        :latitude="form.latitude"
+                                        :longitude="form.longitude"
+                                        title="Student address map preview"
+                                        marker-text="Student address"
+                                        height="18rem"
+                                        :geocode-trigger="addressLookupTrigger"
+                                        picker
+                                        @resolved="handleProfileLocationResolved"
+                                        @picked="handleProfileLocationPicked"
+                                        @error="handleProfileLocationError"
+                                    />
+
+                                    <p v-if="locationMessage" class="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                        <i class="fa-solid fa-circle-info text-amber-600" aria-hidden="true"></i>
+                                        <span>{{ locationMessage }}</span>
+                                    </p>
                                 </div>
                             </div>
                         </section>

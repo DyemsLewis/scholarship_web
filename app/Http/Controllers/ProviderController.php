@@ -67,6 +67,16 @@ class ProviderController extends Controller
         'renewed',
     ];
 
+    private const REVIEW_DECISION_STATUSES = [
+        'submitted',
+        'under_review',
+        'qualified',
+        'shortlisted',
+        'exam_taken',
+        'exam_passed',
+        'interview',
+    ];
+
     public function index(Request $request): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -1410,6 +1420,7 @@ class ProviderController extends Controller
                 ? 'Applicant approved for the next configured stage.'
                 : 'Applicant decision recorded as rejected.',
             'application' => $this->applicationPayload($freshApplication, true),
+            'review_navigation' => $this->reviewNavigationPayload($freshApplication),
         ]);
     }
 
@@ -3559,6 +3570,31 @@ class ProviderController extends Controller
             ->where('provider_id', $request->user()->providerOrganizationId())
             ->withCount($this->providerProgramCountRelations())
             ->findOrFail($scholarshipId);
+    }
+
+    private function reviewNavigationPayload(ScholarshipApplication $application): array
+    {
+        $remainingApplications = ScholarshipApplication::query()
+            ->with('applicant')
+            ->where('scholarship_id', $application->scholarship_id)
+            ->where('id', '!=', $application->id)
+            ->whereIn('status', self::REVIEW_DECISION_STATUSES)
+            ->orderBy('submitted_at')
+            ->orderBy('id')
+            ->get();
+        $nextApplication = $remainingApplications->first();
+
+        return [
+            'remaining_count' => $remainingApplications->count(),
+            'list_url' => route('provider.applications', [
+                'scholarship_id' => $application->scholarship_id,
+            ], false),
+            'next_application' => $nextApplication ? [
+                'id' => $nextApplication->id,
+                'applicant_name' => $nextApplication->applicant?->name ?: "Application #{$nextApplication->id}",
+                'url' => route('provider.applications.show', $nextApplication, false),
+            ] : null,
+        ];
     }
 
     private function providerProgramCountRelations(): array

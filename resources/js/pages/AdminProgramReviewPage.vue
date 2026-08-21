@@ -119,7 +119,7 @@ const workflowSteps = computed(() => selectionStages.value.map((stage, index) =>
 const contractSections = computed(() => [
     { label: 'Possible renewal requirement', value: scholarship.value?.renewal_policy },
     { label: 'Possible service commitment', value: scholarship.value?.return_service_contract },
-    { label: 'Other possible commitments', value: scholarship.value?.other_contract_terms },
+    { label: 'Commitment preview', value: scholarship.value?.other_contract_terms },
 ].filter((section) => hasText(section.value)));
 const hasLocationDetails = computed(() => Boolean(
     scholarship.value?.location_name

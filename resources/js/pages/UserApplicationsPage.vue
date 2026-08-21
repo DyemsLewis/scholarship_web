@@ -61,7 +61,7 @@ const selectedContractSections = computed(() => {
 
     return [
         { label: 'Possible service commitment', value: scholarship.return_service_contract },
-        { label: 'Other possible commitments', value: scholarship.other_contract_terms },
+        { label: 'Commitment preview', value: scholarship.other_contract_terms },
         { label: 'Possible renewal requirement', value: scholarship.renewal_policy },
     ].filter((section) => section.value && String(section.value).trim());
 });
@@ -1229,7 +1229,7 @@ watch(selectedScholarship, (scholarship) => {
                                             <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">{{ section.value }}</p>
                                         </div>
                                         <p class="text-xs leading-5 text-slate-500 sm:col-span-2">
-                                            Applying does not accept these commitments. The provider will explain the final agreement if you are selected.
+                                            This is not the final agreement. The provider will explain and confirm any commitment only if you are accepted.
                                         </p>
                                     </div>
                                 </details>

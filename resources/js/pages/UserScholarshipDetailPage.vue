@@ -842,7 +842,7 @@ onMounted(loadScholarship);
                                         <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">{{ scholarship.return_service_contract }}</p>
                                     </div>
                                     <div v-if="scholarship.other_contract_terms" class="rounded-md bg-white p-4 ring-1 ring-slate-200">
-                                        <p class="font-bold text-slate-950">Other possible commitments</p>
+                                        <p class="font-bold text-slate-950">Commitment preview</p>
                                         <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">{{ scholarship.other_contract_terms }}</p>
                                     </div>
                                 </div>
