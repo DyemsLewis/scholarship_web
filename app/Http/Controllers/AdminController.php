@@ -308,6 +308,7 @@ class AdminController extends Controller
             'user' => $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
             'verification_documents' => $user->isApplicant()
                 ? $user->applicantVerificationDocuments()
+                    ->where('document_type', 'academic_record')
                     ->latest('uploaded_at')
                     ->get()
                     ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
@@ -437,12 +438,14 @@ class AdminController extends Controller
                 'approved_providers' => $providers->filter(fn (User $user) => $user->providerProfile?->verification_status === 'approved')->count(),
                 'rejected_providers' => $providers->filter(fn (User $user) => $user->providerProfile?->verification_status === 'rejected')->count(),
                 'applicants' => $applicants->count(),
-                'pending_applicants' => $applicants->filter(fn (User $user) => $user->applicantVerificationDocuments->isNotEmpty()
+                'pending_applicants' => $applicants->filter(fn (User $user) => $user->applicantVerificationDocuments->contains('document_type', 'academic_record')
                     && ! in_array($user->studentProfile?->verification_status, ['approved', 'rejected'], true))->count(),
-                'approved_applicants' => $applicants->filter(fn (User $user) => $user->studentProfile?->verification_status === 'approved')->count(),
-                'rejected_applicants' => $applicants->filter(fn (User $user) => $user->studentProfile?->verification_status === 'rejected')->count(),
-                'unsubmitted_applicants' => $applicants->filter(fn (User $user) => $user->applicantVerificationDocuments->isEmpty())->count(),
-                'applicant_proofs' => $applicants->sum(fn (User $user) => $user->applicantVerificationDocuments->count()),
+                'approved_applicants' => $applicants->filter(fn (User $user) => $user->applicantVerificationDocuments->contains('document_type', 'academic_record')
+                    && $user->studentProfile?->verification_status === 'approved')->count(),
+                'rejected_applicants' => $applicants->filter(fn (User $user) => $user->applicantVerificationDocuments->contains('document_type', 'academic_record')
+                    && $user->studentProfile?->verification_status === 'rejected')->count(),
+                'unsubmitted_applicants' => $applicants->filter(fn (User $user) => ! $user->applicantVerificationDocuments->contains('document_type', 'academic_record'))->count(),
+                'applicant_proofs' => $applicants->sum(fn (User $user) => $user->applicantVerificationDocuments->where('document_type', 'academic_record')->count()),
                 'pending_programs' => (int) ($programStatusCounts['pending_review'] ?? 0),
                 'published_programs' => (int) ($programStatusCounts['published'] ?? 0),
                 'rejected_programs' => (int) ($programStatusCounts['rejected'] ?? 0),
@@ -622,9 +625,11 @@ class AdminController extends Controller
             'verification_notes' => [Rule::requiredIf($request->input('verification_status') === 'rejected'), 'nullable', 'string', 'max:1500'],
         ]);
 
-        if ($validated['verification_status'] === 'approved' && ! $applicant->applicantVerificationDocuments()->exists()) {
+        if ($validated['verification_status'] === 'approved' && ! $applicant->applicantVerificationDocuments()
+            ->where('document_type', 'academic_record')
+            ->exists()) {
             return response()->json([
-                'message' => 'The applicant must upload at least one proof before the profile can be verified.',
+                'message' => 'The applicant must upload an academic record before the academic result can be verified.',
             ], 422);
         }
 
@@ -646,10 +651,12 @@ class AdminController extends Controller
                 'verified_at' => $validated['verification_status'] === 'approved' ? now() : null,
             ]);
 
-            $applicant->applicantVerificationDocuments()->update([
-                'status' => $documentStatus,
-                'review_notes' => $notes,
-            ]);
+            $applicant->applicantVerificationDocuments()
+                ->where('document_type', 'academic_record')
+                ->update([
+                    'status' => $documentStatus,
+                    'review_notes' => $notes,
+                ]);
         });
 
         ActivityLog::record(
@@ -663,7 +670,7 @@ class AdminController extends Controller
             ],
         );
 
-        $message = "Your applicant profile verification is now {$validated['verification_status']}.";
+        $message = "Your academic record verification is now {$validated['verification_status']}.";
 
         if ($validated['verification_status'] === 'rejected' && $notes) {
             $message .= " Review note: {$notes}";
@@ -672,15 +679,16 @@ class AdminController extends Controller
         PortalNotification::create([
             'user_id' => $applicant->id,
             'type' => 'applicant_profile_verification',
-            'title' => 'Profile verification updated',
+            'title' => 'Academic verification updated',
             'message' => $message,
             'action_url' => '/dashboard/profile',
         ]);
 
         return response()->json([
-            'message' => 'Applicant profile verification updated.',
+            'message' => 'Applicant academic verification updated.',
             'user' => $applicant->fresh(['studentProfile'])->publicPayload(),
             'verification_documents' => $applicant->applicantVerificationDocuments()
+                ->where('document_type', 'academic_record')
                 ->latest('uploaded_at')
                 ->get()
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
@@ -691,6 +699,7 @@ class AdminController extends Controller
     public function viewApplicantVerificationDocument(Request $request, ApplicantVerificationDocument $document)
     {
         abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($document->document_type === 'academic_record', 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
         return Storage::disk('local')->response($document->path, $document->original_name, [
@@ -892,20 +901,7 @@ class AdminController extends Controller
             'middle_initial' => $middleInitial,
             'contact_number' => $validated['contact_number'],
         ];
-        $applicantVerificationReset = $user->isApplicant()
-            && $user->studentProfile?->verification_status === 'approved'
-            && collect($profile)->contains(fn ($value, string $field): bool => (string) ($user->studentProfile?->{$field} ?? '') !== (string) ($value ?? ''));
-
-        if ($applicantVerificationReset) {
-            $profile += [
-                'verification_status' => $user->applicantVerificationDocuments()->exists() ? 'pending' : 'unsubmitted',
-                'verification_notes' => null,
-                'verified_by' => null,
-                'verified_at' => null,
-            ];
-        }
-
-        DB::transaction(function () use ($user, $userPayload, $profile, $displayName, $emailChanged, $applicantVerificationReset): void {
+        DB::transaction(function () use ($user, $userPayload, $profile, $displayName, $emailChanged): void {
             $user->fill($userPayload);
 
             if ($emailChanged) {
@@ -935,12 +931,6 @@ class AdminController extends Controller
                 ], $profile),
             };
 
-            if ($applicantVerificationReset) {
-                $user->applicantVerificationDocuments()->update([
-                    'status' => 'submitted',
-                    'review_notes' => null,
-                ]);
-            }
         });
 
         if ($emailChanged) {
@@ -1480,6 +1470,7 @@ class AdminController extends Controller
         return [
             ...$applicant->publicPayload(),
             'verification_documents' => $applicant->applicantVerificationDocuments
+                ->where('document_type', 'academic_record')
                 ->sortByDesc('uploaded_at')
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
                 ->values(),

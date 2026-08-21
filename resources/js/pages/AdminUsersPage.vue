@@ -50,7 +50,7 @@ const applicantVerificationStates = {
         className: 'bg-rose-100 text-rose-700',
     },
     missing: {
-        label: 'No profile proof',
+        label: 'No academic record',
         icon: 'fa-solid fa-circle-minus',
         className: 'bg-slate-100 text-slate-500',
     },

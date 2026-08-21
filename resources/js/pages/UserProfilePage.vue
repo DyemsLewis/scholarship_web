@@ -119,40 +119,6 @@ const genderOptions = [
     { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 const suffixOptions = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
-const baseVerificationDocumentOptions = [
-    {
-        value: 'school_id',
-        label: 'School or student ID',
-        description: 'A current ID showing the learner name and school.',
-        icon: 'fa-solid fa-id-card',
-        recommended: true,
-    },
-    {
-        value: 'government_id',
-        label: 'Government-issued ID',
-        description: 'A valid government ID belonging to the learner or account owner.',
-        icon: 'fa-solid fa-address-card',
-    },
-    {
-        value: 'enrollment_certificate',
-        label: 'Enrollment certificate',
-        description: 'Current proof of enrollment from the school or learning institution.',
-        icon: 'fa-solid fa-school',
-        recommended: true,
-    },
-    {
-        value: 'birth_certificate',
-        label: 'Birth certificate',
-        description: 'Identity and age proof, especially useful for younger applicants.',
-        icon: 'fa-solid fa-file-signature',
-    },
-    {
-        value: 'other',
-        label: 'Other identity or school proof',
-        description: 'Use another official document only when the options above do not apply.',
-        icon: 'fa-solid fa-file-circle-plus',
-    },
-];
 const fieldLabels = {
     first_name: 'First name',
     last_name: 'Last name',
@@ -243,9 +209,9 @@ const profileSections = [
     {
         id: 'verification',
         label: 'Verification',
-        detail: 'Proof and status',
+        detail: 'Academic record',
         icon: 'fa-solid fa-shield-check',
-        impact: 'Confirms your account.',
+        impact: 'Checks the academic result used for matching.',
         required: false,
         fields: [],
     },
@@ -305,7 +271,7 @@ const academicProofOption = computed(() => {
             detail: 'Upload an official record showing the learner\'s latest academic result.',
         },
     }[educationLevel] ?? {
-        label: 'Academic grade record',
+        label: 'Academic or progress record',
         detail: 'Select an education level in Learning to see the best academic record to upload.',
     };
     const gradingDetail = {
@@ -332,11 +298,7 @@ const academicProofOption = computed(() => {
         context,
     };
 });
-const verificationDocumentOptions = computed(() => [
-    ...baseVerificationDocumentOptions.slice(0, 3),
-    academicProofOption.value,
-    ...baseVerificationDocumentOptions.slice(3),
-]);
+const verificationDocumentOptions = computed(() => [academicProofOption.value]);
 const applicantAge = computed(() => calculateAge(form.value.birthdate));
 const isMinor = computed(() => applicantAge.value !== null && applicantAge.value < 18);
 const needsGuardianContext = computed(() => isMinor.value
@@ -366,41 +328,45 @@ const profileCompletion = computed(() => requiredFieldData.value.length === 0 ? 
 const missingProfileFields = computed(() => requiredFieldData.value.filter((field) => !hasValue(field.value)));
 const profileComplete = computed(() => missingProfileFields.value.length === 0);
 const profileVerificationStatus = computed(() => user.value?.applicant_verification_status ?? 'unsubmitted');
+const academicVerificationDocument = computed(() => verificationDocuments.value
+    .find((document) => document.document_type === 'academic_record') ?? null);
+const legacyVerificationDocuments = computed(() => verificationDocuments.value
+    .filter((document) => document.document_type !== 'academic_record'));
 const verificationDocumentRows = computed(() => verificationDocumentOptions.value.map((option) => ({
     ...option,
-    document: verificationDocuments.value.find((document) => document.document_type === option.value) ?? null,
+    document: academicVerificationDocument.value,
 })));
 const verificationSteps = computed(() => {
     const status = profileVerificationStatus.value;
-    const proofCount = verificationDocuments.value.length;
+    const hasAcademicProof = Boolean(academicVerificationDocument.value);
 
     return [
         {
             number: 1,
-            label: status === 'rejected' ? 'Replace proof' : 'Submit proof',
+            label: status === 'rejected' ? 'Replace academic record' : 'Submit academic record',
             detail: status === 'rejected'
-                ? 'Upload a clearer or updated file.'
-                : proofCount
-                    ? `${proofCount} proof file${proofCount === 1 ? '' : 's'} submitted.`
-                    : 'Choose identity, enrollment, or academic proof.',
+                ? 'Upload a clearer or updated academic file.'
+                : hasAcademicProof
+                    ? 'Your academic record has been submitted.'
+                    : 'Upload one record that supports your saved academic result.',
             state: ['pending', 'approved'].includes(status) ? 'complete' : 'current',
         },
         {
             number: 2,
-            label: 'Admin review',
+            label: 'Academic review',
             detail: status === 'approved'
-                ? 'Review completed.'
+                ? 'Saved result checked.'
                 : status === 'pending'
-                    ? 'Your account is being checked.'
+                    ? 'An admin is checking the saved result against the file.'
                     : status === 'rejected'
                         ? 'Restarts after resubmission.'
-                        : 'Begins after you submit proof.',
+                        : 'Begins after you submit the academic record.',
             state: status === 'approved' ? 'complete' : status === 'pending' ? 'current' : 'upcoming',
         },
         {
             number: 3,
-            label: 'Verified badge',
-            detail: status === 'approved' ? 'Visible to scholarship providers.' : 'Appears after admin approval.',
+            label: 'Academic details verified',
+            detail: status === 'approved' ? 'Providers can see that your academic result was checked.' : 'Appears after admin approval.',
             state: status === 'approved' ? 'complete' : 'upcoming',
         },
     ];
@@ -408,30 +374,32 @@ const verificationSteps = computed(() => {
 const verificationUploadCopy = computed(() => {
     if (profileVerificationStatus.value === 'rejected') {
         return {
-            title: 'Replace the requested proof',
-            detail: 'Review the admin note, then submit a clearer or updated file.',
+            title: 'Replace the academic record',
+            detail: 'Review the admin note, then submit a clearer or updated academic record.',
         };
     }
 
     if (profileVerificationStatus.value === 'pending') {
         return {
-            title: 'Add or update proof',
-            detail: 'Changing a file restarts the admin review, so update only when needed.',
+            title: 'Academic record submitted',
+            detail: 'Replace it only when the file or saved academic result is incorrect or outdated.',
         };
     }
 
     if (profileVerificationStatus.value === 'approved') {
         return {
-            title: 'Keep your proof current',
-            detail: 'Only replace a file when it is outdated. Any change returns the account to review.',
+            title: 'Academic record verified',
+            detail: 'Replace it only when your academic information changes. A replacement returns it to review.',
         };
     }
 
     return {
-        title: 'Submit verification proof',
+        title: 'Verify your academic result',
         detail: requiresGrades.value
-            ? 'Add identity or enrollment proof and an academic record that supports the grade saved in Learning.'
-            : 'Add a clear identity, enrollment, or learner progress document.',
+            ? 'Upload one academic record that supports the average, GWA, grade point, or result saved in Learning.'
+            : hasValue(form.value.education_level)
+                ? 'Upload one recent academic, progress, or assessment record appropriate for the selected education level.'
+                : 'Complete the Learning section first so the portal can show the right academic record to upload.',
     };
 });
 const hasUnsavedChanges = computed(() => savedFormSnapshot.value !== '' && savedFormSnapshot.value !== formSnapshot());
@@ -482,7 +450,7 @@ const applicationSetupItems = computed(() => [
     },
     {
         id: 'verification',
-        label: 'Applicant account',
+        label: 'Academic record',
         detail: verificationStatusLabel(profileVerificationStatus.value),
         state: profileVerificationStatus.value === 'approved'
             ? 'complete'
@@ -541,17 +509,17 @@ const profileRecommendedAction = computed(() => {
 
     if (profileVerificationStatus.value === 'unsubmitted') {
         return {
-            label: 'Submit verification proof',
+            label: 'Submit academic record',
             section: 'verification',
-            detail: 'A verified badge helps providers know that an admin checked your account.',
+            detail: 'This lets an admin check the academic result used for matching.',
         };
     }
 
     if (profileVerificationStatus.value === 'rejected') {
         return {
-            label: 'Replace verification proof',
+            label: 'Replace academic record',
             section: 'verification',
-            detail: 'Review the admin note and upload a clearer or updated document.',
+            detail: 'Review the admin note and upload a clearer or updated academic record.',
         };
     }
 
@@ -1462,18 +1430,7 @@ async function uploadVerificationDocument(documentType, event) {
     }
 
     if (!verificationDocumentTermsAccepted.value) {
-        const message = 'Agree to the document terms before uploading a verification proof.';
-        errorMessage.value = message;
-        showPortalToast({ type: 'error', message });
-        input.value = '';
-        return;
-    }
-
-    const existingDocument = verificationDocuments.value
-        .find((document) => document.document_type === documentType);
-
-    if (!existingDocument && verificationDocuments.value.length >= 3) {
-        const message = 'You can keep up to three verification proofs. Remove one before adding another type.';
+        const message = 'Agree to the document terms before uploading your academic record.';
         errorMessage.value = message;
         showPortalToast({ type: 'error', message });
         input.value = '';
@@ -1505,10 +1462,11 @@ async function uploadVerificationDocument(documentType, event) {
 }
 
 async function deleteVerificationDocument(document) {
+    const isAcademicRecord = document.document_type === 'academic_record';
     const confirmed = await requestConfirmation({
-        title: 'Remove verification proof?',
-        message: `${document.original_name || 'This proof'} will be removed from verification. Its separate copy in Documents will stay available. Your verified status will return to pending or not submitted.`,
-        confirmLabel: 'Remove proof',
+        title: isAcademicRecord ? 'Remove academic record?' : 'Remove older proof file?',
+        message: `${document.original_name || 'This file'} will be removed from verification. Its separate copy in Documents will stay available.${isAcademicRecord ? ' Your academic verification will return to not submitted.' : ''}`,
+        confirmLabel: 'Remove file',
         tone: 'danger',
     });
 
@@ -2698,10 +2656,10 @@ watch(() => form.value.grading_scale, (scale) => {
                         <section v-if="activeSection === 'verification'" id="profile-verification" :class="sectionCardClass">
                             <div :class="sectionHeaderClass">
                                 <div>
-                                    <p class="student-kicker">Account trust</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Profile verification</h3>
+                                    <p class="student-kicker">Academic evidence</p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Academic verification</h3>
                                     <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Confirm your student identity. Admins review these proofs, and providers can view them only when reviewing an application you submitted to their program.
+                                        Confirm the academic result saved in Learning with one academic or progress record. Birth certificates, government IDs, and income documents are not requested here.
                                     </p>
                                 </div>
                                 <span :class="[sectionStatusPillClass, verificationStatusClass(profileVerificationStatus)]">
@@ -2759,13 +2717,13 @@ watch(() => form.value.grading_scale, (scale) => {
                                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{{ verificationUploadCopy.detail }}</p>
                                         </div>
                                         <span class="shrink-0 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-600">
-                                            {{ verificationDocuments.length }} of 3 saved
+                                            {{ academicVerificationDocument ? 'Record saved' : 'Not uploaded' }}
                                         </span>
                                     </div>
 
                                     <div class="mt-4">
                                         <TermsAgreement v-model="verificationDocumentTermsAccepted" context="document" />
-                                        <p class="mt-2 text-xs text-slate-500">Agree once, then upload beside the proof you want to use. A separate reusable copy is saved automatically in Documents.</p>
+                                        <p class="mt-2 text-xs text-slate-500">Agree once, then upload the academic record below. A separate reusable copy is saved automatically in Documents.</p>
                                     </div>
 
                                     <div class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -2821,24 +2779,22 @@ watch(() => form.value.grading_scale, (scale) => {
                                                     :class="[
                                                         'inline-flex h-9 items-center gap-2 rounded-md px-3 text-xs font-bold transition',
                                                         row.document ? 'cursor-pointer border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'cursor-pointer bg-slate-900 text-white hover:bg-slate-800',
-                                                        uploadingVerificationDocumentType || (!row.document && verificationDocuments.length >= 3) ? 'pointer-events-none opacity-50' : '',
+                                                        uploadingVerificationDocumentType ? 'pointer-events-none opacity-50' : '',
                                                     ]"
                                                 >
                                                     <input
-                                                        type="file"
-                                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                                        class="sr-only"
-                                                        :disabled="uploadingVerificationDocumentType !== '' || (!row.document && verificationDocuments.length >= 3)"
-                                                        @change="uploadVerificationDocument(row.value, $event)"
-                                                    >
+                                                    type="file"
+                                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                                    class="sr-only"
+                                                    :disabled="uploadingVerificationDocumentType !== ''"
+                                                    @change="uploadVerificationDocument(row.value, $event)"
+                                                >
                                                     <i :class="uploadingVerificationDocumentType === row.value ? 'fa-solid fa-spinner fa-spin' : row.document ? 'fa-solid fa-rotate' : 'fa-solid fa-upload'" aria-hidden="true"></i>
                                                     {{ uploadingVerificationDocumentType === row.value
                                                         ? 'Uploading...'
                                                         : row.document
                                                             ? 'Replace'
-                                                            : verificationDocuments.length >= 3
-                                                                ? 'Limit reached'
-                                                                : 'Upload' }}
+                                                            : 'Upload' }}
                                                 </label>
                                                 <button
                                                     v-if="row.document"
@@ -2855,33 +2811,55 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
 
                                     <p class="mt-3 text-xs leading-5 text-slate-500">
-                                        You can keep up to three proof types. Removing a verification proof does not remove its separate Documents copy. Replacing any approved proof returns the profile to admin review.
+                                        One current academic record is enough. Replacing an approved record returns the academic result to admin review.
                                     </p>
                                 </div>
 
                                 <aside class="border-t border-slate-200 bg-slate-50 p-5 lg:border-l lg:border-t-0 sm:p-6">
-                                    <p class="student-kicker">Before uploading</p>
-                                    <h4 class="mt-2 text-base font-bold text-slate-950">Use a clear file</h4>
+                                    <p class="student-kicker">What to upload</p>
+                                    <h4 class="mt-2 text-base font-bold text-slate-950">Only the relevant academic record</h4>
                                     <ul class="mt-4 grid gap-4 text-sm text-slate-600">
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
-                                            <span>Use a current document with all edges visible.</span>
+                                            <span>Use the latest report card, grade report, transcript, or assessment shown for your education level.</span>
                                         </li>
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
-                                            <span>Make sure the name and identifying details are readable.</span>
+                                            <span>Make sure the saved average, GWA, grade point, or competency result is readable.</span>
                                         </li>
                                         <li class="flex items-start gap-3">
-                                            <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
-                                            <span>Use PDF, JPG, PNG, DOC, or DOCX up to 5 MB.</span>
+                                            <i class="fa-solid fa-shield-halved mt-1 text-emerald-700" aria-hidden="true"></i>
+                                            <span>Do not upload a birth certificate, government ID, proof of income, or unrelated personal document here.</span>
                                         </li>
                                     </ul>
                                 </aside>
                             </div>
 
+                            <div v-if="legacyVerificationDocuments.length" class="border-b border-slate-200 bg-amber-50/60 px-5 py-4 sm:px-6">
+                                <div class="flex items-start gap-3">
+                                    <i class="fa-solid fa-shield-heart mt-1 text-amber-700" aria-hidden="true"></i>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-sm font-bold text-slate-950">Older proof files are no longer required</p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-600">These files were submitted under the previous verification process. You may review or remove them; the portal will not ask you to replace them.</p>
+                                        <div class="mt-3 grid gap-2">
+                                            <div v-for="document in legacyVerificationDocuments" :key="document.id" class="flex flex-col gap-2 rounded-md border border-amber-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                                                <div class="min-w-0">
+                                                    <p class="truncate text-xs font-bold text-slate-900">{{ document.original_name }}</p>
+                                                    <p class="mt-0.5 text-[11px] text-slate-500">Previously submitted verification file</p>
+                                                </div>
+                                                <div class="flex shrink-0 gap-2">
+                                                    <a :href="document.view_url" target="_blank" rel="noopener noreferrer" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View</a>
+                                                    <button type="button" :disabled="deletingVerificationDocumentId === document.id" class="rounded-md border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50" @click="deleteVerificationDocument(document)">Remove</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="flex items-start gap-3 bg-slate-50 px-5 py-4 text-xs leading-5 text-slate-600 sm:px-6">
                                 <i class="fa-solid fa-lock mt-1 shrink-0 text-slate-500" aria-hidden="true"></i>
-                                <p>Your proof stays private. Admins can review it, and a provider can view it only inside an application you submitted to that provider.</p>
+                                <p>Your academic record stays private. Authorized admins can review it, and a provider can view it only inside an application you submitted to that provider.</p>
                             </div>
                         </section>
 
@@ -2953,7 +2931,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                             @click="openSection('verification')"
                                         >
                                             <span>
-                                                <span class="block text-xs font-semibold text-slate-500">Profile verification</span>
+                                                <span class="block text-xs font-semibold text-slate-500">Academic verification</span>
                                                 <span class="mt-0.5 block text-sm font-bold text-slate-950">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
                                             </span>
                                             <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>

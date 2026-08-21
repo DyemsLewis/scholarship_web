@@ -16,7 +16,9 @@ const canPreview = computed(() => {
         || mimeType.startsWith('image/')
         || /\.(pdf|jpe?g|png)$/i.test(fileName);
 });
-const proofLabel = computed(() => labelFromKey(props.proof?.document_type || 'profile proof'));
+const proofLabel = computed(() => props.proof?.document_type === 'academic_record'
+    ? 'Academic record'
+    : 'Older verification file');
 
 function statusClass(status) {
     if (status === 'approved') {
@@ -53,7 +55,7 @@ onUnmounted(() => {
             <section class="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
                 <header class="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
                     <div class="min-w-0">
-                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Applicant profile proof</p>
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Applicant academic evidence</p>
                         <h2 class="mt-1 truncate text-lg font-bold text-slate-950">{{ proofLabel }}</h2>
                         <p class="mt-1 truncate text-xs font-semibold text-slate-600">{{ applicantName }}</p>
                         <p class="mt-1 truncate text-xs text-slate-500">
@@ -63,7 +65,7 @@ onUnmounted(() => {
                     <button
                         type="button"
                         class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
-                        aria-label="Close profile proof"
+                        aria-label="Close academic record"
                         @click="emit('close')"
                     >
                         <i class="fa-solid fa-xmark" aria-hidden="true"></i>
@@ -98,14 +100,14 @@ onUnmounted(() => {
 
                     <aside class="border-t border-slate-200 bg-white p-4 sm:p-5 lg:overflow-y-auto lg:border-l lg:border-t-0">
                         <div class="flex items-center justify-between gap-3">
-                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Admin verification</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Academic verification</p>
                             <span :class="['rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(proof.status)]">
                                 {{ labelFromKey(proof.status || 'submitted') }}
                             </span>
                         </div>
 
                         <p class="mt-4 text-sm leading-6 text-slate-600">
-                            This file supports the applicant profile and is separate from the scholarship requirement checklist.
+                            This file supports the academic result saved in the applicant profile and is separate from the scholarship requirement checklist.
                         </p>
 
                         <dl class="mt-4 grid gap-3 text-sm">

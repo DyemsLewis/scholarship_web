@@ -51,7 +51,7 @@ export const termsContent = {
             },
             {
                 title: 'Why it is needed',
-                text: 'The portal uses this information to calculate eligibility guidance, recommend suitable programs, verify applicants and providers, prepare and review applications, communicate schedules or decisions, prevent misuse, and keep an accountable history of important actions.',
+                text: 'The portal uses this information to calculate eligibility guidance, recommend suitable programs, verify applicant academic results and provider organizations, prepare and review applications, communicate schedules or decisions, prevent misuse, and keep an accountable history of important actions.',
                 icon: 'fa-solid fa-bullseye',
             },
             {
@@ -71,7 +71,7 @@ export const termsContent = {
             },
             {
                 title: 'Your choices and requests',
-                text: 'Users can view and correct profile details, replace verification proofs, and manage prepared documents through the portal. Use the privacy concern category to request a copy, correction, restriction, account closure, or deletion review. Never include a password in a support report.',
+                text: 'Users can view and correct profile details, replace an academic verification record, remove older verification files, and manage prepared documents through the portal. Use the privacy concern category to request a copy, correction, restriction, account closure, or deletion review. Never include a password in a support report.',
                 icon: 'fa-solid fa-sliders',
             },
             {
@@ -101,20 +101,21 @@ export const termsContent = {
     },
     application: {
         title: 'Application Submission Terms',
-        summary: 'Submitting an application allows the selected scholarship provider and authorized portal administrators to review the information needed for that program. This may include the applicant profile, verification proofs, checklist, notes, decision support result, and attached documents.',
+        summary: 'Submitting an application allows the selected scholarship provider and authorized portal administrators to review the information needed for that program. This may include the applicant profile, verified academic record, checklist, notes, decision support result, and attached program documents.',
         details: [
             'Submitted information should be accurate, current, and belong to the applicant or be supplied with proper permission. Review the application before submission because missing or incorrect details may delay the provider decision.',
             'Prepared documents may be attached when their document type matches a program requirement. Applicants should check that every attached file is the correct and most recent version before proceeding.',
-            'Profile verification proofs are available to authorized administrators and to providers reviewing applications submitted to their own programs. Providers cannot use this access to review unrelated applicant accounts.',
+            'The academic verification record is available to authorized administrators and to a provider only after the applicant submits an application to that provider program. Providers cannot use this access to review unrelated applicant accounts.',
             'Eligibility and decision support results help organize the review but do not guarantee an award. Final approval, rejection, examination, interview, and awarding decisions remain with the scholarship provider.',
         ],
     },
     document: {
         title: 'Document Upload Terms',
-        summary: 'Uploaded files are stored so they can support profile verification, document preparation, scholarship matching, and application review. File activity may also be recorded in the audit history to help protect applicants and providers.',
+        summary: 'Uploaded files are stored so they can support academic verification, document preparation, scholarship matching, and application review. File activity may also be recorded in the audit history to help protect applicants and providers.',
         details: [
             'Each file should be correct, readable, and related to the applicant or an authorized organization. Do not upload unrelated files or personal information that is not needed for scholarship or verification purposes.',
-            'Profile verification proofs may be reviewed by administrators and by a provider after an application is submitted to that provider program. Replacing an approved proof may require the updated file to be reviewed again.',
+            'Profile verification asks only for a relevant academic record, such as a report card, grade report, transcript, or assessment. Do not upload a birth certificate, government ID, proof of income, or unrelated sensitive record for this step. A provider may request a separate document later only when its published program requirements explain why it is needed.',
+            'An academic verification record may be reviewed by administrators and by a provider after an application is submitted to that provider program. Replacing an approved academic record requires the updated file and saved result to be reviewed again.',
             'False, altered, expired, misleading, or unauthorized documents may delay processing and may affect account, verification, or application status. The portal may keep review notes and document status changes as part of the audit record.',
         ],
     },

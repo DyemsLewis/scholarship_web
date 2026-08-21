@@ -415,12 +415,7 @@ class ApplicantDashboardController extends Controller
 
         $validated = $request->validate([
             'document_type' => ['required', Rule::in([
-                'school_id',
-                'government_id',
-                'enrollment_certificate',
                 'academic_record',
-                'birth_certificate',
-                'other',
             ])],
             'document_file' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
             'terms_accepted' => ['accepted'],
@@ -431,19 +426,13 @@ class ApplicantDashboardController extends Controller
             ->where('document_type', $validated['document_type'])
             ->first();
 
-        if (! $existing && $user->applicantVerificationDocuments()->count() >= 3) {
-            throw ValidationException::withMessages([
-                'document_file' => 'You can keep up to three verification proofs. Replace or remove one before adding another.',
-            ]);
-        }
-
         $file = $validated['document_file'];
         $path = $file->store("applicant-verification/{$user->id}", 'local');
         $oldPath = $existing?->path;
 
         if (! is_string($path)) {
             throw ValidationException::withMessages([
-                'document_file' => 'The verification proof could not be stored. Please try again.',
+                'document_file' => 'The academic record could not be stored. Please try again.',
             ]);
         }
 
@@ -471,10 +460,12 @@ class ApplicantDashboardController extends Controller
                     'verified_at' => null,
                     'verified_by' => null,
                 ]);
-                $user->applicantVerificationDocuments()->update([
-                    'status' => 'submitted',
-                    'review_notes' => null,
-                ]);
+                $user->applicantVerificationDocuments()
+                    ->where('document_type', 'academic_record')
+                    ->update([
+                        'status' => 'submitted',
+                        'review_notes' => null,
+                    ]);
 
                 return $document;
             });
@@ -495,7 +486,7 @@ class ApplicantDashboardController extends Controller
             ActivityLog::record(
                 $user,
                 'verification_document_library_copy_failed',
-                "{$user->name}'s verification proof could not be copied to Documents.",
+                "{$user->name}'s academic record could not be copied to Documents.",
                 $request,
                 ['document_id' => $document->id, 'error' => $error->getMessage()],
             );
@@ -508,15 +499,15 @@ class ApplicantDashboardController extends Controller
             ->each(fn (User $admin) => PortalNotification::create([
                 'user_id' => $admin->id,
                 'type' => 'applicant_profile_verification',
-                'title' => 'Applicant proof uploaded',
-                'message' => "{$user->name} submitted a profile verification proof.",
+                'title' => 'Academic record uploaded',
+                'message' => "{$user->name} submitted an academic record for verification.",
                 'action_url' => "/admin/applicants/{$user->id}/review",
             ]));
 
         ActivityLog::record(
             $user,
             'applicant_verification_document_uploaded',
-            "{$user->name} uploaded an applicant profile verification proof.",
+            "{$user->name} uploaded an academic record for verification.",
             $request,
             [
                 'document_id' => $document->id,
@@ -526,8 +517,8 @@ class ApplicantDashboardController extends Controller
         );
 
         $message = $existing
-            ? 'Verification proof updated and sent for review.'
-            : 'Verification proof sent for admin review.';
+            ? 'Academic record updated and sent for review.'
+            : 'Academic record sent for admin review.';
 
         if ($preparedDocument) {
             $message .= ' A separate copy was also saved in Documents.';
@@ -549,39 +540,47 @@ class ApplicantDashboardController extends Controller
 
         $path = $document->path;
         $user = $request->user();
-        $hasDocuments = DB::transaction(function () use ($document, $user): bool {
+        $removedAcademicRecord = $document->document_type === 'academic_record';
+        DB::transaction(function () use ($document, $user, $removedAcademicRecord): void {
             $document->delete();
-            $hasDocuments = $user->applicantVerificationDocuments()->exists();
+            $hasAcademicRecord = $user->applicantVerificationDocuments()
+                ->where('document_type', 'academic_record')
+                ->exists();
 
-            $user->studentProfile()->update([
-                'verification_status' => $hasDocuments ? 'pending' : 'unsubmitted',
-                'verification_notes' => null,
-                'verified_at' => null,
-                'verified_by' => null,
-            ]);
-
-            if ($hasDocuments) {
-                $user->applicantVerificationDocuments()->update([
-                    'status' => 'submitted',
-                    'review_notes' => null,
+            if ($removedAcademicRecord) {
+                $user->studentProfile()->update([
+                    'verification_status' => $hasAcademicRecord ? 'pending' : 'unsubmitted',
+                    'verification_notes' => null,
+                    'verified_at' => null,
+                    'verified_by' => null,
                 ]);
+
+                if ($hasAcademicRecord) {
+                    $user->applicantVerificationDocuments()
+                        ->where('document_type', 'academic_record')
+                        ->update([
+                            'status' => 'submitted',
+                            'review_notes' => null,
+                        ]);
+                }
             }
 
-            return $hasDocuments;
         });
         Storage::disk('local')->delete($path);
 
         ActivityLog::record(
             $user,
             'applicant_verification_document_deleted',
-            "{$user->name} removed an applicant profile verification proof.",
+            $removedAcademicRecord
+                ? "{$user->name} removed an academic verification record."
+                : "{$user->name} removed a legacy profile verification file.",
             $request,
         );
 
         return response()->json([
-            'message' => $hasDocuments
-                ? 'Proof removed. The remaining documents are pending admin review.'
-                : 'Verification proof removed.',
+            'message' => $removedAcademicRecord
+                ? 'Academic record removed. Upload a current record when you are ready for verification.'
+                : 'Older proof file removed. Your academic verification was not changed.',
             'user' => $user->fresh(['studentProfile'])->publicPayload(),
             'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
             'prepared_documents_count' => $user->studentDocuments()->count(),
@@ -768,13 +767,6 @@ class ApplicantDashboardController extends Controller
         $studentProfile = $user->studentProfile()->firstOrNew(['user_id' => $user->id]);
         $studentProfile->fill($profileValues);
         $verifiedFields = [
-            'first_name',
-            'last_name',
-            'middle_initial',
-            'suffix',
-            'gender',
-            'contact_number',
-            'account_managed_by',
             'education_level',
             'school',
             'school_type',
@@ -784,28 +776,15 @@ class ApplicantDashboardController extends Controller
             'enrollment_status',
             'gwa',
             'grading_scale',
-            'income_bracket',
-            'household_size',
-            'address',
-            'barangay',
-            'city',
-            'province',
-            'region',
-            'latitude',
-            'longitude',
-            'birthdate',
-            'guardian_name',
-            'guardian_relationship',
-            'guardian_contact',
-            'guardian_email',
-            'guardian_is_account_owner',
         ];
         $verificationReset = $studentProfile->verification_status === 'approved'
             && $studentProfile->isDirty($verifiedFields);
 
         if ($verificationReset) {
             $studentProfile->fill([
-                'verification_status' => $user->applicantVerificationDocuments()->exists() ? 'pending' : 'unsubmitted',
+                'verification_status' => $user->applicantVerificationDocuments()
+                    ->where('document_type', 'academic_record')
+                    ->exists() ? 'pending' : 'unsubmitted',
                 'verification_notes' => null,
                 'verified_at' => null,
                 'verified_by' => null,
@@ -816,10 +795,12 @@ class ApplicantDashboardController extends Controller
             $studentProfile->save();
 
             if ($verificationReset) {
-                $user->applicantVerificationDocuments()->update([
-                    'status' => 'submitted',
-                    'review_notes' => null,
-                ]);
+                $user->applicantVerificationDocuments()
+                    ->where('document_type', 'academic_record')
+                    ->update([
+                        'status' => 'submitted',
+                        'review_notes' => null,
+                    ]);
             }
         });
         $user->unsetRelation('studentProfile');
@@ -833,8 +814,8 @@ class ApplicantDashboardController extends Controller
                 ->each(fn (User $admin) => PortalNotification::create([
                     'user_id' => $admin->id,
                     'type' => 'applicant_profile_verification',
-                    'title' => 'Verified applicant profile changed',
-                    'message' => "{$user->name} changed verified profile information and needs another review.",
+                    'title' => 'Verified academic details changed',
+                    'message' => "{$user->name} changed verified academic information and needs another review.",
                     'action_url' => route('admin.applicants.review.show', $user, false),
                 ]));
         }
@@ -867,7 +848,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'message' => $verificationReset
-                ? 'Applicant profile updated and returned for verification.'
+                ? 'Academic details updated and returned for verification.'
                 : 'Applicant profile updated.',
             'user' => $this->userPayload($request),
             'profile_readiness' => $user->applicantProfileReadiness(),

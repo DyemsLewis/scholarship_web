@@ -1911,6 +1911,7 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
         abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
         abort_unless($document->applicant_id === $application->applicant_id, 403);
+        abort_unless($document->document_type === 'academic_record', 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
         return Storage::disk('local')->response($document->path, $document->original_name, [
@@ -3380,8 +3381,10 @@ class ProviderController extends Controller
             ])->filter()->implode(', '),
             'latitude' => $profile?->latitude,
             'longitude' => $profile?->longitude,
-            'profile_verification_status' => $profile?->verification_status ?? 'unsubmitted',
-            'profile_verified_at' => $profile?->verified_at?->format('M d, Y'),
+            'profile_verification_status' => $applicant?->applicantAcademicVerificationStatus() ?? 'unsubmitted',
+            'profile_verified_at' => $applicant?->applicantAcademicVerificationStatus() === 'approved'
+                ? $profile?->verified_at?->format('M d, Y')
+                : null,
             'profile_photo_url' => $profile?->profile_photo_path
                 ? route('provider.applications.profile-photo.view', $application)
                 : null,
@@ -3410,6 +3413,7 @@ class ProviderController extends Controller
             'guardian_email' => $profile?->guardian_email,
             'guardian_is_account_owner' => (bool) $profile?->guardian_is_account_owner,
             'profile_proofs' => ($applicant?->applicantVerificationDocuments ?? collect())
+                ->where('document_type', 'academic_record')
                 ->sortByDesc('uploaded_at')
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantProfileProofPayload($application, $document))
                 ->values(),

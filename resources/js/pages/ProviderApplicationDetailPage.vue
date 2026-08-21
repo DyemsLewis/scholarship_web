@@ -624,10 +624,10 @@ function profileVerificationClass(status) {
 
 function profileVerificationLabel(status) {
     return {
-        approved: 'Admin verified',
-        rejected: 'Verification rejected',
-        pending: 'Verification pending',
-        unsubmitted: 'Not verified',
+        approved: 'Academic record verified',
+        rejected: 'Academic record needs replacement',
+        pending: 'Academic review pending',
+        unsubmitted: 'Academic record not verified',
     }[status] ?? labelFromKey(status || 'unsubmitted');
 }
 
@@ -1642,7 +1642,7 @@ onMounted(loadApplication);
                                                 <span>{{ application.applicant?.contact_number || 'Contact not provided' }}</span>
                                             </div>
                                             <p v-if="application.applicant?.profile_photo_url" class="mt-2 text-xs leading-5 text-slate-500">
-                                                The applicant photo is for identification during review and is not verification proof.
+                                                The applicant photo is for reviewer reference and is not academic evidence.
                                             </p>
                                         </div>
                                     </div>
@@ -1776,13 +1776,13 @@ onMounted(loadApplication);
                             <section v-if="activeSection === 'applicant'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:col-span-2">
                                 <div class="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Profile proofs</p>
+                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Academic record</p>
                                         <p class="mt-2 text-sm leading-6 text-slate-600">
-                                            Supporting files from the applicant profile, shown separately from this program's requirements.
+                                            Grade evidence saved in the applicant profile, shown separately from this program's requirements.
                                         </p>
                                     </div>
                                     <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                        {{ applicantProfileProofs.length }} on file
+                                        {{ applicantProfileProofs.length ? 'Record available' : 'No record' }}
                                     </span>
                                 </div>
 
@@ -1790,7 +1790,7 @@ onMounted(loadApplication);
                                     <article v-for="proof in applicantProfileProofs" :key="proof.id" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                                         <div class="flex min-w-0 items-start gap-3">
                                             <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
-                                                <i class="fa-solid fa-id-card" aria-hidden="true"></i>
+                                                <i class="fa-solid fa-file-lines" aria-hidden="true"></i>
                                             </span>
                                             <div class="min-w-0">
                                                 <div class="flex flex-wrap items-center gap-2">
@@ -1809,12 +1809,12 @@ onMounted(loadApplication);
                                             @click="openProfileProof(proof)"
                                         >
                                             <i class="fa-regular fa-eye" aria-hidden="true"></i>
-                                            View proof
+                                            View record
                                         </button>
                                     </article>
                                 </div>
                                 <p v-else class="p-5 text-sm leading-6 text-slate-600">
-                                    No profile proofs have been uploaded. Review the entered profile and application documents instead.
+                                    No academic record is available from profile verification. Review only the documents required by this program.
                                 </p>
                             </section>
 

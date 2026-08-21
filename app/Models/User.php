@@ -131,6 +131,23 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(ApplicantVerificationDocument::class, 'applicant_id');
     }
 
+    public function applicantAcademicVerificationStatus(): string
+    {
+        if (! $this->isApplicant()) {
+            return 'unsubmitted';
+        }
+
+        $hasAcademicRecord = $this->relationLoaded('applicantVerificationDocuments')
+            ? $this->applicantVerificationDocuments->contains('document_type', 'academic_record')
+            : $this->applicantVerificationDocuments()
+                ->where('document_type', 'academic_record')
+                ->exists();
+
+        return $hasAcademicRecord
+            ? ($this->studentProfile?->verification_status ?? 'pending')
+            : 'unsubmitted';
+    }
+
     public function scholarshipFunnelEvents(): HasMany
     {
         return $this->hasMany(ScholarshipFunnelEvent::class);
@@ -305,6 +322,7 @@ class User extends Authenticatable implements MustVerifyEmail
         $age = $birthdate?->age;
         $providerOwner = $this->isProvider() ? $this->providerOrganizationOwner() : null;
         $providerProfile = $providerOwner?->providerProfile ?? $this->providerProfile;
+        $applicantVerificationStatus = $this->applicantAcademicVerificationStatus();
 
         return [
             'id' => $this->id,
@@ -346,10 +364,12 @@ class User extends Authenticatable implements MustVerifyEmail
                 && $providerOwner?->isActive()
                 && $providerOwner?->hasVerifiedEmail()
                 && $providerOwner?->providerProfile?->isVerified(),
-            'applicant_verification_status' => $this->studentProfile?->verification_status ?? 'unsubmitted',
+            'applicant_verification_status' => $applicantVerificationStatus,
             'applicant_verification_notes' => $this->studentProfile?->verification_notes,
-            'applicant_verified_at' => $this->studentProfile?->verified_at?->format('M d, Y'),
-            'is_profile_verified' => $this->isApplicant() && $this->studentProfile?->verification_status === 'approved',
+            'applicant_verified_at' => $applicantVerificationStatus === 'approved'
+                ? $this->studentProfile?->verified_at?->format('M d, Y')
+                : null,
+            'is_profile_verified' => $this->isApplicant() && $applicantVerificationStatus === 'approved',
             'education_level' => $this->studentProfile?->education_level,
             'school' => $this->studentProfile?->school,
             'school_type' => $this->studentProfile?->school_type,

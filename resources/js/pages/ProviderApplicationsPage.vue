@@ -1520,8 +1520,8 @@ onMounted(loadProviderData);
                                         <i
                                             v-if="application.applicant?.profile_verification_status === 'approved'"
                                             class="fa-solid fa-circle-check text-xs text-emerald-600"
-                                            title="Verified applicant"
-                                            aria-label="Verified applicant"
+                                            title="Verified academic record"
+                                            aria-label="Verified academic record"
                                         ></i>
                                         <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', statusClass(application.status)]">
                                             {{ statusLabel(application.status) }}
@@ -1717,7 +1717,7 @@ onMounted(loadProviderData);
                     </div>
 
                     <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                        <p class="text-xs text-slate-500">Open the full review to check files, profile proofs, rubric scores, and record a decision.</p>
+                        <p class="text-xs text-slate-500">Open the full review to check required files, the verified academic record, rubric scores, and record a decision.</p>
                         <div class="flex shrink-0 gap-2">
                             <button
                                 type="button"

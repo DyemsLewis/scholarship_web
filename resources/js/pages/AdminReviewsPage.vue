@@ -53,7 +53,7 @@ const reviewTabs = computed(() => [
         label: 'Applicants',
         count: stats.value.applicants,
         pending: stats.value.pending_applicants,
-        description: 'Applicant profile and verification proof',
+        description: 'Academic results and submitted grade records',
     },
 ]);
 
@@ -552,7 +552,7 @@ onMounted(loadReviewData);
                                         </span>
                                     </div>
                                     <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
-                                        {{ applicant.email }} &middot; {{ applicant.school || 'School not provided' }} &middot; {{ applicant.verification_documents?.length || 0 }} proof file{{ applicant.verification_documents?.length === 1 ? '' : 's' }}
+                                        {{ applicant.email }} &middot; {{ applicant.school || 'School not provided' }} &middot; {{ applicant.verification_documents?.length ? 'Academic record submitted' : 'No academic record' }}
                                     </p>
                                 </div>
 

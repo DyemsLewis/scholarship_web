@@ -92,9 +92,9 @@ class PlatformIntegritySafeguardsTest extends TestCase
         $proof = ApplicantVerificationDocument::create([
             'applicant_id' => $applicant->id,
             'uploaded_by' => $applicant->id,
-            'document_type' => 'school_id',
-            'original_name' => 'school-id.pdf',
-            'path' => "applicant-verification/{$applicant->id}/school-id.pdf",
+            'document_type' => 'academic_record',
+            'original_name' => 'academic-record.pdf',
+            'path' => "applicant-verification/{$applicant->id}/academic-record.pdf",
             'mime_type' => 'application/pdf',
             'size' => 100,
             'status' => 'approved',
@@ -117,6 +117,41 @@ class PlatformIntegritySafeguardsTest extends TestCase
 
         $this->assertSame('submitted', $proof->fresh()->status);
         $this->assertNull($applicant->studentProfile()->first()->verified_at);
+    }
+
+    public function test_non_academic_profile_changes_do_not_reset_academic_verification(): void
+    {
+        $applicant = $this->completeApplicant();
+        $profile = $applicant->studentProfile;
+        $profile->update(['verification_status' => 'approved', 'verified_at' => now()]);
+        $proof = ApplicantVerificationDocument::create([
+            'applicant_id' => $applicant->id,
+            'uploaded_by' => $applicant->id,
+            'document_type' => 'academic_record',
+            'original_name' => 'academic-record.pdf',
+            'path' => "applicant-verification/{$applicant->id}/academic-record.pdf",
+            'mime_type' => 'application/pdf',
+            'size' => 100,
+            'status' => 'approved',
+            'uploaded_at' => now(),
+        ]);
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', [
+                'first_name' => $profile->first_name,
+                'last_name' => $profile->last_name,
+                'middle_initial' => $profile->middle_initial,
+                'contact_number' => '09179990000',
+                'school' => $profile->school,
+                'grading_scale' => $profile->grading_scale,
+                'gwa' => $profile->gwa,
+            ])
+            ->assertOk()
+            ->assertJsonPath('verification_reset', false)
+            ->assertJsonPath('user.applicant_verification_status', 'approved');
+
+        $this->assertSame('approved', $proof->fresh()->status);
+        $this->assertNotNull($applicant->studentProfile()->first()->verified_at);
     }
 
     public function test_verified_provider_changes_return_the_organization_and_proofs_to_review(): void

@@ -188,7 +188,7 @@ const applicantVerificationStatus = computed(() => account.value?.applicant_veri
 const applicantVerificationLabel = computed(() => ({
     unsubmitted: 'Not submitted',
     pending: 'Pending review',
-    approved: 'Admin verified',
+    approved: 'Academic verified',
     rejected: 'Needs replacement',
 }[applicantVerificationStatus.value] ?? 'Not submitted'));
 const applicantVerificationClass = computed(() => {
@@ -207,11 +207,7 @@ const applicantVerificationClass = computed(() => {
     return 'bg-slate-100 text-slate-600';
 });
 const applicantVerificationDocumentOptions = {
-    school_id: 'School or student ID',
-    government_id: 'Government-issued ID',
-    enrollment_certificate: 'Enrollment certificate',
-    birth_certificate: 'Birth certificate',
-    other: 'Other identity or school proof',
+    academic_record: 'Academic record',
 };
 
 function handleMiddleInitialInput(event) {
@@ -489,7 +485,7 @@ async function updateApplicantVerification(status) {
 }
 
 function applicantVerificationDocumentLabel(type) {
-    return applicantVerificationDocumentOptions[type] ?? 'Verification proof';
+    return applicantVerificationDocumentOptions[type] ?? 'Older verification file';
 }
 
 function openDocumentPreview(document) {
@@ -999,13 +995,13 @@ onMounted(loadAccount);
                     <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
                         <div>
                             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                Applicant verification
+                                Academic verification
                             </p>
                             <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                Review profile proof
+                                Review academic record
                             </h3>
                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                Check the applicant's private proof, then approve the account badge or explain what needs replacement.
+                                Compare the saved academic result with the submitted grade record, then approve it or explain what must be corrected.
                             </p>
                         </div>
                         <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.12em]', applicantVerificationClass]">
@@ -1033,12 +1029,12 @@ onMounted(loadAccount);
                                     class="w-fit rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                                     @click="openDocumentPreview(document)"
                                 >
-                                    View proof
+                                    View record
                                 </button>
                             </div>
                         </div>
                         <div v-else class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
-                            This applicant has not submitted a verification proof yet.
+                            This applicant has not submitted an academic record yet.
                         </div>
 
                         <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
@@ -1076,7 +1072,7 @@ onMounted(loadAccount);
                                     class="rounded-md bg-slate-900 px-3.5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                                     @click="updateApplicantVerification('approved')"
                                 >
-                                    {{ accountAction === 'profile-verification-approved' ? 'Verifying...' : 'Verify profile' }}
+                                    {{ accountAction === 'profile-verification-approved' ? 'Verifying...' : 'Verify academic result' }}
                                 </button>
                             </div>
                         </div>

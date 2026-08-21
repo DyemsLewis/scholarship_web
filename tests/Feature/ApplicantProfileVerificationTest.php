@@ -16,7 +16,7 @@ class ApplicantProfileVerificationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_applicant_can_submit_private_profile_proof_for_admin_review(): void
+    public function test_applicant_can_submit_private_academic_record_for_admin_review(): void
     {
         Storage::fake('local');
 
@@ -25,8 +25,8 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $response = $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
-                'document_type' => 'school_id',
-                'document_file' => UploadedFile::fake()->image('school-id.jpg'),
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('latest-grades.pdf', 120, 'application/pdf'),
                 'terms_accepted' => '1',
             ], ['Accept' => 'application/json'])
             ->assertCreated()
@@ -63,7 +63,25 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_verification_proof_is_copied_to_documents_and_survives_verification_deletion(): void
+    public function test_sensitive_identity_document_is_rejected_by_academic_verification_endpoint(): void
+    {
+        Storage::fake('local');
+
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'birth_certificate',
+                'document_file' => UploadedFile::fake()->image('birth-certificate.jpg'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('document_type');
+
+        $this->assertDatabaseCount('applicant_verification_documents', 0);
+    }
+
+    public function test_academic_verification_record_is_copied_to_documents_and_survives_verification_deletion(): void
     {
         Storage::fake('local');
 
@@ -71,12 +89,12 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $response = $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
-                'document_type' => 'school_id',
-                'document_file' => UploadedFile::fake()->image('school-id.jpg'),
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('latest-grades.pdf', 120, 'application/pdf'),
                 'terms_accepted' => '1',
             ], ['Accept' => 'application/json'])
             ->assertCreated()
-            ->assertJsonPath('prepared_document.document_name', 'School ID')
+            ->assertJsonPath('prepared_document.document_name', 'Latest report card or grades')
             ->assertJsonPath('prepared_documents_count', 1);
 
         $verificationDocument = ApplicantVerificationDocument::query()->firstOrFail();
@@ -99,7 +117,7 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->actingAs($applicant)
             ->getJson('/dashboard/documents/data')
             ->assertOk()
-            ->assertJsonPath('prepared_documents.0.document_name', 'School ID');
+            ->assertJsonPath('prepared_documents.0.document_name', 'Latest report card or grades');
     }
 
     public function test_academic_proof_is_saved_as_a_reusable_grade_document(): void
@@ -146,8 +164,8 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
-                'document_type' => 'enrollment_certificate',
-                'document_file' => UploadedFile::fake()->create('enrollment.pdf', 120, 'application/pdf'),
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('latest-grades.pdf', 120, 'application/pdf'),
                 'terms_accepted' => '1',
             ], ['Accept' => 'application/json'])
             ->assertCreated();
@@ -195,8 +213,8 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
-                'document_type' => 'school_id',
-                'document_file' => UploadedFile::fake()->image('original-school-id.jpg'),
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('original-grades.pdf', 120, 'application/pdf'),
                 'terms_accepted' => '1',
             ], ['Accept' => 'application/json'])
             ->assertCreated();
@@ -210,8 +228,8 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
-                'document_type' => 'school_id',
-                'document_file' => UploadedFile::fake()->image('updated-school-id.jpg'),
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('updated-grades.pdf', 120, 'application/pdf'),
                 'terms_accepted' => '1',
             ], ['Accept' => 'application/json'])
             ->assertOk()
@@ -265,13 +283,13 @@ class ApplicantProfileVerificationTest extends TestCase
             'verified_at' => now(),
         ]);
 
-        $proofPath = "applicant-verification/{$applicant->id}/school-id.pdf";
-        Storage::disk('local')->put($proofPath, 'demo profile proof');
+        $proofPath = "applicant-verification/{$applicant->id}/academic-record.pdf";
+        Storage::disk('local')->put($proofPath, 'demo academic record');
         $proof = ApplicantVerificationDocument::create([
             'applicant_id' => $applicant->id,
             'uploaded_by' => $applicant->id,
-            'document_type' => 'school_id',
-            'original_name' => 'school-id.pdf',
+            'document_type' => 'academic_record',
+            'original_name' => 'academic-record.pdf',
             'path' => $proofPath,
             'mime_type' => 'application/pdf',
             'size' => 1024,
@@ -335,5 +353,30 @@ class ApplicantProfileVerificationTest extends TestCase
                 'verification_status' => 'approved',
             ])
             ->assertUnprocessable();
+    }
+
+    public function test_admin_cannot_use_a_legacy_identity_file_to_verify_academic_results(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        ApplicantVerificationDocument::create([
+            'applicant_id' => $applicant->id,
+            'uploaded_by' => $applicant->id,
+            'document_type' => 'birth_certificate',
+            'original_name' => 'older-birth-certificate.pdf',
+            'path' => "applicant-verification/{$applicant->id}/older-birth-certificate.pdf",
+            'mime_type' => 'application/pdf',
+            'size' => 1024,
+            'status' => 'submitted',
+            'uploaded_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+                'verification_status' => 'approved',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'The applicant must upload an academic record before the academic result can be verified.');
     }
 }

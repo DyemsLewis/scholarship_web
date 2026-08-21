@@ -12,12 +12,7 @@ use RuntimeException;
 class ApplicantDocumentLibraryService
 {
     private const VERIFICATION_DOCUMENT_NAMES = [
-        'school_id' => 'School ID',
-        'government_id' => 'Government-issued ID',
-        'enrollment_certificate' => 'Certificate of enrollment',
         'academic_record' => 'Latest report card or grades',
-        'birth_certificate' => 'Birth certificate',
-        'other' => 'Other identity or school proof',
     ];
 
     public function ensureVerificationCopy(User $user, ApplicantVerificationDocument $verificationDocument): ?StudentDocument
@@ -48,7 +43,7 @@ class ApplicantDocumentLibraryService
             .($extension !== '' ? ".{$extension}" : '');
 
         if (! $disk->copy($verificationDocument->path, $targetPath)) {
-            throw new RuntimeException('Unable to copy the verification proof into the prepared-document library.');
+            throw new RuntimeException('Unable to copy the academic record into the prepared-document library.');
         }
 
         $document = StudentDocument::query()->firstOrCreate([
