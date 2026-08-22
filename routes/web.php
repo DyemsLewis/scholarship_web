@@ -101,6 +101,7 @@ Route::middleware(['auth', 'admin'])
         Route::get('/reviews/data', [AdminController::class, 'reviewsData'])->middleware('permission:manage_reviews')->name('reviews.data');
         Route::patch('/providers/{provider}/verification', [AdminController::class, 'updateProviderVerification'])->middleware('permission:manage_reviews')->name('providers.verification');
         Route::patch('/scholarships/{scholarship}/review', [AdminController::class, 'updateScholarshipReview'])->middleware('permission:manage_reviews')->name('scholarships.review');
+        Route::get('/provider-verification-documents/{document}/view', [AdminController::class, 'viewProviderVerificationDocument'])->middleware('permission:manage_reviews')->name('provider-verification-documents.view');
         Route::get('/provider-verification-documents/{document}/download', [AdminController::class, 'downloadProviderVerificationDocument'])->middleware('permission:manage_reviews')->name('provider-verification-documents.download');
         Route::get('/export/users', [AdminController::class, 'exportUsers'])->middleware('permission:export_data')->name('export.users');
         Route::get('/export/applications', [AdminController::class, 'exportApplications'])->middleware('permission:export_data')->name('export.applications');
@@ -142,6 +143,7 @@ Route::middleware(['auth', 'provider'])
         Route::get('/profile/data', [ProviderController::class, 'profileData'])->name('profile.data');
         Route::patch('/profile', [ProviderController::class, 'updateProfile'])->name('profile.update');
         Route::post('/verification-documents', [ProviderController::class, 'uploadVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.store');
+        Route::get('/verification-documents/{document}/view', [ProviderController::class, 'viewVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.view');
         Route::get('/verification-documents/{document}/download', [ProviderController::class, 'downloadVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.download');
         Route::delete('/verification-documents/{document}', [ProviderController::class, 'deleteVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.destroy');
         Route::get('/insights/data', [ProviderController::class, 'insightsData'])->middleware(['permission:review_applications', 'provider.approved'])->name('insights.data');

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { formatFileSize } from '../support/display';
+import ZoomableImagePreview from './ZoomableImagePreview.vue';
 
 const props = defineProps({
     document: { type: Object, default: null },
@@ -22,13 +23,18 @@ const statusOptions = [
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
 const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500';
 const requiresNote = computed(() => ['rejected', 'needs_replacement'].includes(status.value));
-const canPreview = computed(() => {
+const isImage = computed(() => {
     const mimeType = props.document?.mime_type ?? '';
     const fileName = props.document?.original_name ?? '';
 
-    return mimeType === 'application/pdf'
-        || mimeType.startsWith('image/')
-        || /\.(pdf|jpe?g|png)$/i.test(fileName);
+    return mimeType.startsWith('image/')
+        || /\.(gif|jpe?g|png|webp|bmp)$/i.test(fileName);
+});
+const isPdf = computed(() => {
+    const mimeType = props.document?.mime_type ?? '';
+    const fileName = props.document?.original_name ?? '';
+
+    return mimeType === 'application/pdf' || /\.pdf$/i.test(fileName);
 });
 const displayedError = computed(() => props.error || localError.value);
 
@@ -95,8 +101,14 @@ function submitReview() {
 
                 <div class="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:overflow-hidden">
                     <div class="min-h-[22rem] bg-slate-100 p-3 sm:p-4 lg:min-h-0">
+                        <ZoomableImagePreview
+                            v-if="isImage"
+                            :src="document.view_url"
+                            :alt="document.document_name"
+                            class="h-[55vh] lg:h-full"
+                        />
                         <iframe
-                            v-if="canPreview"
+                            v-else-if="isPdf"
                             :src="document.view_url"
                             :title="document.document_name"
                             class="h-[55vh] w-full rounded-md border border-slate-200 bg-white lg:h-full"

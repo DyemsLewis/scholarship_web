@@ -834,114 +834,135 @@ watch(selectedScholarship, (scholarship) => {
                                 </div>
                             </div>
 
-                            <div v-else-if="currentStep === 0 && selectedScholarship" class="space-y-5">
-                                <section class="rounded-md border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-                                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                        <div class="flex min-w-0 gap-3">
-                                            <img
-                                                :src="selectedScholarship.image_url"
-                                                :alt="selectedScholarship.title"
-                                                class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
-                                            >
-                                            <div class="min-w-0">
-                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                                                    {{ selectedScholarship.provider?.name || 'Scholarship Provider' }}
-                                                </p>
-                                                <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                                    {{ selectedScholarship.title }}
-                                                </h3>
-                                                <p class="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">
-                                                    {{ selectedScholarship.description }}
-                                                </p>
+                            <div v-else-if="currentStep === 0 && selectedScholarship" class="space-y-4">
+                                <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                    <div class="p-5 sm:p-6">
+                                        <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                                            <div class="flex min-w-0 items-start gap-4">
+                                                <img
+                                                    :src="selectedScholarship.image_url"
+                                                    :alt="selectedScholarship.title"
+                                                    class="h-14 w-14 shrink-0 rounded-md bg-slate-50 object-contain p-2 ring-1 ring-slate-200"
+                                                >
+                                                <div class="min-w-0">
+                                                    <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-amber-700">
+                                                        {{ selectedScholarship.provider?.name || 'Scholarship Provider' }}
+                                                    </p>
+                                                    <h3 class="mt-1 text-xl font-bold leading-tight text-slate-950">
+                                                        {{ selectedScholarship.title }}
+                                                    </h3>
+                                                    <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                                                        {{ selectedScholarship.description }}
+                                                    </p>
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div class="flex shrink-0 flex-wrap gap-2 sm:justify-end">
-                                            <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', matchClass(selectedScholarship.eligibility_match?.score)]">
-                                                {{ selectedScholarship.eligibility_match?.score ?? 0 }}% match
-                                            </span>
-                                            <span class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
-                                                {{ selectedApplicationMode }}
-                                            </span>
+                                            <div class="flex shrink-0 flex-wrap gap-2 lg:max-w-52 lg:justify-end">
+                                                <span :class="['rounded-md px-2.5 py-1.5 text-xs font-bold', matchClass(selectedScholarship.eligibility_match?.score)]">
+                                                    {{ selectedScholarship.eligibility_match?.score ?? 0 }}% match
+                                                </span>
+                                                <span class="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-700">
+                                                    {{ selectedApplicationMode }}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <dl class="mt-4 grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                                        <div class="bg-white p-3">
-                                            <dt class="text-xs font-semibold text-slate-500">Benefits</dt>
-                                            <dd class="mt-1 line-clamp-2 font-bold text-slate-950">{{ selectedScholarship.benefit_summary || formatAmount(selectedScholarship.award_amount) }}</dd>
+                                    <dl class="grid border-t border-slate-200 sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-slate-200">
+                                        <div class="border-b border-slate-200 p-4 lg:border-b-0">
+                                            <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                                <i class="fa-solid fa-gift text-amber-700" aria-hidden="true"></i>
+                                                Benefits
+                                            </dt>
+                                            <dd class="mt-2 line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ selectedScholarship.benefit_summary || formatAmount(selectedScholarship.award_amount) }}</dd>
                                         </div>
-                                        <div class="bg-white p-3">
-                                            <dt class="text-xs font-semibold text-slate-500">Deadline</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ selectedScholarship.deadline || 'No deadline' }}</dd>
+                                        <div class="border-b border-slate-200 p-4 lg:border-b-0">
+                                            <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                                <i class="fa-regular fa-calendar text-amber-700" aria-hidden="true"></i>
+                                                Deadline
+                                            </dt>
+                                            <dd class="mt-2 text-sm font-bold text-slate-950">{{ selectedScholarship.deadline || 'No deadline' }}</dd>
                                         </div>
-                                        <div class="bg-white p-3">
-                                            <dt class="text-xs font-semibold text-slate-500">Academic requirement</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ academicRequirementLabel(selectedScholarship) }}</dd>
+                                        <div class="border-b border-slate-200 p-4 sm:border-b-0">
+                                            <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                                <i class="fa-solid fa-chart-line text-amber-700" aria-hidden="true"></i>
+                                                Academic requirement
+                                            </dt>
+                                            <dd class="mt-2 text-sm font-bold text-slate-950">{{ academicRequirementLabel(selectedScholarship) }}</dd>
                                         </div>
-                                        <div class="bg-white p-3">
-                                            <dt class="text-xs font-semibold text-slate-500">Required files</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ selectedRequirements.length }} files · {{ selectedDocumentReadiness }}% ready</dd>
+                                        <div class="p-4">
+                                            <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                                <i class="fa-solid fa-folder-open text-amber-700" aria-hidden="true"></i>
+                                                File readiness
+                                            </dt>
+                                            <dd class="mt-2 text-sm font-bold text-slate-950">{{ selectedDocumentReadiness }}% ready</dd>
+                                            <p class="mt-1 text-xs text-slate-500">{{ selectedRequirements.length }} required file{{ selectedRequirements.length === 1 ? '' : 's' }}</p>
                                         </div>
                                     </dl>
 
-                                    <div class="mt-4 text-sm leading-6 text-slate-600">
-                                        <span class="font-bold text-slate-800">Eligibility:</span>
-                                        {{ selectedScholarship.eligibility || 'No additional eligibility details listed.' }}
+                                    <div :class="['flex items-start gap-3 border-t p-4 sm:px-5', selectedIsEligible ? 'border-emerald-200 bg-emerald-50/70' : 'border-rose-200 bg-rose-50']">
+                                        <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', selectedIsEligible ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700']">
+                                            <i :class="selectedIsEligible ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation'" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p :class="['text-sm font-bold', selectedIsEligible ? 'text-emerald-900' : 'text-rose-900']">
+                                                {{ selectedIsEligible ? 'Your profile meets the listed criteria' : 'Your profile has an eligibility issue' }}
+                                            </p>
+                                            <p :class="['mt-1 whitespace-pre-line text-sm leading-6', selectedIsEligible ? 'text-emerald-800' : 'text-rose-800']">
+                                                {{ selectedIsEligible ? (selectedScholarship.eligibility || 'No additional eligibility conditions are listed.') : selectedEligibilityMessage }}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <p v-if="!selectedIsEligible" class="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800">
-                                        {{ selectedEligibilityMessage }}
-                                    </p>
                                 </section>
 
-                                <section class="grid overflow-hidden rounded-md border border-slate-200 bg-white lg:grid-cols-[minmax(0,1fr)_minmax(19rem,0.8fr)]">
-                                    <div class="p-4 sm:p-5">
-                                        <div class="flex items-center justify-between gap-3">
+                                <div class="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
+                                    <section class="rounded-lg border border-slate-200 bg-white p-5">
+                                        <div class="flex items-start justify-between gap-3">
                                             <div>
-                                                <p class="student-kicker">Applicant details</p>
-                                                <h3 class="mt-1 text-base font-bold text-slate-950">Confirm your information</h3>
+                                                <p class="student-kicker">Applicant</p>
+                                                <h3 class="mt-1 text-base font-bold text-slate-950">Information sent with this application</h3>
                                             </div>
-                                            <a href="/dashboard/profile" class="text-xs font-bold text-slate-600 hover:text-slate-950">Edit profile</a>
+                                            <a href="/dashboard/profile" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Edit profile</a>
                                         </div>
-                                        <dl class="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                                            <div>
+                                        <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                                            <div class="rounded-md bg-slate-50 px-3 py-2.5">
                                                 <dt class="text-xs font-semibold text-slate-500">Name</dt>
-                                                <dd class="mt-0.5 font-bold text-slate-900">{{ user?.name }}</dd>
+                                                <dd class="mt-1 font-bold text-slate-900">{{ user?.name }}</dd>
                                             </div>
-                                            <div>
+                                            <div class="rounded-md bg-slate-50 px-3 py-2.5">
                                                 <dt class="text-xs font-semibold text-slate-500">Email</dt>
-                                                <dd class="mt-0.5 truncate font-bold text-slate-900">{{ user?.email }}</dd>
+                                                <dd class="mt-1 truncate font-bold text-slate-900">{{ user?.email }}</dd>
                                             </div>
-                                            <div>
+                                            <div class="rounded-md bg-slate-50 px-3 py-2.5">
                                                 <dt class="text-xs font-semibold text-slate-500">Contact</dt>
-                                                <dd class="mt-0.5 font-bold text-slate-900">{{ user?.contact_number || 'Not provided' }}</dd>
+                                                <dd class="mt-1 font-bold text-slate-900">{{ user?.contact_number || 'Not provided' }}</dd>
                                             </div>
-                                            <div>
+                                            <div class="rounded-md bg-slate-50 px-3 py-2.5">
                                                 <dt class="text-xs font-semibold text-slate-500">Education</dt>
-                                                <dd class="mt-0.5 font-bold text-slate-900">{{ user?.course_or_strand || 'Track not set' }} · {{ user?.year_level || 'Grade/year not set' }}</dd>
+                                                <dd class="mt-1 font-bold text-slate-900">{{ user?.course_or_strand || 'Track not set' }} · {{ user?.year_level || 'Grade/year not set' }}</dd>
                                             </div>
                                         </dl>
-                                    </div>
+                                    </section>
 
-                                    <div class="border-t border-slate-200 bg-slate-50/70 p-4 sm:p-5 lg:border-l lg:border-t-0">
+                                    <section class="rounded-lg border border-slate-200 bg-slate-50/70 p-5">
                                         <div class="flex items-center justify-between gap-3">
                                             <div>
-                                                <p class="student-kicker">Selection process</p>
-                                                <h3 class="mt-1 text-base font-bold text-slate-950">What happens after submission</h3>
+                                                <p class="student-kicker">After submission</p>
+                                                <h3 class="mt-1 text-base font-bold text-slate-950">Selection process</h3>
                                             </div>
                                             <span class="text-xs font-bold text-slate-500">{{ selectedSelectionPlan.length }} stages</span>
                                         </div>
-                                        <ol class="mt-4 flex flex-wrap gap-2">
+                                        <ol class="mt-4 space-y-2">
                                             <li
                                                 v-for="(stage, index) in selectedSelectionPlan"
                                                 :key="stage.value"
-                                                class="inline-flex items-center gap-2 rounded-md bg-white px-2.5 py-2 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
+                                                class="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2.5"
                                             >
-                                                <span class="grid h-5 w-5 place-items-center rounded-full bg-slate-900 text-[9px] text-white">{{ index + 1 }}</span>
-                                                {{ stage.label }}
+                                                <span class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-900 text-[10px] font-bold text-white">{{ index + 1 }}</span>
+                                                <span class="text-sm font-bold text-slate-700">{{ stage.label }}</span>
                                             </li>
                                         </ol>
-                                    </div>
-                                </section>
+                                    </section>
+                                </div>
                             </div>
 
                             <div v-else-if="currentStep === 1 && selectedScholarship" class="grid gap-6">
@@ -1095,58 +1116,98 @@ watch(selectedScholarship, (scholarship) => {
                                 </details>
                             </div>
 
-                            <div v-else-if="currentStep === 2 && selectedScholarship" class="space-y-5">
-                                <div>
-                                    <p class="student-kicker">Final review</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">Check before submitting</h3>
-                                    <p class="mt-1 text-sm text-slate-600">Your prepared files will be attached automatically.</p>
-                                </div>
+                            <div v-else-if="currentStep === 2 && selectedScholarship" class="space-y-4">
+                                <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                    <div class="flex flex-col gap-4 border-b border-slate-200 bg-slate-50/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="flex min-w-0 items-center gap-4">
+                                            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700">
+                                                <i class="fa-solid fa-file-circle-check" aria-hidden="true"></i>
+                                            </span>
+                                            <div>
+                                                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">Ready for submission</p>
+                                                <h3 class="mt-1 text-lg font-bold text-slate-950">Review the final application</h3>
+                                                <p class="mt-1 text-sm text-slate-600">Confirm the program, applicant, and prepared files below.</p>
+                                            </div>
+                                        </div>
+                                        <span :class="['w-fit rounded-md px-2.5 py-1.5 text-xs font-bold', matchClass(selectedScholarship.eligibility_match?.score)]">
+                                            {{ selectedScholarship.eligibility_match?.score ?? 0 }}% match
+                                        </span>
+                                    </div>
 
-                                <section class="grid overflow-hidden rounded-md border border-slate-200 bg-white lg:grid-cols-[minmax(0,1fr)_20rem]">
-                                    <div class="p-4 sm:p-5">
-                                        <div class="flex items-start gap-3">
+                                    <div class="p-5 sm:p-6">
+                                        <div class="flex items-start gap-4">
                                             <img
                                                 :src="selectedScholarship.image_url"
                                                 :alt="selectedScholarship.title"
-                                                class="h-11 w-11 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
+                                                class="h-12 w-12 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
                                             >
                                             <div class="min-w-0">
-                                                <p class="font-bold text-slate-950">{{ selectedScholarship.title }}</p>
-                                                <p class="mt-1 text-xs text-slate-500">{{ selectedScholarship.provider?.name || 'Scholarship Provider' }}</p>
+                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">{{ selectedScholarship.provider?.name || 'Scholarship Provider' }}</p>
+                                                <h3 class="mt-1 text-lg font-bold text-slate-950">{{ selectedScholarship.title }}</h3>
+                                                <p class="mt-1 text-sm text-slate-500">{{ selectedApplicationMode }}</p>
                                             </div>
                                         </div>
-                                        <dl class="mt-4 grid gap-x-6 gap-y-3 border-t border-slate-200 pt-4 text-sm sm:grid-cols-2">
-                                            <div>
-                                                <dt class="text-xs font-semibold text-slate-500">Applicant</dt>
-                                                <dd class="mt-0.5 font-bold text-slate-900">{{ user?.name }}</dd>
-                                            </div>
-                                            <div>
-                                                <dt class="text-xs font-semibold text-slate-500">Files attached</dt>
-                                                <dd class="mt-0.5 font-bold text-slate-900">{{ documentChecklist.length }} of {{ selectedRequirements.length }}</dd>
-                                            </div>
-                                            <div>
-                                                <dt class="text-xs font-semibold text-slate-500">Application mode</dt>
-                                                <dd class="mt-0.5 font-bold text-slate-900">{{ selectedApplicationMode }}</dd>
-                                            </div>
-                                            <div>
-                                                <dt class="text-xs font-semibold text-slate-500">Match score</dt>
-                                                <dd class="mt-0.5 font-bold text-slate-900">{{ selectedScholarship.eligibility_match?.score ?? 0 }}%</dd>
-                                            </div>
-                                        </dl>
-                                        <div class="mt-4 border-t border-slate-200 pt-4">
-                                            <p class="text-xs font-semibold text-slate-500">Selection process</p>
-                                            <p class="mt-1 text-sm font-bold leading-6 text-slate-800">{{ selectedSelectionPlan.map((stage) => stage.label).join(' → ') }}</p>
-                                        </div>
-                                    </div>
 
-                                    <div class="border-t border-slate-200 bg-slate-50/70 p-4 sm:p-5 lg:border-l lg:border-t-0">
-                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Your note</p>
-                                        <p class="mt-2 text-sm leading-6 text-slate-700">{{ notes || 'No note added.' }}</p>
-                                        <p class="mt-4 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">
-                                            Files can still be viewed or replaced from your application after submission.
-                                        </p>
+                                        <div class="mt-5 grid gap-3 lg:grid-cols-3">
+                                            <div class="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3">
+                                                <i class="fa-solid fa-circle-check text-emerald-600" aria-hidden="true"></i>
+                                                <div>
+                                                    <p class="text-xs font-semibold text-emerald-700">Applicant profile</p>
+                                                    <p class="mt-0.5 text-sm font-bold text-emerald-950">{{ user?.name }}</p>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3">
+                                                <i class="fa-solid fa-circle-check text-emerald-600" aria-hidden="true"></i>
+                                                <div>
+                                                    <p class="text-xs font-semibold text-emerald-700">Eligibility</p>
+                                                    <p class="mt-0.5 text-sm font-bold text-emerald-950">Criteria matched</p>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3">
+                                                <i class="fa-solid fa-circle-check text-emerald-600" aria-hidden="true"></i>
+                                                <div>
+                                                    <p class="text-xs font-semibold text-emerald-700">Prepared files</p>
+                                                    <p class="mt-0.5 text-sm font-bold text-emerald-950">
+                                                        {{ selectedRequirements.length ? `${documentChecklist.length} of ${selectedRequirements.length} attached` : 'No files required' }}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </section>
+
+                                <div class="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
+                                    <section class="rounded-lg border border-slate-200 bg-white p-5">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p class="student-kicker">Selection process</p>
+                                                <h3 class="mt-1 text-base font-bold text-slate-950">What happens next</h3>
+                                            </div>
+                                            <span class="text-xs font-bold text-slate-500">{{ selectedSelectionPlan.length }} stages</span>
+                                        </div>
+                                        <ol class="mt-4 grid gap-2 sm:grid-cols-2">
+                                            <li
+                                                v-for="(stage, index) in selectedSelectionPlan"
+                                                :key="stage.value"
+                                                class="flex items-center gap-3 rounded-md bg-slate-50 px-3 py-2.5"
+                                            >
+                                                <span class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-900 text-[10px] font-bold text-white">{{ index + 1 }}</span>
+                                                <span class="text-sm font-bold text-slate-700">{{ stage.label }}</span>
+                                            </li>
+                                        </ol>
+                                    </section>
+
+                                    <section class="rounded-lg border border-slate-200 bg-slate-50/70 p-5">
+                                        <div class="flex items-center gap-2">
+                                            <i class="fa-regular fa-message text-amber-700" aria-hidden="true"></i>
+                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Note to provider</p>
+                                        </div>
+                                        <p class="mt-3 text-sm leading-6 text-slate-700">{{ notes || 'No note added.' }}</p>
+                                        <p class="mt-4 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">
+                                            You can still view or replace files from the application record after submission.
+                                        </p>
+                                    </section>
+                                </div>
 
                                 <details v-if="selectedContractSections.length" class="rounded-md border border-slate-200 bg-white">
                                     <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-700">
@@ -1171,7 +1232,7 @@ watch(selectedScholarship, (scholarship) => {
                                     </div>
                                 </details>
 
-                                <div class="flex flex-col gap-4 rounded-md border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div class="flex flex-col gap-4 rounded-lg border border-amber-200 bg-amber-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
                                     <TermsAgreement
                                         v-model="applicationTermsAccepted"
                                         context="application"

@@ -716,6 +716,17 @@ class AdminController extends Controller
         return Storage::disk('local')->download($document->path, $document->original_name);
     }
 
+    public function viewProviderVerificationDocument(Request $request, ProviderVerificationDocument $document)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless(Storage::disk('local')->exists($document->path), 404);
+
+        return Storage::disk('local')->response($document->path, $document->original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     public function storeUser(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
@@ -1490,10 +1501,12 @@ class AdminController extends Controller
             'id' => $document->id,
             'document_type' => $document->document_type,
             'original_name' => $document->original_name,
+            'mime_type' => $document->mime_type,
             'size' => $document->size,
             'status' => $document->status,
             'review_notes' => $document->review_notes,
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
+            'view_url' => route('admin.provider-verification-documents.view', $document),
             'download_url' => route('admin.provider-verification-documents.download', $document),
         ];
     }

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onUnmounted, watch } from 'vue';
 import { formatFileSize, labelFromKey } from '../support/display';
+import ZoomableImagePreview from './ZoomableImagePreview.vue';
 
 const props = defineProps({
     proof: { type: Object, default: null },
@@ -8,13 +9,18 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close']);
-const canPreview = computed(() => {
+const isImage = computed(() => {
     const mimeType = props.proof?.mime_type ?? '';
     const fileName = props.proof?.original_name ?? '';
 
-    return mimeType === 'application/pdf'
-        || mimeType.startsWith('image/')
-        || /\.(pdf|jpe?g|png)$/i.test(fileName);
+    return mimeType.startsWith('image/')
+        || /\.(gif|jpe?g|png|webp|bmp)$/i.test(fileName);
+});
+const isPdf = computed(() => {
+    const mimeType = props.proof?.mime_type ?? '';
+    const fileName = props.proof?.original_name ?? '';
+
+    return mimeType === 'application/pdf' || /\.pdf$/i.test(fileName);
 });
 const proofLabel = computed(() => props.proof?.document_type === 'academic_record'
     ? 'Academic record'
@@ -74,8 +80,14 @@ onUnmounted(() => {
 
                 <div class="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:overflow-hidden">
                     <div class="min-h-[22rem] bg-slate-100 p-3 sm:p-4 lg:min-h-0">
+                        <ZoomableImagePreview
+                            v-if="isImage"
+                            :src="proof.view_url"
+                            :alt="proofLabel"
+                            class="h-[55vh] lg:h-full"
+                        />
                         <iframe
-                            v-if="canPreview"
+                            v-else-if="isPdf"
                             :src="proof.view_url"
                             :title="proofLabel"
                             class="h-[55vh] w-full rounded-md border border-slate-200 bg-white lg:h-full"

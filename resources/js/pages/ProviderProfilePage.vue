@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
@@ -19,6 +20,7 @@ const verificationDocumentFile = ref(null);
 const verificationDocumentTermsAccepted = ref(false);
 const isUploadingDocument = ref(false);
 const deletingDocumentId = ref(null);
+const previewDocument = ref(null);
 const canManageProfile = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_profile'),
@@ -179,6 +181,14 @@ function documentTypeLabel(type) {
         ?? String(type ?? 'Document').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function openDocumentPreview(document) {
+    previewDocument.value = document;
+}
+
+function closeDocumentPreview() {
+    previewDocument.value = null;
+}
+
 function selectProfileSection(section) {
     activeProfileSection.value = section;
 
@@ -303,6 +313,13 @@ onMounted(loadProviderProfile);
 <template>
     <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
         <ProviderSidebar />
+
+        <FilePreviewModal
+            :file="previewDocument"
+            :title="documentTypeLabel(previewDocument?.document_type)"
+            :context="user?.provider_name || user?.name || 'Provider'"
+            @close="closeDocumentPreview"
+        />
 
         <ConfirmationDialog
             v-bind="confirmation"
@@ -537,13 +554,14 @@ onMounted(loadProviderProfile);
                                     </p>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
-                                    <a
+                                    <button
                                         v-if="canManageProfile"
-                                        :href="document.download_url"
+                                        type="button"
                                         class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                        @click="openDocumentPreview(document)"
                                     >
-                                        Download
-                                    </a>
+                                        View file
+                                    </button>
                                     <button
                                         v-if="canManageProfile"
                                         type="button"

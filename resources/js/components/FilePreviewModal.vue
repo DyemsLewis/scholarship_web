@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onUnmounted, watch } from 'vue';
 import { formatFileSize } from '../support/display';
+import ZoomableImagePreview from './ZoomableImagePreview.vue';
 
 const props = defineProps({
     file: { type: Object, default: null },
@@ -65,13 +66,12 @@ onUnmounted(() => {
                 </header>
 
                 <div class="min-h-[22rem] flex-1 overflow-auto bg-slate-100 p-3 sm:p-4">
-                    <div v-if="isImage" class="flex min-h-[22rem] h-[65vh] items-center justify-center overflow-auto rounded-md border border-slate-200 bg-white p-3">
-                        <img
-                            :src="previewUrl"
-                            :alt="title"
-                            class="max-h-full max-w-full object-contain"
-                        >
-                    </div>
+                    <ZoomableImagePreview
+                        v-if="isImage"
+                        :src="previewUrl"
+                        :alt="title"
+                        class="h-[65vh] min-h-[22rem]"
+                    />
                     <iframe
                         v-else-if="isPdf"
                         :src="previewUrl"

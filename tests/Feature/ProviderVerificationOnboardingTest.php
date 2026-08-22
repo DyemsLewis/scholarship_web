@@ -225,4 +225,53 @@ class ProviderVerificationOnboardingTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'verification_documents');
     }
+
+    public function test_provider_verification_files_use_secure_inline_preview_routes(): void
+    {
+        Storage::fake('local');
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $path = "provider-verification/{$provider->id}/registration.pdf";
+        Storage::disk('local')->put($path, '%PDF-1.4 provider registration');
+        $document = ProviderVerificationDocument::create([
+            'provider_id' => $provider->id,
+            'uploaded_by' => $provider->id,
+            'document_type' => 'organization_registration',
+            'original_name' => 'registration.pdf',
+            'path' => $path,
+            'mime_type' => 'application/pdf',
+            'size' => 31,
+            'status' => 'submitted',
+            'uploaded_at' => now(),
+        ]);
+
+        $providerViewUrl = route('provider.verification-documents.view', $document);
+        $adminViewUrl = route('admin.provider-verification-documents.view', $document);
+
+        $this->actingAs($provider)
+            ->getJson('/provider/profile/data')
+            ->assertOk()
+            ->assertJsonPath('verification_documents.0.mime_type', 'application/pdf')
+            ->assertJsonPath('verification_documents.0.view_url', $providerViewUrl);
+
+        $this->actingAs($provider)
+            ->get($providerViewUrl)
+            ->assertOk();
+
+        $this->actingAs($otherProvider)
+            ->get($providerViewUrl)
+            ->assertForbidden();
+
+        $this->actingAs($admin)
+            ->getJson("/admin/providers/{$provider->id}/review/data")
+            ->assertOk()
+            ->assertJsonPath('provider.verification_documents.0.mime_type', 'application/pdf')
+            ->assertJsonPath('provider.verification_documents.0.view_url', $adminViewUrl);
+
+        $this->actingAs($admin)
+            ->get($adminViewUrl)
+            ->assertOk();
+    }
 }

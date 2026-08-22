@@ -75,31 +75,58 @@ const categoryOptions = ['Academic merit', 'Financial assistance', 'Community gr
 const customEligibilityOption = '__custom__';
 const eligibilityOptions = [
     {
-        label: 'Applicants who meet all listed requirements',
-        value: 'Open to applicants who meet the education, academic, location, income, and document requirements listed in this program.',
+        key: 'currently_enrolled',
+        label: 'Currently enrolled',
+        description: 'Applicant must be enrolled in a school or recognized learning program.',
+        summary: 'Currently enrolled in an eligible school or recognized learning program.',
     },
     {
-        label: 'Academic performance based',
-        value: 'Open to applicants who meet the listed academic, education-level, and document requirements.',
+        key: 'learner_group',
+        label: 'Target learner group',
+        description: 'Use the education level, grade, strand, course, and school rules below.',
+        summary: 'Meets the listed education level, grade or year level, track, strand, course, and school requirements.',
     },
     {
-        label: 'Financial need based',
-        value: 'Open to applicants who meet the listed income, education-level, and document requirements.',
+        key: 'academic_performance',
+        label: 'Academic requirement',
+        description: 'Applicant must meet the average or GWA configured below.',
+        summary: 'Meets the academic average or GWA requirement listed in this program.',
     },
     {
-        label: 'Specific learner group or program',
-        value: 'Open to applicants in the listed education levels, grade or year levels, tracks, strands, courses, or training programs.',
+        key: 'financial_need',
+        label: 'Financial need',
+        description: 'Applicant must fall within the selected household-income range.',
+        summary: 'Meets the household-income requirement listed in this program.',
     },
     {
-        label: 'Local or community applicants',
-        value: 'Open to applicants who live or study within the locations covered by this program and meet the listed requirements.',
+        key: 'location_coverage',
+        label: 'Location coverage',
+        description: 'Applicant must live or study in an eligible location.',
+        summary: 'Lives or studies within the locations covered by this program.',
     },
     {
-        label: 'Open to all applicants',
-        value: 'Open to all applicants. The provider will review the submitted profile and required documents.',
+        key: 'required_documents',
+        label: 'Required documents',
+        description: 'Applicant must provide the documents selected in the next step.',
+        summary: 'Can provide the required documents listed in this program.',
+    },
+    {
+        key: 'open_to_all',
+        label: 'Open to all learners',
+        description: 'Sets the detailed matching fields to all education levels, locations, and income groups.',
+        summary: 'Open to all learners. The provider will review the submitted profile and required documents.',
     },
 ];
-const selectedEligibilityOption = ref('');
+const legacyEligibilityMappings = new Map([
+    ['Open to applicants who meet the education, academic, location, income, and document requirements listed in this program.', ['currently_enrolled', 'learner_group', 'academic_performance', 'financial_need', 'location_coverage', 'required_documents']],
+    ['Open to applicants who meet the listed academic, education-level, and document requirements.', ['currently_enrolled', 'learner_group', 'academic_performance', 'required_documents']],
+    ['Open to applicants who meet the listed income, education-level, and document requirements.', ['currently_enrolled', 'learner_group', 'financial_need', 'required_documents']],
+    ['Open to applicants in the listed education levels, grade or year levels, tracks, strands, courses, or training programs.', ['learner_group']],
+    ['Open to applicants who live or study within the locations covered by this program and meet the listed requirements.', ['location_coverage']],
+    ['Open to all applicants. The provider will review the submitted profile and required documents.', ['open_to_all']],
+]);
+const selectedEligibilityOptions = ref([]);
+const customEligibilityText = ref('');
 const defaultCommitmentText = 'The provider will explain any final recipient commitments after the applicant is accepted.';
 const commitmentOptions = [
     {
@@ -1286,7 +1313,7 @@ function applyTargetApplicantPreset(preset) {
     scholarshipForm.value.eligibleYearLevels = preset.years;
     scholarshipForm.value.eligibleLocations = preset.locations;
     scholarshipForm.value.eligibility = preset.eligibility;
-    syncEligibilityOption();
+    syncEligibilityOptions();
     scholarshipForm.value.requirements = preset.requirements
         .filter((requirement) => documentRequirementOptions.includes(requirement));
 
@@ -1299,28 +1326,70 @@ function applyTargetApplicantPreset(preset) {
     }
 }
 
-function syncEligibilityOption() {
-    const eligibility = scholarshipForm.value.eligibility;
-    const preset = eligibilityOptions.find((option) => option.value === eligibility);
+function syncEligibilityOptions() {
+    const eligibility = String(scholarshipForm.value.eligibility ?? '').trim();
+    const legacySelection = legacyEligibilityMappings.get(eligibility);
 
-    selectedEligibilityOption.value = preset?.value
-        ?? (hasText(eligibility) ? customEligibilityOption : '');
-}
+    selectedEligibilityOptions.value = legacySelection ? [...legacySelection] : [];
+    customEligibilityText.value = '';
 
-function applyEligibilityOption() {
-    if (selectedEligibilityOption.value === customEligibilityOption) {
-        const currentIsPreset = eligibilityOptions.some(
-            (option) => option.value === scholarshipForm.value.eligibility,
-        );
-
-        if (currentIsPreset) {
-            scholarshipForm.value.eligibility = '';
-        }
-
+    if (!eligibility || legacySelection) {
         return;
     }
 
-    scholarshipForm.value.eligibility = selectedEligibilityOption.value;
+    const unmatchedLines = [];
+
+    eligibility.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).forEach((line) => {
+        const option = eligibilityOptions.find((item) => item.summary === line);
+
+        if (option && !selectedEligibilityOptions.value.includes(option.key)) {
+            selectedEligibilityOptions.value.push(option.key);
+        } else {
+            unmatchedLines.push(line);
+        }
+    });
+
+    if (unmatchedLines.length) {
+        selectedEligibilityOptions.value.push(customEligibilityOption);
+        customEligibilityText.value = unmatchedLines.join('\n');
+    }
+}
+
+function updateEligibilitySummary() {
+    const summaries = selectedEligibilityOptions.value
+        .filter((key) => key !== customEligibilityOption)
+        .map((key) => eligibilityOptions.find((option) => option.key === key)?.summary)
+        .filter(Boolean);
+    const customSummary = customEligibilityText.value.trim();
+
+    if (selectedEligibilityOptions.value.includes(customEligibilityOption) && customSummary) {
+        summaries.push(customSummary);
+    }
+
+    scholarshipForm.value.eligibility = summaries.join('\n');
+}
+
+function applyEligibilityOption(changedOption) {
+    if (changedOption === 'open_to_all' && selectedEligibilityOptions.value.includes('open_to_all')) {
+        selectedEligibilityOptions.value = ['open_to_all'];
+        customEligibilityText.value = '';
+        scholarshipForm.value.eligibleEducationLevels = [...allEducationLevelValues];
+        scholarshipForm.value.eligibleCourses = 'Any';
+        scholarshipForm.value.eligibleSchoolTypes = [];
+        scholarshipForm.value.eligibleYearLevels = 'Any grade or year level';
+        scholarshipForm.value.eligibleLocations = 'Nationwide';
+        scholarshipForm.value.incomeRequirement = 'Any';
+        scholarshipForm.value.minimumGradeScale = '';
+        scholarshipForm.value.minimumGwa = '';
+    } else if (changedOption !== 'open_to_all' && selectedEligibilityOptions.value.includes(changedOption)) {
+        selectedEligibilityOptions.value = selectedEligibilityOptions.value.filter((key) => key !== 'open_to_all');
+    }
+
+    if (!selectedEligibilityOptions.value.includes(customEligibilityOption)) {
+        customEligibilityText.value = '';
+    }
+
+    updateEligibilitySummary();
 }
 
 async function applyTargetApplicantPresetByKey(event) {
@@ -1466,7 +1535,7 @@ function fillScholarshipForm(scholarship) {
     imageFile.value = null;
     imagePreviewUrl.value = '';
     selectedTargetPresetKey.value = inferTargetFormKey(scholarshipForm.value.eligibleEducationLevels);
-    syncEligibilityOption();
+    syncEligibilityOptions();
     syncCommitmentEditor();
 }
 
@@ -1691,7 +1760,8 @@ function resetScholarshipForm() {
     eventLocationMapMessage.value = '';
     customizeRubric.value = false;
     selectedTargetPresetKey.value = '';
-    selectedEligibilityOption.value = '';
+    selectedEligibilityOptions.value = [];
+    customEligibilityText.value = '';
     imageFile.value = null;
     imagePreviewUrl.value = '';
     formError.value = '';
@@ -2074,41 +2144,69 @@ onMounted(loadFormData);
                                 </div>
                             </div>
 
-                            <div v-show="activeFormSection === 'audience'" :class="fieldStackClass">
-                                <label :class="labelClass" for="scholarship-eligibility">
-                                    Eligibility summary
+                            <div v-show="activeFormSection === 'audience'" id="scholarship-eligibility" :class="fieldStackClass">
+                                <div :class="labelClass">
+                                    Eligibility criteria
                                     <span :class="requiredHintClass">Required</span>
-                                </label>
-                                <select
-                                    id="scholarship-eligibility"
-                                    v-model="selectedEligibilityOption"
-                                    :class="inputClass"
-                                    @change="applyEligibilityOption"
-                                >
-                                    <option value="">
-                                        Select an eligibility summary
-                                    </option>
-                                    <option
-                                        v-for="option in eligibilityOptions"
-                                        :key="option.value"
-                                        :value="option.value"
-                                    >
-                                        {{ option.label }}
-                                    </option>
-                                    <option :value="customEligibilityOption">
-                                        Custom eligibility summary
-                                    </option>
-                                </select>
+                                </div>
                                 <p class="mt-1.5 text-xs leading-5 text-slate-500">
-                                    This is the short applicant-facing summary. The detailed rules below control matching.
+                                    Select every condition that applies. These choices create the applicant-facing summary; the detailed fields below control matching.
                                 </p>
+
+                                <div class="mt-3 grid gap-2 md:grid-cols-2" role="group" aria-label="Eligibility criteria">
+                                    <label
+                                        v-for="option in eligibilityOptions"
+                                        :key="option.key"
+                                        :class="[
+                                            'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition',
+                                            selectedEligibilityOptions.includes(option.key)
+                                                ? 'border-slate-900 bg-slate-50 ring-1 ring-slate-900/10'
+                                                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70',
+                                        ]"
+                                    >
+                                        <input
+                                            v-model="selectedEligibilityOptions"
+                                            type="checkbox"
+                                            :value="option.key"
+                                            class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-amber-400"
+                                            @change="applyEligibilityOption(option.key)"
+                                        >
+                                        <span>
+                                            <span class="block text-sm font-bold text-slate-900">{{ option.label }}</span>
+                                            <span class="mt-1 block text-xs leading-5 text-slate-500">{{ option.description }}</span>
+                                        </span>
+                                    </label>
+
+                                    <label
+                                        :class="[
+                                            'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition md:col-span-2',
+                                            selectedEligibilityOptions.includes(customEligibilityOption)
+                                                ? 'border-amber-400 bg-amber-50/60 ring-1 ring-amber-200'
+                                                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70',
+                                        ]"
+                                    >
+                                        <input
+                                            v-model="selectedEligibilityOptions"
+                                            type="checkbox"
+                                            :value="customEligibilityOption"
+                                            class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-amber-400"
+                                            @change="applyEligibilityOption(customEligibilityOption)"
+                                        >
+                                        <span>
+                                            <span class="block text-sm font-bold text-slate-900">Custom eligibility</span>
+                                            <span class="mt-1 block text-xs leading-5 text-slate-500">Add an official condition that is not covered above.</span>
+                                        </span>
+                                    </label>
+                                </div>
+
                                 <textarea
-                                    v-if="selectedEligibilityOption === customEligibilityOption"
+                                    v-if="selectedEligibilityOptions.includes(customEligibilityOption)"
                                     id="scholarship-custom-eligibility"
-                                    v-model="scholarshipForm.eligibility"
+                                    v-model="customEligibilityText"
                                     rows="3"
-                                    placeholder="Write a short summary of who can apply"
+                                    placeholder="Write the additional eligibility condition"
                                     :class="[inputClass, 'mt-3']"
+                                    @input="updateEligibilitySummary"
                                 ></textarea>
                             </div>
 
@@ -3318,7 +3416,7 @@ onMounted(loadFormData);
 
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Who can apply</p>
-                                        <p class="mt-2 text-sm leading-6 text-slate-700">
+                                        <p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">
                                             {{ scholarshipForm.eligibility || 'Add an eligibility summary.' }}
                                         </p>
                                         <p class="mt-3 text-xs font-semibold text-slate-500">

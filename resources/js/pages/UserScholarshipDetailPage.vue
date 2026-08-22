@@ -666,7 +666,7 @@ onMounted(loadScholarship);
                                     </div>
                                 </div>
 
-                                <p class="mt-5 text-sm leading-6 text-slate-600">
+                                <p class="mt-5 whitespace-pre-line text-sm leading-6 text-slate-600">
                                     {{ scholarship.eligibility || 'The provider has not posted a separate eligibility description.' }}
                                 </p>
 
