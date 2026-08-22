@@ -368,16 +368,6 @@ onMounted(loadApplicant);
                                     </dd>
                                 </div>
                             </dl>
-                            <div class="flex justify-end border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                    @click="selectReviewSection('proof')"
-                                >
-                                    Next: Review academic record
-                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                </button>
-                            </div>
                         </article>
 
                         <article v-if="activeReviewSection === 'proof'" id="verification-files" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -425,16 +415,6 @@ onMounted(loadApplicant);
                             <p v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
                                 No academic record has been uploaded. The saved academic result cannot be verified yet.
                             </p>
-                            <div class="mt-4 flex justify-end border-t border-slate-200 pt-4">
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                    @click="selectReviewSection('decision')"
-                                >
-                                    Next: Record decision
-                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                </button>
-                            </div>
                         </article>
 
                     <section v-if="activeReviewSection === 'decision'" id="verification-decision" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -451,7 +431,7 @@ onMounted(loadApplicant);
                             Confirm that the submitted record supports the academic information saved in the applicant profile.
                         </p>
 
-                        <div v-if="applicant.verification_documents?.length" class="max-w-3xl">
+                        <div v-if="applicant.verification_documents?.length" class="w-full">
                             <div class="mt-4 flex items-center gap-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700 ring-1 ring-slate-200">
                                 <i class="fa-solid fa-file-circle-check text-slate-500" aria-hidden="true"></i>
                                 <span>Academic record is available for review</span>

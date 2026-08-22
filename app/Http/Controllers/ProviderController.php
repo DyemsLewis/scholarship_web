@@ -1180,7 +1180,7 @@ class ProviderController extends Controller
         );
 
         return response()->json([
-            'message' => ucfirst(ScholarshipSelectionPlan::label($event->type)).' marked complete. Attendance can now be recorded in bulk.',
+            'message' => ucfirst(ScholarshipSelectionPlan::label($event->type)).' marked complete. Participant results can now be recorded.',
             'event' => ScholarshipEventPayload::make($event->fresh()),
             'participant_count' => $participantCount,
         ]);
@@ -1197,13 +1197,13 @@ class ProviderController extends Controller
 
         if ($event->status !== 'completed') {
             throw ValidationException::withMessages([
-                'event' => 'Mark the program event complete before recording attendance.',
+                'event' => 'Mark the program event complete before recording participant results.',
             ]);
         }
 
         $attendanceValues = $event->type === 'distribution'
             ? ['received', 'not_required']
-            : ['attended', 'absent', 'excused'];
+            : ['passed', 'failed'];
         $validated = $request->validate([
             'application_ids' => ['required', 'array', 'min:1', 'max:500'],
             'application_ids.*' => ['required', 'integer', 'distinct'],
@@ -1246,6 +1246,23 @@ class ProviderController extends Controller
             ]);
         }
 
+        $invalidStageApplication = $applications->first(function (ScholarshipApplication $application) use ($event): bool {
+            $expectedStatus = match ($event->type) {
+                'exam' => 'exam_scheduled',
+                'interview' => 'interview',
+                'distribution' => 'distribution_scheduled',
+                default => null,
+            };
+
+            return $expectedStatus === null || $application->status !== $expectedStatus;
+        });
+
+        if ($invalidStageApplication) {
+            throw ValidationException::withMessages([
+                'application_ids' => 'One or more selected applicants are no longer waiting for this activity result. Refresh the list and try again.',
+            ]);
+        }
+
         $statusChangedIds = [];
         $scheduleStatus = $event->type === 'distribution' && $validated['attendance_status'] === 'not_required'
             ? 'cancelled'
@@ -1261,6 +1278,22 @@ class ProviderController extends Controller
         ): void {
             foreach ($applications as $application) {
                 $schedule = $application->schedules->firstWhere('type', $event->type);
+                $nextStatus = $this->applicationStatusForEventResult(
+                    $application,
+                    $event->type,
+                    $validated['attendance_status'],
+                );
+                $decisionReason = $this->decisionReasonForEventResult(
+                    $event->type,
+                    $validated['attendance_status'],
+                    $nextStatus,
+                );
+
+                if ($nextStatus && $application->status !== $nextStatus) {
+                    $this->ensureApplicationDocumentsReadyForStatus($application, $nextStatus);
+                    $this->ensureScholarshipAwardSlotAvailable($application, $application->status, $nextStatus);
+                }
+
                 $schedule->update([
                     'status' => $scheduleStatus,
                     'attendance_status' => $validated['attendance_status'],
@@ -1270,25 +1303,16 @@ class ProviderController extends Controller
                     'updated_by' => $request->user()->id,
                 ]);
 
-                $nextStatus = null;
-
-                if ($event->type === 'exam' && $validated['attendance_status'] === 'attended') {
-                    $nextStatus = 'exam_taken';
-                }
-
-                if ($event->type === 'distribution' && $validated['attendance_status'] === 'received') {
-                    $nextStatus = 'disbursed';
-                }
-
                 if (! $nextStatus || $application->status === $nextStatus) {
                     continue;
                 }
 
                 $fromStatus = $application->status;
-                $decisionReason = $nextStatus === 'disbursed' ? 'award_released' : 'exam_completed';
                 $application->update([
                     'status' => $nextStatus,
                     'decision_reason' => $decisionReason,
+                    'review_notes' => $validated['attendance_notes']
+                        ?? $this->defaultReviewNoteForEventResult($event->type, $validated['attendance_status']),
                     'outcome_at' => $nextStatus === 'disbursed' ? now() : $application->outcome_at,
                     'reviewed_by' => $request->user()->id,
                     'reviewed_at' => now(),
@@ -1300,7 +1324,8 @@ class ProviderController extends Controller
                     'from_status' => $fromStatus,
                     'to_status' => $nextStatus,
                     'decision_reason' => $decisionReason,
-                    'review_notes' => "{$this->scheduleTypeLabel($event->type)} attendance recorded through the program list.",
+                    'review_notes' => $validated['attendance_notes']
+                        ?? $this->defaultReviewNoteForEventResult($event->type, $validated['attendance_status']),
                     'changed_at' => now(),
                 ]);
                 $statusChangedIds[] = $application->id;
@@ -1308,15 +1333,24 @@ class ProviderController extends Controller
         });
 
         foreach ($applications as $application) {
+            $freshApplication = $application->fresh()->load(['applicant', 'scholarship']);
+
+            if (in_array($application->id, $statusChangedIds, true)) {
+                app(ScholarshipEventService::class)->syncApplication($freshApplication);
+                $freshApplication = $application->fresh()->load(['applicant', 'scholarship']);
+            }
+
             PortalNotification::create([
                 'user_id' => $application->applicant_id,
-                'type' => 'application_schedule',
-                'title' => $this->scheduleTypeLabel($event->type).' record updated',
-                'message' => "The provider marked your {$this->scheduleTypeLabel($event->type)} participation as {$validated['attendance_status']}.",
+                'type' => $event->type === 'distribution' ? 'application_schedule' : 'application_status',
+                'title' => $this->eventResultNotificationTitle($event->type, $validated['attendance_status']),
+                'message' => $this->eventResultNotificationMessage(
+                    $freshApplication,
+                    $event->type,
+                    $validated['attendance_status'],
+                ),
                 'action_url' => route('dashboard.applications.show', $application, false),
             ]);
-
-            $freshApplication = $application->fresh()->load(['applicant', 'scholarship']);
 
             if (in_array($application->id, $statusChangedIds, true)) {
                 ScholarshipFunnelEvent::record(
@@ -1335,7 +1369,7 @@ class ProviderController extends Controller
         ActivityLog::record(
             $request->user(),
             'application_schedule_bulk_tracking_updated',
-            "{$request->user()->name} updated {$event->type} participation for {$applications->count()} applicant(s).",
+            "{$request->user()->name} updated {$event->type} results for {$applications->count()} applicant(s).",
             $request,
             [
                 'scholarship_id' => $scholarship->id,
@@ -1370,6 +1404,25 @@ class ProviderController extends Controller
             'rubric_scores' => ['sometimes', 'array'],
             'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
         ]);
+
+        $managedResultStage = match ($application->status) {
+            'exam_scheduled' => 'exam',
+            'interview' => 'interview',
+            default => null,
+        };
+        $pendingManagedResult = $managedResultStage
+            ? $application->schedules()
+                ->where('type', $managedResultStage)
+                ->where('status', 'scheduled')
+                ->where('attendance_status', 'pending')
+                ->exists()
+            : false;
+
+        if ($pendingManagedResult) {
+            throw ValidationException::withMessages([
+                'decision' => 'Complete the shared activity, then record Passed or Failed once from Program Results.',
+            ]);
+        }
 
         $selectionStages = ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages);
         $nextStatus = $validated['decision'] === 'approve'
@@ -2673,6 +2726,18 @@ class ProviderController extends Controller
             : $scholarship?->{$field};
         $errors = [];
         $deadline = $value('deadline');
+        $applicationOpensAt = $value('application_opens_at');
+        $expectedResultsAt = $value('expected_results_at');
+
+        if (filled($applicationOpensAt) && filled($deadline)
+            && CarbonImmutable::parse($applicationOpensAt)->startOfDay()->isAfter(CarbonImmutable::parse($deadline)->startOfDay())) {
+            $errors['application_opens_at'] = 'The application opening date must be on or before the deadline.';
+        }
+
+        if (filled($expectedResultsAt) && filled($deadline)
+            && CarbonImmutable::parse($expectedResultsAt)->startOfDay()->isBefore(CarbonImmutable::parse($deadline)->startOfDay())) {
+            $errors['expected_results_at'] = 'The expected results date must be on or after the application deadline.';
+        }
 
         // Do not strand an older live program that predates the expanded form.
         // Its unchanged deadline remains editable, while a new invalid value is blocked.
@@ -2787,6 +2852,7 @@ class ProviderController extends Controller
         return $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:100'],
+            'program_cycle' => ['nullable', 'string', 'max:100'],
             'description' => [
                 Rule::requiredIf($requiresCompleteSubmission),
                 'nullable',
@@ -2820,6 +2886,11 @@ class ProviderController extends Controller
             'other_contract_terms' => ['nullable', 'string', 'max:3000'],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'contact_number' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{7,30}$/'],
+            'application_opens_at' => ['nullable', 'date'],
+            'expected_results_at' => ['nullable', 'date'],
+            'official_program_url' => ['nullable', 'url:http,https', 'max:2048'],
+            'contact_person' => ['nullable', 'string', 'max:150'],
+            'contact_department' => ['nullable', 'string', 'max:150'],
             'deadline' => ['nullable', 'date'],
             'status' => ['required', Rule::in(['draft', 'pending_review', 'published', 'closed', 'rejected'])],
             'image_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
@@ -3128,6 +3199,7 @@ class ProviderController extends Controller
             'image_path',
             'title',
             'category',
+            'program_cycle',
             'description',
             'eligibility',
             'eligible_education_levels',
@@ -3155,6 +3227,11 @@ class ProviderController extends Controller
             'other_contract_terms',
             'contact_email',
             'contact_number',
+            'application_opens_at',
+            'expected_results_at',
+            'official_program_url',
+            'contact_person',
+            'contact_department',
             'deadline',
         ];
 
@@ -3470,6 +3547,7 @@ class ProviderController extends Controller
             'image_url' => $this->scholarshipImageUrl($scholarship),
             'title' => $scholarship->title,
             'category' => $scholarship->category,
+            'program_cycle' => $scholarship->program_cycle,
             'description' => $scholarship->description,
             'eligibility' => $scholarship->eligibility,
             'eligible_education_levels' => $scholarship->eligible_education_levels,
@@ -3512,6 +3590,11 @@ class ProviderController extends Controller
             'other_contract_terms' => $scholarship->other_contract_terms,
             'contact_email' => $scholarship->contact_email,
             'contact_number' => $scholarship->contact_number,
+            'application_opens_at' => $scholarship->application_opens_at?->format('Y-m-d'),
+            'expected_results_at' => $scholarship->expected_results_at?->format('Y-m-d'),
+            'official_program_url' => $scholarship->official_program_url,
+            'contact_person' => $scholarship->contact_person,
+            'contact_department' => $scholarship->contact_department,
             'deadline' => $scholarship->deadline?->format('Y-m-d'),
             'status' => $scholarship->status,
             'bookmarks_count' => $scholarship->bookmarks_count ?? $scholarship->bookmarks()->count(),
@@ -3912,6 +3995,84 @@ class ProviderController extends Controller
         throw ValidationException::withMessages([
             'decision' => 'Complete the '.ScholarshipSelectionPlan::label($stageType).' activity and mark the applicant as attended before approving them for the next stage.',
         ]);
+    }
+
+    private function applicationStatusForEventResult(
+        ScholarshipApplication $application,
+        string $eventType,
+        string $result,
+    ): ?string {
+        if ($eventType === 'distribution') {
+            return $result === 'received' ? 'disbursed' : null;
+        }
+
+        if ($result === 'failed') {
+            return $eventType === 'exam' ? 'exam_failed' : 'interview_failed';
+        }
+
+        return $eventType === 'exam'
+            ? ScholarshipSelectionPlan::nextApprovalStatus('exam_taken', $application->scholarship?->selection_stages)
+            : 'approved';
+    }
+
+    private function decisionReasonForEventResult(string $eventType, string $result, ?string $nextStatus): ?string
+    {
+        if ($eventType === 'distribution') {
+            return $result === 'received' ? 'award_released' : null;
+        }
+
+        if ($result === 'failed') {
+            return $eventType === 'exam' ? 'failed_exam' : 'failed_interview';
+        }
+
+        return match ($nextStatus) {
+            'interview' => 'passed_exam',
+            'approved' => 'approved_for_award',
+            default => null,
+        };
+    }
+
+    private function defaultReviewNoteForEventResult(string $eventType, string $result): string
+    {
+        $stage = $eventType === 'exam' ? 'exam' : ($eventType === 'interview' ? 'interview' : 'reward distribution');
+
+        return match ($result) {
+            'passed' => "Applicant passed the scholarship {$stage}.",
+            'failed' => "Applicant did not pass the scholarship {$stage}.",
+            'received' => 'Applicant received the scholarship benefits.',
+            default => 'No distribution tracking was required for this applicant.',
+        };
+    }
+
+    private function eventResultNotificationTitle(string $eventType, string $result): string
+    {
+        if ($eventType === 'distribution') {
+            return $result === 'received' ? 'Scholarship benefits received' : 'Distribution record updated';
+        }
+
+        return ucfirst($eventType).' '.($result === 'passed' ? 'passed' : 'not passed');
+    }
+
+    private function eventResultNotificationMessage(
+        ScholarshipApplication $application,
+        string $eventType,
+        string $result,
+    ): string {
+        $programTitle = $application->scholarship?->title ?: 'this scholarship';
+
+        if ($eventType === 'distribution') {
+            return $result === 'received'
+                ? "The provider recorded that you received the scholarship benefits for {$programTitle}."
+                : "The provider updated your distribution record for {$programTitle}.";
+        }
+
+        if ($result === 'failed') {
+            return "Your application for {$programTitle} did not pass the scholarship {$eventType}. Open the application to review the provider note.";
+        }
+
+        return $application->status === 'interview'
+            ? "You passed the scholarship exam for {$programTitle}. Your application will proceed to the interview stage."
+            : "You passed the scholarship {$eventType} for {$programTitle}. Your application has advanced to the next stage.";
     }
 
     private function scheduleTypeLabel(string $type): string

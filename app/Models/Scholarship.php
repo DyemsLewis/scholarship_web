@@ -14,6 +14,7 @@ class Scholarship extends Model
         'image_path',
         'title',
         'category',
+        'program_cycle',
         'description',
         'eligibility',
         'eligible_education_levels',
@@ -41,6 +42,11 @@ class Scholarship extends Model
         'other_contract_terms',
         'contact_email',
         'contact_number',
+        'application_opens_at',
+        'expected_results_at',
+        'official_program_url',
+        'contact_person',
+        'contact_department',
         'deadline',
         'status',
         'views_count',
@@ -56,6 +62,8 @@ class Scholarship extends Model
             'slots_available' => 'integer',
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
+            'application_opens_at' => 'date',
+            'expected_results_at' => 'date',
             'deadline' => 'date',
             'review_rubric' => 'array',
             'selection_stages' => 'array',
@@ -104,6 +112,7 @@ class Scholarship extends Model
             $this->award_amount,
             null,
             'one_time',
+            null,
             null,
         )];
     }
@@ -157,6 +166,17 @@ class Scholarship extends Model
     public function scopeAcceptingApplications(Builder $query): Builder
     {
         return $query
+            ->discoverable()
+            ->where(function (Builder $openingQuery): void {
+                $openingQuery
+                    ->whereNull('application_opens_at')
+                    ->orWhereDate('application_opens_at', '<=', now()->toDateString());
+            });
+    }
+
+    public function scopeDiscoverable(Builder $query): Builder
+    {
+        return $query
             ->publiclyVisible()
             ->where(function (Builder $deadlineQuery): void {
                 $deadlineQuery
@@ -166,6 +186,12 @@ class Scholarship extends Model
     }
 
     public function isAcceptingApplications(): bool
+    {
+        return $this->isDiscoverable()
+            && ($this->application_opens_at === null || ! $this->application_opens_at->isAfter(now()->startOfDay()));
+    }
+
+    public function isDiscoverable(): bool
     {
         return $this->isPubliclyVisible()
             && ($this->deadline === null || ! $this->deadline->isBefore(now()->startOfDay()));

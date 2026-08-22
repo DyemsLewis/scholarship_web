@@ -41,6 +41,7 @@ class ScholarshipBenefit extends Model
         'amount',
         'coverage',
         'frequency',
+        'duration',
         'description',
         'sort_order',
     ];
@@ -66,6 +67,7 @@ class ScholarshipBenefit extends Model
             $this->amount,
             $this->coverage,
             $this->frequency,
+            $this->duration,
             $this->description,
         );
     }
@@ -76,6 +78,7 @@ class ScholarshipBenefit extends Model
         mixed $amount,
         ?string $coverage,
         ?string $frequency,
+        ?string $duration,
         ?string $description,
     ): array {
         $label = filled($title) ? trim((string) $title) : (self::TYPE_LABELS[$type] ?? 'Program benefit');
@@ -93,6 +96,10 @@ class ScholarshipBenefit extends Model
             $details[] = self::FREQUENCY_LABELS[$frequency];
         }
 
+        if (filled($duration)) {
+            $details[] = trim($duration);
+        }
+
         return [
             'type' => $type,
             'type_label' => self::TYPE_LABELS[$type] ?? 'Program benefit',
@@ -102,6 +109,7 @@ class ScholarshipBenefit extends Model
             'coverage_label' => $coverage ? (self::COVERAGE_LABELS[$coverage] ?? $coverage) : null,
             'frequency' => $frequency,
             'frequency_label' => $frequency ? (self::FREQUENCY_LABELS[$frequency] ?? $frequency) : null,
+            'duration' => filled($duration) ? trim($duration) : null,
             'description' => filled($description) ? trim((string) $description) : null,
             'display_summary' => $details === [] ? $label : $label.' ('.implode(', ', $details).')',
         ];

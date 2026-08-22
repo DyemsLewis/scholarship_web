@@ -48,6 +48,8 @@ async function submitForm() {
             'Return to the portal after your password is changed.'
         ]"
         panel-note="Password reset links expire after one hour and should not be shared."
+        :show-panel="false"
+        background-image="/images/scholarship-cards.jpg"
     >
         <form ref="formElement" class="space-y-4" @submit.prevent="submitForm">
             <div>

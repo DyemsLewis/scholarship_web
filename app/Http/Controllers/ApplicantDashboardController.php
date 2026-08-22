@@ -186,7 +186,13 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
 
-        $scholarships = $this->publishedScholarships()->limit(8)->get();
+        $scholarships = $this->publishedScholarships()
+            ->get()
+            ->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))
+            ->filter(fn (array $scholarship) => (bool) data_get($scholarship, 'eligibility_match.is_eligible', false))
+            ->sortByDesc(fn (array $scholarship) => (int) data_get($scholarship, 'eligibility_match.score', 0))
+            ->take(8)
+            ->values();
         $applications = ScholarshipApplication::query()
             ->with(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile', 'scholarship.events'])
             ->where('applicant_id', $request->user()->id)
@@ -200,7 +206,7 @@ class ApplicantDashboardController extends Controller
             'user' => $this->userPayload($request),
             'profile_readiness' => $request->user()->applicantProfileReadiness(),
             'stats' => $this->statsPayload($request),
-            'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))->values(),
+            'scholarships' => $scholarships,
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
             'next_steps' => [
                 'Review available scholarship programs.',
@@ -906,7 +912,9 @@ class ApplicantDashboardController extends Controller
 
         if (! $scholarship->isAcceptingApplications()) {
             return response()->json([
-                'message' => 'This scholarship is no longer accepting applications.',
+                'message' => $scholarship->application_opens_at?->isFuture()
+                    ? 'Applications open on '.$scholarship->application_opens_at->format('M d, Y').'.'
+                    : 'This scholarship is no longer accepting applications.',
             ], 422);
         }
 
@@ -1055,7 +1063,7 @@ class ApplicantDashboardController extends Controller
     public function saveScholarship(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isApplicant(), 403);
-        abort_unless($scholarship->isAcceptingApplications(), 404);
+        abort_unless($scholarship->isDiscoverable(), 404);
 
         $bookmark = ScholarshipBookmark::query()->firstOrCreate([
             'scholarship_id' => $scholarship->id,
@@ -1347,7 +1355,7 @@ class ApplicantDashboardController extends Controller
         return Scholarship::query()
             ->with(['provider.providerProfile', 'events'])
             ->withCount('bookmarks')
-            ->acceptingApplications()
+            ->discoverable()
             ->orderByRaw('deadline is null')
             ->orderBy('deadline')
             ->latest();
@@ -1394,6 +1402,7 @@ class ApplicantDashboardController extends Controller
             'image_url' => $this->scholarshipImageUrl($scholarship),
             'title' => $scholarship->title,
             'category' => $scholarship->category,
+            'program_cycle' => $scholarship->program_cycle,
             'description' => $scholarship->description,
             'eligibility' => $scholarship->eligibility,
             'eligible_education_levels' => $scholarship->eligible_education_levels,
@@ -1443,6 +1452,12 @@ class ApplicantDashboardController extends Controller
             'other_contract_terms' => $scholarship->other_contract_terms,
             'contact_email' => $scholarship->contact_email,
             'contact_number' => $scholarship->contact_number,
+            'application_opens_at' => $scholarship->application_opens_at?->format('M d, Y'),
+            'application_opens_date' => $scholarship->application_opens_at?->format('Y-m-d'),
+            'expected_results_at' => $scholarship->expected_results_at?->format('M d, Y'),
+            'official_program_url' => $scholarship->official_program_url,
+            'contact_person' => $scholarship->contact_person,
+            'contact_department' => $scholarship->contact_department,
             'deadline' => $scholarship->deadline?->format('M d, Y'),
             'bookmarks_count' => $scholarship->bookmarks_count ?? $scholarship->bookmarks()->count(),
             'is_saved' => $saved,

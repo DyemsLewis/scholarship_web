@@ -366,12 +366,23 @@ function matchClass(score) {
     return 'bg-rose-100 text-rose-800';
 }
 
+const localTodayDate = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
+
 function canStartApplication(scholarship) {
     if (scholarship?.can_start_application !== undefined) {
         return Boolean(scholarship.can_start_application);
     }
 
     return scholarship?.eligibility_match?.is_eligible !== false;
+}
+
+function isUpcomingProgram(scholarship) {
+    return Boolean(
+        scholarship?.application_opens_date
+        && scholarship.application_opens_date > localTodayDate,
+    );
 }
 
 function applicationBlockedLabel(scholarship) {
@@ -387,6 +398,10 @@ function applicationBlockedLabel(scholarship) {
 }
 
 function applicationBlockedActionLabel(scholarship) {
+    if (isUpcomingProgram(scholarship)) {
+        return `Opens ${scholarship.application_opens_at}`;
+    }
+
     return scholarship?.eligibility_match?.is_eligible === false
         ? 'Not eligible'
         : 'Complete profile first';
@@ -955,6 +970,9 @@ onBeforeUnmount(() => {
                                         <p class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                             <i class="fa-regular fa-calendar mr-1"></i>
                                             {{ compactDeadlineLabel(scholarship) }}
+                                        </p>
+                                        <p v-if="scholarship.program_cycle" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                            {{ scholarship.program_cycle }}
                                         </p>
                                         <p v-if="scholarship.distance_label" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                             <i class="fa-solid fa-location-dot mr-1"></i>

@@ -10,6 +10,9 @@ import { selectionPlanFor } from '../support/selectionPlan';
 
 const appElement = document.getElementById('app');
 const scholarshipId = appElement?.dataset.scholarshipId;
+const localTodayDate = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
 const isLoading = ref(true);
 const errorMessage = ref('');
 const isSaving = ref(false);
@@ -52,6 +55,10 @@ const selectionPlan = computed(() => selectionPlanFor(scholarship.value));
 const canApply = computed(() => profileReadiness.value.complete);
 const isEligible = computed(() => scholarship.value?.eligibility_match?.is_eligible !== false);
 const isAcceptingApplications = computed(() => scholarship.value?.is_accepting_applications !== false);
+const isUpcomingProgram = computed(() => Boolean(
+    scholarship.value?.application_opens_date
+    && scholarship.value.application_opens_date > localTodayDate,
+));
 const eligibilityState = computed(() => {
     if (!canApply.value) {
         return {
@@ -142,7 +149,9 @@ const keyFacts = computed(() => {
             icon: 'fa-regular fa-calendar',
             label: 'Apply by',
             value: current.deadline || 'No deadline listed',
-            detail: isAcceptingApplications.value ? 'Applications are open' : 'Applications are closed',
+            detail: isUpcomingProgram.value
+                ? `Opens ${current.application_opens_at}`
+                : (isAcceptingApplications.value ? 'Applications are open' : 'Applications are closed'),
         },
         {
             icon: 'fa-solid fa-users',
@@ -180,6 +189,10 @@ const applyPanelTitle = computed(() => {
         return 'Application submitted';
     }
 
+    if (isUpcomingProgram.value) {
+        return `Opens ${scholarship.value.application_opens_at}`;
+    }
+
     if (!isAcceptingApplications.value) {
         return 'Applications are closed';
     }
@@ -197,6 +210,10 @@ const applyPanelTitle = computed(() => {
 const applyPanelDescription = computed(() => {
     if (scholarship.value?.has_applied) {
         return 'You can review this program in your submitted applications.';
+    }
+
+    if (isUpcomingProgram.value) {
+        return `You can review and save this program now. Applications begin on ${scholarship.value.application_opens_at}.`;
     }
 
     if (!isAcceptingApplications.value) {
@@ -477,6 +494,9 @@ onMounted(loadScholarship);
                                             <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                                 {{ targetApplicantLabel(scholarship) }}
                                             </span>
+                                            <span v-if="scholarship.program_cycle" class="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-200">
+                                                {{ scholarship.program_cycle }}
+                                            </span>
                                         </div>
 
                                         <h1 class="mt-3 font-display text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">
@@ -491,6 +511,10 @@ onMounted(loadScholarship);
 
                                 <p class="mt-5 max-w-4xl text-sm leading-6 text-slate-600">
                                     {{ scholarship.description || 'No program description has been posted yet.' }}
+                                </p>
+                                <p v-if="scholarship.expected_results_at" class="mt-4 inline-flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                                    <i class="fa-regular fa-calendar-check text-amber-700" aria-hidden="true"></i>
+                                    Initial results expected around {{ scholarship.expected_results_at }}
                                 </p>
                             </div>
 
@@ -535,6 +559,12 @@ onMounted(loadScholarship);
                                     >
                                         Start application
                                     </a>
+                                    <span
+                                        v-else-if="isUpcomingProgram"
+                                        class="rounded-md bg-white/10 px-4 py-2.5 text-center text-sm font-bold text-amber-200 ring-1 ring-white/15"
+                                    >
+                                        Opens {{ scholarship.application_opens_at }}
+                                    </span>
                                     <span
                                         v-else-if="!isAcceptingApplications"
                                         class="rounded-md bg-white/10 px-4 py-2.5 text-center text-sm font-bold text-slate-300 ring-1 ring-white/15"
@@ -877,7 +907,11 @@ onMounted(loadScholarship);
                                             <i class="fa-solid fa-address-card text-sm text-amber-700" aria-hidden="true"></i>
                                             <h4 class="text-sm font-bold text-slate-950">Contact</h4>
                                         </div>
-                                        <div v-if="scholarship.contact_email || scholarship.contact_number" class="mt-3 grid gap-2 text-sm">
+                                        <div v-if="scholarship.contact_person || scholarship.contact_department || scholarship.contact_email || scholarship.contact_number || scholarship.official_program_url" class="mt-3 grid gap-2 text-sm">
+                                            <p v-if="scholarship.contact_department || scholarship.contact_person" class="font-semibold leading-5 text-slate-700">
+                                                {{ scholarship.contact_department || scholarship.contact_person }}
+                                                <span v-if="scholarship.contact_department && scholarship.contact_person" class="font-normal text-slate-500"> | {{ scholarship.contact_person }}</span>
+                                            </p>
                                             <a
                                                 v-if="scholarship.contact_email"
                                                 :href="`mailto:${scholarship.contact_email}`"
@@ -893,6 +927,16 @@ onMounted(loadScholarship);
                                             >
                                                 <i class="fa-solid fa-phone w-4 shrink-0 text-slate-400" aria-hidden="true"></i>
                                                 {{ scholarship.contact_number }}
+                                            </a>
+                                            <a
+                                                v-if="scholarship.official_program_url"
+                                                :href="scholarship.official_program_url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="flex items-center gap-2 font-bold text-slate-700 hover:text-slate-950"
+                                            >
+                                                <i class="fa-solid fa-arrow-up-right-from-square w-4 shrink-0 text-slate-400" aria-hidden="true"></i>
+                                                Official program page
                                             </a>
                                         </div>
                                         <p v-else class="mt-2 text-sm text-slate-500">No contact details listed.</p>

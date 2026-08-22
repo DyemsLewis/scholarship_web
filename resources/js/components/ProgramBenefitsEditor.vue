@@ -52,6 +52,7 @@ function addBenefit() {
         amount: '',
         coverage: option.coverage ? 'partial' : '',
         frequency: 'one_time',
+        duration: '',
         description: '',
     }];
     editingIndex.value = benefits.value.length - 1;
@@ -79,6 +80,7 @@ function benefitSummary(benefit) {
     if (coverage) details.push(coverage);
     if (benefit.amount !== '' && benefit.amount !== null) details.push(formatAmount(benefit.amount));
     if (frequency) details.push(frequency);
+    if (benefit.duration) details.push(benefit.duration);
 
     return details.length ? details.join(' | ') : 'Details can be added if needed';
 }
@@ -158,6 +160,19 @@ function benefitSummary(benefit) {
                         <select v-model="benefit.frequency" :class="inputClass">
                             <option v-for="option in frequencyOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                         </select>
+                    </div>
+                    <div>
+                        <label class="mb-1.5 block text-sm font-semibold text-slate-700">
+                            Support duration
+                            <span class="font-normal text-slate-400">Optional</span>
+                        </label>
+                        <input
+                            v-model="benefit.duration"
+                            type="text"
+                            maxlength="100"
+                            placeholder="Example: One school year"
+                            :class="inputClass"
+                        >
                     </div>
                     <div class="md:col-span-2">
                         <label class="mb-1.5 block text-sm font-semibold text-slate-700">What is included? <span class="font-normal text-slate-400">Optional</span></label>

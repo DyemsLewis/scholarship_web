@@ -24,6 +24,7 @@ class ScholarshipBenefitService
             'benefits.*.amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'benefits.*.coverage' => ['nullable', Rule::in(array_keys(ScholarshipBenefit::COVERAGE_LABELS))],
             'benefits.*.frequency' => ['nullable', Rule::in(array_keys(ScholarshipBenefit::FREQUENCY_LABELS))],
+            'benefits.*.duration' => ['nullable', 'string', 'max:100'],
             'benefits.*.description' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -50,6 +51,9 @@ class ScholarshipBenefitService
                         ? ($benefit['coverage'] ?? null)
                         : null,
                     'frequency' => $benefit['frequency'] ?? null,
+                    'duration' => filled($benefit['duration'] ?? null)
+                        ? trim($benefit['duration'])
+                        : null,
                     'description' => filled($benefit['description'] ?? null)
                         ? trim($benefit['description'])
                         : null,
@@ -96,6 +100,7 @@ class ScholarshipBenefitService
                 'amount' => $benefit->amount,
                 'coverage' => $benefit->coverage,
                 'frequency' => $benefit->frequency,
+                'duration' => $benefit->duration,
                 'description' => $benefit->description,
                 'sort_order' => $benefit->sort_order,
             ]
@@ -131,6 +136,7 @@ class ScholarshipBenefitService
             'amount' => (float) $amount,
             'coverage' => null,
             'frequency' => 'one_time',
+            'duration' => null,
             'description' => null,
             'sort_order' => 0,
         ]];
@@ -146,6 +152,7 @@ class ScholarshipBenefitService
                 : null,
             'coverage' => $benefit['coverage'] ?? null,
             'frequency' => $benefit['frequency'] ?? null,
+            'duration' => $benefit['duration'] ?? null,
             'description' => $benefit['description'] ?? null,
         ];
     }

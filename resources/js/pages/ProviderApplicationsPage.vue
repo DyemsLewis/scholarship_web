@@ -291,9 +291,8 @@ const bulkAttendanceOptions = computed(() => activeAttendanceEvent.value?.type =
         { value: 'not_required', label: 'Not required' },
     ]
     : [
-        { value: 'attended', label: 'Attended' },
-        { value: 'absent', label: 'Absent' },
-        { value: 'excused', label: 'Excused' },
+        { value: 'passed', label: 'Passed' },
+        { value: 'failed', label: 'Failed' },
     ]);
 const exportApplicationsUrl = computed(() => {
     if (!hasProgramContext.value) {
@@ -677,15 +676,15 @@ function eventStatusClass(status) {
 }
 
 function attendanceStatusClass(status) {
-    if (['attended', 'received'].includes(status)) {
+    if (['passed', 'received'].includes(status)) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (status === 'absent') {
+    if (status === 'failed') {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (['excused', 'not_required'].includes(status)) {
+    if (status === 'not_required') {
         return 'bg-slate-200 text-slate-700';
     }
 
@@ -725,7 +724,7 @@ async function completeProgramEvent(event) {
 
 async function applyBulkAttendance() {
     if (!bulkAttendanceStatus.value || selectedAttendanceIds.value.length === 0) {
-        attendanceError.value = 'Select applicants and choose an attendance result.';
+        attendanceError.value = 'Select applicants and choose a result.';
         return;
     }
 
@@ -750,7 +749,7 @@ async function applyBulkAttendance() {
 
         attendanceError.value = Object.values(validationErrors).flat()[0]
             ?? error.response?.data?.message
-            ?? 'Unable to update attendance.';
+            ?? 'Unable to update participant results.';
     } finally {
         attendanceSaving.value = false;
     }
@@ -1270,7 +1269,7 @@ onMounted(loadProviderData);
                                         <p class="mt-1 text-xs leading-5 text-amber-800">
                                             {{ activeAttendanceEvent.status === 'completed'
                                                 ? 'They reached this stage after the current activity closed, so they are not part of the participant table below.'
-                                                : 'They are not assigned to the current activity yet. Review and republish the shared schedule before tracking participation.' }}
+                                            : 'They are not assigned to the current activity yet. Review and republish the shared schedule before recording results.' }}
                                         </p>
                                     </div>
                                     <button
@@ -1290,9 +1289,8 @@ onMounted(loadProviderData);
                                             <span class="rounded-md bg-slate-200 px-2.5 py-1 text-slate-700">{{ attendanceSummary.not_required ?? 0 }} not required</span>
                                         </template>
                                         <template v-else>
-                                            <span class="rounded-md bg-emerald-100 px-2.5 py-1 text-emerald-800">{{ attendanceSummary.attended ?? 0 }} attended</span>
-                                            <span class="rounded-md bg-rose-100 px-2.5 py-1 text-rose-800">{{ attendanceSummary.absent ?? 0 }} absent</span>
-                                            <span class="rounded-md bg-slate-200 px-2.5 py-1 text-slate-700">{{ attendanceSummary.excused ?? 0 }} excused</span>
+                                            <span class="rounded-md bg-emerald-100 px-2.5 py-1 text-emerald-800">{{ attendanceSummary.passed ?? 0 }} passed</span>
+                                            <span class="rounded-md bg-rose-100 px-2.5 py-1 text-rose-800">{{ attendanceSummary.failed ?? 0 }} failed</span>
                                         </template>
                                     </div>
 
@@ -1303,7 +1301,7 @@ onMounted(loadProviderData);
                                             <input v-model="attendanceSearch" type="search" placeholder="Search applicant" class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-slate-600">
                                         </label>
                                         <select v-model="bulkAttendanceStatus" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
-                                            <option value="">{{ activeAttendanceEvent.type === 'distribution' ? 'Choose release result' : 'Choose attendance' }}</option>
+                                            <option value="">{{ activeAttendanceEvent.type === 'distribution' ? 'Choose release result' : 'Choose pass or fail' }}</option>
                                             <option v-for="option in bulkAttendanceOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                                         </select>
                                         <input v-model="bulkAttendanceNotes" type="text" maxlength="1500" placeholder="Optional note for selected applicants" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
@@ -1326,22 +1324,23 @@ onMounted(loadProviderData);
                                     </div>
 
                                     <div v-else class="mt-4 overflow-hidden rounded-lg border border-slate-200">
-                                        <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_9rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 sm:grid">
+                                        <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_9rem_6rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 sm:grid">
                                             <button type="button" class="text-left" @click="toggleVisibleAttendance">
                                                 <i :class="allVisibleAttendanceSelected ? 'fa-solid fa-square-check text-slate-900' : 'fa-regular fa-square text-slate-400'" aria-hidden="true"></i>
                                                 <span class="sr-only">Select displayed applicants</span>
                                             </button>
                                             <span>Applicant</span>
-                                            <span>Status</span>
+                                            <span>Result</span>
+                                            <span>Action</span>
                                         </div>
 
-                                        <label
+                                        <div
                                             v-for="record in visibleAttendanceParticipants"
                                             :key="record.application.id"
                                             :class="[
-                                                'grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0',
+                                                'grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_9rem_6rem]',
                                                 record.schedule.status === 'scheduled' && (record.schedule.attendance_status ?? 'pending') === 'pending'
-                                                    ? 'cursor-pointer hover:bg-slate-50'
+                                                    ? 'hover:bg-slate-50'
                                                     : 'bg-slate-50/70',
                                             ]"
                                         >
@@ -1359,7 +1358,14 @@ onMounted(loadProviderData);
                                             <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', attendanceStatusClass(record.schedule.attendance_status)]">
                                                 {{ statusLabel(record.schedule.attendance_status || 'pending') }}
                                             </span>
-                                        </label>
+                                            <a
+                                                :href="`${record.application.detail_url}?section=applicant`"
+                                                class="col-start-2 inline-flex w-fit items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 sm:col-start-auto"
+                                            >
+                                                Review
+                                                <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                            </a>
+                                        </div>
                                     </div>
 
                                     <div v-if="filteredAttendanceParticipants.length > attendancePerPage" class="mt-4 flex flex-wrap items-center justify-between gap-3">

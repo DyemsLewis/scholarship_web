@@ -77,6 +77,54 @@ class ApplicantProfileWorkflowTest extends TestCase
         $this->assertSame(0, $financialPayload['preference_match']['score']);
     }
 
+    public function test_dashboard_recommendations_only_include_eligible_scholarships(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = $this->completeAdultApplicant();
+        $eligible = $this->publishedScholarship($provider, 'College Opportunity', 'Academic merit');
+        $ineligible = $this->publishedScholarship($provider, 'Elementary Opportunity', 'Academic merit');
+        $ineligible->update(['eligible_education_levels' => 'elementary']);
+
+        $scholarships = $this->actingAs($applicant)
+            ->getJson('/dashboard/data')
+            ->assertOk()
+            ->json('scholarships');
+        $scholarshipIds = collect($scholarships)->pluck('id');
+
+        $this->assertTrue($scholarshipIds->contains($eligible->id));
+        $this->assertFalse($scholarshipIds->contains($ineligible->id));
+        $this->assertTrue(collect($scholarships)->every(
+            fn (array $scholarship): bool => $scholarship['eligibility_match']['is_eligible'] === true,
+        ));
+    }
+
+    public function test_upcoming_program_is_discoverable_before_applications_open(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+        $applicant = $this->completeAdultApplicant();
+        $scholarship = $this->publishedScholarship($provider, 'Upcoming Opportunity', 'Academic merit');
+        $scholarship->update([
+            'program_cycle' => 'SY 2026-2027',
+            'application_opens_at' => now()->addWeek()->toDateString(),
+            'expected_results_at' => now()->addMonths(2)->toDateString(),
+            'deadline' => now()->addMonth()->toDateString(),
+        ]);
+
+        $program = collect($this->actingAs($applicant)
+            ->getJson('/dashboard/data')
+            ->assertOk()
+            ->json('scholarships'))
+            ->firstWhere('id', $scholarship->id);
+
+        $this->assertNotNull($program);
+        $this->assertSame('SY 2026-2027', $program['program_cycle']);
+        $this->assertFalse($program['is_accepting_applications']);
+        $this->assertFalse($program['can_start_application']);
+        $this->assertTrue($scholarship->fresh()->isDiscoverable());
+        $this->assertFalse($scholarship->fresh()->isAcceptingApplications());
+    }
+
     public function test_grade_point_profile_rejects_values_outside_the_supported_scale(): void
     {
         $applicant = User::factory()->create();

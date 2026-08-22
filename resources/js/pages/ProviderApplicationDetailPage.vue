@@ -146,6 +146,22 @@ const rubricDraftSummary = computed(() => {
 });
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
+const pendingManagedStageResult = computed(() => {
+    const stageType = {
+        exam_scheduled: 'exam',
+        interview: 'interview',
+    }[application.value?.status];
+
+    if (!stageType) {
+        return null;
+    }
+
+    return schedules.value.find((schedule) => (
+        schedule.type === stageType
+        && schedule.status === 'scheduled'
+        && (schedule.attendance_status ?? 'pending') === 'pending'
+    )) ?? null;
+});
 const programWorkspaceAction = computed(() => {
     const pendingResult = schedules.value.find((schedule) => (
         schedule.status === 'completed' && (schedule.attendance_status ?? 'pending') === 'pending'
@@ -310,6 +326,10 @@ const nextRejectionStatus = computed(() => (
             : (['submitted', 'under_review', 'qualified', 'shortlisted'].includes(application.value?.status) ? 'rejected' : null))
 ));
 const suggestedReviewActions = computed(() => {
+    if (pendingManagedStageResult.value) {
+        return [];
+    }
+
     const actions = [];
 
     if (nextApprovalStatus.value) {
@@ -388,7 +408,8 @@ const reviewSubmitLabel = computed(() => {
 });
 const completedStageMessage = computed(() => ({
     exam_qualified: 'The applicant is waiting for the shared exam schedule. You may still reject the application if screening needs to be closed.',
-    exam_scheduled: 'Track exam attendance in Schedule. Approve or reject after the exam is completed.',
+    exam_scheduled: 'Complete the shared exam, then record Passed or Failed once in Program Results.',
+    interview: 'Complete the shared interview, then record Passed or Failed once in Program Results.',
     approved: 'The applicant is approved. Publish distribution details once from the program applicant page.',
     awarded: 'The award is confirmed. Publish distribution details once from the program applicant page.',
     distribution_scheduled: 'Distribution is scheduled. Use Schedule only to record this applicant\'s release result.',
@@ -1549,7 +1570,7 @@ onMounted(loadApplication);
                                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant schedule</p>
                                             <h3 class="mt-2 text-xl font-bold text-slate-950">Attendance and results</h3>
                                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                                Shared dates are managed from the Program Workspace. Attendance confirms participation only; passing or failing is recorded in Decision.
+                                            Shared dates and participant results are managed from the Program Workspace. Record Passed or Failed once after the activity is complete.
                                             </p>
                                         </div>
                                         <a :href="`/provider/programs/${application.scholarship.id}/applications?workspace=schedule`" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
@@ -1622,17 +1643,17 @@ onMounted(loadApplication);
                                         <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
                                             <div>
                                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                    {{ schedule.type === 'distribution' ? 'Release status' : 'Participation status' }}
+                                                    {{ schedule.type === 'distribution' ? 'Release status' : 'Result status' }}
                                                 </p>
                                                 <p class="mt-1 text-sm text-slate-600">
-                                                    {{ labelFromKey(schedule.attendance_status || 'pending') }}. Participation is updated in bulk from the Program Workspace.
+                                                    {{ labelFromKey(schedule.attendance_status || 'pending') }}. Results are updated from the Program Workspace.
                                                 </p>
                                             </div>
                                             <a
                                                 :href="`/provider/programs/${application.scholarship?.id}/applications?workspace=results`"
                                                 class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                                             >
-                                                Open attendance list
+                                                Open results list
                                             </a>
                                         </div>
                                     </details>

@@ -132,6 +132,8 @@ onBeforeUnmount(() => {
             'Receive updates from the scholarship committee.'
         ]"
         panel-note="Use the same account details connected to your scholarship application to continue where you left off."
+        :show-panel="false"
+        background-image="/images/scholarship-cards.jpg"
     >
         <ToastMessage
             :show="toast.show"

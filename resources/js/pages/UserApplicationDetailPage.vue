@@ -917,7 +917,7 @@ onMounted(loadApplication);
                                                 <p v-if="schedule.venue || schedule.location_address" class="font-semibold text-slate-700">{{ schedule.location_address || schedule.venue }}</p>
                                                 <p class="mt-2 whitespace-pre-line leading-6 text-slate-600">{{ schedule.instructions }}</p>
                                                 <span v-if="schedule.attendance_status !== 'pending'" class="mt-3 inline-flex rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
-                                                    {{ schedule.type === 'distribution' ? 'Release' : 'Participation' }}: {{ labelFromKey(schedule.attendance_status) }}
+                                                    {{ schedule.type === 'distribution' ? 'Release' : 'Result' }}: {{ labelFromKey(schedule.attendance_status) }}
                                                 </span>
                                             </div>
                                         </details>

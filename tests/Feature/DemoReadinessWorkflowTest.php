@@ -10,6 +10,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\StudentDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -48,10 +49,17 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('provider.verification_status', 'approved');
 
+        $applicationOpensAt = now()->subDay()->toDateString();
+        $deadline = now()->addMonth()->toDateString();
+        $expectedResultsAt = now()->addMonth()->addWeeks(2)->toDateString();
+        $applicationOpensAtLabel = Carbon::parse($applicationOpensAt)->format('M d, Y');
+        $expectedResultsAtLabel = Carbon::parse($expectedResultsAt)->format('M d, Y');
+
         $scholarshipResponse = $this->actingAs($provider)
             ->postJson('/provider/scholarships', [
                 'title' => 'Core Workflow Scholarship',
                 'category' => 'Financial assistance',
+                'program_cycle' => 'School Year 2026-2027',
                 'description' => 'A scholarship used to verify the complete role workflow.',
                 'eligibility' => 'Open to enrolled college students who meet the listed document requirements.',
                 'eligible_education_levels' => 'college',
@@ -62,6 +70,7 @@ class DemoReadinessWorkflowTest extends TestCase
                     'title' => 'Education allowance',
                     'amount' => 10000,
                     'frequency' => 'one_time',
+                    'duration' => 'Current program cycle',
                 ]]),
                 'application_mode' => 'online',
                 'location_name' => 'Community Scholarship Office',
@@ -69,16 +78,32 @@ class DemoReadinessWorkflowTest extends TestCase
                 'latitude' => 14.6760,
                 'longitude' => 121.0437,
                 'contact_email' => 'scholarships@example.test',
+                'contact_person' => 'Program Coordinator',
+                'contact_department' => 'Scholarship Office',
+                'official_program_url' => 'https://example.test/scholarships/core-workflow',
                 'return_service_contract' => 'Provider will handle any return service agreement after awarding.',
                 'other_contract_terms' => 'Provider may require separate contract signing after final selection.',
-                'deadline' => now()->addMonth()->toDateString(),
+                'application_opens_at' => $applicationOpensAt,
+                'deadline' => $deadline,
+                'expected_results_at' => $expectedResultsAt,
                 'status' => 'pending_review',
                 'terms_accepted' => true,
             ])
             ->assertCreated()
-            ->assertJsonPath('scholarship.status', 'pending_review');
+            ->assertJsonPath('scholarship.status', 'pending_review')
+            ->assertJsonPath('scholarship.program_cycle', 'School Year 2026-2027')
+            ->assertJsonPath('scholarship.benefits.0.duration', 'Current program cycle');
 
         $scholarshipId = $scholarshipResponse->json('scholarship.id');
+
+        $this->actingAs($admin)
+            ->getJson("/admin/scholarships/{$scholarshipId}/review/data")
+            ->assertOk()
+            ->assertJsonPath('scholarship.program_cycle', 'School Year 2026-2027')
+            ->assertJsonPath('scholarship.application_opens_at', $applicationOpensAtLabel)
+            ->assertJsonPath('scholarship.expected_results_at', $expectedResultsAtLabel)
+            ->assertJsonPath('scholarship.contact_department', 'Scholarship Office')
+            ->assertJsonPath('scholarship.benefits.0.duration', 'Current program cycle');
 
         $this->actingAs($admin)
             ->patchJson("/admin/scholarships/{$scholarshipId}/review", [
@@ -92,6 +117,15 @@ class DemoReadinessWorkflowTest extends TestCase
             ->getJson('/admin/dashboard/data')
             ->assertOk()
             ->assertJsonPath('recent_scholarships.0.id', $scholarshipId);
+
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/scholarships/{$scholarshipId}/data")
+            ->assertOk()
+            ->assertJsonPath('scholarship.program_cycle', 'School Year 2026-2027')
+            ->assertJsonPath('scholarship.application_opens_at', $applicationOpensAtLabel)
+            ->assertJsonPath('scholarship.expected_results_at', $expectedResultsAtLabel)
+            ->assertJsonPath('scholarship.contact_person', 'Program Coordinator')
+            ->assertJsonPath('scholarship.benefits.0.duration', 'Current program cycle');
 
         foreach (['Completed application form', 'Certificate of enrollment', 'Latest report card or grades'] as $documentName) {
             $path = "student-documents/{$applicant->id}/".str()->slug($documentName).'.pdf';

@@ -20,6 +20,7 @@ class ScholarshipBenefitPackageTest extends TestCase
                 'title' => 'Learning allowance',
                 'amount' => 7500,
                 'frequency' => 'per_term',
+                'duration' => 'One school year',
                 'description' => 'Flexible school-expense support.',
             ],
             [
@@ -52,6 +53,8 @@ class ScholarshipBenefitPackageTest extends TestCase
             'title' => 'Laptop loan',
             'amount' => null,
         ]);
+        $this->assertSame('One school year', $scholarship->benefits->first()->duration);
+        $this->assertSame('One school year', $response->json('scholarship.benefits.0.duration'));
 
         $duplicateResponse = $this->actingAs($provider)
             ->postJson("/provider/scholarships/{$scholarship->id}/duplicate")

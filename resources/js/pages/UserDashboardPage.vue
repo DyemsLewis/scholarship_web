@@ -18,7 +18,8 @@ const scholarships = ref([]);
 const applications = ref([]);
 const nextSteps = ref([]);
 
-const recommendedScholarships = computed(() => [...scholarships.value]
+const recommendedScholarships = computed(() => scholarships.value
+    .filter((scholarship) => scholarship.eligibility_match?.is_eligible === true)
     .sort((first, second) => {
         const scoreDifference = Number(second.eligibility_match?.score ?? 0)
             - Number(first.eligibility_match?.score ?? 0);
@@ -50,6 +51,7 @@ const nextScheduledActivity = computed(() => scheduledActivities.value[0] ?? nul
 const activeApplication = computed(() => nextScheduledActivity.value?.application
     ?? applications.value.find((application) => !isClosedApplication(application))
     ?? null);
+const activeApplicationCount = computed(() => applications.value.filter((application) => !isClosedApplication(application)).length);
 
 const visibleApplications = computed(() => [...applications.value]
     .sort((first, second) => applicationPriority(second) - applicationPriority(first))
@@ -597,9 +599,9 @@ onMounted(loadDashboard);
                         </div>
                     </section>
 
-                    <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
+                    <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-stretch">
                         <div class="space-y-5 xl:contents xl:space-y-0">
-                            <section class="student-card p-4 sm:p-5 xl:col-start-1 xl:row-start-1">
+                            <section class="student-card h-full p-4 sm:p-5 xl:col-start-1 xl:row-start-1">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
                                         <p class="student-kicker">Your applications</p>
@@ -695,7 +697,7 @@ onMounted(loadDashboard);
                                 </div>
                             </section>
 
-                            <section class="student-card p-4 sm:p-5 xl:col-start-1 xl:row-start-2">
+                            <section class="student-card flex h-full flex-col p-4 sm:p-5 xl:col-start-1 xl:row-start-2">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
                                         <p class="student-kicker">Recommended</p>
@@ -706,11 +708,11 @@ onMounted(loadDashboard);
                                     </a>
                                 </div>
 
-                                <div v-if="recommendedScholarships.length" class="mt-4 grid gap-3 lg:grid-cols-3">
+                                <div v-if="recommendedScholarships.length" class="mt-4 grid flex-1 auto-rows-fr gap-3 lg:grid-cols-3">
                                     <article
                                         v-for="scholarship in recommendedScholarships"
                                         :key="scholarship.id"
-                                        class="flex min-w-0 flex-col rounded-lg border border-slate-200 bg-slate-50 p-3"
+                                        class="flex h-full min-w-0 flex-col rounded-lg border border-slate-200 bg-slate-50 p-3"
                                     >
                                         <div class="flex min-w-0 items-start gap-3">
                                             <img
@@ -754,7 +756,7 @@ onMounted(loadDashboard);
                         </div>
 
                         <aside class="space-y-4 xl:contents xl:space-y-0">
-                            <section class="student-card p-4 xl:col-start-2 xl:row-start-1">
+                            <section class="student-card flex h-full flex-col p-4 xl:col-start-2 xl:row-start-1">
                                 <p class="student-kicker">Readiness</p>
                                 <h3 class="mt-1 text-lg font-bold text-slate-950">Profile and files</h3>
 
@@ -775,9 +777,20 @@ onMounted(loadDashboard);
                                         </div>
                                     </div>
                                 </div>
+
+                                <div class="mt-auto grid grid-cols-2 gap-2 border-t border-slate-200 pt-4">
+                                    <a href="/dashboard/applications" class="rounded-md bg-slate-50 p-3 transition hover:bg-slate-100">
+                                        <span class="block text-xl font-bold text-slate-950">{{ activeApplicationCount }}</span>
+                                        <span class="mt-0.5 block text-xs font-semibold text-slate-500">Active applications</span>
+                                    </a>
+                                    <a href="/dashboard/applications" class="rounded-md bg-slate-50 p-3 transition hover:bg-slate-100">
+                                        <span class="block text-xl font-bold text-slate-950">{{ scheduledActivities.length }}</span>
+                                        <span class="mt-0.5 block text-xs font-semibold text-slate-500">Upcoming activities</span>
+                                    </a>
+                                </div>
                             </section>
 
-                            <section class="student-card p-4 xl:col-start-2 xl:row-start-2">
+                            <section class="student-card flex h-full flex-col p-4 xl:col-start-2 xl:row-start-2">
                                 <div class="flex items-center gap-3">
                                     <span class="student-section-mark">
                                         <i class="fa-solid fa-bell text-xs" aria-hidden="true"></i>
@@ -788,7 +801,7 @@ onMounted(loadDashboard);
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid gap-2">
+                                <div class="mt-4 grid flex-1 content-start gap-2">
                                     <a
                                         v-for="reminder in reminders"
                                         :key="reminder.key"

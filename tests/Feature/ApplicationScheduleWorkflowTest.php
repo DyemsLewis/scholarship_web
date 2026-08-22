@@ -404,15 +404,15 @@ class ApplicationScheduleWorkflowTest extends TestCase
             ->assertJsonPath('application.status', 'approved');
     }
 
-    public function test_provider_can_complete_one_program_event_and_record_attendance_in_bulk(): void
+    public function test_provider_can_complete_one_program_event_and_record_results_in_bulk(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);
         $otherProvider = User::factory()->create(['role' => 'provider']);
         $applicants = User::factory()->count(3)->create();
         $scholarship = Scholarship::create([
             'provider_id' => $provider->id,
-            'title' => 'Bulk Attendance Scholarship',
-            'description' => 'Tests scalable provider attendance tracking.',
+            'title' => 'Bulk Result Scholarship',
+            'description' => 'Tests scalable provider result tracking.',
             'selection_stages' => ['screening', 'exam', 'distribution'],
             'status' => 'published',
         ]);
@@ -452,8 +452,8 @@ class ApplicationScheduleWorkflowTest extends TestCase
         $this->actingAs($provider)
             ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/attendance", [
                 'application_ids' => $selectedIds,
-                'attendance_status' => 'attended',
-                'attendance_notes' => 'Attendance checked at the venue.',
+                'attendance_status' => 'passed',
+                'attendance_notes' => 'Applicants passed the qualifying exam.',
             ])
             ->assertOk()
             ->assertJsonPath('updated_count', 2);
@@ -461,20 +461,20 @@ class ApplicationScheduleWorkflowTest extends TestCase
         foreach ($selectedIds as $applicationId) {
             $this->assertDatabaseHas('scholarship_applications', [
                 'id' => $applicationId,
-                'status' => 'exam_taken',
+                'status' => 'approved',
             ]);
             $this->assertDatabaseHas('application_schedules', [
                 'scholarship_application_id' => $applicationId,
                 'type' => 'exam',
                 'status' => 'completed',
-                'attendance_status' => 'attended',
+                'attendance_status' => 'passed',
             ]);
         }
 
         $this->actingAs($provider)
             ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/attendance", [
                 'application_ids' => [$selectedIds[0]],
-                'attendance_status' => 'attended',
+                'attendance_status' => 'passed',
             ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('application_ids');
@@ -489,6 +489,83 @@ class ApplicationScheduleWorkflowTest extends TestCase
         $this->assertDatabaseHas('scholarship_applications', [
             'id' => $unselectedApplication->id,
             'status' => 'exam_scheduled',
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/attendance", [
+                'application_ids' => [$unselectedApplication->id],
+                'attendance_status' => 'failed',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('scholarship_applications', [
+            'id' => $unselectedApplication->id,
+            'status' => 'exam_failed',
+        ]);
+        $this->assertDatabaseHas('application_schedules', [
+            'scholarship_application_id' => $unselectedApplication->id,
+            'attendance_status' => 'failed',
+        ]);
+    }
+
+    public function test_passed_interview_result_approves_the_application_without_an_attendance_step(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create();
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Interview Result Scholarship',
+            'description' => 'Tests the consolidated interview result.',
+            'selection_stages' => ['screening', 'interview', 'distribution'],
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'interview',
+            'submitted_at' => now(),
+        ]);
+        $event = ScholarshipEvent::create([
+            'scholarship_id' => $scholarship->id,
+            'type' => 'interview',
+            'title' => 'Final interview',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'venue' => 'Provider office',
+            'instructions' => 'Bring a school ID.',
+            'status' => 'completed',
+            'created_by' => $provider->id,
+            'updated_by' => $provider->id,
+        ]);
+        $application->schedules()->create([
+            'type' => 'interview',
+            'title' => 'Final interview',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'venue' => 'Provider office',
+            'instructions' => 'Bring a school ID.',
+            'status' => 'scheduled',
+            'attendance_status' => 'pending',
+            'created_by' => $provider->id,
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/attendance", [
+                'application_ids' => [$application->id],
+                'attendance_status' => 'passed',
+                'attendance_notes' => 'Applicant passed the interview.',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('scholarship_applications', [
+            'id' => $application->id,
+            'status' => 'approved',
+        ]);
+        $this->assertDatabaseHas('application_schedules', [
+            'scholarship_application_id' => $application->id,
+            'type' => 'interview',
+            'status' => 'completed',
+            'attendance_status' => 'passed',
         ]);
     }
 }

@@ -6,6 +6,7 @@ export function normalizeScholarshipBenefits(scholarship = {}) {
             amount: benefit.amount ?? '',
             coverage: benefit.coverage ?? '',
             frequency: benefit.frequency ?? 'one_time',
+            duration: benefit.duration ?? '',
             description: benefit.description ?? '',
         }));
     }
@@ -17,6 +18,7 @@ export function normalizeScholarshipBenefits(scholarship = {}) {
             amount: scholarship.award_amount,
             coverage: '',
             frequency: 'one_time',
+            duration: '',
             description: '',
         }];
     }

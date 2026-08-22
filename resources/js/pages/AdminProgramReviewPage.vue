@@ -96,9 +96,9 @@ const summaryFacts = computed(() => {
 
     return [
         { label: 'Benefits', value: current.benefit_summary || formatAmount(current.award_amount) },
+        { label: 'Program cycle', value: current.program_cycle || 'Not specified' },
         { label: 'Deadline', value: current.deadline || 'Not specified' },
         { label: 'Available slots', value: current.slots_available ?? 'Not specified' },
-        { label: 'Application', value: applicationModeLabel(current.application_mode) },
     ];
 });
 const eligibilityRules = computed(() => {
@@ -151,9 +151,18 @@ const readinessChecks = computed(() => {
             icon: 'fa-solid fa-align-left',
         },
         {
+            label: 'Program cycle',
+            detail: hasText(current.program_cycle)
+                ? `${current.program_cycle} is shown to applicants.`
+                : 'Ask the provider to identify the school year or intake.',
+            status: hasText(current.program_cycle) ? 'Provided' : 'Missing',
+            tone: hasText(current.program_cycle) ? 'good' : 'warn',
+            icon: 'fa-solid fa-rotate',
+        },
+        {
             label: 'Application deadline',
             detail: hasText(current.deadline)
-                ? `Applications close ${current.deadline}.`
+                ? `${current.application_opens_at ? `Opens ${current.application_opens_at}; ` : ''}closes ${current.deadline}${current.expected_results_at ? `; initial results expected ${current.expected_results_at}` : ''}.`
                 : 'Confirm whether this program has an application deadline.',
             status: hasText(current.deadline) ? 'Provided' : 'Review',
             tone: hasText(current.deadline) ? 'good' : 'warn',
@@ -700,6 +709,13 @@ onMounted(loadScholarship);
                                 </div>
 
                                 <dl class="mt-4 grid overflow-hidden rounded-md border border-slate-200 md:grid-cols-2 md:divide-x md:divide-slate-200">
+                                    <div v-if="scholarship.contact_department || scholarship.contact_person" class="border-b border-slate-200 p-4 md:col-span-2">
+                                        <dt class="text-xs font-semibold text-slate-500">Responsible contact</dt>
+                                        <dd class="mt-1 break-words text-sm font-bold text-slate-950">
+                                            {{ scholarship.contact_department || scholarship.contact_person }}
+                                            <span v-if="scholarship.contact_department && scholarship.contact_person" class="font-normal text-slate-500"> | {{ scholarship.contact_person }}</span>
+                                        </dd>
+                                    </div>
                                     <div class="p-4">
                                         <dt class="text-xs font-semibold text-slate-500">Applicant contact email</dt>
                                         <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ scholarship.contact_email || 'Not provided' }}</dd>
@@ -707,6 +723,14 @@ onMounted(loadScholarship);
                                     <div class="p-4">
                                         <dt class="text-xs font-semibold text-slate-500">Applicant contact number</dt>
                                         <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ scholarship.contact_number || 'Not provided' }}</dd>
+                                    </div>
+                                    <div v-if="scholarship.official_program_url" class="border-t border-slate-200 p-4 md:col-span-2">
+                                        <dt class="text-xs font-semibold text-slate-500">Official program page</dt>
+                                        <dd class="mt-1 break-all text-sm font-bold">
+                                            <a :href="scholarship.official_program_url" target="_blank" rel="noopener noreferrer" class="text-sky-700 underline underline-offset-2">
+                                                {{ scholarship.official_program_url }}
+                                            </a>
+                                        </dd>
                                     </div>
                                 </dl>
 
@@ -778,7 +802,7 @@ onMounted(loadScholarship);
                     </div>
 
                     <aside v-if="['overview', 'decision'].includes(activeReviewSection)" class="space-y-4">
-                        <section v-if="activeReviewSection === 'decision'" class="max-w-3xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <section v-if="activeReviewSection === 'decision'" class="w-full rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>

@@ -384,7 +384,7 @@ onMounted(loadProvider);
                         </article>
                     </div>
 
-                    <aside v-if="activeReviewSection === 'decision'" class="max-w-3xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <aside v-if="activeReviewSection === 'decision'" class="w-full rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>

@@ -40,9 +40,9 @@ const documentFileInput = ref(null);
 const activeUploadRequirement = ref('');
 
 const steps = [
-    { label: 'Review', detail: 'Check details' },
-    { label: 'Documents', detail: 'Prepare files' },
-    { label: 'Submit', detail: 'Final check' },
+    { label: 'Program', detail: 'Review your match', icon: 'fa-solid fa-graduation-cap' },
+    { label: 'Documents', detail: 'Prepare required files', icon: 'fa-solid fa-folder-open' },
+    { label: 'Confirm', detail: 'Check and submit', icon: 'fa-solid fa-paper-plane' },
 ];
 const applicationModeOptions = [
     { value: 'online', label: 'Online submission' },
@@ -775,124 +775,61 @@ watch(selectedScholarship, (scholarship) => {
                     </div>
 
                     <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="border-b border-slate-200 bg-white px-5 pt-4 sm:px-6">
-                            <div class="flex items-end justify-between gap-4 pb-4">
-                                <div>
-                                    <p class="text-xs font-semibold text-slate-500">Step {{ currentStep + 1 }} of {{ steps.length }}</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">{{ steps[currentStep].label }}</h3>
+                        <header class="bg-slate-950 px-5 py-4 text-white sm:px-6">
+                            <div class="flex items-center gap-4">
+                                <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-amber-400 text-slate-950">
+                                    <i :class="steps[currentStep].icon" aria-hidden="true"></i>
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-amber-300">Step {{ currentStep + 1 }} of {{ steps.length }}</p>
+                                    <h3 class="mt-1 text-lg font-bold">{{ steps[currentStep].label }}</h3>
+                                    <p class="mt-0.5 truncate text-xs text-slate-300">{{ selectedScholarship?.title || 'Select a scholarship to begin' }}</p>
                                 </div>
-                                <p class="hidden max-w-sm truncate text-sm font-semibold text-slate-500 sm:block">
-                                    {{ selectedScholarship?.title || 'No scholarship selected' }}
-                                </p>
+                                <span class="hidden text-xs font-semibold text-slate-400 sm:block">{{ steps[currentStep].detail }}</span>
                             </div>
+                        </header>
 
-                                <nav class="-mx-5 grid grid-cols-3 border-t border-slate-200 sm:-mx-6" aria-label="Application process">
-                                    <button
-                                        v-for="(step, index) in steps"
-                                        :key="step.label"
-                                        type="button"
-                                        :disabled="!canOpenWizardStep(index)"
-                                        :aria-current="currentStep === index ? 'step' : undefined"
-                                        :class="[
-                                            'relative flex min-w-0 items-center justify-center gap-2.5 border-r border-slate-200 px-2 py-3.5 text-left transition last:border-r-0 disabled:cursor-not-allowed disabled:opacity-45 sm:px-4',
-                                            currentStep === index
-                                                ? 'bg-amber-50 text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-amber-500'
-                                                : index < currentStep
-                                                    ? 'bg-slate-50 text-slate-700'
-                                                    : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-950',
-                                        ]"
-                                        @click="goToWizardStep(index)"
-                                    >
-                                        <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold', currentStep === index ? 'bg-amber-400 text-slate-950' : index < currentStep ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-500']">
-                                            <i v-if="index < currentStep" class="fa-solid fa-check" aria-hidden="true"></i>
-                                            <span v-else>{{ index + 1 }}</span>
-                                        </span>
-                                        <span class="min-w-0">
-                                            <span class="block truncate text-xs font-bold sm:text-sm">{{ step.label }}</span>
-                                            <span class="mt-0.5 hidden truncate text-[11px] opacity-65 sm:block">{{ step.detail }}</span>
-                                        </span>
-                                    </button>
-                                </nav>
-                        </div>
+                        <nav class="grid gap-2 border-b border-slate-200 bg-slate-50 p-3 sm:grid-cols-3" aria-label="Application process">
+                            <button
+                                v-for="(step, index) in steps"
+                                :key="step.label"
+                                type="button"
+                                :disabled="!canOpenWizardStep(index)"
+                                :aria-current="currentStep === index ? 'step' : undefined"
+                                :class="[
+                                    'flex min-w-0 items-center gap-3 rounded-md border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-45',
+                                    currentStep === index
+                                        ? 'border-slate-900 bg-white text-slate-950 shadow-sm'
+                                        : index < currentStep
+                                            ? 'border-slate-200 bg-white text-slate-700'
+                                            : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-950',
+                                ]"
+                                @click="goToWizardStep(index)"
+                            >
+                                <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold', currentStep === index ? 'bg-amber-400 text-slate-950' : index < currentStep ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-500']">
+                                    <i v-if="index < currentStep" class="fa-solid fa-check" aria-hidden="true"></i>
+                                    <i v-else :class="step.icon" aria-hidden="true"></i>
+                                </span>
+                                <span class="min-w-0">
+                                    <span class="block truncate text-sm font-bold">{{ step.label }}</span>
+                                    <span class="mt-0.5 block truncate text-[11px] opacity-70">{{ step.detail }}</span>
+                                </span>
+                            </button>
+                        </nav>
 
                         <div class="bg-white p-5 sm:p-6">
                             <div v-if="currentStep === 0 && !selectedScholarship">
-                                <div class="grid gap-5">
-                                    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                        <div>
-                                            <p class="text-xs font-bold uppercase text-slate-500">
-                                                Selected program
-                                            </p>
-                                            <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                                {{ selectedScholarship ? 'Selected scholarship' : 'Choose from Scholarships first' }}
-                                            </h3>
-                                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                                {{ selectedScholarship ? 'Confirm this is the program you want to apply for.' : 'Applications use the program selected from Scholarships.' }}
-                                            </p>
-                                        </div>
-                                        <a
-                                            href="/dashboard/scholarships"
-                                            class="inline-flex justify-center rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                        >
-                                            Choose scholarship
+                                <div class="grid min-h-64 place-items-center rounded-md border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center">
+                                    <div class="max-w-md">
+                                        <span class="mx-auto grid h-12 w-12 place-items-center rounded-md bg-white text-amber-700 shadow-sm ring-1 ring-slate-200">
+                                            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                                        </span>
+                                        <h3 class="mt-4 text-lg font-bold text-slate-950">Choose a scholarship first</h3>
+                                        <p class="mt-2 text-sm leading-6 text-slate-600">Open Scholarships, review a program, and select Start application. Your chosen program will appear here automatically.</p>
+                                        <a href="/dashboard/scholarships" class="mt-5 inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
+                                            Browse scholarships
+                                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                         </a>
-                                    </div>
-
-                                    <div v-if="selectedScholarship" class="border-t border-slate-200 pt-5">
-                                        <div class="flex gap-3">
-                                            <img
-                                                :src="selectedScholarship.image_url"
-                                                :alt="selectedScholarship.title"
-                                                class="h-12 w-12 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
-                                            >
-                                            <div class="min-w-0">
-                                                <p class="truncate text-xs font-bold uppercase text-slate-500">
-                                                    {{ selectedScholarship.provider?.name || 'Scholarship Provider' }}
-                                                </p>
-                                                <h4 class="mt-1 text-lg font-bold text-slate-950">
-                                                    {{ selectedScholarship.title }}
-                                                </h4>
-                                                <p class="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">
-                                                    {{ selectedScholarship.description }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div class="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
-                                            <div class="min-w-0 border-b border-slate-200 pb-3">
-                                                <p class="font-semibold text-slate-500">Benefits</p>
-                                                <p class="mt-1 font-bold text-slate-950">{{ selectedScholarship.benefit_summary || formatAmount(selectedScholarship.award_amount) }}</p>
-                                            </div>
-                                            <div class="min-w-0 border-b border-slate-200 pb-3">
-                                                <p class="font-semibold text-slate-500">Deadline</p>
-                                                <p class="mt-1 font-bold text-slate-950">{{ selectedScholarship.deadline || 'No deadline' }}</p>
-                                            </div>
-                                            <div class="min-w-0 border-b border-slate-200 pb-3">
-                                                <p class="font-semibold text-slate-500">Documents</p>
-                                                <p class="mt-1 font-bold text-slate-950">{{ selectedRequirements.length }}</p>
-                                            </div>
-                                            <div class="min-w-0 border-b border-slate-200 pb-3">
-                                                <p class="font-semibold text-slate-500">Mode</p>
-                                                <p class="mt-1 font-bold text-slate-950">{{ selectedApplicationMode }}</p>
-                                            </div>
-                                            <div class="min-w-0 border-b border-slate-200 pb-3">
-                                                <p class="font-semibold text-slate-500">Match</p>
-                                                <p :class="['mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold', matchClass(selectedScholarship.eligibility_match?.score)]">
-                                                    {{ selectedScholarship.eligibility_match?.score ?? 0 }}%
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div v-if="!selectedIsEligible" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm leading-6 text-rose-800">
-                                            <p class="font-bold">
-                                                Not eligible to apply
-                                            </p>
-                                            <p class="mt-1">
-                                                {{ selectedEligibilityMessage }}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div v-else class="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                                        No scholarship is selected yet. Open Scholarships, pick a program, then start the application from there.
                                     </div>
                                 </div>
                             </div>
@@ -1251,26 +1188,27 @@ watch(selectedScholarship, (scholarship) => {
                             </div>
                         </div>
 
-                        <div class="border-t border-slate-200 bg-white px-5 py-4">
+                        <div class="border-t border-slate-200 bg-slate-50 px-5 py-4">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <button
+                                    v-if="currentStep > 0"
                                     type="button"
                                     class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                                    :disabled="currentStep === 0"
                                     @click="previousStep"
                                 >
                                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                                     Back
                                 </button>
+                                <a
+                                    v-else
+                                    href="/dashboard/scholarships"
+                                    class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto"
+                                >
+                                    <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
+                                    Scholarships
+                                </a>
 
                                 <div class="grid gap-2 sm:flex sm:justify-end">
-                                    <button
-                                        type="button"
-                                        class="w-full rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto"
-                                        @click="resetWizard"
-                                    >
-                                        Reset
-                                    </button>
                                     <button
                                         v-if="currentStep < steps.length - 1"
                                         type="button"
