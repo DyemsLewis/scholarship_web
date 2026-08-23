@@ -35,9 +35,8 @@ function selectReviewSection(section) {
 }
 
 const applicationModeOptions = [
-    { value: 'online', label: 'Portal pre-screening' },
-    { value: 'onsite', label: 'Assisted on-site pre-screening' },
-    { value: 'hybrid', label: 'Portal with on-site verification' },
+    { value: 'online', label: 'Portal review' },
+    { value: 'onsite', label: 'Portal review with in-person verification' },
     { value: 'provider_review', label: 'Profile review only' },
 ];
 const reviewStatusOptions = [
@@ -271,7 +270,9 @@ function formatAmount(amount) {
 }
 
 function applicationModeLabel(value) {
-    return applicationModeOptions.find((option) => option.value === value)?.label ?? 'Not specified';
+    const normalizedValue = value === 'hybrid' ? 'onsite' : value;
+
+    return applicationModeOptions.find((option) => option.value === normalizedValue)?.label ?? 'Not specified';
 }
 
 function inferGradeScale(value) {

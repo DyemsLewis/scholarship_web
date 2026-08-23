@@ -53,7 +53,7 @@ class ScholarshipPublicationGuard
         }
 
         if (blank($scholarship->application_mode)) {
-            $errors['application_mode'] = 'Choose an application method before publication.';
+            $errors['application_mode'] = 'Choose a verification method before publication.';
         }
 
         if (blank($scholarship->eligibility)) {
@@ -64,7 +64,7 @@ class ScholarshipPublicationGuard
             $errors['eligible_education_levels'] = 'Add at least one applicant matching rule before publication.';
         }
 
-        if (blank($scholarship->requirements)) {
+        if ($scholarship->application_mode !== 'provider_review' && blank($scholarship->requirements)) {
             $errors['requirements'] = 'Add at least one required applicant document before publication.';
         }
 

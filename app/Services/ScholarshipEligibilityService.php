@@ -263,7 +263,9 @@ class ScholarshipEligibilityService
 
     public function preparedDocumentReadiness(Scholarship $scholarship, ?User $user): array
     {
-        $requiredDocuments = $this->documentRequirements($scholarship);
+        $requiredDocuments = $scholarship->application_mode === 'provider_review'
+            ? []
+            : $this->documentRequirements($scholarship);
 
         if (! $user) {
             return [

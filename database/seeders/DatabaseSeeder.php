@@ -264,6 +264,7 @@ class DatabaseSeeder extends Seeder
                 'title' => 'Tulay Aral College Starter Grant',
                 'data' => [
                     ...$common,
+                    'application_mode' => 'onsite',
                     'selection_stages' => ['screening', 'interview', 'distribution'],
                     'image_path' => '/images/programs/tulay-aral-logo.png',
                     'category' => 'Community grant',
@@ -280,7 +281,7 @@ class DatabaseSeeder extends Seeder
                     'latitude' => 14.6255000,
                     'longitude' => 121.1245000,
                     'requirements' => implode("\n", [
-                'Certificate of enrollment',
+                        'Admission or acceptance letter',
                         'Latest report card or grades',
                         'Proof of income',
                         'Recommendation letter',
@@ -353,6 +354,7 @@ class DatabaseSeeder extends Seeder
                 'title' => 'Bukas Kinabukasan School Essentials Grant',
                 'data' => [
                     ...$common,
+                    'application_mode' => 'provider_review',
                     'image_path' => '/images/programs/bukas-kinabukasan-logo.png',
                     'category' => 'Community grant',
                     'description' => 'A non-cash support package that provides school supplies, learning materials, and shared learning-device access for elementary and junior high school learners from nearby communities.',
@@ -367,13 +369,11 @@ class DatabaseSeeder extends Seeder
                     'location_address' => 'Barangay Nueva, San Pedro City, Laguna',
                     'latitude' => 14.3595000,
                     'longitude' => 121.0473000,
-                    'requirements' => implode("\n", [
-                'Certificate of enrollment',
-                        'Latest report card or grades',
-                        'Parent or guardian valid ID',
-                    ]),
+                    'requirements' => null,
+                    'optional_requirements' => null,
                     'post_qualification_requirements' => implode("\n", [
                         'Original learner enrollment record',
+                        'Latest report card or grades',
                         'Learner school ID when available',
                         'Parent or guardian valid ID',
                         'Provider formal application form signed by the guardian',
@@ -428,6 +428,7 @@ class DatabaseSeeder extends Seeder
                 'title' => 'Bukas Kinabukasan STEM Pathways Grant',
                 'data' => [
                     ...$common,
+                    'application_mode' => 'onsite',
                     'image_path' => '/images/programs/bukas-kinabukasan-logo.png',
                     'selection_stages' => ['screening', 'exam', 'interview', 'distribution'],
                     'exam_duration_minutes' => 60,

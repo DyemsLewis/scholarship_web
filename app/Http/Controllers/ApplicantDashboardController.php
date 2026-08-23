@@ -959,11 +959,15 @@ class ApplicantDashboardController extends Controller
             ], 422);
         }
 
-        $requiredDocuments = collect($this->documentRequirements($scholarship))
+        $requiredDocuments = collect($scholarship->application_mode === 'provider_review'
+            ? []
+            : $this->documentRequirements($scholarship))
             ->unique()
             ->values()
             ->all();
-        $optionalDocuments = $this->eligibilityService->optionalDocumentRequirements($scholarship);
+        $optionalDocuments = $scholarship->application_mode === 'provider_review'
+            ? []
+            : $this->eligibilityService->optionalDocumentRequirements($scholarship);
         $preparedDocumentNames = $requiredDocuments === []
             ? collect()
             : $request->user()->studentDocuments()
@@ -1511,7 +1515,9 @@ class ApplicantDashboardController extends Controller
                 'minimum_gwa' => $scholarship->minimum_gwa,
                 'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
                 'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
-                'required_documents' => count($this->documentRequirements($scholarship)),
+                'required_documents' => $scholarship->application_mode === 'provider_review'
+                    ? 0
+                    : count($this->documentRequirements($scholarship)),
                 'prepared_documents' => $preparedDocuments['uploaded'],
                 'note' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             ],
@@ -1768,9 +1774,11 @@ class ApplicantDashboardController extends Controller
         array &$copiedPaths,
     ): void {
         $application->loadMissing('scholarship');
-        $requiredDocuments = $confirmedDocuments !== []
+        $requiredDocuments = $application->scholarship?->application_mode === 'provider_review'
+            ? []
+            : ($confirmedDocuments !== []
             ? collect($confirmedDocuments)->map(fn (string $document) => trim($document))->filter()->values()->all()
-            : $this->documentRequirements($application->scholarship);
+            : $this->documentRequirements($application->scholarship));
         $requirements = collect($requiredDocuments)
             ->merge($optionalDocuments)
             ->map(fn (string $document) => trim($document))

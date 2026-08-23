@@ -354,6 +354,24 @@ function selectionProcessLabel(scholarship) {
         + (stages.length > 4 ? ` +${stages.length - 4}` : '');
 }
 
+function applicationModeLabel(mode) {
+    return {
+        online: 'Portal review',
+        onsite: 'Portal review with in-person verification',
+        hybrid: 'Portal review with in-person verification',
+        provider_review: 'Profile review only',
+    }[mode] ?? labelFromKey(mode || 'not specified');
+}
+
+function applicationModeDescription(mode) {
+    return {
+        online: 'Profile and required files are reviewed in the portal.',
+        onsite: 'Files are uploaded first; original documents may be checked in person later.',
+        hybrid: 'Files are uploaded first; original documents may be checked in person later.',
+        provider_review: 'The initial review uses the applicant profile and does not require program files.',
+    }[mode] ?? 'The provider reviews the portal submission before its formal process.';
+}
+
 function matchClass(score) {
     if (Number(score) >= 80) {
         return 'bg-emerald-100 text-emerald-800';
@@ -1165,8 +1183,9 @@ onBeforeUnmount(() => {
                                         Application
                                     </dt>
                                     <dd class="mt-1 text-sm font-bold text-slate-900">
-                                        {{ previewScholarship.application_mode ? labelFromKey(previewScholarship.application_mode) : 'Not specified' }}
+                                        {{ applicationModeLabel(previewScholarship.application_mode) }}
                                     </dd>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">{{ applicationModeDescription(previewScholarship.application_mode) }}</p>
                                 </div>
                             </dl>
                         </section>

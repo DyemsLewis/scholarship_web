@@ -27,6 +27,9 @@ const showMapModal = ref(false);
 const documentTermsAccepted = ref(false);
 const acknowledgingScheduleId = ref(null);
 const activeSection = ref('overview');
+const requiresOriginalVerification = computed(() => ['onsite', 'hybrid'].includes(
+    application.value?.scholarship?.application_mode,
+));
 
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
@@ -106,6 +109,8 @@ const dssDecisionNotice = computed(() => application.value?.dss_breakdown?.decis
 const rubricReview = computed(() => application.value?.rubric_review ?? null);
 const rubricCriteria = computed(() => rubricReview.value?.criteria ?? []);
 const formalApplicationHandoff = computed(() => application.value?.formal_application_handoff ?? null);
+const handoffRequiresOriginalDocuments = computed(() => formalApplicationHandoff.value?.mode === 'onsite'
+    && (formalApplicationHandoff.value?.requirements?.length ?? 0) > 0);
 const applicantNextStep = computed(() => applicantNextAction(application.value));
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
@@ -270,6 +275,15 @@ function scheduleModeLabel(mode) {
         hybrid: 'On-site and online',
         provider_managed: 'Provider-managed',
     }[mode] ?? labelFromKey(mode);
+}
+
+function applicationModeLabel(mode) {
+    return {
+        online: 'Portal review',
+        onsite: 'Portal review with in-person verification',
+        hybrid: 'Portal review with in-person verification',
+        provider_review: 'Profile review only',
+    }[mode] ?? labelFromKey(mode || 'not listed');
 }
 
 function scheduleStatusClass(status) {
@@ -873,6 +887,16 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
+                                <div v-if="handoffRequiresOriginalDocuments" class="mx-5 mb-5 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                        <i class="fa-solid fa-file-shield" aria-hidden="true"></i>
+                                    </span>
+                                    <div>
+                                        <p class="font-bold">Bring the original documents for this step</p>
+                                        <p class="mt-1 text-amber-900">Follow the provider document list, deadline, and location shown above. Keep your uploaded portal copies unchanged unless a replacement is requested.</p>
+                                    </div>
+                                </div>
+
                                 <div class="border-t border-slate-200 bg-slate-50 px-5 py-4">
                                     <p class="whitespace-pre-line text-sm leading-6 text-slate-700">{{ formalApplicationHandoff.instructions }}</p>
                                     <div v-if="formalApplicationHandoff.contact_person || formalApplicationHandoff.contact_department || formalApplicationHandoff.contact_email || formalApplicationHandoff.contact_number" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-600">
@@ -1141,7 +1165,7 @@ onMounted(loadApplication);
                                     </div>
                                     <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
                                         <p class="text-xs font-semibold text-slate-500">Application mode</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.scholarship?.application_mode || 'not listed') }}</p>
+                                        <p class="mt-1 font-bold text-slate-950">{{ applicationModeLabel(application.scholarship?.application_mode) }}</p>
                                     </div>
                                     <div class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
                                         <p class="text-xs font-semibold text-slate-500">Available slots</p>
@@ -1274,6 +1298,11 @@ onMounted(loadApplication);
                                     >
                                         {{ filesNeedingAction.length ? `${filesNeedingAction.length} need attention` : 'Files ready' }}
                                     </span>
+                                </div>
+
+                                <div v-if="requiresOriginalVerification" class="mt-4 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                                    <i class="fa-solid fa-circle-info mt-1 text-amber-700" aria-hidden="true"></i>
+                                    <p><span class="font-bold">Originals are not needed yet.</span> Keep them ready and bring them only when the provider sends an in-person verification schedule or formal application instructions.</p>
                                 </div>
 
                                 <TermsAgreement
@@ -1427,7 +1456,7 @@ onMounted(loadApplication);
                                     <div>
                                         <p class="font-semibold text-slate-500">Application mode</p>
                                         <p class="mt-1 font-bold text-slate-950">
-                                            {{ labelFromKey(application.scholarship?.application_mode || 'not listed') }}
+                                            {{ applicationModeLabel(application.scholarship?.application_mode) }}
                                         </p>
                                     </div>
                                     <div>

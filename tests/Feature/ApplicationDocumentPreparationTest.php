@@ -29,6 +29,7 @@ class ApplicationDocumentPreparationTest extends TestCase
             'requirements' => "Latest report card or grades\nProvider-specific essay form",
             'deadline' => now()->addMonth()->toDateString(),
             'status' => 'published',
+            'application_mode' => 'online',
         ]);
 
         $documentOptions = $this->actingAs($applicant)
@@ -75,6 +76,7 @@ class ApplicationDocumentPreparationTest extends TestCase
             'income_requirement' => 'Any',
             'requirements' => "Certificate of enrollment\nLatest report card or grades",
             'optional_requirements' => "Good moral certificate\nRecommendation letter",
+            'application_mode' => 'online',
             'deadline' => now()->addMonth()->toDateString(),
             'status' => 'published',
         ]);
@@ -140,6 +142,45 @@ class ApplicationDocumentPreparationTest extends TestCase
         ApplicationDocument::query()
             ->where('scholarship_application_id', $application->id)
             ->each(fn (ApplicationDocument $document) => Storage::disk('local')->assertExists($document->path));
+    }
+
+    public function test_profile_review_only_does_not_require_files_before_initial_submission(): void
+    {
+        Mail::fake();
+        Storage::fake('local');
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+        $applicant = $this->completeApplicant();
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Profile Review Scholarship',
+            'description' => 'Uses profile data for the initial provider review.',
+            'eligible_education_levels' => 'college',
+            'eligible_courses' => 'Any',
+            'eligible_school_types' => 'Any',
+            'eligible_year_levels' => 'Any',
+            'eligible_locations' => 'Philippines',
+            'income_requirement' => 'Any',
+            'requirements' => "Certificate of enrollment\nLatest report card or grades",
+            'application_mode' => 'provider_review',
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+
+        $response = $this->actingAs($applicant)
+            ->postJson('/dashboard/applications', [
+                'scholarship_id' => $scholarship->id,
+                'terms_accepted' => true,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('application.status', 'submitted')
+            ->assertJsonCount(0, 'application.document_checklist')
+            ->assertJsonCount(0, 'application.documents');
+
+        $application = ScholarshipApplication::findOrFail($response->json('application.id'));
+
+        $this->assertSame([], $application->document_checklist);
     }
 
     private function completeApplicant(): User

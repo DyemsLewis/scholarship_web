@@ -31,6 +31,12 @@ class ProgramCatalogSeedTest extends TestCase
         foreach ($programs as $program) {
             $this->assertNotNull($program->image_path);
             $this->assertFileExists(public_path(ltrim($program->image_path, '/')));
+            $this->assertSame('onsite', $program->handoff_mode);
+            $this->assertNotNull($program->handoff_deadline);
+            $this->assertStringContainsString('portal pre-screening', strtolower($program->handoff_instructions));
+            $this->assertStringNotContainsString('birth certificate', strtolower($program->requirements ?? ''));
+            $this->assertStringNotContainsString('government-issued id', strtolower($program->requirements ?? ''));
+            $this->assertStringNotContainsString('parent or guardian valid id', strtolower($program->requirements ?? ''));
         }
 
         $tulayAral = User::query()
@@ -65,6 +71,9 @@ class ProgramCatalogSeedTest extends TestCase
             fn (Scholarship $program): bool => $program->image_path === '/images/programs/bukas-kinabukasan-logo.png'
         ));
         $this->assertSame('Bukas Kinabukasan Learning Hub', $stemProgram->location_name);
+        $this->assertSame('onsite', $stemProgram->application_mode);
+        $this->assertSame('onsite', $collegeProgram->application_mode);
+        $this->assertSame('provider_review', $schoolEssentialsProgram->application_mode);
         $this->assertSame('85.00', $stemProgram->minimum_gwa);
         $this->assertSame('STEM', $stemProgram->eligible_courses);
         $this->assertSame(['screening', 'interview', 'distribution'], $collegeProgram->selection_stages);

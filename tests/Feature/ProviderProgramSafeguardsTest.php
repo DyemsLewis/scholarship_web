@@ -123,6 +123,27 @@ class ProviderProgramSafeguardsTest extends TestCase
         ]);
     }
 
+    public function test_profile_review_program_can_be_submitted_without_initial_document_requirements(): void
+    {
+        $provider = $this->verifiedProvider();
+
+        $response = $this->actingAs($provider)
+            ->postJson('/provider/scholarships', $this->completeSubmissionPayload([
+                'title' => 'Profile Review Program',
+                'application_mode' => 'provider_review',
+                'requirements' => '',
+            ]))
+            ->assertCreated()
+            ->assertJsonPath('scholarship.status', 'pending_review')
+            ->assertJsonPath('scholarship.requirements', null);
+
+        $this->assertDatabaseHas('scholarships', [
+            'id' => $response->json('scholarship.id'),
+            'application_mode' => 'provider_review',
+            'requirements' => null,
+        ]);
+    }
+
     public function test_grade_point_requirement_cannot_exceed_five(): void
     {
         $provider = $this->verifiedProvider();

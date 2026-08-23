@@ -45,15 +45,18 @@ const steps = [
     { label: 'Confirm', detail: 'Check and submit', icon: 'fa-solid fa-paper-plane' },
 ];
 const applicationModeOptions = [
-    { value: 'online', label: 'Portal pre-screening' },
-    { value: 'onsite', label: 'Assisted on-site pre-screening' },
-    { value: 'hybrid', label: 'Portal with on-site verification' },
+    { value: 'online', label: 'Portal review' },
+    { value: 'onsite', label: 'Portal review with in-person verification' },
     { value: 'provider_review', label: 'Profile review only' },
 ];
 const selectedScholarship = computed(() => scholarships.value.find((scholarship) => scholarship.id === Number(selectedScholarshipId.value)));
-const selectedRequirements = computed(() => documentRequirements(selectedScholarship.value?.requirements));
-const selectedOptionalRequirements = computed(() => documentRequirements(selectedScholarship.value?.optional_requirements)
-    .filter((requirement) => !selectedRequirements.value.includes(requirement)));
+const selectedRequirements = computed(() => selectedScholarship.value?.application_mode === 'provider_review'
+    ? []
+    : documentRequirements(selectedScholarship.value?.requirements));
+const selectedOptionalRequirements = computed(() => selectedScholarship.value?.application_mode === 'provider_review'
+    ? []
+    : documentRequirements(selectedScholarship.value?.optional_requirements)
+        .filter((requirement) => !selectedRequirements.value.includes(requirement)));
 const selectedContractSections = computed(() => {
     const scholarship = selectedScholarship.value;
 
@@ -111,6 +114,8 @@ const selectedDocumentReadiness = computed(() => selectedRequirements.value.leng
     ? 100
     : Math.round((selectedPreparedDocuments.value.length / selectedRequirements.value.length) * 100));
 const selectedApplicationMode = computed(() => applicationModeLabel(selectedScholarship.value?.application_mode));
+const selectedApplicationModeDescription = computed(() => applicationModeDescription(selectedScholarship.value?.application_mode));
+const selectedNeedsOriginalVerification = computed(() => ['onsite', 'hybrid'].includes(selectedScholarship.value?.application_mode));
 const selectedSelectionPlan = computed(() => selectionPlanFor(selectedScholarship.value));
 const readyApplicationCount = computed(() => applications.value.filter((application) => Number(application.document_readiness?.accepted_percent ?? application.document_readiness?.uploaded_percent ?? 0) >= 100).length);
 const activeApplicationCount = computed(() => applications.value.filter((application) => ![
@@ -431,7 +436,27 @@ function recommendationClass(recommendation) {
 }
 
 function applicationModeLabel(value) {
-    return applicationModeOptions.find((option) => option.value === value)?.label ?? labelFromKey(value || 'not_listed');
+    const normalizedValue = value === 'hybrid' ? 'onsite' : value;
+
+    return applicationModeOptions.find((option) => option.value === normalizedValue)?.label ?? labelFromKey(value || 'not_listed');
+}
+
+function applicationModeDescription(value) {
+    return {
+        online: 'Your profile and required files are reviewed through the portal.',
+        onsite: 'Upload copies first and keep the originals ready. Do not bring them yet; the provider will send the date and location if an in-person check is needed.',
+        hybrid: 'Upload copies first and keep the originals ready. Do not bring them yet; the provider will send the date and location if an in-person check is needed.',
+        provider_review: 'The provider checks your profile first. No program files are required for this initial review.',
+    }[value] ?? 'The provider will review your portal submission before its formal application process.';
+}
+
+function selectionStageDescription(stage) {
+    return {
+        screening: 'The provider checks your profile, eligibility, and submitted files.',
+        exam: 'Applicants who pass the review receive the exam schedule and instructions.',
+        interview: 'Applicants who reach this stage receive the interview schedule and instructions.',
+        distribution: 'Selected recipients receive the benefit release details from the provider.',
+    }[stage?.value] ?? stage?.detail ?? 'The provider will share instructions if you reach this stage.';
 }
 
 function documentRequirements(requirements) {
@@ -840,479 +865,200 @@ watch(selectedScholarship, (scholarship) => {
                                 </div>
                             </div>
 
-                            <div v-else-if="currentStep === 0 && selectedScholarship" class="space-y-4">
-                                <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                    <div class="p-5 sm:p-6">
-                                        <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                                            <div class="flex min-w-0 items-start gap-4">
-                                                <img
-                                                    :src="selectedScholarship.image_url"
-                                                    :alt="selectedScholarship.title"
-                                                    class="h-14 w-14 shrink-0 rounded-md bg-slate-50 object-contain p-2 ring-1 ring-slate-200"
-                                                >
-                                                <div class="min-w-0">
-                                                    <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-amber-700">
-                                                        {{ selectedScholarship.provider?.name || 'Scholarship Provider' }}
-                                                    </p>
-                                                    <h3 class="mt-1 text-xl font-bold leading-tight text-slate-950">
-                                                        {{ selectedScholarship.title }}
-                                                    </h3>
-                                                    <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                                                        {{ selectedScholarship.description }}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div class="flex shrink-0 flex-wrap gap-2 lg:max-w-52 lg:justify-end">
-                                                <span :class="['rounded-md px-2.5 py-1.5 text-xs font-bold', matchClass(selectedScholarship.eligibility_match?.score)]">
-                                                    {{ selectedScholarship.eligibility_match?.score ?? 0 }}% match
-                                                </span>
-                                                <span class="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-700">
-                                                    {{ selectedApplicationMode }}
-                                                </span>
+                            <div v-else-if="currentStep === 0 && selectedScholarship" class="grid gap-5">
+                                <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                    <header class="relative flex flex-col gap-5 overflow-hidden bg-slate-950 p-5 text-white sm:flex-row sm:items-start sm:justify-between sm:p-6">
+                                        <span class="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full border-[24px] border-amber-300/10" aria-hidden="true"></span>
+                                        <div class="flex min-w-0 items-start gap-4">
+                                            <img :src="selectedScholarship.image_url" :alt="selectedScholarship.title" class="h-16 w-16 shrink-0 rounded-md bg-white object-contain p-2 ring-1 ring-white/20">
+                                            <div class="min-w-0">
+                                                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-amber-300">{{ selectedScholarship.provider?.name || 'Scholarship Provider' }}</p>
+                                                <h3 class="mt-1 text-2xl font-bold leading-tight text-white">{{ selectedScholarship.title }}</h3>
+                                                <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-300">{{ selectedScholarship.description || 'No program description has been posted yet.' }}</p>
                                             </div>
                                         </div>
-                                    </div>
+                                        <span :class="['relative w-fit shrink-0 rounded-md px-3 py-2 text-xs font-bold ring-1', selectedIsEligible ? 'bg-emerald-400/15 text-emerald-200 ring-emerald-300/25' : 'bg-rose-400/15 text-rose-200 ring-rose-300/25']">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% match</span>
+                                    </header>
 
-                                    <dl class="grid border-t border-slate-200 sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-slate-200">
-                                        <div class="border-b border-slate-200 p-4 lg:border-b-0">
-                                            <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                                                <i class="fa-solid fa-gift text-amber-700" aria-hidden="true"></i>
-                                                Benefits
-                                            </dt>
-                                            <dd class="mt-2 line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ selectedScholarship.benefit_summary || formatAmount(selectedScholarship.award_amount) }}</dd>
-                                        </div>
-                                        <div class="border-b border-slate-200 p-4 lg:border-b-0">
-                                            <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                                                <i class="fa-regular fa-calendar text-amber-700" aria-hidden="true"></i>
-                                                Deadline
-                                            </dt>
-                                            <dd class="mt-2 text-sm font-bold text-slate-950">{{ selectedScholarship.deadline || 'No deadline' }}</dd>
-                                        </div>
-                                        <div class="border-b border-slate-200 p-4 sm:border-b-0">
-                                            <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                                                <i class="fa-solid fa-chart-line text-amber-700" aria-hidden="true"></i>
-                                                Academic requirement
-                                            </dt>
-                                            <dd class="mt-2 text-sm font-bold text-slate-950">{{ academicRequirementLabel(selectedScholarship) }}</dd>
-                                        </div>
-                                        <div class="p-4">
-                                            <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                                                <i class="fa-solid fa-folder-open text-amber-700" aria-hidden="true"></i>
-                                                File readiness
-                                            </dt>
-                                            <dd class="mt-2 text-sm font-bold text-slate-950">{{ selectedDocumentReadiness }}% ready</dd>
-                                            <p class="mt-1 text-xs text-slate-500">{{ selectedRequirements.length }} required file{{ selectedRequirements.length === 1 ? '' : 's' }}</p>
-                                        </div>
+                                    <dl class="grid gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-3">
+                                        <div class="flex items-start gap-3 bg-amber-50 p-4 sm:col-span-2 lg:col-span-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900"><i class="fa-solid fa-gift" aria-hidden="true"></i></span><div><dt class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">Benefits</dt><dd class="mt-1 text-sm font-bold leading-6 text-slate-950">{{ selectedScholarship.benefit_summary || formatAmount(selectedScholarship.award_amount) }}</dd></div></div>
+                                        <div class="flex items-start gap-3 bg-white p-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Deadline</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedScholarship.deadline || 'No deadline' }}</dd></div></div>
+                                        <div class="flex items-start gap-3 bg-white p-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Academic requirement</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ academicRequirementLabel(selectedScholarship) }}</dd></div></div>
+                                        <div class="flex items-start gap-3 bg-white p-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Files to prepare</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedRequirements.length ? `${selectedRequirements.length} required` : 'None initially' }}</dd></div></div>
                                     </dl>
 
-                                    <div :class="['flex items-start gap-3 border-t p-4 sm:px-5', selectedIsEligible ? 'border-emerald-200 bg-emerald-50/70' : 'border-rose-200 bg-rose-50']">
-                                        <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', selectedIsEligible ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700']">
-                                            <i :class="selectedIsEligible ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation'" aria-hidden="true"></i>
-                                        </span>
+                                    <div :class="['flex items-start gap-3 border-b px-5 py-4', selectedIsEligible ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50']">
+                                        <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', selectedIsEligible ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white']"><i :class="selectedIsEligible ? 'fa-solid fa-check' : 'fa-solid fa-exclamation'" aria-hidden="true"></i></span>
                                         <div>
-                                            <p :class="['text-sm font-bold', selectedIsEligible ? 'text-emerald-900' : 'text-rose-900']">
-                                                {{ selectedIsEligible ? 'Your profile meets the listed criteria' : 'Your profile has an eligibility issue' }}
-                                            </p>
-                                            <p :class="['mt-1 whitespace-pre-line text-sm leading-6', selectedIsEligible ? 'text-emerald-800' : 'text-rose-800']">
-                                                {{ selectedIsEligible ? (selectedScholarship.eligibility || 'No additional eligibility conditions are listed.') : selectedEligibilityMessage }}
-                                            </p>
+                                            <p :class="['text-sm font-bold', selectedIsEligible ? 'text-emerald-950' : 'text-rose-950']">{{ selectedIsEligible ? 'Your profile meets the listed criteria' : 'Your profile needs attention' }}</p>
+                                            <p :class="['mt-1 text-sm leading-6', selectedIsEligible ? 'text-emerald-800' : 'text-rose-800']">{{ selectedIsEligible ? (selectedScholarship.eligibility || 'You meet the published eligibility rules.') : selectedEligibilityMessage }}</p>
                                         </div>
+                                    </div>
+
+                                    <div class="grid gap-px bg-slate-200 lg:grid-cols-2">
+                                        <section class="bg-white p-5">
+                                            <div class="flex items-start justify-between gap-3">
+                                                <div><p class="student-kicker">Application details</p><h4 class="mt-1 font-bold text-slate-950">What the provider receives</h4></div>
+                                                <a href="/dashboard/profile" class="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Edit profile</a>
+                                            </div>
+                                            <div class="mt-4 flex items-center gap-3 rounded-md bg-slate-50 p-3">
+                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+                                                <div><p class="text-sm font-bold text-slate-900">{{ user?.name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ user?.course_or_strand || 'Track not set' }} · {{ user?.year_level || 'Grade/year not set' }}</p></div>
+                                            </div>
+                                            <div class="mt-3 border-l-2 border-amber-400 pl-3">
+                                                <p class="text-xs font-bold text-slate-700">{{ selectedApplicationMode }}</p>
+                                                <p class="mt-1 text-xs leading-5 text-slate-500">{{ selectedApplicationModeDescription }}</p>
+                                            </div>
+                                        </section>
+
+                                        <section class="bg-slate-50 p-5">
+                                            <div class="flex items-center justify-between gap-3"><div><p class="student-kicker">After submission</p><h4 class="mt-1 font-bold text-slate-950">Selection process</h4></div><span class="text-xs font-bold text-slate-500">{{ selectedSelectionPlan.length }} stages</span></div>
+                                            <ol class="mt-4 grid gap-2 sm:grid-cols-2">
+                                                <li v-for="(stage, index) in selectedSelectionPlan" :key="stage.value" class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700"><span class="grid h-6 w-6 shrink-0 place-items-center rounded bg-slate-950 text-[10px] text-amber-300">{{ index + 1 }}</span>{{ stage.label }}</li>
+                                            </ol>
+                                        </section>
                                     </div>
                                 </section>
-
-                                <div class="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
-                                    <section class="rounded-lg border border-slate-200 bg-white p-5">
-                                        <div class="flex items-start justify-between gap-3">
-                                            <div>
-                                                <p class="student-kicker">Applicant</p>
-                                                <h3 class="mt-1 text-base font-bold text-slate-950">Information sent with this application</h3>
-                                            </div>
-                                            <a href="/dashboard/profile" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Edit profile</a>
-                                        </div>
-                                        <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                                            <div class="rounded-md bg-slate-50 px-3 py-2.5">
-                                                <dt class="text-xs font-semibold text-slate-500">Name</dt>
-                                                <dd class="mt-1 font-bold text-slate-900">{{ user?.name }}</dd>
-                                            </div>
-                                            <div class="rounded-md bg-slate-50 px-3 py-2.5">
-                                                <dt class="text-xs font-semibold text-slate-500">Email</dt>
-                                                <dd class="mt-1 truncate font-bold text-slate-900">{{ user?.email }}</dd>
-                                            </div>
-                                            <div class="rounded-md bg-slate-50 px-3 py-2.5">
-                                                <dt class="text-xs font-semibold text-slate-500">Contact</dt>
-                                                <dd class="mt-1 font-bold text-slate-900">{{ user?.contact_number || 'Not provided' }}</dd>
-                                            </div>
-                                            <div class="rounded-md bg-slate-50 px-3 py-2.5">
-                                                <dt class="text-xs font-semibold text-slate-500">Education</dt>
-                                                <dd class="mt-1 font-bold text-slate-900">{{ user?.course_or_strand || 'Track not set' }} · {{ user?.year_level || 'Grade/year not set' }}</dd>
-                                            </div>
-                                        </dl>
-                                    </section>
-
-                                    <section class="rounded-lg border border-slate-200 bg-slate-50/70 p-5">
-                                        <div class="flex items-center justify-between gap-3">
-                                            <div>
-                                                <p class="student-kicker">After submission</p>
-                                                <h3 class="mt-1 text-base font-bold text-slate-950">Selection process</h3>
-                                            </div>
-                                            <span class="text-xs font-bold text-slate-500">{{ selectedSelectionPlan.length }} stages</span>
-                                        </div>
-                                        <ol class="mt-4 space-y-2">
-                                            <li
-                                                v-for="(stage, index) in selectedSelectionPlan"
-                                                :key="stage.value"
-                                                class="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2.5"
-                                            >
-                                                <span class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-900 text-[10px] font-bold text-white">{{ index + 1 }}</span>
-                                                <span class="text-sm font-bold text-slate-700">{{ stage.label }}</span>
-                                            </li>
-                                        </ol>
-                                    </section>
-                                </div>
                             </div>
 
-                            <div v-else-if="currentStep === 1 && selectedScholarship" class="grid gap-6">
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                        <p class="student-kicker">Application documents</p>
-                                        <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                            Prepare your files
-                                        </h3>
-                                        <p class="mt-1 max-w-2xl text-sm text-slate-600">
-                                            Required files must be ready. Supporting files are optional but can provide useful context.
-                                        </p>
-                                    </div>
-                                    <span class="w-fit rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
-                                        {{ selectedPreparedDocuments.length }} of {{ selectedRequirements.length }} ready
-                                    </span>
-                                </div>
+                            <div v-else-if="currentStep === 1 && selectedScholarship" class="grid gap-5">
+                                <input ref="documentFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="hidden" @change="handleDocumentFileChange">
 
-                                <input
-                                    ref="documentFileInput"
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                    class="hidden"
-                                    @change="handleDocumentFileChange"
-                                >
-
-                                <div v-if="selectedRequirements.length" class="grid gap-4">
-                                    <div class="rounded-md border border-slate-200 bg-slate-50 p-4">
-                                        <div class="flex items-center gap-3">
-                                            <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
-                                                <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${selectedDocumentReadiness}%` }"></div>
-                                            </div>
-                                            <span class="text-sm font-bold text-slate-800">{{ selectedDocumentReadiness }}%</span>
-                                        </div>
-                                        <div class="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                                            <div>
-                                                <TermsAgreement
-                                                    v-model="documentTermsAccepted"
-                                                    context="document"
-                                                />
-                                            </div>
-                                            <a
-                                                href="/dashboard/documents"
-                                                class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                            >
-                                                <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
-                                                Open Documents
-                                            </a>
-                                        </div>
-                                    </div>
-
-                                    <div class="grid gap-2">
-                                        <article
-                                            v-for="requirement in selectedRequirements"
-                                            :key="requirement"
-                                            :class="[
-                                                'flex flex-col gap-3 rounded-md border bg-white p-3 sm:flex-row sm:items-center sm:justify-between',
-                                                preparedDocumentFor(requirement)
-                                                    ? 'border-slate-300'
-                                                    : 'border-amber-200',
-                                            ]"
-                                        >
-                                            <div class="flex min-w-0 items-start gap-3">
-                                                <span
-                                                    :class="[
-                                                        'grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm',
-                                                        preparedDocumentFor(requirement)
-                                                            ? 'bg-slate-900 text-white'
-                                                            : 'bg-amber-50 text-amber-700',
-                                                    ]"
-                                                >
-                                                    <i :class="preparedDocumentFor(requirement) ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file'" aria-hidden="true"></i>
-                                                </span>
-                                                <div class="min-w-0">
-                                                    <p class="font-bold text-slate-900">
-                                                        {{ requirement }}
-                                                    </p>
-                                                    <p v-if="preparedDocumentFor(requirement)" class="mt-1 truncate text-xs text-slate-500">
-                                                        {{ preparedDocumentFor(requirement).original_name }} - {{ formatFileSize(preparedDocumentFor(requirement).size) }}
-                                                    </p>
-                                                    <p v-else class="mt-1 text-xs font-semibold text-amber-700">
-                                                        Upload this file before continuing.
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <div class="flex shrink-0 items-center gap-2">
-                                                <span :class="['rounded-md px-2 py-1 text-[0.68rem] font-bold uppercase', preparedDocumentFor(requirement) ? 'bg-slate-100 text-slate-700' : 'bg-amber-50 text-amber-700']">
-                                                    {{ preparedDocumentFor(requirement) ? 'Ready' : 'Missing' }}
-                                                </span>
-                                                <a
-                                                    v-if="preparedDocumentFor(requirement)?.view_url"
-                                                    :href="preparedDocumentFor(requirement).view_url"
-                                                    target="_blank"
-                                                    rel="noopener"
-                                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                                >
-                                                    View
-                                                </a>
-                                                <button
-                                                    type="button"
-                                                    :disabled="isUploadingDocument"
-                                                    class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                                    @click="openDocumentUpload(requirement)"
-                                                >
-                                                    <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>
-                                                    {{ isUploadingDocument && activeUploadRequirement === requirement
-                                                        ? 'Uploading...'
-                                                        : preparedDocumentFor(requirement) ? 'Replace' : 'Upload' }}
-                                                </button>
-                                            </div>
-                                        </article>
-                                    </div>
-
-                                    <div
-                                        v-if="selectedMissingPreparedDocuments.length === 0"
-                                        class="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
-                                    >
-                                        <i class="fa-solid fa-circle-check mt-0.5" aria-hidden="true"></i>
-                                        <div>
-                                            <p class="font-bold">
-                                                All required files are ready
-                                            </p>
-                                            <p class="mt-1 leading-5">
-                                                Continue when ready. You can replace a file from the application record after submitting.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-                                    This scholarship has no required documents, so you can continue to review.
-                                </div>
-
-                                <section v-if="selectedOptionalRequirements.length" class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-900">Supporting documents</p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">
-                                                These files are optional and will not prevent you from submitting the application.
-                                            </p>
-                                        </div>
-                                        <span class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                                            {{ selectedPreparedOptionalDocuments.length }} of {{ selectedOptionalRequirements.length }} prepared
-                                        </span>
-                                    </div>
-
-                                    <div class="mt-3 grid gap-2">
-                                        <article
-                                            v-for="requirement in selectedOptionalRequirements"
-                                            :key="`optional-${requirement}`"
-                                            class="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
-                                        >
-                                            <div class="flex min-w-0 items-start gap-3">
-                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
-                                                    <i :class="preparedDocumentFor(requirement) ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file'" aria-hidden="true"></i>
-                                                </span>
-                                                <div class="min-w-0">
-                                                    <div class="flex flex-wrap items-center gap-2">
-                                                        <p class="font-bold text-slate-900">{{ requirement }}</p>
-                                                        <span class="rounded bg-slate-100 px-2 py-0.5 text-[0.65rem] font-bold uppercase text-slate-500">Optional</span>
-                                                    </div>
-                                                    <p v-if="preparedDocumentFor(requirement)" class="mt-1 truncate text-xs text-slate-500">
-                                                        {{ preparedDocumentFor(requirement).original_name }} - {{ formatFileSize(preparedDocumentFor(requirement).size) }}
-                                                    </p>
-                                                    <p v-else class="mt-1 text-xs text-slate-500">Add this only if it supports your application.</p>
-                                                </div>
-                                            </div>
-
-                                            <div class="flex shrink-0 items-center gap-2">
-                                                <a
-                                                    v-if="preparedDocumentFor(requirement)?.view_url"
-                                                    :href="preparedDocumentFor(requirement).view_url"
-                                                    target="_blank"
-                                                    rel="noopener"
-                                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                                >
-                                                    View
-                                                </a>
-                                                <button
-                                                    type="button"
-                                                    :disabled="isUploadingDocument"
-                                                    class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                    @click="openDocumentUpload(requirement)"
-                                                >
-                                                    <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>
-                                                    {{ isUploadingDocument && activeUploadRequirement === requirement
-                                                        ? 'Uploading...'
-                                                        : preparedDocumentFor(requirement) ? 'Replace' : 'Upload' }}
-                                                </button>
-                                            </div>
-                                        </article>
-                                    </div>
-                                </section>
-
-                                <details class="rounded-md border border-slate-200 bg-white">
-                                    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-700">
-                                        <span>Optional note to provider</span>
-                                        <i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i>
-                                    </summary>
-                                    <div class="border-t border-slate-200 p-4">
-                                        <label for="application-notes" class="sr-only">Optional note to provider</label>
-                                        <textarea
-                                            id="application-notes"
-                                            v-model="notes"
-                                            rows="3"
-                                            maxlength="1000"
-                                            placeholder="Add a short note if the provider needs additional context"
-                                            class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                                        ></textarea>
-                                    </div>
-                                </details>
-                            </div>
-
-                            <div v-else-if="currentStep === 2 && selectedScholarship" class="space-y-4">
                                 <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                    <div class="flex flex-col gap-4 border-b border-slate-200 bg-slate-50/70 p-5 sm:flex-row sm:items-center sm:justify-between">
-                                        <div class="flex min-w-0 items-center gap-4">
-                                            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700">
-                                                <i class="fa-solid fa-file-circle-check" aria-hidden="true"></i>
-                                            </span>
-                                            <div>
-                                                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">Ready for submission</p>
-                                                <h3 class="mt-1 text-lg font-bold text-slate-950">Review your pre-screening submission</h3>
-                                                <p class="mt-1 text-sm text-slate-600">Confirm the program, profile, and supporting files below.</p>
-                                            </div>
+                                    <header class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p class="student-kicker">Required for this program</p>
+                                            <h3 class="mt-1 text-xl font-bold text-slate-950">Prepare your application files</h3>
+                                            <p class="mt-1 text-sm leading-6 text-slate-600">Upload one clear file for each required item.</p>
                                         </div>
-                                        <span :class="['w-fit rounded-md px-2.5 py-1.5 text-xs font-bold', matchClass(selectedScholarship.eligibility_match?.score)]">
-                                            {{ selectedScholarship.eligibility_match?.score ?? 0 }}% match
-                                        </span>
+                                        <span class="w-fit rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">{{ selectedPreparedDocuments.length }} / {{ selectedRequirements.length }} ready</span>
+                                    </header>
+
+                                    <div v-if="selectedRequirements.length" class="divide-y divide-slate-200">
+                                        <article v-for="requirement in selectedRequirements" :key="requirement" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                            <div class="flex min-w-0 items-center gap-3">
+                                                <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md', preparedDocumentFor(requirement) ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']">
+                                                    <i :class="preparedDocumentFor(requirement) ? 'fa-solid fa-check' : 'fa-regular fa-file'" aria-hidden="true"></i>
+                                                </span>
+                                                <div class="min-w-0">
+                                                    <p class="font-bold text-slate-950">{{ requirement }}</p>
+                                                    <p v-if="preparedDocumentFor(requirement)" class="mt-1 truncate text-xs text-slate-500">{{ preparedDocumentFor(requirement).original_name }} · {{ formatFileSize(preparedDocumentFor(requirement).size) }}</p>
+                                                    <p v-else class="mt-1 text-xs font-semibold text-amber-700">No file uploaded</p>
+                                                </div>
+                                            </div>
+                                            <div class="flex shrink-0 gap-2">
+                                                <a v-if="preparedDocumentFor(requirement)?.view_url" :href="preparedDocumentFor(requirement).view_url" target="_blank" rel="noopener" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">View</a>
+                                                <button type="button" :disabled="isUploadingDocument" class="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:opacity-60" @click="openDocumentUpload(requirement)">
+                                                    <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>
+                                                    {{ isUploadingDocument && activeUploadRequirement === requirement ? 'Uploading...' : preparedDocumentFor(requirement) ? 'Replace' : 'Upload' }}
+                                                </button>
+                                            </div>
+                                        </article>
                                     </div>
 
-                                    <div class="p-5 sm:p-6">
-                                        <div class="flex items-start gap-4">
-                                            <img
-                                                :src="selectedScholarship.image_url"
-                                                :alt="selectedScholarship.title"
-                                                class="h-12 w-12 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
-                                            >
-                                            <div class="min-w-0">
-                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">{{ selectedScholarship.provider?.name || 'Scholarship Provider' }}</p>
-                                                <h3 class="mt-1 text-lg font-bold text-slate-950">{{ selectedScholarship.title }}</h3>
-                                                <p class="mt-1 text-sm text-slate-500">{{ selectedApplicationMode }}</p>
-                                            </div>
-                                        </div>
-
-                                        <div class="mt-5 grid gap-3 lg:grid-cols-3">
-                                            <div class="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3">
-                                                <i class="fa-solid fa-circle-check text-emerald-600" aria-hidden="true"></i>
-                                                <div>
-                                                    <p class="text-xs font-semibold text-emerald-700">Applicant profile</p>
-                                                    <p class="mt-0.5 text-sm font-bold text-emerald-950">{{ user?.name }}</p>
-                                                </div>
-                                            </div>
-                                            <div class="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3">
-                                                <i class="fa-solid fa-circle-check text-emerald-600" aria-hidden="true"></i>
-                                                <div>
-                                                    <p class="text-xs font-semibold text-emerald-700">Eligibility</p>
-                                                    <p class="mt-0.5 text-sm font-bold text-emerald-950">Criteria matched</p>
-                                                </div>
-                                            </div>
-                                            <div class="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3">
-                                                <i class="fa-solid fa-circle-check text-emerald-600" aria-hidden="true"></i>
-                                                <div>
-                                                    <p class="text-xs font-semibold text-emerald-700">Prepared files</p>
-                                                    <p class="mt-0.5 text-sm font-bold text-emerald-950">
-                                                        {{ selectedRequirements.length ? `${documentChecklist.length} of ${selectedRequirements.length} required attached` : 'No required files' }}
-                                                        <span v-if="selectedPreparedOptionalDocuments.length"> + {{ selectedPreparedOptionalDocuments.length }} supporting</span>
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <div v-else class="flex items-start gap-3 p-5 text-sm leading-6 text-slate-600">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
+                                        <div><p class="font-bold text-slate-950">No initial files required</p><p class="mt-1">This provider will begin with your completed applicant profile.</p></div>
                                     </div>
+
+                                    <details v-if="selectedOptionalRequirements.length" class="border-t border-slate-200 bg-slate-50">
+                                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-bold text-slate-700">
+                                            <span>Optional supporting files · {{ selectedPreparedOptionalDocuments.length }} / {{ selectedOptionalRequirements.length }} prepared</span>
+                                            <i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i>
+                                        </summary>
+                                        <div class="divide-y divide-slate-200 border-t border-slate-200 bg-white">
+                                            <article v-for="requirement in selectedOptionalRequirements" :key="`optional-${requirement}`" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                                <div class="flex min-w-0 items-center gap-3">
+                                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600"><i :class="preparedDocumentFor(requirement) ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file'" aria-hidden="true"></i></span>
+                                                    <div class="min-w-0"><p class="font-bold text-slate-900">{{ requirement }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ preparedDocumentFor(requirement)?.original_name || 'Optional · upload only if useful' }}</p></div>
+                                                </div>
+                                                <div class="flex shrink-0 gap-2">
+                                                    <a v-if="preparedDocumentFor(requirement)?.view_url" :href="preparedDocumentFor(requirement).view_url" target="_blank" rel="noopener" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">View</a>
+                                                    <button type="button" :disabled="isUploadingDocument" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60" @click="openDocumentUpload(requirement)">{{ preparedDocumentFor(requirement) ? 'Replace' : 'Upload' }}</button>
+                                                </div>
+                                            </article>
+                                        </div>
+                                    </details>
+
+                                    <details class="border-t border-slate-200">
+                                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-bold text-slate-700"><span>Add a note to the provider <span class="font-normal text-slate-400">(optional)</span></span><i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i></summary>
+                                        <div class="border-t border-slate-200 p-4"><label for="application-notes" class="sr-only">Optional note to provider</label><textarea id="application-notes" v-model="notes" rows="3" maxlength="1000" placeholder="Share short context the provider should know" class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100"></textarea></div>
+                                    </details>
                                 </section>
 
-                                <div class="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
-                                    <section class="rounded-lg border border-slate-200 bg-white p-5">
-                                        <div class="flex items-center justify-between gap-3">
-                                            <div>
-                                                <p class="student-kicker">Selection process</p>
-                                                <h3 class="mt-1 text-base font-bold text-slate-950">What happens next</h3>
+                                <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                    <div v-if="selectedNeedsOriginalVerification" class="border-b border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-950">
+                                        <p class="font-bold"><i class="fa-solid fa-file-shield mr-2 text-amber-700" aria-hidden="true"></i>Keep originals ready</p>
+                                        <p class="mt-1 text-amber-900">Upload copies now. Bring originals only after the provider sends the date and location.</p>
+                                    </div>
+
+                                    <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center justify-between gap-3">
+                                                <p class="text-sm font-bold text-slate-900">File readiness</p>
+                                                <span class="text-sm font-bold text-slate-700">{{ selectedDocumentReadiness }}%</span>
                                             </div>
-                                            <span class="text-xs font-bold text-slate-500">{{ selectedSelectionPlan.length }} stages</span>
+                                            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div class="h-full rounded-full bg-amber-500 transition-all" :style="{ width: `${selectedDocumentReadiness}%` }"></div></div>
+                                            <p class="mt-2 text-xs text-slate-500">{{ selectedMissingPreparedDocuments.length ? `${selectedMissingPreparedDocuments.length} required file${selectedMissingPreparedDocuments.length === 1 ? '' : 's'} still missing.` : 'All required files are ready.' }}</p>
                                         </div>
+                                        <a href="/dashboard/documents" class="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto"><i class="fa-solid fa-folder-open" aria-hidden="true"></i>Open Documents</a>
+                                    </div>
+
+                                    <div class="p-5">
+                                        <TermsAgreement v-model="documentTermsAccepted" context="document" />
+                                    </div>
+                                </section>
+                            </div>
+
+                            <div v-else-if="currentStep === 2 && selectedScholarship" class="grid gap-5">
+                                <div class="grid gap-4">
+                                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                        <header class="flex items-start gap-4 border-b border-slate-200 p-5">
+                                            <img :src="selectedScholarship.image_url" :alt="selectedScholarship.title" class="h-12 w-12 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200">
+                                            <div class="min-w-0"><p class="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700">{{ selectedScholarship.provider?.name || 'Scholarship Provider' }}</p><h3 class="mt-1 text-xl font-bold text-slate-950">{{ selectedScholarship.title }}</h3><p class="mt-1 text-sm text-slate-500">{{ selectedApplicationMode }}</p></div>
+                                        </header>
+
+                                        <div class="divide-y divide-slate-200">
+                                            <div class="flex items-start gap-3 p-4">
+                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
+                                                <div><p class="text-xs font-semibold text-slate-500">Applicant profile</p><p class="mt-1 font-bold text-slate-950">{{ user?.name }}</p><p class="mt-1 text-xs text-slate-500">{{ user?.course_or_strand || 'Track not set' }} · {{ user?.year_level || 'Grade/year not set' }}</p></div>
+                                            </div>
+                                            <div class="flex items-start gap-3 p-4">
+                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
+                                                <div><p class="text-xs font-semibold text-slate-500">Eligibility check</p><p class="mt-1 font-bold text-slate-950">Profile meets the published criteria</p><p class="mt-1 text-xs text-slate-500">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% profile match</p></div>
+                                            </div>
+                                            <div class="flex items-start gap-3 p-4">
+                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
+                                                <div><p class="text-xs font-semibold text-slate-500">Application files</p><p class="mt-1 font-bold text-slate-950">{{ selectedRequirements.length ? `${documentChecklist.length} of ${selectedRequirements.length} required files attached` : 'No initial files required' }}</p><p v-if="selectedPreparedOptionalDocuments.length" class="mt-1 text-xs text-slate-500">{{ selectedPreparedOptionalDocuments.length }} optional supporting file{{ selectedPreparedOptionalDocuments.length === 1 ? '' : 's' }} included</p></div>
+                                            </div>
+                                            <div class="flex items-start gap-3 p-4">
+                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-regular fa-message" aria-hidden="true"></i></span>
+                                                <div><p class="text-xs font-semibold text-slate-500">Note to provider</p><p class="mt-1 text-sm leading-6 text-slate-700">{{ notes || 'No note added.' }}</p></div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section class="rounded-lg border border-slate-200 bg-slate-50 p-5">
+                                        <div class="flex items-center justify-between gap-3"><div><p class="student-kicker">After you submit</p><h3 class="mt-1 text-lg font-bold text-slate-950">Provider selection flow</h3></div><span class="text-xs font-bold text-slate-500">{{ selectedSelectionPlan.length }} stages</span></div>
                                         <ol class="mt-4 grid gap-2 sm:grid-cols-2">
-                                            <li
-                                                v-for="(stage, index) in selectedSelectionPlan"
-                                                :key="stage.value"
-                                                class="flex items-center gap-3 rounded-md bg-slate-50 px-3 py-2.5"
-                                            >
-                                                <span class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-900 text-[10px] font-bold text-white">{{ index + 1 }}</span>
-                                                <span class="text-sm font-bold text-slate-700">{{ stage.label }}</span>
+                                            <li v-for="(stage, index) in selectedSelectionPlan" :key="stage.value" class="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-4 py-3">
+                                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-900 text-xs font-bold text-white">{{ index + 1 }}</span>
+                                                <div>
+                                                    <p class="text-sm font-bold text-slate-800">{{ stage.label }}</p>
+                                                    <p class="mt-1 text-xs leading-5 text-slate-500">{{ selectionStageDescription(stage) }}</p>
+                                                </div>
                                             </li>
                                         </ol>
                                     </section>
 
-                                    <section class="rounded-lg border border-slate-200 bg-slate-50/70 p-5">
-                                        <div class="flex items-center gap-2">
-                                            <i class="fa-regular fa-message text-amber-700" aria-hidden="true"></i>
-                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Note to provider</p>
-                                        </div>
-                                        <p class="mt-3 text-sm leading-6 text-slate-700">{{ notes || 'No note added.' }}</p>
-                                        <p class="mt-4 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">
-                                            You can still view or replace files from the application record after submission.
-                                        </p>
+                                    <details v-if="selectedContractSections.length" class="rounded-lg border border-slate-200 bg-white">
+                                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-bold text-slate-700"><span>Possible commitments after acceptance</span><span class="flex items-center gap-2 text-xs text-slate-500">Review <i class="fa-solid fa-chevron-down" aria-hidden="true"></i></span></summary>
+                                        <div class="grid gap-4 border-t border-slate-200 p-5 sm:grid-cols-2"><div v-for="section in selectedContractSections" :key="section.label"><p class="text-sm font-bold text-slate-800">{{ section.label }}</p><p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-600">{{ section.value }}</p></div><p class="text-xs leading-5 text-slate-500 sm:col-span-2">This is not the final agreement. The provider explains any commitment only if you are accepted.</p></div>
+                                    </details>
+
+                                    <section class="rounded-lg border border-amber-200 bg-amber-50/60 p-4 sm:p-5">
+                                        <TermsAgreement v-model="applicationTermsAccepted" context="application" />
                                     </section>
-                                </div>
-
-                                <details v-if="selectedContractSections.length" class="rounded-md border border-slate-200 bg-white">
-                                    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-700">
-                                        <span>Possible commitments after acceptance</span>
-                                        <span class="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                                            Review
-                                            <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
-                                        </span>
-                                    </summary>
-                                    <div class="grid gap-3 border-t border-slate-200 p-4 sm:grid-cols-2">
-                                        <div
-                                            v-for="section in selectedContractSections"
-                                            :key="section.label"
-                                            class="text-sm"
-                                        >
-                                            <p class="font-bold text-slate-800">{{ section.label }}</p>
-                                            <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">{{ section.value }}</p>
-                                        </div>
-                                        <p class="text-xs leading-5 text-slate-500 sm:col-span-2">
-                                            This is not the final agreement. The provider will explain and confirm any commitment only if you are accepted.
-                                        </p>
-                                    </div>
-                                </details>
-
-                                <div class="flex flex-col gap-4 rounded-lg border border-amber-200 bg-amber-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <TermsAgreement
-                                        v-model="applicationTermsAccepted"
-                                        context="application"
-                                    />
-                                    <button
-                                        type="button"
-                                        :disabled="isSubmitting || !canSubmitApplication"
-                                        class="w-full shrink-0 rounded-md bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 sm:w-auto"
-                                        @click="submitApplication"
-                                    >
-                                        {{ isSubmitting ? 'Submitting...' : 'Submit for pre-screening' }}
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1347,6 +1093,16 @@ watch(selectedScholarship, (scholarship) => {
                                     >
                                         {{ nextStepLabel }}
                                         <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </button>
+                                    <button
+                                        v-else
+                                        type="button"
+                                        :disabled="isSubmitting || !canSubmitApplication"
+                                        class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 sm:w-auto"
+                                        @click="submitApplication"
+                                    >
+                                        {{ isSubmitting ? 'Submitting...' : 'Submit application' }}
+                                        <i class="fa-solid fa-paper-plane text-xs" aria-hidden="true"></i>
                                     </button>
                                 </div>
                             </div>

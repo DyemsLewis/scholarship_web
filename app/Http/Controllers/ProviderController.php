@@ -2805,7 +2805,7 @@ class ProviderController extends Controller
         }
 
         if (blank($value('application_mode'))) {
-            $errors['application_mode'] = 'Choose how applicants will submit their application.';
+            $errors['application_mode'] = 'Choose how applicants will be verified during the portal review.';
         }
 
         if (blank($value('eligibility'))) {
@@ -2827,7 +2827,7 @@ class ProviderController extends Controller
             $errors['eligible_education_levels'] = 'Add at least one applicant matching rule.';
         }
 
-        if (blank($value('requirements'))) {
+        if ($value('application_mode') !== 'provider_review' && blank($value('requirements'))) {
             $errors['requirements'] = 'Add at least one document needed for portal pre-screening.';
         }
 
@@ -3001,12 +3001,14 @@ class ProviderController extends Controller
                 continue;
             }
 
-            $validated[$field] = collect(preg_split('/\r\n|\r|\n/', (string) ($validated[$field] ?? '')))
+            $normalized = collect(preg_split('/\r\n|\r|\n/', (string) ($validated[$field] ?? '')))
                 ->map(fn (string $requirement): string => trim($requirement))
                 ->filter()
                 ->reject(fn (string $requirement): bool => Str::lower($requirement) === 'completed application form')
                 ->unique(fn (string $requirement): string => Str::lower($requirement))
                 ->implode("\n");
+
+            $validated[$field] = $normalized !== '' ? $normalized : null;
         }
 
         return $validated;

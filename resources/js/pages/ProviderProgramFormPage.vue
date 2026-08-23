@@ -175,9 +175,8 @@ const selectedCommitmentOption = ref('provider_briefing');
 const customCommitmentText = ref('');
 const incomeOptions = ['Any', 'Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
 const applicationModeOptions = [
-    { value: 'online', label: 'Portal pre-screening' },
-    { value: 'onsite', label: 'Assisted on-site pre-screening' },
-    { value: 'hybrid', label: 'Portal with on-site verification' },
+    { value: 'online', label: 'Portal review', detail: 'Review the applicant profile and uploaded files in the portal.' },
+    { value: 'onsite', label: 'Portal review with in-person verification', detail: 'Review uploads first, then request original documents on-site when needed.' },
     { value: 'provider_review', label: 'Profile review only' },
 ];
 const handoffModeOptions = [
@@ -590,6 +589,7 @@ const postQualificationRequirementItems = computed(() =>
     splitRequirementText(scholarshipForm.value.postQualificationRequirements));
 const selectedRequirementCount = computed(() => allDocumentRequirements.value.length);
 const selectedOptionalRequirementCount = computed(() => allOptionalDocumentRequirements.value.length);
+const isProfileReviewOnly = computed(() => scholarshipForm.value.applicationMode === 'provider_review');
 const rubricWeightTotal = computed(() => scholarshipForm.value.reviewRubric
     .reduce((total, criterion) => total + Number(criterion.weight || 0), 0));
 const reviewRubricReady = computed(() => scholarshipForm.value.reviewRubric.length > 0
@@ -683,8 +683,10 @@ const programReadinessItems = computed(() => [
     {
         label: 'Document checklist',
         section: 'documents',
-        complete: selectedRequirementCount.value > 0,
-        help: 'Minimal proof applicants upload for portal pre-screening.',
+        complete: isProfileReviewOnly.value || selectedRequirementCount.value > 0,
+        help: isProfileReviewOnly.value
+            ? 'No program files are required for the initial profile review.'
+            : 'Minimal proof applicants upload for portal review.',
     },
     {
         label: 'Formal application handoff',
@@ -758,7 +760,7 @@ const formSectionProgress = computed(() => {
                 && hasText(scholarshipForm.value.examPassingScore)
             ))
             && reviewRubricReady.value,
-        documents: selectedRequirementCount.value > 0
+        documents: (isProfileReviewOnly.value || selectedRequirementCount.value > 0)
             && postQualificationRequirementItems.value.length > 0
             && hasText(scholarshipForm.value.handoffMode)
             && hasText(scholarshipForm.value.handoffInstructions)
@@ -974,7 +976,20 @@ function formatPreviewDate(value, fallback = 'Not specified') {
 }
 
 function applicationModeLabel(value) {
-    return applicationModeOptions.find((option) => option.value === value)?.label ?? 'Not specified';
+    const normalizedValue = value === 'hybrid' ? 'onsite' : value;
+
+    return applicationModeOptions.find((option) => option.value === normalizedValue)?.label ?? 'Not specified';
+}
+
+function applicationModeDetail(value) {
+    if (value === 'provider_review') {
+        return 'Use profile and matching data for the initial review. Applicants are not required to upload program files before submitting.';
+    }
+
+    const normalizedValue = value === 'hybrid' ? 'onsite' : value;
+
+    return applicationModeOptions.find((option) => option.value === normalizedValue)?.detail
+        ?? 'Choose how the provider will verify applicants during the portal review.';
 }
 
 function optionLabels(values, options) {
@@ -1616,7 +1631,7 @@ function fillScholarshipForm(scholarship) {
         minimumGwa: scholarship.minimum_gwa ?? '',
         minimumGradeScale: scholarship.minimum_grade_scale ?? inferGradeScale(scholarship.minimum_gwa),
         slotsAvailable: scholarship.slots_available ?? '',
-        applicationMode: scholarship.application_mode ?? '',
+        applicationMode: scholarship.application_mode === 'hybrid' ? 'onsite' : (scholarship.application_mode ?? ''),
         selectionStages: selectionStageOptions
             .map((option) => option.value)
             .filter((value) => (scholarship.selection_stages ?? ['screening']).includes(value)),
@@ -2089,8 +2104,8 @@ async function saveScholarship() {
         location_address: scholarshipForm.value.locationAddress || '',
         latitude: scholarshipForm.value.latitude || '',
         longitude: scholarshipForm.value.longitude || '',
-        requirements: allDocumentRequirements.value.join('\n'),
-        optional_requirements: allOptionalDocumentRequirements.value.join('\n'),
+        requirements: isProfileReviewOnly.value ? '' : allDocumentRequirements.value.join('\n'),
+        optional_requirements: isProfileReviewOnly.value ? '' : allOptionalDocumentRequirements.value.join('\n'),
         post_qualification_requirements: postQualificationRequirementItems.value.join('\n'),
         handoff_mode: scholarshipForm.value.handoffMode || '',
         handoff_instructions: scholarshipForm.value.handoffInstructions || '',
@@ -2571,12 +2586,12 @@ onBeforeUnmount(() => {
 
                                 <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-mode">
-                                        Pre-screening method
+                                        Verification method
                                         <span :class="requiredHintClass">Required</span>
                                     </label>
                                     <select id="scholarship-mode" v-model="scholarshipForm.applicationMode" :class="inputClass">
                                         <option value="">
-                                            Select mode
+                                            Select verification method
                                         </option>
                                         <option
                                             v-for="option in applicationModeOptions"
@@ -2587,7 +2602,7 @@ onBeforeUnmount(() => {
                                         </option>
                                     </select>
                                     <p class="mt-2 text-xs leading-5 text-slate-500">
-                                        This describes the portal review, not the provider's final application.
+                                        {{ applicationModeDetail(scholarshipForm.applicationMode) }}
                                     </p>
                                 </div>
 
@@ -3418,15 +3433,23 @@ onBeforeUnmount(() => {
                                 <div>
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
-                                            Pre-screening documents
-                                            <span :class="requiredHintClass">At least one</span>
+                                            Initial review documents
+                                            <span v-if="!isProfileReviewOnly" :class="requiredHintClass">At least one</span>
                                         </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Applicants upload these only to prove initial eligibility. {{ selectedRequirementCount }} required and {{ selectedOptionalRequirementCount }} supporting document{{ selectedOptionalRequirementCount === 1 ? '' : 's' }} selected.
+                                            {{ isProfileReviewOnly
+                                                ? 'This program checks the applicant profile first, so no program files are collected at submission.'
+                                                : `Applicants upload these for the initial portal review. ${selectedRequirementCount} required and ${selectedOptionalRequirementCount} supporting document${selectedOptionalRequirementCount === 1 ? '' : 's'} selected.` }}
                                         </p>
                                     </div>
                                 </div>
 
+                                <div v-if="isProfileReviewOnly" class="mt-4 flex items-start gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
+                                    <i class="fa-solid fa-circle-check mt-1" aria-hidden="true"></i>
+                                    <p>Applicants submit their completed profile for the initial review. List any documents needed later under formal application handoff.</p>
+                                </div>
+
+                                <template v-else>
                                 <div class="mt-4 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
                                     <button
                                         type="button"
@@ -3510,6 +3533,7 @@ onBeforeUnmount(() => {
                                         <p class="mt-2 text-xs leading-5 text-slate-500">These may strengthen or clarify an application but never block submission.</p>
                                     </div>
                                 </div>
+                                </template>
 
                                 <section class="mt-6 border-t border-slate-200 pt-6">
                                     <div class="flex items-start gap-3">
@@ -3823,9 +3847,9 @@ onBeforeUnmount(() => {
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Required before submission</p>
                                         <p class="mt-2 text-sm font-semibold text-slate-800">
-                                            {{ selectedRequirementCount }} required document{{ selectedRequirementCount === 1 ? '' : 's' }}
+                                            {{ isProfileReviewOnly ? 'Profile review only' : `${selectedRequirementCount} required document${selectedRequirementCount === 1 ? '' : 's'}` }}
                                         </p>
-                                        <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ allDocumentRequirements.join(', ') || 'No required documents selected.' }}</p>
+                                        <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ isProfileReviewOnly ? 'No program files are collected during initial submission.' : (allDocumentRequirements.join(', ') || 'No required documents selected.') }}</p>
                                     </div>
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Optional supporting files</p>

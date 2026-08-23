@@ -27,9 +27,8 @@ const profileReadiness = ref({
     missing: [],
 });
 const applicationModeOptions = [
-    { value: 'online', label: 'Portal pre-screening' },
-    { value: 'onsite', label: 'Assisted on-site pre-screening' },
-    { value: 'hybrid', label: 'Portal with on-site verification' },
+    { value: 'online', label: 'Portal review' },
+    { value: 'onsite', label: 'Portal review with in-person verification' },
     { value: 'provider_review', label: 'Profile review only' },
 ];
 const preparedDocuments = computed(() => scholarship.value?.prepared_documents ?? {
@@ -48,12 +47,16 @@ const documentItems = computed(() => {
     return documentRequirements(scholarship.value?.requirements);
 });
 const hasDocumentRequirements = computed(() => documentItems.value.length > 0);
-const optionalDocumentItems = computed(() => documentRequirements(scholarship.value?.optional_requirements));
+const optionalDocumentItems = computed(() => scholarship.value?.application_mode === 'provider_review'
+    ? []
+    : documentRequirements(scholarship.value?.optional_requirements));
 const postQualificationDocumentItems = computed(() =>
     documentRequirements(scholarship.value?.post_qualification_requirements));
-const documentRequirementSummary = computed(() => hasDocumentRequirements.value
-    ? `${documentItems.value.length} requirement${documentItems.value.length === 1 ? '' : 's'}`
-    : 'No documents listed');
+const documentRequirementSummary = computed(() => scholarship.value?.application_mode === 'provider_review'
+    ? 'No files required for the initial review'
+    : (hasDocumentRequirements.value
+        ? `${documentItems.value.length} requirement${documentItems.value.length === 1 ? '' : 's'}`
+        : 'No documents listed'));
 const selectionPlan = computed(() => selectionPlanFor(scholarship.value));
 const canApply = computed(() => profileReadiness.value.complete);
 const isEligible = computed(() => scholarship.value?.eligibility_match?.is_eligible !== false);
@@ -185,7 +188,12 @@ const fitHighlights = computed(() => {
         { icon: 'fa-solid fa-school', label: 'Education level', value: criteriaLabel(current.eligible_education_levels) },
         { icon: 'fa-solid fa-building-columns', label: 'School type', value: criteriaLabel(current.eligible_school_types) },
         { icon: 'fa-solid fa-book-open', label: 'Track, strand, course, or program', value: current.eligible_courses || 'Any' },
-        { icon: 'fa-solid fa-layer-group', label: 'Grade / year level', value: current.eligible_year_levels || 'Any' },
+        {
+            icon: 'fa-solid fa-layer-group',
+            label: 'Grade / year level',
+            value: current.eligible_year_levels || 'Any',
+            items: criteriaItems(current.eligible_year_levels),
+        },
         { icon: 'fa-solid fa-wallet', label: 'Household income', value: current.income_requirement || 'Any' },
         { icon: 'fa-solid fa-location-dot', label: 'Location coverage', value: current.eligible_locations || current.location_name || 'Any' },
         { icon: 'fa-solid fa-chart-line', label: 'Academic requirement', value: academicRequirementLabel(current) },
@@ -292,7 +300,18 @@ function providerTypeLabel(type) {
 }
 
 function applicationModeLabel(value) {
-    return applicationModeOptions.find((option) => option.value === value)?.label ?? labelFromKey(value || 'not_listed');
+    const normalizedValue = value === 'hybrid' ? 'onsite' : value;
+
+    return applicationModeOptions.find((option) => option.value === normalizedValue)?.label ?? labelFromKey(value || 'not_listed');
+}
+
+function applicationModeDescription(value) {
+    return {
+        online: 'Your profile and required files are reviewed through the portal.',
+        onsite: 'Upload the required files first. The provider may later ask to see the originals in person.',
+        hybrid: 'Upload the required files first. The provider may later ask to see the originals in person.',
+        provider_review: 'The provider checks your profile first. No program files are required for this initial review.',
+    }[value] ?? 'The provider will review your portal submission before its formal application process.';
 }
 
 function programEventPlaceLabel(event) {
@@ -314,17 +333,21 @@ function programEventPlaceLabel(event) {
 }
 
 function criteriaLabel(value) {
+    const items = criteriaItems(value);
+
+    return items.length ? items.join(', ') : 'Any';
+}
+
+function criteriaItems(value) {
     if (!value) {
-        return 'Any';
+        return [];
     }
 
-    const items = String(value)
+    return String(value)
         .split(/\r?\n|,/)
         .map((item) => item.trim())
         .filter(Boolean)
         .map(labelFromKey);
-
-    return items.length ? items.join(', ') : 'Any';
 }
 
 function eligibilityCriterionText(value, fallback = '') {
@@ -689,7 +712,16 @@ onMounted(loadScholarship);
                                             </span>
                                             <div class="min-w-0">
                                                 <p class="text-xs font-semibold text-slate-500">{{ item.label }}</p>
-                                                <p class="mt-1 whitespace-pre-line text-sm font-bold leading-5 text-slate-800">{{ item.value }}</p>
+                                                <div v-if="item.items?.length" class="mt-2 flex flex-wrap gap-1.5">
+                                                    <span
+                                                        v-for="level in item.items"
+                                                        :key="level"
+                                                        class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
+                                                    >
+                                                        {{ level }}
+                                                    </span>
+                                                </div>
+                                                <p v-else class="mt-1 whitespace-pre-line text-sm font-bold leading-5 text-slate-800">{{ item.value }}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -837,7 +869,7 @@ onMounted(loadScholarship);
 
                                 <div class="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500">
                                     <i class="fa-solid fa-circle-info mt-1 text-amber-700" aria-hidden="true"></i>
-                                    <p>Pre-screening method: <span class="font-bold text-slate-700">{{ applicationModeLabel(scholarship.application_mode) }}</span>. Passing this review does not guarantee the scholarship.</p>
+                                    <p><span class="font-bold text-slate-700">{{ applicationModeLabel(scholarship.application_mode) }}:</span> {{ applicationModeDescription(scholarship.application_mode) }} Passing this review does not guarantee the scholarship.</p>
                                 </div>
                             </article>
 
