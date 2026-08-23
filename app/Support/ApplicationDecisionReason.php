@@ -18,6 +18,7 @@ class ApplicationDecisionReason
         'failed_exam' => 'Failed exam',
         'for_interview' => 'For interview',
         'failed_interview' => 'Failed interview',
+        'qualified_for_formal_application' => 'Qualified for formal application',
         'approved_for_award' => 'Approved for award',
         'distribution_scheduled' => 'Distribution scheduled',
         'award_released' => 'Reward distributed',

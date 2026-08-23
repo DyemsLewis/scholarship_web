@@ -112,6 +112,43 @@ class ProviderReviewRubricTest extends TestCase
         $this->assertSame('submitted', $application->fresh()->status);
     }
 
+    public function test_applicant_can_see_their_completed_provider_rubric_score(): void
+    {
+        [$provider, $application] = $this->applicationWithRubric();
+
+        $application->update([
+            'rubric_scores' => [
+                'eligibility_fit' => 80,
+                'academic_merit' => 90,
+                'financial_need' => 70,
+                'document_quality' => 100,
+            ],
+            'rubric_total_score' => 84.5,
+            'rubric_scored_by' => $provider->id,
+            'rubric_scored_at' => now(),
+        ]);
+
+        $this->actingAs($application->applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.rubric_review.is_complete', true)
+            ->assertJsonPath('application.rubric_review.total_score', 84.5)
+            ->assertJsonPath('application.rubric_review.criteria.0.label', 'Eligibility fit')
+            ->assertJsonPath('application.rubric_review.criteria.0.score', 80)
+            ->assertJsonMissingPath('application.rubric_review.scored_by');
+    }
+
+    public function test_applicant_does_not_see_an_incomplete_provider_rubric(): void
+    {
+        [, $application] = $this->applicationWithRubric();
+
+        $this->actingAs($application->applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.rubric_review', null)
+            ->assertJsonPath('application.rubric_scored_at', null);
+    }
+
     private function applicationWithRubric(): array
     {
         $provider = User::factory()->create(['role' => 'provider']);

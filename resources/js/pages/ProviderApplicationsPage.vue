@@ -12,7 +12,7 @@ const initialScholarshipId = appElement?.dataset.scholarshipId ?? pageSearchPara
 const initialScholarshipTitle = appElement?.dataset.scholarshipTitle ?? '';
 const requestedWorkspaceSection = pageSearchParams.get('workspace');
 const requestedQueueFilter = pageSearchParams.get('filter');
-const queueFilterValues = ['pending_review', 'document_issues', 'active_stages', 'decided', 'all'];
+const queueFilterValues = ['pending_review', 'document_issues', 'active_stages', 'formal_application', 'decided', 'all'];
 const pendingReviewStatuses = ['submitted', 'under_review'];
 const activeStageStatuses = [
     'qualified',
@@ -24,8 +24,8 @@ const activeStageStatuses = [
     'exam_passed',
     'distribution_scheduled',
 ];
+const formalApplicationStatuses = ['approved'];
 const decidedStatuses = [
-    'approved',
     'awarded',
     'not_awarded',
     'disbursed',
@@ -97,18 +97,18 @@ const scheduleModeOptions = [
 const scheduleWaitingStatuses = {
     exam: ['exam_qualified'],
     interview: ['interview'],
-    distribution: ['approved', 'awarded'],
+    distribution: ['awarded'],
 };
 
 const selectedScholarshipId = computed(() => selectedScholarshipContext.value?.id || initialScholarshipId);
 const hasProgramContext = computed(() => Boolean(selectedScholarshipId.value));
 const configuredScheduleTypes = computed(() => {
-    const configured = selectedScholarshipContext.value?.selection_stages ?? ['screening', 'distribution'];
+    const configured = selectedScholarshipContext.value?.selection_stages ?? ['screening'];
 
     return scheduleTypeCatalog.filter((type) => configured.includes(type.value));
 });
 const availableBulkAdvanceTargets = computed(() => {
-    const stages = selectedScholarshipContext.value?.selection_stages ?? ['screening', 'distribution'];
+    const stages = selectedScholarshipContext.value?.selection_stages ?? ['screening'];
     const targets = [];
 
     if (stages.includes('exam')) {
@@ -116,7 +116,7 @@ const availableBulkAdvanceTargets = computed(() => {
     }
 
     if (stages.includes('distribution')) {
-        targets.push({ value: 'distribution', label: 'Approve for distribution' });
+        targets.push({ value: 'distribution', label: 'Record award recipients' });
     }
 
     return targets;
@@ -306,8 +306,8 @@ const pageTitle = computed(() => (hasProgramContext.value
     ? selectedScholarshipContext.value?.title || 'Scholarship program'
     : 'Review applicants'));
 const pageDescription = computed(() => (hasProgramContext.value
-    ? 'Review applicants first, then manage shared schedules and participant results when needed.'
-    : 'Find applicants needing attention and open a guided review of their profile, eligibility, and files.'));
+    ? 'Review pre-screening submissions, then manage shared activities and formal outcomes when needed.'
+    : 'Find applicants needing attention and review their profile, eligibility, and supporting files.'));
 const reviewFilterOptions = computed(() => [
     {
         value: 'pending_review',
@@ -325,6 +325,11 @@ const reviewFilterOptions = computed(() => [
         count: applications.value.filter((application) => activeStageStatuses.includes(application.status)).length,
     },
     {
+        value: 'formal_application',
+        label: 'Formal application',
+        count: applications.value.filter((application) => formalApplicationStatuses.includes(application.status)).length,
+    },
+    {
         value: 'decided',
         label: 'Decisions',
         count: applications.value.filter((application) => decidedStatuses.includes(application.status)).length,
@@ -335,6 +340,7 @@ const emptyQueueMessage = computed(() => ({
     pending_review: 'No applicants currently need an initial review.',
     document_issues: 'No applicants currently have missing or unresolved document issues.',
     active_stages: 'No applicants are currently in an exam, interview, or distribution stage.',
+    formal_application: 'No applicants are currently completing the provider formal application process.',
     decided: 'No applicant decisions have been recorded yet.',
     all: 'No applicants match this search.',
 }[selectedQueueFilter.value]));
@@ -361,6 +367,10 @@ const rankedApplications = computed(() => {
 
         if (selectedQueueFilter.value === 'active_stages') {
             return activeStageStatuses.includes(application.status);
+        }
+
+        if (selectedQueueFilter.value === 'formal_application') {
+            return formalApplicationStatuses.includes(application.status);
         }
 
         if (selectedQueueFilter.value === 'decided') {
@@ -408,6 +418,8 @@ const bulkEligibleVisibleApplications = computed(() => visibleApplications.value
 const allVisibleBulkSelected = computed(() => bulkEligibleVisibleApplications.value.length > 0
     && bulkEligibleVisibleApplications.value.every((application) => selectedBulkApplicationIds.value.includes(application.id)));
 const customStatusLabels = {
+    approved: 'Qualified for formal application',
+    rejected: 'Not qualified',
     exam_qualified: 'Qualified for exam',
     exam_scheduled: 'Exam scheduled',
     exam_taken: 'Exam taken',
@@ -454,11 +466,11 @@ async function applyBulkAdvance() {
 
     const isDistribution = bulkAdvanceTarget.value === 'distribution';
     const confirmed = await requestConfirmation({
-        title: isDistribution ? 'Approve selected applicants for distribution?' : 'Approve selected applicants for the exam?',
+        title: isDistribution ? 'Record selected applicants as award recipients?' : 'Approve selected applicants for the exam?',
         message: isDistribution
-            ? `Only the ${selectedBulkApplicationIds.value.length} selected applicants already marked Approved will advance for distribution.`
+            ? `${selectedBulkApplicationIds.value.length} applicants who passed portal pre-screening will be recorded as award recipients after your formal selection process.`
             : `${selectedBulkApplicationIds.value.length} selected applicants will advance to the configured exam stage.`,
-        confirmLabel: isDistribution ? 'Approve for distribution' : 'Approve for exam',
+        confirmLabel: isDistribution ? 'Record award recipients' : 'Approve for exam',
     });
 
     if (!confirmed) {
@@ -595,7 +607,7 @@ function reviewPriorityScore(application) {
         score += 10;
     }
 
-    if (['approved', 'awarded'].includes(status) && !application.distribution_scheduled_for) {
+    if (status === 'awarded' && !application.distribution_scheduled_for) {
         score += 18;
     }
 
@@ -1470,7 +1482,7 @@ onMounted(loadProviderData);
                                     </label>
                                     <p class="text-xs leading-5 text-slate-500">
                                         {{ bulkAdvanceTarget === 'distribution'
-                                            ? 'Only applicants already marked Approved are selectable.'
+                                            ? 'Only applicants qualified for your formal application are selectable.'
                                             : 'Only applicants with accepted required files who can enter the exam are selectable.' }}
                                     </p>
                                 </div>
@@ -1480,7 +1492,7 @@ onMounted(loadProviderData);
                                     </button>
                                     <span class="text-xs font-bold text-slate-500">{{ selectedBulkApplicationIds.length }} selected</span>
                                     <button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="selectedBulkApplicationIds.length === 0 || bulkAdvancing" @click="applyBulkAdvance">
-                                        {{ bulkAdvancing ? 'Approving...' : 'Approve selected' }}
+                                        {{ bulkAdvancing ? 'Saving...' : (bulkAdvanceTarget === 'distribution' ? 'Record recipients' : 'Approve selected') }}
                                     </button>
                                 </div>
                             </div>
@@ -1491,8 +1503,8 @@ onMounted(loadProviderData);
                             <p class="text-sm font-bold text-slate-900">No applicants yet</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
                                 {{ hasProgramContext
-                                    ? 'Applicants for this program will appear here after eligible students submit the application wizard.'
-                                    : 'Applicants will appear after a published scholarship receives a completed application.' }}
+                                    ? 'Applicants for this program will appear here after students submit the portal pre-screening form.'
+                                    : 'Applicants will appear after a published scholarship receives a pre-screening submission.' }}
                             </p>
                             <div class="mt-4 flex flex-wrap gap-2">
                                 <a href="/provider/programs" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">Check programs</a>
@@ -1568,7 +1580,7 @@ onMounted(loadProviderData);
                                         class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
                                         @click="openApplicationPreview(application)"
                                     >
-                                        Review
+                                        {{ application.status === 'approved' ? 'Record outcome' : decidedStatuses.includes(application.status) ? 'View' : 'Review' }}
                                     </button>
                                 </div>
                             </article>

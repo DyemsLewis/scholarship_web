@@ -164,8 +164,8 @@ const profileSections = [
         icon: 'fa-solid fa-address-card',
         impact: 'Identity, contact, and household context.',
         required: true,
-        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'income_bracket', 'household_size', 'support_needs'],
-        requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number', 'account_managed_by', 'income_bracket'],
+        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'income_bracket', 'household_size', 'support_needs', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
+        requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number', 'account_managed_by', 'income_bracket', 'guardian_name', 'guardian_relationship', 'guardian_contact'],
     },
     {
         id: 'academic',
@@ -195,16 +195,6 @@ const profileSections = [
         impact: 'Personalizes result order.',
         required: false,
         fields: ['preferred_categories', 'preferred_locations', 'willing_to_relocate', 'scholarship_goal'],
-    },
-    {
-        id: 'guardian',
-        label: 'Guardian',
-        detail: 'Contact person',
-        icon: 'fa-solid fa-user-shield',
-        impact: 'Trusted contact.',
-        required: true,
-        fields: ['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
-        requiredFields: ['guardian_name', 'guardian_relationship', 'guardian_contact'],
     },
     {
         id: 'verification',
@@ -240,46 +230,40 @@ const academicProofOption = computed(() => {
     const recordCopy = {
         preschool: {
             label: 'Progress report or assessment',
-            detail: 'Upload the learner\'s latest progress report or school assessment.',
+            detail: 'Latest progress report or school assessment.',
         },
         elementary: {
             label: 'Latest report card',
-            detail: 'Upload the latest report card for the selected grade level.',
+            detail: 'Latest report card for the selected grade level.',
         },
         junior_high_school: {
             label: 'Latest report card',
-            detail: 'Upload the latest report card for the selected grade level.',
+            detail: 'Latest report card for the selected grade level.',
         },
         senior_high_school: {
             label: 'Latest report card',
-            detail: 'Upload the latest report card for the selected grade level.',
+            detail: 'Latest report card for the selected grade level.',
         },
         college: {
             label: 'Latest grades or transcript',
-            detail: 'Upload a recent grade report or transcript for the selected year level.',
+            detail: 'Recent grade report or transcript for the selected year level.',
         },
         tvet: {
             label: 'Training assessment record',
-            detail: 'Upload the latest training, competency, or assessment record.',
+            detail: 'Latest training, competency, or assessment record.',
         },
         als: {
             label: 'ALS assessment or progress record',
-            detail: 'Upload the latest assessment or progress record from the ALS learning center.',
+            detail: 'Latest assessment or progress record from the ALS learning center.',
         },
         other: {
             label: 'Latest academic record',
-            detail: 'Upload an official record showing the learner\'s latest academic result.',
+            detail: 'Official record showing the learner\'s latest academic result.',
         },
     }[educationLevel] ?? {
         label: 'Academic or progress record',
         detail: 'Select an education level in Learning to see the best academic record to upload.',
     };
-    const gradingDetail = {
-        percentage: 'The file should clearly show the general average or percentage.',
-        grade_point: 'The file should clearly show the GWA or grade point.',
-        pass_fail: 'The file should clearly show the pass/fail or competency result.',
-        other: 'The file should show the result and the institution\'s grading system.',
-    }[gradingScale] ?? (requiresGrades.value ? 'Select the grading system in Learning so the correct result can be checked.' : '');
     const context = [educationLabel, form.value.year_level, gradingLabel].filter(hasValue);
 
     if (requiresNumericGrade.value && hasValue(form.value.gwa)) {
@@ -291,10 +275,8 @@ const academicProofOption = computed(() => {
     return {
         value: 'academic_record',
         label: recordCopy.label,
-        description: [recordCopy.detail, gradingDetail].filter(Boolean).join(' '),
+        description: recordCopy.detail,
         icon: 'fa-solid fa-file-lines',
-        recommended: requiresGrades.value,
-        featured: true,
         context,
     };
 });
@@ -305,11 +287,8 @@ const schoolProofOption = computed(() => {
     return {
         value: 'school_record',
         label: educationLevel === 'tvet' ? 'Training enrollment proof' : 'School enrollment proof',
-        description: `Upload a current certificate of enrollment, ${learnerLabel} ID, admission letter, or official enrollment record.`,
+        description: `Certificate of enrollment, ${learnerLabel} ID, admission letter, or official enrollment record.`,
         icon: 'fa-solid fa-school',
-        recommended: false,
-        optional: true,
-        featured: false,
         context: [form.value.school, form.value.enrollment_status].filter(hasValue),
     };
 });
@@ -325,7 +304,7 @@ const hasGuardianDetails = computed(() => [
     form.value.guardian_contact,
     form.value.guardian_email,
 ].some(hasValue) || form.value.guardian_is_account_owner);
-const visibleProfileSections = computed(() => profileSections.filter((section) => section.id !== 'guardian' || needsGuardianContext.value || hasGuardianDetails.value));
+const visibleProfileSections = computed(() => profileSections);
 const requiredProfileFields = computed(() => profileSections.flatMap((section) => sectionRequiredFields(section)));
 const boosterFields = computed(() => profileSections.flatMap((section) => sectionAllFields(section).filter((field) => !sectionRequiredFields(section).includes(field))));
 const requiredFieldData = computed(() => requiredProfileFields.value.map((key) => ({
@@ -364,28 +343,28 @@ const verificationSteps = computed(() => {
             number: 1,
             label: status === 'rejected' ? 'Replace academic record' : 'Submit academic record',
             detail: status === 'rejected'
-                ? 'Upload a clearer or updated academic file.'
+                ? 'Add a clearer or updated file.'
                 : hasAcademicProof
-                    ? 'Your academic record has been submitted.'
-                    : 'Upload one record that supports your saved academic result.',
+                    ? 'Academic record submitted.'
+                    : 'Add a record supporting your saved result.',
             state: ['pending', 'approved'].includes(status) ? 'complete' : 'current',
         },
         {
             number: 2,
             label: 'Academic review',
             detail: status === 'approved'
-                ? 'Saved result checked.'
+                ? 'Result checked.'
                 : status === 'pending'
-                    ? 'An admin is checking the saved result against the file.'
+                    ? 'An admin is checking the file.'
                     : status === 'rejected'
                         ? 'Restarts after resubmission.'
-                        : 'Begins after you submit the academic record.',
+                        : 'Starts after upload.',
             state: status === 'approved' ? 'complete' : status === 'pending' ? 'current' : 'upcoming',
         },
         {
             number: 3,
-            label: 'Academic details verified',
-            detail: status === 'approved' ? 'Providers can see that your academic result was checked.' : 'Appears after admin approval.',
+            label: 'Verified',
+            detail: status === 'approved' ? 'Academic result confirmed.' : 'Shown after approval.',
             state: status === 'approved' ? 'complete' : 'upcoming',
         },
     ];
@@ -400,25 +379,25 @@ const verificationUploadCopy = computed(() => {
 
     if (profileVerificationStatus.value === 'pending') {
         return {
-            title: 'Academic record submitted',
-            detail: 'Replace it only when the file or saved academic result is incorrect or outdated.',
+            title: 'Files submitted',
+            detail: 'An admin is checking your academic record.',
         };
     }
 
     if (profileVerificationStatus.value === 'approved') {
         return {
             title: 'Academic record verified',
-            detail: 'Replace it only when your academic information changes. A replacement returns it to review.',
+            detail: 'Replace it only when your academic information changes.',
         };
     }
 
     return {
-        title: 'Verify your academic result',
+        title: 'Upload your records',
         detail: requiresGrades.value
-            ? 'Upload one academic record that supports the average, GWA, grade point, or result saved in Learning.'
+            ? 'Use records that support the result saved in Learning.'
             : hasValue(form.value.education_level)
-                ? 'Upload one recent academic, progress, or assessment record appropriate for the selected education level.'
-                : 'Complete the Learning section first so the portal can show the right academic record to upload.',
+                ? 'Use recent records for the selected education level.'
+                : 'Complete Learning first to see the correct record type.',
     };
 });
 const hasUnsavedChanges = computed(() => savedFormSnapshot.value !== '' && savedFormSnapshot.value !== formSnapshot());
@@ -889,6 +868,9 @@ function overviewSectionSummary(sectionId) {
             form.value.contact_number,
             form.value.income_bracket,
             form.value.household_size ? `${form.value.household_size} household members` : '',
+            (needsGuardianContext.value || hasGuardianDetails.value) && form.value.guardian_name
+                ? `Guardian: ${form.value.guardian_name}`
+                : '',
         ],
         academic: [
             educationLevelLabel(form.value.education_level),
@@ -900,7 +882,6 @@ function overviewSectionSummary(sectionId) {
             listFromText(form.value.preferred_categories).slice(0, 2).join(', '),
             form.value.willing_to_relocate ? relocationOptions.find((option) => option.value === form.value.willing_to_relocate)?.label : '',
         ],
-        guardian: [form.value.guardian_name, relationshipLabel(form.value.guardian_relationship), form.value.guardian_contact],
     };
 
     return (summaries[sectionId] ?? []).filter(hasValue).join(' - ') || 'No details added yet.';
@@ -1086,6 +1067,12 @@ const reviewGroups = computed(() => [
             ['Income bracket', form.value.income_bracket],
             ['Household size', form.value.household_size],
             ['Support needed', listFromText(form.value.support_needs).join(', ')],
+            ...((needsGuardianContext.value || hasGuardianDetails.value) ? [
+                ['Guardian name', form.value.guardian_name],
+                ['Guardian relationship', relationshipLabel(form.value.guardian_relationship)],
+                ['Guardian contact', form.value.guardian_contact],
+                ['Guardian email', form.value.guardian_email],
+            ] : []),
         ],
     },
     {
@@ -1119,18 +1106,7 @@ const reviewGroups = computed(() => [
             ['Goal', form.value.scholarship_goal],
         ],
     },
-    {
-        id: 'guardian',
-        title: 'Guardian',
-        icon: 'fa-solid fa-user-shield',
-        items: [
-            ['Name', form.value.guardian_name],
-            ['Relationship', relationshipLabel(form.value.guardian_relationship)],
-            ['Contact', form.value.guardian_contact],
-            ['Email', form.value.guardian_email],
-        ],
-    },
-].filter((group) => group.id !== 'guardian' || needsGuardianContext.value || hasGuardianDetails.value));
+]);
 const yearLevelOptions = computed(() => {
     switch (form.value.education_level) {
         case 'preschool':
@@ -1895,7 +1871,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         </div>
                     </section>
 
-                    <div class="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.75fr)] lg:items-start">
+                    <div class="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.75fr)] lg:items-stretch">
                         <section class="student-card overflow-hidden">
                             <div class="flex items-start justify-between gap-4 border-b border-slate-200 p-5 sm:p-6">
                                 <div>
@@ -1943,14 +1919,14 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </section>
 
-                        <aside class="space-y-5">
-                            <section class="student-card overflow-hidden">
+                        <aside class="space-y-5 lg:h-full">
+                            <section class="student-card overflow-hidden lg:flex lg:h-full lg:flex-col">
                                 <div class="border-b border-slate-200 p-5">
                                     <p class="student-kicker">Before applying</p>
                                     <h3 class="mt-2 text-lg font-bold text-slate-950">Application setup</h3>
                                 </div>
-                                <div class="divide-y divide-slate-200">
-                                    <div v-for="item in applicationSetupItems" :key="item.id" class="flex items-start gap-3 px-5 py-3.5">
+                                <div class="divide-y divide-slate-200 lg:flex lg:flex-1 lg:flex-col">
+                                    <div v-for="item in applicationSetupItems" :key="item.id" class="flex items-start gap-3 px-5 py-3.5 lg:flex-1 lg:items-center">
                                         <i
                                             :class="[
                                                 'mt-0.5 text-sm',
@@ -2274,6 +2250,50 @@ watch(() => form.value.grading_scale, (scale) => {
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+
+                                <div v-if="needsGuardianContext || hasGuardianDetails" :class="formPanelClass">
+                                    <div class="mb-4 flex items-start gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200">
+                                            <i class="fa-solid fa-user-shield text-sm" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <h4 :class="formPanelTitleClass">Guardian information</h4>
+                                            <p :class="formPanelDescriptionClass">{{ guardianRequirementLabel }}. {{ guardianRequirementText }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="grid items-start gap-4 md:grid-cols-2">
+                                        <div>
+                                            <label :class="labelClass" for="profile-guardian">Guardian name</label>
+                                            <input id="profile-guardian" v-model="form.guardian_name" placeholder="Parent or guardian" :class="inputClass">
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" for="profile-guardian-relationship">Relationship to learner</label>
+                                            <select id="profile-guardian-relationship" v-model="form.guardian_relationship" :class="inputClass">
+                                                <option value="">Select relationship</option>
+                                                <option v-for="option in guardianRelationshipOptions" :key="option" :value="option">{{ option }}</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" for="profile-guardian-contact">Guardian contact</label>
+                                            <input id="profile-guardian-contact" :value="form.guardian_contact" placeholder="09XX XXX XXXX" :class="inputClass" @input="handlePhoneInput('guardian_contact', $event)">
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" for="profile-guardian-email">Guardian email <span class="font-normal text-slate-400">(optional)</span></label>
+                                            <input id="profile-guardian-email" v-model="form.guardian_email" type="email" placeholder="guardian@example.com" :class="inputClass">
+                                        </div>
+                                    </div>
+                                    <label class="mt-4 flex cursor-pointer items-start gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600">
+                                        <input
+                                            v-model="form.guardian_is_account_owner"
+                                            type="checkbox"
+                                            class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                        >
+                                        <span>
+                                            <span class="block font-bold text-slate-950">Guardian manages this account</span>
+                                            <span class="mt-1 block text-xs leading-5">Select this when the guardian signs in, updates the learner profile, and manages applications.</span>
+                                        </span>
+                                    </label>
                                 </div>
 
                                 <fieldset :class="formPanelClass">
@@ -2630,68 +2650,13 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </section>
 
-                        <section v-if="activeSection === 'guardian'" id="profile-guardian" :class="sectionCardClass">
-                            <div :class="sectionHeaderClass">
-                                <div>
-                                    <p class="student-kicker">{{ needsGuardianContext ? 'Required' : 'Optional' }}</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Guardian information</h3>
-                                    <p class="mt-1 text-sm text-slate-500">Add a trusted adult contact when the learner is younger or the account is managed for them.</p>
-                                </div>
-                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('guardian'))]">
-                                    {{ sectionStatusLabel(profileSection('guardian')) }}
-                                </span>
-                            </div>
-
-                            <div :class="[sectionBodyClass, 'space-y-4']">
-                                <div :class="formPanelClass">
-                                    <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">{{ guardianRequirementLabel }}</h4>
-                                        <p :class="formPanelDescriptionClass">{{ guardianRequirementText }}</p>
-                                    </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-2">
-                                        <div>
-                                            <label :class="labelClass" for="profile-guardian">Guardian name</label>
-                                            <input id="profile-guardian" v-model="form.guardian_name" placeholder="Parent or guardian" :class="inputClass">
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-guardian-relationship">Relationship to learner</label>
-                                            <select id="profile-guardian-relationship" v-model="form.guardian_relationship" :class="inputClass">
-                                                <option value="">Select relationship</option>
-                                                <option v-for="option in guardianRelationshipOptions" :key="option" :value="option">{{ option }}</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-guardian-contact">Guardian contact</label>
-                                            <input id="profile-guardian-contact" :value="form.guardian_contact" placeholder="09XX XXX XXXX" :class="inputClass" @input="handlePhoneInput('guardian_contact', $event)">
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-guardian-email">Guardian email <span class="font-normal text-slate-400">(optional)</span></label>
-                                            <input id="profile-guardian-email" v-model="form.guardian_email" type="email" placeholder="guardian@example.com" :class="inputClass">
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <label :class="[formPanelClass, 'flex cursor-pointer items-start gap-3 bg-white text-sm text-slate-600 transition hover:border-slate-300']">
-                                    <input
-                                        v-model="form.guardian_is_account_owner"
-                                        type="checkbox"
-                                        class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                                    >
-                                    <span>
-                                        <span class="block font-bold text-slate-950">Guardian manages this account</span>
-                                        <span class="mt-1 block text-xs leading-5">Select this when the guardian signs in, updates the learner profile, and manages applications.</span>
-                                    </span>
-                                </label>
-                            </div>
-                        </section>
-
                         <section v-if="activeSection === 'verification'" id="profile-verification" :class="sectionCardClass">
                             <div :class="sectionHeaderClass">
                                 <div>
                                     <p class="student-kicker">Academic evidence</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Profile proof</h3>
                                     <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Confirm the saved academic result and optionally add current school enrollment proof. Birth certificates, government IDs, and income documents are not requested here.
+                                        Upload your latest academic record and proof of current enrollment.
                                     </p>
                                 </div>
                                 <span :class="[sectionStatusPillClass, verificationStatusClass(profileVerificationStatus)]">
@@ -2755,27 +2720,22 @@ watch(() => form.value.grading_scale, (scale) => {
 
                                     <div class="mt-4">
                                         <TermsAgreement v-model="verificationDocumentTermsAccepted" context="document" />
-                                        <p class="mt-2 text-xs text-slate-500">Agree once, then upload either proof below. A separate reusable copy is saved automatically in Documents.</p>
+                                        <p class="mt-2 text-xs text-slate-500">Accept once. Reusable copies are also saved in Documents.</p>
                                     </div>
 
                                     <div class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
                                         <article
                                             v-for="row in verificationDocumentRows"
                                             :key="row.value"
-                                            :class="[
-                                                'flex flex-col gap-4 border-b border-slate-200 p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between',
-                                                row.featured ? 'bg-amber-50/40' : 'bg-white',
-                                            ]"
+                                            class="flex flex-col gap-4 border-b border-slate-200 bg-white p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
                                         >
                                             <div class="flex min-w-0 items-start gap-3">
-                                                <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm', row.document ? 'bg-slate-900 text-white' : row.featured ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500']">
+                                                <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm', row.document ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600']">
                                                     <i :class="row.icon" aria-hidden="true"></i>
                                                 </span>
                                                 <div class="min-w-0">
                                                     <div class="flex flex-wrap items-center gap-2">
                                                         <h5 class="text-sm font-bold text-slate-950">{{ row.label }}</h5>
-                                                        <span v-if="row.recommended" class="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">Recommended</span>
-                                                        <span v-if="row.optional" class="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">Optional</span>
                                                         <span v-if="row.document" :class="['rounded px-2 py-0.5 text-[10px] font-bold uppercase', verificationDocumentStatusClass(row.document.status)]">
                                                             {{ verificationDocumentStatusLabel(row.document.status) }}
                                                         </span>
@@ -2843,30 +2803,23 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </article>
                                     </div>
 
-                                    <p class="mt-3 text-xs leading-5 text-slate-500">
-                                        The academic record supports grade verification. School enrollment proof is optional and does not block profile completion or applications.
-                                    </p>
                                 </div>
 
                                 <aside class="border-t border-slate-200 bg-slate-50 p-5 lg:border-l lg:border-t-0 sm:p-6">
                                     <p class="student-kicker">What to upload</p>
-                                    <h4 class="mt-2 text-base font-bold text-slate-950">Use current school records</h4>
+                                    <h4 class="mt-2 text-base font-bold text-slate-950">Accepted records</h4>
                                     <ul class="mt-4 grid gap-4 text-sm text-slate-600">
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
-                                            <span>Use the latest report card, grade report, transcript, or assessment shown for your education level.</span>
+                                            <span>Report card, transcript, grade report, or assessment with a readable result.</span>
                                         </li>
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
-                                            <span>Make sure the saved average, GWA, grade point, or competency result is readable.</span>
-                                        </li>
-                                        <li class="flex items-start gap-3">
-                                            <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
-                                            <span>For school proof, use a current enrollment certificate, school ID, admission letter, or official learning-center record.</span>
+                                            <span>Enrollment certificate, school ID, admission letter, or learning-center record.</span>
                                         </li>
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-shield-halved mt-1 text-emerald-700" aria-hidden="true"></i>
-                                            <span>Do not upload a birth certificate, government ID, proof of income, or unrelated personal document here.</span>
+                                            <span>Do not upload IDs, birth certificates, income proof, or unrelated files.</span>
                                         </li>
                                     </ul>
                                 </aside>
@@ -2896,7 +2849,7 @@ watch(() => form.value.grading_scale, (scale) => {
 
                             <div class="flex items-start gap-3 bg-slate-50 px-5 py-4 text-xs leading-5 text-slate-600 sm:px-6">
                                 <i class="fa-solid fa-lock mt-1 shrink-0 text-slate-500" aria-hidden="true"></i>
-                                <p>Your profile proofs stay private. Authorized admins can review them, and a provider can view them only inside an application you submitted to that provider.</p>
+                                <p>Only authorized admins and providers reviewing your submitted application can access these files.</p>
                             </div>
                         </section>
 

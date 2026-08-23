@@ -8,7 +8,7 @@ class ScholarshipSelectionPlan
 
     public const SCHEDULABLE_STAGES = ['exam', 'interview', 'distribution'];
 
-    public const DEFAULT = ['screening', 'distribution'];
+    public const DEFAULT = ['screening'];
 
     public static function normalize(mixed $stages): array
     {
@@ -80,7 +80,7 @@ class ScholarshipSelectionPlan
             'screening' => ['submitted', 'under_review'],
             'exam' => ['exam_qualified', 'exam_scheduled'],
             'interview' => ['interview'],
-            'distribution' => ['approved', 'awarded', 'distribution_scheduled'],
+            'distribution' => ['awarded', 'distribution_scheduled'],
             default => [],
         };
     }

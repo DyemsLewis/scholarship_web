@@ -4,13 +4,14 @@ namespace App\Console\Commands;
 
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
+use App\Models\ScholarshipApplication;
 use Illuminate\Console\Command;
 
 class SendScholarshipReminders extends Command
 {
     protected $signature = 'scholarships:send-reminders';
 
-    protected $description = 'Send idempotent scholarship deadline reminders to applicants and providers';
+    protected $description = 'Send idempotent scholarship and formal application deadline reminders';
 
     public function handle(): int
     {
@@ -54,9 +55,20 @@ class SendScholarshipReminders extends Command
                         }
                     }
                 });
+
+            ScholarshipApplication::query()
+                ->with(['applicant', 'scholarship'])
+                ->where('status', 'approved')
+                ->whereHas('scholarship', fn ($query) => $query
+                    ->whereDate('handoff_deadline', now()->addDays($daysRemaining)->toDateString()))
+                ->chunkById(100, function ($applications) use ($daysRemaining, &$created): void {
+                    foreach ($applications as $application) {
+                        $created += $this->createFormalApplicationReminder($application, $daysRemaining);
+                    }
+                });
         }
 
-        $this->info("Created {$created} scholarship deadline reminder(s).");
+        $this->info("Created {$created} deadline reminder(s).");
 
         return self::SUCCESS;
     }
@@ -79,6 +91,38 @@ class SendScholarshipReminders extends Command
                 ? "Your published scholarship closes {$when}. Review pending applications and keep the listing current."
                 : "A scholarship you saved closes {$when}. Review your match and requirements before applying.",
             'action_url' => $actionUrl,
+        ]);
+
+        return $notification->wasRecentlyCreated ? 1 : 0;
+    }
+
+    private function createFormalApplicationReminder(ScholarshipApplication $application, int $daysRemaining): int
+    {
+        $applicant = $application->applicant;
+        $scholarship = $application->scholarship;
+
+        if (! $applicant
+            || ! $scholarship
+            || ! $applicant->isApplicant()
+            || ! $applicant->isActive()
+            || ! $applicant->hasVerifiedEmail()) {
+            return 0;
+        }
+
+        $when = match ($daysRemaining) {
+            0 => 'today',
+            1 => 'tomorrow',
+            default => "in {$daysRemaining} days",
+        };
+
+        $notification = PortalNotification::firstOrCreate([
+            'deduplication_key' => "formal-application:{$application->id}:applicant:{$daysRemaining}",
+        ], [
+            'user_id' => $applicant->id,
+            'type' => 'formal_application_reminder',
+            'title' => "Formal application due {$when}: {$scholarship->title}",
+            'message' => "You passed portal pre-screening. Complete the provider's formal application steps {$when} to remain under consideration.",
+            'action_url' => "/dashboard/applications/{$application->id}",
         ]);
 
         return $notification->wasRecentlyCreated ? 1 : 0;

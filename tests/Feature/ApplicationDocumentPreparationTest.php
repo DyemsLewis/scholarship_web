@@ -92,6 +92,7 @@ class ApplicationDocumentPreparationTest extends TestCase
         foreach ([
             'Certificate of enrollment' => 'enrollment.pdf',
             'Latest report card or grades' => 'report-card.pdf',
+            'Good moral certificate' => 'good-moral.pdf',
         ] as $documentName => $filename) {
             $this->actingAs($applicant)
                 ->post('/dashboard/student-documents', [
@@ -106,7 +107,7 @@ class ApplicationDocumentPreparationTest extends TestCase
         $this->actingAs($applicant)
             ->getJson('/dashboard/applications/data')
             ->assertOk()
-            ->assertJsonCount(2, 'prepared_documents')
+            ->assertJsonCount(3, 'prepared_documents')
             ->assertJsonPath('scholarships.0.prepared_documents.percent', 100)
             ->assertJsonFragment(['document_name' => 'Certificate of enrollment'])
             ->assertJsonFragment(['document_name' => 'Latest report card or grades']);
@@ -118,7 +119,9 @@ class ApplicationDocumentPreparationTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('application.status', 'submitted')
-            ->assertJsonCount(2, 'application.documents');
+            ->assertJsonPath('application.optional_document_checklist.0', 'Good moral certificate')
+            ->assertJsonPath('application.optional_document_checklist.1', 'Recommendation letter')
+            ->assertJsonCount(3, 'application.documents');
 
         $application = ScholarshipApplication::findOrFail($response->json('application.id'));
 
@@ -126,7 +129,11 @@ class ApplicationDocumentPreparationTest extends TestCase
             'Certificate of enrollment',
             'Latest report card or grades',
         ], $application->document_checklist);
-        $this->assertSame(2, ApplicationDocument::query()
+        $this->assertSame([
+            'Good moral certificate',
+            'Recommendation letter',
+        ], $application->optional_document_checklist);
+        $this->assertSame(3, ApplicationDocument::query()
             ->where('scholarship_application_id', $application->id)
             ->count());
 

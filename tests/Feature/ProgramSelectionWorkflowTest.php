@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Mail\PortalNotificationMail;
 use App\Models\ApplicationSchedule;
+use App\Models\MobileApiToken;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
@@ -77,7 +79,7 @@ class ProgramSelectionWorkflowTest extends TestCase
         );
     }
 
-    public function test_shared_distribution_is_automatically_released_to_newly_approved_applicants(): void
+    public function test_shared_distribution_is_released_only_after_a_formal_award_is_recorded(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->applicationWithPlan([
             'screening',
@@ -100,6 +102,15 @@ class ProgramSelectionWorkflowTest extends TestCase
             ->patchJson("/provider/applications/{$application->id}/decision", [
                 'decision' => 'approve',
                 'review_notes' => 'Applicant passed document and eligibility review.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'approved')
+            ->assertJsonCount(0, 'application.schedules');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/status", [
+                'status' => 'awarded',
+                'decision_reason' => 'approved_for_award',
             ])
             ->assertOk()
             ->assertJsonPath('application.status', 'distribution_scheduled')
@@ -136,7 +147,7 @@ class ProgramSelectionWorkflowTest extends TestCase
             ],
             [
                 'stages' => ['screening', 'distribution'],
-                'status' => 'approved',
+                'status' => 'awarded',
                 'type' => 'distribution',
                 'expected_status' => 'distribution_scheduled',
             ],
@@ -329,13 +340,12 @@ class ProgramSelectionWorkflowTest extends TestCase
             ->assertJsonPath('scholarship.selection_stages', [
                 'screening',
                 'interview',
-                'distribution',
             ]);
 
         $this->assertDatabaseHas('scholarships', [
             'provider_id' => $provider->id,
             'title' => 'Interview Selection Scholarship',
-            'selection_stages' => json_encode(['screening', 'interview', 'distribution']),
+            'selection_stages' => json_encode(['screening', 'interview']),
         ]);
     }
 
@@ -377,7 +387,7 @@ class ProgramSelectionWorkflowTest extends TestCase
             ->postJson('/provider/scholarships', [
                 'title' => 'Scheduled Selection Scholarship',
                 'description' => 'A program with dates applicants can review before applying.',
-                'selection_stages' => json_encode(['exam']),
+                'selection_stages' => json_encode(['exam', 'distribution']),
                 'exam_duration_minutes' => 75,
                 'exam_passing_score' => 70,
                 'program_events' => json_encode([
@@ -518,13 +528,112 @@ class ProgramSelectionWorkflowTest extends TestCase
             ->json('application');
 
         $this->assertSame(
-            ['submitted', 'screening', 'interview', 'distribution'],
+            ['submitted', 'screening', 'interview', 'handoff', 'distribution'],
             array_column($payload['status_progress']['steps'], 'key'),
         );
         $this->assertSame('screening', $payload['status_progress']['current_stage']);
         $this->assertSame('Shared applicant interview', $payload['scholarship']['program_events'][0]['title']);
         $this->assertArrayNotHasKey('online_url', $payload['scholarship']['program_events'][0]);
         $this->assertArrayNotHasKey('instructions', $payload['scholarship']['program_events'][0]);
+    }
+
+    public function test_formal_application_handoff_is_revealed_only_after_portal_qualification(): void
+    {
+        [$provider, $applicant, $scholarship, $application] = $this->applicationWithPlan([
+            'screening',
+        ]);
+        $scholarship->update([
+            'post_qualification_requirements' => "Original report card\nProvider formal application form",
+            'handoff_mode' => 'onsite',
+            'handoff_instructions' => 'Bring the originals to the provider office for formal application.',
+            'handoff_deadline' => now()->addDays(14)->toDateString(),
+            'handoff_location_name' => 'Provider Office',
+            'handoff_location_address' => 'Quezon City, Metro Manila',
+        ]);
+
+        $beforeQualification = $this->actingAs($applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.formal_application_handoff', null)
+            ->json('application');
+
+        $this->assertArrayNotHasKey('handoff_instructions', $beforeQualification['scholarship']);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/decision", [
+                'decision' => 'approve',
+                'review_notes' => 'Applicant passed portal pre-screening.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'approved');
+
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.formal_application_handoff.mode', 'onsite')
+            ->assertJsonPath('application.formal_application_handoff.requirements.0', 'Original report card')
+            ->assertJsonPath('application.formal_application_handoff.location_address', 'Quezon City, Metro Manila')
+            ->assertJsonPath('application.formal_application_handoff.instructions', 'Bring the originals to the provider office for formal application.');
+
+        $plainToken = 'formal-application-mobile-token';
+        MobileApiToken::create([
+            'user_id' => $applicant->id,
+            'name' => 'mobile_app',
+            'token_hash' => hash('sha256', $plainToken),
+            'last_used_at' => now(),
+            'expires_at' => now()->addDay(),
+        ]);
+
+        $this->withToken($plainToken)
+            ->getJson('/api/mobile/profile')
+            ->assertOk()
+            ->assertJsonPath('applications.0.formal_application_handoff.mode', 'onsite')
+            ->assertJsonPath('applications.0.formal_application_handoff.requirements.0', 'Original report card')
+            ->assertJsonPath('applications.0.formal_application_handoff.location_address', 'Quezon City, Metro Manila');
+    }
+
+    public function test_provider_records_final_outcomes_after_formal_application(): void
+    {
+        [$provider, $awardedApplicant, $scholarship, $awardedApplication] = $this->applicationWithPlan([
+            'screening',
+        ], 'approved');
+        $notSelectedApplicant = User::factory()->create(['role' => 'applicant']);
+        $notSelectedApplication = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $notSelectedApplicant->id,
+            'status' => 'approved',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$awardedApplication->id}/status", [
+                'status' => 'awarded',
+                'decision_reason' => 'approved_for_award',
+                'review_notes' => 'Selected after the provider formal application process.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'awarded');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$notSelectedApplication->id}/status", [
+                'status' => 'not_awarded',
+                'decision_reason' => 'not_selected',
+                'review_notes' => 'The formal selection process is complete.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'not_awarded');
+
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $awardedApplicant->id,
+            'type' => 'application_outcome',
+            'title' => 'Scholarship award confirmed',
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $notSelectedApplicant->id,
+            'type' => 'application_outcome',
+            'title' => 'Formal application result',
+        ]);
+        Mail::assertQueued(PortalNotificationMail::class, 2);
     }
 
     public function test_screening_cannot_be_published_as_an_applicant_schedule(): void

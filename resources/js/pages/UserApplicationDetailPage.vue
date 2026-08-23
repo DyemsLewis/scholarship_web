@@ -37,6 +37,15 @@ const applicationRequirements = computed(() => {
 
     return checklist.length ? checklist : requiredDocuments.value;
 });
+const optionalApplicationRequirements = computed(() => {
+    const checklist = (application.value?.optional_document_checklist ?? [])
+        .map((requirement) => String(requirement).trim())
+        .filter(Boolean);
+
+    return checklist.length
+        ? checklist
+        : documentRequirements(application.value?.scholarship?.optional_requirements);
+});
 const applicationFileRows = computed(() => {
     const documents = application.value?.documents ?? [];
     const documentsByName = new Map(
@@ -60,6 +69,21 @@ const applicationFileRows = computed(() => {
         });
     });
 
+    optionalApplicationRequirements.value.forEach((requirement) => {
+        const normalizedName = normalizeDocumentName(requirement);
+
+        if (!normalizedName || seenNames.has(normalizedName)) {
+            return;
+        }
+
+        seenNames.add(normalizedName);
+        rows.push({
+            name: requirement,
+            document: documentsByName.get(normalizedName) ?? null,
+            required: false,
+        });
+    });
+
     documents.forEach((document) => {
         const normalizedName = normalizeDocumentName(document.document_name);
 
@@ -79,14 +103,17 @@ const applicationFileRows = computed(() => {
 });
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
 const dssDecisionNotice = computed(() => application.value?.dss_breakdown?.decision_notice ?? 'This score supports screening only. The scholarship provider makes the final decision.');
+const rubricReview = computed(() => application.value?.rubric_review ?? null);
+const rubricCriteria = computed(() => rubricReview.value?.criteria ?? []);
+const formalApplicationHandoff = computed(() => application.value?.formal_application_handoff ?? null);
 const applicantNextStep = computed(() => applicantNextAction(application.value));
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
 const currentSchedule = computed(() => schedules.value.find((schedule) => schedule.status === 'scheduled') ?? null);
 const scheduleHistory = computed(() => schedules.value.filter((schedule) => schedule.status !== 'scheduled'));
 const currentScheduleDate = computed(() => formatScheduleDate(currentSchedule.value));
-const filesNeedingAction = computed(() => applicationFileRows.value.filter((row) => !row.document
-    || ['needs_replacement', 'rejected'].includes(row.document.status)));
+const filesNeedingAction = computed(() => applicationFileRows.value.filter((row) => row.required
+    && (!row.document || ['needs_replacement', 'rejected'].includes(row.document.status))));
 const applicationIsClosed = computed(() => ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'disbursed'].includes(application.value?.status));
 const applicationSections = computed(() => [
     { key: 'overview', label: 'Overview' },
@@ -95,6 +122,10 @@ const applicationSections = computed(() => [
     { key: 'history', label: 'History', count: timeline.value.length },
 ]);
 const nextActionButton = computed(() => {
+    if (formalApplicationHandoff.value) {
+        return { label: 'View formal application steps', section: 'overview', target: 'formal-application-handoff' };
+    }
+
     if (scheduleNeedsAcknowledgment(currentSchedule.value)) {
         return { label: 'Review schedule', section: 'overview', target: 'application-schedules' };
     }
@@ -127,6 +158,10 @@ const hasUserMapLocation = computed(() => hasCoordinates(user.value?.latitude, u
 
 function statusLabel(status) {
     const labels = {
+        approved: 'Qualified for formal application',
+        awarded: 'Awarded',
+        not_awarded: 'Not selected',
+        rejected: 'Not qualified',
         exam_qualified: 'Qualified for exam',
         exam_scheduled: 'Exam scheduled',
         exam_taken: 'Exam taken',
@@ -312,6 +347,8 @@ function stepClass(state) {
 
 function labelFromKey(value) {
     const labels = {
+        qualified_for_formal_application: 'Qualified for formal application',
+        approved_for_award: 'Approved for award',
         for_exam: 'Meets exam eligibility',
         exam_scheduled: 'Exam scheduled',
         exam_completed: 'Exam completed',
@@ -366,6 +403,10 @@ function applicantNextAction(current) {
         return `Follow the posted ${scheduleTypeLabel(activeSchedule.type)} instructions and attend at the scheduled time.`;
     }
 
+    if (current.formal_application_handoff) {
+        return 'You passed portal pre-screening. Review what to bring and continue directly with the provider.';
+    }
+
     if (['awarded', 'disbursed', 'renewed'].includes(current.status)) {
         return 'Your award is recorded. Watch for release or renewal updates.';
     }
@@ -391,7 +432,7 @@ function applicantNextAction(current) {
     }
 
     if (current.status === 'exam_passed') {
-        return 'You passed the scholarship exam. Wait for final provider award review.';
+        return 'You passed the scholarship exam. Wait for the provider to complete pre-screening.';
     }
 
     const missing = current.document_readiness?.missing ?? [];
@@ -607,12 +648,12 @@ onMounted(loadApplication);
         <section class="student-page">
             <div class="student-container">
                 <ApplicantPageHeader
-                    eyebrow="Application Details"
-                    title="Track your application"
+                    eyebrow="Pre-screening Details"
+                    title="Track your submission"
                     :description="application ? `${application.scholarship?.title || 'Scholarship'} - ${application.scholarship?.provider?.name || 'Scholarship provider'}` : 'See your status, next step, and required files.'"
                     icon="fa-solid fa-file-circle-check"
                     action-href="/dashboard/applications"
-                    action-label="Back to applications"
+                    action-label="Back to submissions"
                     secondary-href="/dashboard/documents"
                     secondary-label="Documents"
                 />
@@ -643,7 +684,7 @@ onMounted(loadApplication);
                                 >
                                 <div class="min-w-0">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">
-                                        Application #{{ application.id }}
+                                        Submission #{{ application.id }}
                                     </p>
                                     <h3 class="mt-1 font-display text-xl font-bold text-white sm:text-2xl">
                                         {{ application.scholarship?.title || 'Scholarship' }}
@@ -733,11 +774,11 @@ onMounted(loadApplication);
                             <section v-if="activeSection === 'overview' && application.status_progress" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
-                                        <p class="student-kicker">Application flow</p>
+                                        <p class="student-kicker">Pre-screening flow</p>
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">
                                             {{ application.status_progress.current_stage_label }}
                                         </h3>
-                                        <p class="mt-1 text-sm leading-5 text-slate-500">Follow your progress from review to the final decision.</p>
+                                        <p class="mt-1 text-sm leading-5 text-slate-500">Follow your progress until the provider decides whether you may continue formally.</p>
                                     </div>
                                     <div class="w-full sm:w-44">
                                         <div class="flex items-center justify-between text-xs font-bold text-slate-600">
@@ -775,6 +816,116 @@ onMounted(loadApplication);
                                         <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Next step</p>
                                         <p class="mt-0.5 text-sm font-semibold leading-5 text-slate-700">{{ application.status_progress.next_action }}</p>
                                     </div>
+                                </div>
+                            </section>
+
+                            <section
+                                v-if="activeSection === 'overview' && formalApplicationHandoff"
+                                id="formal-application-handoff"
+                                class="scroll-mt-4 overflow-hidden rounded-lg border border-emerald-200 bg-white shadow-sm"
+                            >
+                                <div class="bg-slate-950 p-5 text-white">
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-300 text-slate-950">
+                                            <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">Pre-screening passed</p>
+                                            <h3 class="mt-1 text-xl font-bold">Continue with the provider</h3>
+                                            <p class="mt-2 text-sm leading-6 text-slate-300">{{ formalApplicationHandoff.notice }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="grid gap-5 p-5 lg:grid-cols-2">
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Provider documents</p>
+                                        <ul v-if="formalApplicationHandoff.requirements?.length" class="mt-3 space-y-2">
+                                            <li v-for="item in formalApplicationHandoff.requirements" :key="item" class="flex items-start gap-2 text-sm leading-6 text-slate-700">
+                                                <i class="fa-solid fa-circle-check mt-1.5 text-xs text-emerald-700" aria-hidden="true"></i>
+                                                <span>{{ item }}</span>
+                                            </li>
+                                        </ul>
+                                        <p v-else class="mt-2 text-sm text-slate-500">The provider will confirm the document list directly.</p>
+                                        <p class="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-900">
+                                            Bring or send these directly to the provider as instructed. They are not uploaded to this portal unless the provider separately requests them in your application checklist.
+                                        </p>
+                                    </div>
+
+                                    <div class="space-y-3">
+                                        <div v-if="formalApplicationHandoff.deadline" class="rounded-md bg-amber-50 p-3 ring-1 ring-amber-200">
+                                            <p class="text-xs font-bold uppercase tracking-wider text-amber-800">Formal application deadline</p>
+                                            <p class="mt-1 font-bold text-slate-950">{{ formalApplicationHandoff.deadline }}</p>
+                                        </div>
+                                        <div v-if="formalApplicationHandoff.location_name || formalApplicationHandoff.location_address" class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
+                                            <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Where to continue</p>
+                                            <p v-if="formalApplicationHandoff.location_name" class="mt-1 font-bold text-slate-950">{{ formalApplicationHandoff.location_name }}</p>
+                                            <p v-if="formalApplicationHandoff.location_address" class="mt-1 text-sm leading-6 text-slate-600">{{ formalApplicationHandoff.location_address }}</p>
+                                            <a v-if="formalApplicationHandoff.map_url" :href="formalApplicationHandoff.map_url" target="_blank" rel="noopener" class="mt-2 inline-flex items-center gap-2 text-sm font-bold text-sky-700">
+                                                <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i>
+                                                View map
+                                            </a>
+                                        </div>
+                                        <a v-if="formalApplicationHandoff.url" :href="formalApplicationHandoff.url" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white">
+                                            Continue on provider site
+                                            <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
+                                        </a>
+                                    </div>
+                                </div>
+
+                                <div class="border-t border-slate-200 bg-slate-50 px-5 py-4">
+                                    <p class="whitespace-pre-line text-sm leading-6 text-slate-700">{{ formalApplicationHandoff.instructions }}</p>
+                                    <div v-if="formalApplicationHandoff.contact_person || formalApplicationHandoff.contact_department || formalApplicationHandoff.contact_email || formalApplicationHandoff.contact_number" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-600">
+                                        <span v-if="formalApplicationHandoff.contact_person">Contact: {{ formalApplicationHandoff.contact_person }}</span>
+                                        <span v-if="formalApplicationHandoff.contact_department">{{ formalApplicationHandoff.contact_department }}</span>
+                                        <a v-if="formalApplicationHandoff.contact_email" :href="`mailto:${formalApplicationHandoff.contact_email}`" class="font-bold text-sky-700">{{ formalApplicationHandoff.contact_email }}</a>
+                                        <span v-if="formalApplicationHandoff.contact_number">{{ formalApplicationHandoff.contact_number }}</span>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section v-if="activeSection === 'overview' && rubricReview" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <p class="student-kicker">Provider assessment</p>
+                                        <h3 class="mt-1 text-lg font-bold text-slate-950">Review rubric score</h3>
+                                        <p class="mt-1 text-sm leading-5 text-slate-500">
+                                            This is how the provider scored your submitted application against its review criteria.
+                                        </p>
+                                    </div>
+                                    <div class="flex w-fit items-baseline gap-1 rounded-md bg-slate-950 px-4 py-2 text-white">
+                                        <span class="text-2xl font-bold">{{ rubricReview.total_score }}</span>
+                                        <span class="text-xs font-semibold text-slate-300">/ 100</span>
+                                    </div>
+                                </div>
+
+                                <div class="grid gap-3 bg-slate-50/70 p-4 sm:grid-cols-2">
+                                    <div
+                                        v-for="criterion in rubricCriteria"
+                                        :key="criterion.key"
+                                        class="rounded-md border border-slate-200 bg-white p-3"
+                                    >
+                                        <div class="flex items-center justify-between gap-3">
+                                            <p class="font-bold text-slate-950">{{ criterion.label }}</p>
+                                            <p class="shrink-0 text-sm font-bold text-slate-950">{{ criterion.score }} / 100</p>
+                                        </div>
+                                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                            <div
+                                                class="h-full rounded-full bg-amber-400"
+                                                :style="{ width: `${Math.min(100, Math.max(0, Number(criterion.score) || 0))}%` }"
+                                            ></div>
+                                        </div>
+                                        <p class="mt-2 text-xs font-semibold text-slate-500">
+                                            {{ criterion.weight }}% of the total score
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-col gap-1 border-t border-slate-200 px-4 py-3 text-xs leading-5 text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                                    <p>{{ rubricReview.decision_notice }}</p>
+                                    <p v-if="application.rubric_scored_at" class="shrink-0 font-semibold">
+                                        Scored {{ application.rubric_scored_at }}
+                                    </p>
                                 </div>
                             </section>
 
@@ -1149,7 +1300,9 @@ onMounted(loadApplication);
                                             <span
                                                 :class="[
                                                     'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
-                                                    row.document ? 'bg-slate-100 text-slate-700' : 'bg-amber-50 text-amber-700',
+                                                    row.document
+                                                        ? 'bg-slate-100 text-slate-700'
+                                                        : row.required ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500',
                                                 ]"
                                             >
                                                 <i :class="row.document ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file'"></i>
@@ -1161,14 +1314,14 @@ onMounted(loadApplication);
                                                         {{ row.name }}
                                                     </p>
                                                     <span v-if="!row.required" class="rounded bg-slate-100 px-2 py-0.5 text-[0.65rem] font-bold uppercase text-slate-500">
-                                                        Additional file
+                                                        Supporting file
                                                     </span>
                                                 </div>
                                                 <p v-if="row.document" class="mt-1 truncate text-xs text-slate-500">
                                                     {{ row.document.original_name }} - {{ formatFileSize(row.document.size) }} - {{ row.document.uploaded_at }}
                                                 </p>
-                                                <p v-else class="mt-1 text-xs font-semibold text-amber-700">
-                                                    No file uploaded yet
+                                                <p v-else :class="['mt-1 text-xs font-semibold', row.required ? 'text-amber-700' : 'text-slate-500']">
+                                                    {{ row.required ? 'No file uploaded yet' : 'Optional - upload if it supports your application' }}
                                                 </p>
                                                 <p v-if="row.document?.review_notes" class="mt-1 text-xs font-semibold text-slate-600">
                                                     Provider note: {{ row.document.review_notes }}
@@ -1180,10 +1333,12 @@ onMounted(loadApplication);
                                             <span
                                                 :class="[
                                                     'h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase',
-                                                    row.document ? documentStatusClass(row.document.status) : 'bg-amber-50 text-amber-700',
+                                                    row.document
+                                                        ? documentStatusClass(row.document.status)
+                                                        : row.required ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500',
                                                 ]"
                                             >
-                                                {{ row.document ? labelFromKey(row.document.status || 'pending') : 'Not uploaded' }}
+                                                {{ row.document ? labelFromKey(row.document.status || 'pending') : row.required ? 'Not uploaded' : 'Optional' }}
                                             </span>
                                             <button
                                                 v-if="row.document?.view_url"
@@ -1360,7 +1515,7 @@ onMounted(loadApplication);
                             </section>
 
                             <section
-                                v-if="activeSection === 'overview' && !schedules.some((schedule) => schedule.type === 'distribution') && (application.awarded_amount || application.distribution_scheduled_for || application.distribution_instructions || ['approved', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed'].includes(application.status))"
+                                v-if="activeSection === 'overview' && !schedules.some((schedule) => schedule.type === 'distribution') && (application.awarded_amount || application.distribution_scheduled_for || application.distribution_instructions || ['awarded', 'distribution_scheduled', 'disbursed', 'renewed'].includes(application.status))"
                                 class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
                             >
                                 <p class="student-kicker">Reward Distribution</p>

@@ -369,7 +369,7 @@ function applicationNextAction(application) {
     }
 
     return {
-        submitted: 'Waiting for the provider to begin reviewing your application.',
+        submitted: 'Waiting for the provider to begin reviewing your submission.',
         under_review: 'The provider is checking your profile and documents.',
         qualified: 'You passed the initial requirements and remain under review.',
         shortlisted: 'You are shortlisted for closer provider review.',
@@ -377,13 +377,13 @@ function applicationNextAction(application) {
         exam_qualified: 'Wait for the provider to publish the exam schedule.',
         exam_scheduled: 'Review the posted exam details.',
         exam_taken: 'Wait for the provider to record the exam result.',
-        exam_passed: 'You passed the exam and remain under final award review.',
-        approved: 'Your application is approved. Wait for the award update.',
+        exam_passed: 'You passed the exam. Wait for the provider to finish pre-screening.',
+        approved: 'You passed pre-screening. Review how to continue the formal application.',
         awarded: 'Your award is recorded. Wait for distribution details.',
         distribution_scheduled: 'Review the distribution schedule and instructions.',
         disbursed: 'The provider recorded the scholarship reward as distributed.',
         renewed: 'Your scholarship support was renewed.',
-        rejected: 'Review the provider note for the decision.',
+        rejected: 'You did not qualify in pre-screening. Review the provider note.',
         not_awarded: 'The review finished without an award. Check the provider note.',
         exam_failed: 'Review the provider note for the exam result.',
         interview_failed: 'Review the provider note for the interview result.',
@@ -392,6 +392,8 @@ function applicationNextAction(application) {
 
 function statusLabel(status) {
     const labels = {
+        approved: 'Qualified for formal application',
+        rejected: 'Not qualified',
         exam_qualified: 'Qualified for exam',
         exam_scheduled: 'Exam scheduled',
         exam_taken: 'Exam taken',
@@ -604,7 +606,7 @@ onMounted(loadDashboard);
                             <section class="student-card h-full p-4 sm:p-5 xl:col-start-1 xl:row-start-1">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
-                                        <p class="student-kicker">Your applications</p>
+                                        <p class="student-kicker">Your submissions</p>
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">Recent progress</h3>
                                     </div>
                                     <a href="/dashboard/applications" class="w-fit rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-500">
@@ -671,7 +673,7 @@ onMounted(loadDashboard);
                                         <div class="mt-3 flex flex-col gap-3 border-t border-slate-200 pt-3 sm:flex-row sm:items-center">
                                             <div class="min-w-0 flex-1">
                                                 <div class="flex items-center justify-between gap-3 text-xs font-semibold text-slate-500">
-                                                    <span>Application files</span>
+                                                    <span>Pre-screening files</span>
                                                     <span>{{ application.document_readiness?.percent ?? 0 }}%</span>
                                                 </div>
                                                 <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
@@ -689,7 +691,7 @@ onMounted(loadDashboard);
                                 </div>
 
                                 <div v-else class="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5">
-                                    <p class="text-sm font-bold text-slate-900">No submitted applications yet</p>
+                                    <p class="text-sm font-bold text-slate-900">No pre-screening submissions yet</p>
                                     <p class="mt-1 text-sm leading-6 text-slate-500">Start with a recommended scholarship when your profile is ready.</p>
                                     <a href="/dashboard/scholarships" class="mt-3 inline-flex rounded-md bg-slate-900 px-3 py-2 text-sm font-bold text-white">
                                         Find scholarships

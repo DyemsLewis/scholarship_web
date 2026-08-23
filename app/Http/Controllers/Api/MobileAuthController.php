@@ -993,6 +993,7 @@ class MobileAuthController extends Controller
                 : ($application->scholarship?->award_amount !== null ? 'program' : null),
             'outcome_notes' => $application->outcome_notes,
             'outcome_at' => $application->outcome_at?->format('M d, Y'),
+            'formal_application_handoff' => $this->formalApplicationHandoffPayload($application),
             'distribution_scheduled_for' => $application->distribution_scheduled_for?->format('M d, Y'),
             'distribution_instructions' => $application->distribution_instructions,
             'schedules' => $application->schedules
@@ -1004,6 +1005,45 @@ class MobileAuthController extends Controller
             'scholarship' => $application->scholarship
                 ? $this->scholarshipPayload($application->scholarship, $application->applicant)
                 : null,
+        ];
+    }
+
+    private function formalApplicationHandoffPayload(ScholarshipApplication $application): ?array
+    {
+        if (! in_array($application->status, [
+            'approved',
+            'awarded',
+            'distribution_scheduled',
+            'disbursed',
+            'renewed',
+        ], true)) {
+            return null;
+        }
+
+        $scholarship = $application->scholarship;
+
+        if (! $scholarship) {
+            return null;
+        }
+
+        $mapQuery = $scholarship->handoff_location_address ?: $scholarship->handoff_location_name;
+
+        return [
+            'requirements' => $this->splitOptions($scholarship->post_qualification_requirements),
+            'mode' => $scholarship->handoff_mode ?: 'provider_contact',
+            'instructions' => $scholarship->handoff_instructions,
+            'deadline' => $scholarship->handoff_deadline?->format('M d, Y'),
+            'location_name' => $scholarship->handoff_location_name,
+            'location_address' => $scholarship->handoff_location_address,
+            'map_url' => filled($mapQuery)
+                ? 'https://www.openstreetmap.org/search?query='.rawurlencode($mapQuery)
+                : null,
+            'url' => $scholarship->handoff_url,
+            'contact_person' => $scholarship->contact_person,
+            'contact_department' => $scholarship->contact_department,
+            'contact_email' => $scholarship->contact_email,
+            'contact_number' => $scholarship->contact_number,
+            'notice' => 'Portal qualification lets you continue with the provider. It is not a final scholarship award.',
         ];
     }
 
@@ -1143,7 +1183,6 @@ class MobileAuthController extends Controller
     private function documentLibraryOptions(User $user): array
     {
         $commonDocuments = [
-            'Completed application form',
             'Certificate of enrollment',
             'Latest report card or grades',
             'School ID',

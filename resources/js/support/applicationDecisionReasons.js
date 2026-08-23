@@ -13,6 +13,7 @@ export const decisionReasonOptions = [
     { value: 'failed_exam', label: 'Failed exam' },
     { value: 'for_interview', label: 'For interview' },
     { value: 'failed_interview', label: 'Failed interview' },
+    { value: 'qualified_for_formal_application', label: 'Qualified for formal application' },
     { value: 'approved_for_award', label: 'Approved for award' },
     { value: 'distribution_scheduled', label: 'Distribution scheduled' },
     { value: 'award_released', label: 'Reward distributed' },

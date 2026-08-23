@@ -106,7 +106,7 @@ export const termsContent = {
             'Submitted information should be accurate, current, and belong to the applicant or be supplied with proper permission. Review the application before submission because missing or incorrect details may delay the provider decision.',
             'Prepared documents may be attached when their document type matches a program requirement. Applicants should check that every attached file is the correct and most recent version before proceeding.',
             'The academic verification record is available to authorized administrators and to a provider only after the applicant submits an application to that provider program. Providers cannot use this access to review unrelated applicant accounts.',
-            'Eligibility and decision support results help organize the review but do not guarantee an award. Final approval, rejection, examination, interview, and awarding decisions remain with the scholarship provider.',
+            'Submitting through the portal starts pre-screening only. Passing this review means the applicant may continue with the provider\'s separate formal application; it does not guarantee a scholarship award. Examination, interview, formal selection, and awarding decisions remain with the provider.',
         ],
     },
     document: {
@@ -135,6 +135,7 @@ export const termsContent = {
             'The provider is responsible for truthful program descriptions, eligibility rules, deadlines, requirements, schedules, award details, and contact information. Important changes should be updated promptly so applicants are not misled.',
             'Applicant profiles and documents received through the portal should only be used for scholarship review, verification, communication, and award-related activities. The information should not be sold, publicly shared, or used for unrelated purposes.',
             'Administrator review is required before a new or resubmitted program becomes visible to applicants. Approval confirms that the listing passed platform review, but the provider remains responsible for operating and funding the scholarship.',
+            'Providers should publish accurate post-qualification documents, deadlines, addresses or links, and contact details. After formal processing, they should record whether each qualified applicant was awarded or not selected so applicants receive a clear final outcome.',
         ],
     },
     acceptance: {

@@ -64,7 +64,8 @@ class DemoReadinessWorkflowTest extends TestCase
                 'eligibility' => 'Open to enrolled college students who meet the listed document requirements.',
                 'eligible_education_levels' => 'college',
                 'eligible_locations' => 'Metro Manila',
-                'requirements' => "Completed application form\nCertificate of enrollment\nLatest report card or grades",
+                'requirements' => "Certificate of enrollment\nLatest report card or grades",
+                'post_qualification_requirements' => "Original certificate of enrollment\nProvider formal application form",
                 'benefits' => json_encode([[
                     'type' => 'cash_grant',
                     'title' => 'Education allowance',
@@ -73,6 +74,10 @@ class DemoReadinessWorkflowTest extends TestCase
                     'duration' => 'Current program cycle',
                 ]]),
                 'application_mode' => 'online',
+                'handoff_mode' => 'onsite',
+                'handoff_instructions' => 'Bring the original records to the provider office to continue the formal application.',
+                'handoff_location_name' => 'Community Scholarship Office',
+                'handoff_location_address' => 'Quezon City, Metro Manila',
                 'location_name' => 'Community Scholarship Office',
                 'location_address' => 'Quezon City, Metro Manila',
                 'latitude' => 14.6760,
@@ -127,7 +132,7 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertJsonPath('scholarship.contact_person', 'Program Coordinator')
             ->assertJsonPath('scholarship.benefits.0.duration', 'Current program cycle');
 
-        foreach (['Completed application form', 'Certificate of enrollment', 'Latest report card or grades'] as $documentName) {
+        foreach (['Certificate of enrollment', 'Latest report card or grades'] as $documentName) {
             $path = "student-documents/{$applicant->id}/".str()->slug($documentName).'.pdf';
             Storage::disk('local')->put($path, 'Demo document content');
             StudentDocument::create([

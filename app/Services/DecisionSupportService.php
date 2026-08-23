@@ -162,11 +162,14 @@ class DecisionSupportService
 
         $status = $application->status ?: 'submitted';
         $selectionStages = ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages);
+        $preScreeningStages = collect($selectionStages)
+            ->reject(fn (string $stage): bool => $stage === 'distribution')
+            ->values();
         $flow = collect([[
             'key' => 'submitted',
             'label' => 'Submitted',
-            'description' => 'Application received',
-        ]])->concat(collect($selectionStages)->map(fn (string $stage): array => [
+            'description' => 'Pre-screening received',
+        ]])->concat($preScreeningStages->map(fn (string $stage): array => [
             'key' => $stage,
             'label' => match ($stage) {
                 'screening' => 'Review',
@@ -182,7 +185,21 @@ class DecisionSupportService
                 'distribution' => 'Scholarship release',
                 default => 'Provider-managed stage',
             },
-        ]))->values();
+        ]))->push([
+            'key' => 'handoff',
+            'label' => 'Formal application',
+            'description' => 'Continue directly with the provider',
+        ]);
+
+        if (in_array('distribution', $selectionStages, true)) {
+            $flow->push([
+                'key' => 'distribution',
+                'label' => 'Award outcome',
+                'description' => 'Optional provider outcome tracking',
+            ]);
+        }
+
+        $flow = $flow->values();
         $currentStage = $this->progressStage($application, $selectionStages);
         $stageIndex = $flow->search(fn (array $step): bool => $step['key'] === $currentStage);
         $stageIndex = $stageIndex === false ? 0 : $stageIndex;
@@ -236,13 +253,12 @@ class DecisionSupportService
         }
 
         if ($status === 'not_awarded') {
-            return collect($selectionStages)->reject(fn (string $stage): bool => $stage === 'distribution')->last()
-                ?? 'screening';
+            return 'handoff';
         }
 
         $stage = $this->stageForStatus($status);
 
-        if ($stage === 'submitted' || in_array($stage, $selectionStages, true)) {
+        if (in_array($stage, ['submitted', 'handoff'], true) || in_array($stage, $selectionStages, true)) {
             return $stage;
         }
 
@@ -257,7 +273,8 @@ class DecisionSupportService
             'under_review', 'qualified', 'shortlisted', 'other' => 'screening',
             'exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed' => 'exam',
             'interview', 'interview_failed' => 'interview',
-            'approved', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed' => 'distribution',
+            'approved' => 'handoff',
+            'awarded', 'distribution_scheduled', 'disbursed', 'renewed' => 'distribution',
             default => 'screening',
         };
     }
@@ -602,7 +619,7 @@ class DecisionSupportService
             return 35;
         }
 
-        if ($application->decision_reason === 'approved_for_award') {
+        if (in_array($application->decision_reason, ['qualified_for_formal_application', 'approved_for_award'], true)) {
             return 100;
         }
 
@@ -711,11 +728,11 @@ class DecisionSupportService
         }
 
         if ($application->status === 'exam_passed') {
-            return 'Provider can move this applicant to final award review.';
+            return 'Provider can continue the applicant to an interview or complete portal pre-screening.';
         }
 
         if ($missingUploads !== []) {
-            return 'Applicant should upload missing requirements before final review.';
+            return 'Applicant should upload missing requirements before the pre-screening decision.';
         }
 
         if ($missingAccepted !== []) {
@@ -749,21 +766,22 @@ class DecisionSupportService
         $nextAfterExam = $this->nextStageLabel('exam', $selectionStages);
 
         return match ($status) {
-            'submitted' => 'Your application is waiting for the provider to check eligibility and required files.',
-            'under_review', 'qualified', 'shortlisted', 'other' => "The provider is reviewing your application. If approved, you will move to {$nextAfterScreening}.",
-            'interview' => 'Follow the shared interview details when posted. The provider will approve or reject after review.',
+            'submitted' => 'Your pre-screening submission is waiting for the provider to check eligibility and required files.',
+            'under_review', 'qualified', 'shortlisted', 'other' => "The provider is reviewing your submission. If qualified, you will move to {$nextAfterScreening}.",
+            'interview' => 'Follow the shared interview details when posted. The provider will record whether you qualify after review.',
             'exam_qualified' => 'You passed screening. Wait for the provider to post the shared exam schedule.',
             'exam_scheduled' => 'Review and confirm the posted exam schedule, then follow its instructions.',
             'exam_taken' => "Your exam participation is recorded. Wait for the provider decision for {$nextAfterExam}.",
             'exam_passed' => "You passed the exam. Wait for the provider decision for {$nextAfterExam}.",
             'exam_failed' => 'This application did not advance after the exam. Check the provider note for context.',
             'interview_failed' => 'This application did not advance after the interview. Check the provider note for context.',
-            'approved' => 'You passed the configured selection stages. Wait for the shared reward distribution schedule.',
+            'approved' => 'You passed portal pre-screening. Review the documents and instructions for continuing with the provider.',
             'awarded' => 'Your award is recorded. Wait for the provider to post reward distribution details.',
             'distribution_scheduled' => 'Reward distribution is scheduled; follow the provider instructions.',
             'disbursed' => 'Scholarship support has been released.',
             'renewed' => 'Scholarship renewal has been recorded.',
-            'rejected', 'not_awarded' => 'This application did not advance. Check the provider note for the decision.',
+            'rejected' => 'This pre-screening submission did not qualify for the next stage. Check the provider note.',
+            'not_awarded' => 'The provider recorded that the formal process ended without an award.',
             default => 'Continue monitoring this application.',
         };
     }
@@ -777,14 +795,18 @@ class DecisionSupportService
         return match ($nextStage) {
             'exam' => 'the exam stage',
             'interview' => 'the interview stage',
-            'distribution' => 'final approval and reward distribution',
-            default => 'the next provider review',
+            'distribution' => 'formal provider processing',
+            default => 'the formal provider application',
         };
     }
 
     private function statusLabel(string $status): string
     {
         return match ($status) {
+            'approved' => 'Qualified for formal application',
+            'awarded' => 'Awarded',
+            'not_awarded' => 'Not selected',
+            'rejected' => 'Not qualified',
             'exam_qualified' => 'Qualified for exam',
             'exam_scheduled' => 'Exam scheduled',
             'exam_taken' => 'Exam taken',

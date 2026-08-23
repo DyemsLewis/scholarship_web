@@ -182,7 +182,7 @@ class ApplicationScheduleWorkflowTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors('type');
 
-        $application->update(['status' => 'approved']);
+        $application->update(['status' => 'awarded']);
 
         $this->actingAs($provider)
             ->postJson("/provider/applications/{$application->id}/schedules", $payload)
@@ -245,7 +245,7 @@ class ApplicationScheduleWorkflowTest extends TestCase
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => $applicant->id,
-            'status' => 'approved',
+            'status' => 'awarded',
             'submitted_at' => now(),
         ]);
 

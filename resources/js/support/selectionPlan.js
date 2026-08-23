@@ -1,7 +1,7 @@
 export const selectionStageDefinitions = [
     {
         value: 'screening',
-        label: 'Review',
+        label: 'Pre-screening review',
         icon: 'fa-solid fa-list-check',
         detail: 'Eligibility and file review',
     },
@@ -19,9 +19,9 @@ export const selectionStageDefinitions = [
     },
     {
         value: 'distribution',
-        label: 'Reward distribution',
+        label: 'Award outcome',
         icon: 'fa-solid fa-hand-holding-dollar',
-        detail: 'Scholarship release',
+        detail: 'Optional award and release tracking',
     },
 ];
 
@@ -40,7 +40,7 @@ export function programEventForStage(scholarship, stage) {
 export function selectionPlanFor(scholarship) {
     const selectedStages = Array.isArray(scholarship?.selection_stages)
         ? scholarship.selection_stages
-        : ['screening', 'distribution'];
+        : ['screening'];
 
     return selectionStageDefinitions
         .filter((stage) => selectedStages.includes(stage.value))

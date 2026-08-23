@@ -35,10 +35,10 @@ function selectReviewSection(section) {
 }
 
 const applicationModeOptions = [
-    { value: 'online', label: 'Online submission' },
-    { value: 'onsite', label: 'On-site submission' },
-    { value: 'hybrid', label: 'Online and on-site' },
-    { value: 'provider_review', label: 'Provider review only' },
+    { value: 'online', label: 'Portal pre-screening' },
+    { value: 'onsite', label: 'Assisted on-site pre-screening' },
+    { value: 'hybrid', label: 'Portal with on-site verification' },
+    { value: 'provider_review', label: 'Profile review only' },
 ];
 const reviewStatusOptions = [
     {
@@ -63,9 +63,10 @@ const reviewStatusOptions = [
 
 const documentItems = computed(() => splitItems(scholarship.value?.requirements));
 const optionalDocumentItems = computed(() => splitItems(scholarship.value?.optional_requirements));
+const postQualificationDocumentItems = computed(() => splitItems(scholarship.value?.post_qualification_requirements));
 const selectionStages = computed(() => scholarship.value?.selection_stages?.length
     ? scholarship.value.selection_stages
-    : ['screening', 'distribution']);
+    : ['screening']);
 const programEvents = computed(() => scholarship.value?.program_events ?? []);
 const rubricTotal = computed(() => (scholarship.value?.review_rubric ?? [])
     .reduce((total, criterion) => total + Number(criterion.weight || 0), 0));
@@ -177,6 +178,15 @@ const readinessChecks = computed(() => {
             status: documentItems.value.length ? 'Provided' : 'Missing',
             tone: documentItems.value.length ? 'good' : 'warn',
             icon: 'fa-regular fa-file-lines',
+        },
+        {
+            label: 'Formal application handoff',
+            detail: postQualificationDocumentItems.value.length && hasText(current.handoff_instructions)
+                ? `${postQualificationDocumentItems.value.length} document${postQualificationDocumentItems.value.length === 1 ? '' : 's'} to bring, with next-step instructions.`
+                : 'The provider has not completed the next steps for qualified applicants.',
+            status: postQualificationDocumentItems.value.length && hasText(current.handoff_instructions) ? 'Provided' : 'Missing',
+            tone: postQualificationDocumentItems.value.length && hasText(current.handoff_instructions) ? 'good' : 'warn',
+            icon: 'fa-solid fa-arrow-right-to-bracket',
         },
         {
             label: 'Applicant targeting',
@@ -716,6 +726,43 @@ onMounted(loadScholarship);
                                         </div>
                                     </section>
                                 </div>
+
+                                <section class="mt-4 rounded-md border border-amber-200 bg-amber-50/60 p-4">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-wider text-amber-800">After pre-screening</p>
+                                            <h5 class="mt-1 font-bold text-slate-950">Formal application handoff</h5>
+                                            <p class="mt-1 text-xs leading-5 text-slate-600">
+                                                Confirm that qualified applicants receive clear next steps without uploading these final documents to the portal.
+                                            </p>
+                                        </div>
+                                        <span class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-amber-200">
+                                            {{ labelFromKey(scholarship.handoff_mode || 'not specified') }}
+                                        </span>
+                                    </div>
+
+                                    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Documents to bring</p>
+                                            <ul v-if="postQualificationDocumentItems.length" class="mt-2 space-y-2">
+                                                <li v-for="item in postQualificationDocumentItems" :key="item" class="flex items-start gap-2 text-sm text-slate-700">
+                                                    <i class="fa-solid fa-file-circle-check mt-1 text-xs text-amber-700" aria-hidden="true"></i>
+                                                    <span>{{ item }}</span>
+                                                </li>
+                                            </ul>
+                                            <p v-else class="mt-2 text-sm text-rose-700">No formal application documents listed.</p>
+                                        </div>
+                                        <div class="space-y-2 text-sm text-slate-700">
+                                            <p v-if="scholarship.handoff_deadline"><span class="font-bold">Deadline:</span> {{ scholarship.handoff_deadline }}</p>
+                                            <p v-if="scholarship.handoff_location_name" class="font-bold text-slate-950">{{ scholarship.handoff_location_name }}</p>
+                                            <p v-if="scholarship.handoff_location_address">{{ scholarship.handoff_location_address }}</p>
+                                            <a v-if="scholarship.handoff_url" :href="scholarship.handoff_url" target="_blank" rel="noopener" class="inline-flex font-bold text-sky-700 underline underline-offset-2">
+                                                Check continuation link
+                                            </a>
+                                            <p class="whitespace-pre-line leading-6">{{ scholarship.handoff_instructions || 'No handoff instructions provided.' }}</p>
+                                        </div>
+                                    </div>
+                                </section>
 
                                 <dl class="mt-4 grid overflow-hidden rounded-md border border-slate-200 md:grid-cols-2 md:divide-x md:divide-slate-200">
                                     <div v-if="scholarship.contact_department || scholarship.contact_person" class="border-b border-slate-200 p-4 md:col-span-2">

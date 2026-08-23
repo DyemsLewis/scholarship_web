@@ -13,6 +13,7 @@ class ScholarshipApplication extends Model
         'applicant_id',
         'status',
         'document_checklist',
+        'optional_document_checklist',
         'eligibility_score',
         'eligibility_breakdown',
         'review_rubric_snapshot',
@@ -53,6 +54,7 @@ class ScholarshipApplication extends Model
     {
         return [
             'document_checklist' => 'array',
+            'optional_document_checklist' => 'array',
             'eligibility_score' => 'decimal:2',
             'eligibility_breakdown' => 'array',
             'review_rubric_snapshot' => 'array',

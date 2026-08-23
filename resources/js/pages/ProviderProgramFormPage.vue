@@ -43,6 +43,7 @@ const customizeRubric = ref(false);
 const selectedTargetPresetKey = ref('');
 const programPathChoice = ref('');
 const customProgramPath = ref('');
+const gradeLevelChoice = ref('');
 const autosaveReady = ref(false);
 const draftSavedAt = ref('');
 let autosaveTimer = null;
@@ -69,10 +70,10 @@ const currentLocalDateTime = new Date(Date.now() - new Date().getTimezoneOffset(
 const todayDate = currentLocalDateTime.slice(0, 10);
 const minimumScheduleDateTime = currentLocalDateTime.slice(0, 16);
 const formSections = [
-    { id: 'overview', label: 'Program', help: 'Basic details, benefits, and application dates.' },
+    { id: 'overview', label: 'Program', help: 'Basic details, benefits, and pre-screening dates.' },
     { id: 'audience', label: 'Eligibility', help: 'Who can apply and how students are matched.' },
-    { id: 'documents', label: 'Requirements', help: 'Required documents and the program location.' },
-    { id: 'process', label: 'Selection', help: 'Review stages, schedules, contact, and scoring.' },
+    { id: 'documents', label: 'Requirements', help: 'Online proof, program location, and documents needed after qualification.' },
+    { id: 'process', label: 'Selection', help: 'Pre-screening stages, schedules, contact, and scoring.' },
     { id: 'finish', label: 'Publish', help: 'Choose how to save this program.' },
 ];
 const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
@@ -174,15 +175,20 @@ const selectedCommitmentOption = ref('provider_briefing');
 const customCommitmentText = ref('');
 const incomeOptions = ['Any', 'Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
 const applicationModeOptions = [
-    { value: 'online', label: 'Online submission' },
-    { value: 'onsite', label: 'On-site submission' },
-    { value: 'hybrid', label: 'Online and on-site' },
-    { value: 'provider_review', label: 'Provider review only' },
+    { value: 'online', label: 'Portal pre-screening' },
+    { value: 'onsite', label: 'Assisted on-site pre-screening' },
+    { value: 'hybrid', label: 'Portal with on-site verification' },
+    { value: 'provider_review', label: 'Profile review only' },
+];
+const handoffModeOptions = [
+    { value: 'onsite', label: 'Bring documents on-site' },
+    { value: 'online', label: 'Continue through an official link' },
+    { value: 'provider_contact', label: 'Provider will contact the applicant' },
 ];
 const selectionStageOptions = [
     {
         value: 'screening',
-        label: 'Review',
+        label: 'Pre-screening review',
         description: 'Review eligibility, profile details, and submitted requirements.',
         icon: 'fa-solid fa-list-check',
         required: true,
@@ -190,23 +196,23 @@ const selectionStageOptions = [
     {
         value: 'exam',
         label: 'Exam',
-        description: 'Provider conducts and grades an exam before the final decision.',
+        description: 'Provider conducts and grades an exam before the pre-screening decision.',
         icon: 'fa-solid fa-clipboard-question',
         required: false,
     },
     {
         value: 'interview',
         label: 'Interview',
-        description: 'Meet shortlisted applicants before approval.',
+        description: 'Meet shortlisted applicants before confirming qualification.',
         icon: 'fa-solid fa-comments',
         required: false,
     },
     {
         value: 'distribution',
-        label: 'Distribution',
-        description: 'Announce award release details to approved applicants.',
+        label: 'Award outcome',
+        description: 'Optionally track an award release after the provider completes its formal process.',
         icon: 'fa-solid fa-hand-holding-dollar',
-        required: true,
+        required: false,
     },
 ];
 const scholarshipForm = ref(emptyScholarshipForm());
@@ -273,7 +279,6 @@ const schoolTypeOptions = [
     { value: 'als_center', label: 'ALS center' },
 ];
 const documentRequirementOptions = [
-    'Completed application form',
     'Certificate of enrollment',
     'Latest report card or grades',
     'Transcript of records',
@@ -285,7 +290,6 @@ const documentRequirementOptions = [
     'Parent or guardian valid ID',
     'Proof of income',
     'Government-issued ID',
-    'Recent 2x2 ID photo',
     'Admission or acceptance letter',
     'Recommendation letter',
 ];
@@ -301,7 +305,7 @@ const targetApplicantPresets = [
         years: 'Any grade or year level',
         locations: 'Nationwide',
         eligibility: 'Open to Filipino learners who meet the document, academic, location, and income requirements listed by the provider.',
-        requirements: ['Completed application form', 'Certificate of enrollment', 'Latest report card or grades', 'School ID'],
+        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'School ID'],
     },
     {
         key: 'early_basic',
@@ -314,7 +318,7 @@ const targetApplicantPresets = [
         years: 'Nursery\nKinder 1\nKinder 2\nGrade 1\nGrade 2\nGrade 3\nGrade 4\nGrade 5\nGrade 6',
         locations: 'Nationwide',
         eligibility: 'Open to preschool or elementary learners. A parent or guardian may manage the applicant profile and provide contact information.',
-        requirements: ['Completed application form', 'Certificate of enrollment', 'Latest report card or grades', 'Birth certificate', 'Parent or guardian valid ID', 'Proof of income'],
+        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'Birth certificate', 'Parent or guardian valid ID', 'Proof of income'],
     },
     {
         key: 'junior_high',
@@ -327,7 +331,7 @@ const targetApplicantPresets = [
         years: 'Grade 7\nGrade 8\nGrade 9\nGrade 10',
         locations: 'Nationwide',
         eligibility: 'Open to Junior High School learners who meet the provider requirements and maintain the required general average.',
-        requirements: ['Completed application form', 'Certificate of enrollment', 'Latest report card or grades', 'School ID', 'Proof of income'],
+        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'School ID', 'Proof of income'],
     },
     {
         key: 'senior_high',
@@ -340,7 +344,7 @@ const targetApplicantPresets = [
         years: 'Grade 11\nGrade 12',
         locations: 'Nationwide',
         eligibility: 'Open to Senior High School learners in eligible tracks or strands who meet the academic and document requirements.',
-        requirements: ['Completed application form', 'Certificate of enrollment', 'Latest report card or grades', 'School ID', 'Proof of income'],
+        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'School ID', 'Proof of income'],
     },
     {
         key: 'college',
@@ -353,7 +357,7 @@ const targetApplicantPresets = [
         years: '1st year\n2nd year\n3rd year\n4th year\n5th year\nGraduating',
         locations: 'Nationwide',
         eligibility: 'Open to college or university students enrolled in eligible degree programs and year levels.',
-        requirements: ['Completed application form', 'Certificate of enrollment', 'Transcript of records', 'School ID', 'Proof of income'],
+        requirements: ['Certificate of enrollment', 'Transcript of records', 'School ID', 'Proof of income'],
     },
     {
         key: 'tvet',
@@ -366,7 +370,7 @@ const targetApplicantPresets = [
         years: 'NC I\nNC II\nNC III\nNC IV\nFirst term\nSecond term',
         locations: 'Nationwide',
         eligibility: 'Open to TVET or vocational learners enrolled in eligible training programs or qualifications.',
-        requirements: ['Completed application form', 'Certificate of enrollment', 'School ID', 'Proof of income', 'Good moral certificate'],
+        requirements: ['Certificate of enrollment', 'School ID', 'Proof of income', 'Good moral certificate'],
     },
     {
         key: 'als',
@@ -379,7 +383,7 @@ const targetApplicantPresets = [
         years: 'Basic literacy\nElementary level\nJunior high school level',
         locations: 'Nationwide',
         eligibility: 'Open to ALS learners who can provide enrollment or learning center verification and meet listed requirements.',
-        requirements: ['Completed application form', 'Certificate of enrollment', 'Latest report card or grades', 'Birth certificate', 'Proof of income'],
+        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'Birth certificate', 'Proof of income'],
     },
 ];
 const targetFormProfiles = {
@@ -560,6 +564,15 @@ const targetFormProfiles = {
         emptyLevelSummary: 'Any applicable level',
     },
 };
+const gradeLevelOptionsByEducationLevel = {
+    preschool: ['Nursery', 'Kinder 1', 'Kinder 2'],
+    elementary: ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'],
+    junior_high_school: ['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'],
+    senior_high_school: ['Grade 11', 'Grade 12'],
+    college: ['1st year', '2nd year', '3rd year', '4th year', '5th year', 'Graduating'],
+    tvet: ['NC I', 'NC II', 'NC III', 'NC IV', 'First term', 'Second term'],
+    als: ['Basic literacy', 'Elementary level', 'Junior high school level'],
+};
 
 const customDocumentRequirements = computed(() => splitRequirementText(scholarshipForm.value.customRequirements)
     .filter((requirement) => !documentRequirementOptions.includes(requirement)));
@@ -573,6 +586,8 @@ const allOptionalDocumentRequirements = computed(() => [...new Set([
     ...scholarshipForm.value.optionalRequirements,
     ...customOptionalDocumentRequirements.value,
 ])].filter((requirement) => !allDocumentRequirements.value.includes(requirement)));
+const postQualificationRequirementItems = computed(() =>
+    splitRequirementText(scholarshipForm.value.postQualificationRequirements));
 const selectedRequirementCount = computed(() => allDocumentRequirements.value.length);
 const selectedOptionalRequirementCount = computed(() => allOptionalDocumentRequirements.value.length);
 const rubricWeightTotal = computed(() => scholarshipForm.value.reviewRubric
@@ -669,7 +684,17 @@ const programReadinessItems = computed(() => [
         label: 'Document checklist',
         section: 'documents',
         complete: selectedRequirementCount.value > 0,
-        help: 'Documents applicants must prepare before submission.',
+        help: 'Minimal proof applicants upload for portal pre-screening.',
+    },
+    {
+        label: 'Formal application handoff',
+        section: 'documents',
+        complete: postQualificationRequirementItems.value.length > 0
+            && hasText(scholarshipForm.value.handoffMode)
+            && hasText(scholarshipForm.value.handoffInstructions)
+            && (scholarshipForm.value.handoffMode !== 'onsite' || hasText(scholarshipForm.value.handoffLocationAddress))
+            && (scholarshipForm.value.handoffMode !== 'online' || hasText(scholarshipForm.value.handoffUrl)),
+        help: 'Documents and instructions released when an applicant qualifies.',
     },
     {
         label: 'Program location',
@@ -681,14 +706,14 @@ const programReadinessItems = computed(() => [
         help: 'Address and map pin for distance estimates.',
     },
     {
-        label: 'Application workflow',
+        label: 'Pre-screening workflow',
         section: 'process',
         complete: hasText(scholarshipForm.value.applicationMode)
             && (
                 hasText(scholarshipForm.value.contactEmail)
                 || hasText(scholarshipForm.value.contactNumber)
             ),
-        help: 'How students apply and who they can contact for questions.',
+        help: 'How students submit for pre-screening and who they can contact.',
     },
     ...(scholarshipForm.value.selectionStages.includes('exam') ? [{
         label: 'Exam details',
@@ -727,7 +752,6 @@ const formSectionProgress = computed(() => {
                 || hasText(scholarshipForm.value.eligibleLocations)
             ),
         process: scholarshipForm.value.selectionStages.includes('screening')
-            && scholarshipForm.value.selectionStages.includes('distribution')
             && (hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber))
             && (!scholarshipForm.value.selectionStages.includes('exam') || (
                 hasText(scholarshipForm.value.examDurationMinutes)
@@ -735,6 +759,11 @@ const formSectionProgress = computed(() => {
             ))
             && reviewRubricReady.value,
         documents: selectedRequirementCount.value > 0
+            && postQualificationRequirementItems.value.length > 0
+            && hasText(scholarshipForm.value.handoffMode)
+            && hasText(scholarshipForm.value.handoffInstructions)
+            && (scholarshipForm.value.handoffMode !== 'onsite' || hasText(scholarshipForm.value.handoffLocationAddress))
+            && (scholarshipForm.value.handoffMode !== 'online' || hasText(scholarshipForm.value.handoffUrl))
             && hasText(scholarshipForm.value.locationName)
             && hasText(scholarshipForm.value.locationAddress)
             && hasText(scholarshipForm.value.latitude)
@@ -763,6 +792,15 @@ const activeTargetKey = computed(() => inferTargetFormKey(scholarshipForm.value.
 const activeTargetForm = computed(() => targetFormProfiles[activeTargetKey.value] ?? targetFormProfiles.mixed);
 const programPathSelectOptions = computed(() => providerProgramPathOptionsForTarget(activeTargetKey.value));
 const selectedProgramPaths = computed(() => splitProgramPaths(scholarshipForm.value.eligibleCourses));
+const selectedGradeLevels = computed(() => splitRequirementText(scholarshipForm.value.eligibleYearLevels));
+const gradeLevelSelectOptions = computed(() => {
+    const selectedEducationLevels = scholarshipForm.value.eligibleEducationLevels.length
+        ? scholarshipForm.value.eligibleEducationLevels
+        : allEducationLevelValues;
+    const levels = selectedEducationLevels.flatMap((level) => gradeLevelOptionsByEducationLevel[level] ?? []);
+
+    return ['Any grade or year level', ...new Set(levels)];
+});
 const targetSchoolTypeOptions = computed(() => {
     const values = activeTargetForm.value.schoolTypeValues;
 
@@ -880,6 +918,14 @@ function readinessFocusTarget(item) {
     }
 
     if (item.label === 'Document checklist') return 'scholarship-custom-requirements';
+    if (item.label === 'Formal application handoff') {
+        if (!postQualificationRequirementItems.value.length) return 'scholarship-post-qualification-requirements';
+        if (!hasText(scholarshipForm.value.handoffMode)) return 'scholarship-handoff-mode';
+        if (scholarshipForm.value.handoffMode === 'onsite' && !hasText(scholarshipForm.value.handoffLocationAddress)) return 'scholarship-handoff-location-address';
+        if (scholarshipForm.value.handoffMode === 'online' && !hasText(scholarshipForm.value.handoffUrl)) return 'scholarship-handoff-url';
+
+        return 'scholarship-handoff-instructions';
+    }
 
     if (item.label === 'Program location') {
         if (!hasText(scholarshipForm.value.locationName)) return 'scholarship-location-name';
@@ -888,7 +934,7 @@ function readinessFocusTarget(item) {
         return 'scholarship-map-toggle';
     }
 
-    if (item.label === 'Application workflow') return 'scholarship-contact-email';
+    if (item.label === 'Pre-screening workflow') return 'scholarship-contact-email';
     if (item.label === 'Exam details') return 'scholarship-exam-duration';
     if (item.label === 'Review scoring') return `rubric-label-${scholarshipForm.value.reviewRubric[0]?.key}`;
 
@@ -1050,7 +1096,6 @@ function emptyScholarshipForm() {
         latitude: '',
         longitude: '',
         requirements: [
-            'Completed application form',
             'Certificate of enrollment',
             'Latest report card or grades',
             'School ID',
@@ -1059,13 +1104,20 @@ function emptyScholarshipForm() {
         customRequirements: '',
         optionalRequirements: [],
         customOptionalRequirements: '',
+        postQualificationRequirements: '',
+        handoffMode: 'onsite',
+        handoffInstructions: 'Bring the listed documents to the provider for final verification and the formal application process.',
+        handoffDeadline: '',
+        handoffLocationName: '',
+        handoffLocationAddress: '',
+        handoffUrl: '',
         reviewRubric: defaultReviewRubric(),
         benefits: [],
         minimumGwa: '',
         minimumGradeScale: '',
         slotsAvailable: '',
         applicationMode: 'online',
-        selectionStages: ['screening', 'distribution'],
+        selectionStages: ['screening'],
         examDurationMinutes: '',
         examPassingScore: '',
         programEvents: emptyProgramEvents(),
@@ -1159,7 +1211,7 @@ function toggleSelectionStage(stage) {
 
     scholarshipForm.value.selectionStages = selectionStageOptions
         .map((optionItem) => optionItem.value)
-        .filter((optionValue) => selected.includes(optionValue) || ['screening', 'distribution'].includes(optionValue));
+        .filter((optionValue) => selected.includes(optionValue) || optionValue === 'screening');
 }
 
 function scheduleModeNeedsVenue(mode) {
@@ -1294,6 +1346,37 @@ function removeEligibleProgramPath(path) {
     setEligibleProgramPaths(selectedProgramPaths.value.filter((selectedPath) => (
         normalizeProgramPath(selectedPath) !== normalizeProgramPath(path)
     )));
+}
+
+function setEligibleGradeLevels(levels) {
+    scholarshipForm.value.eligibleYearLevels = [...new Set(levels)].join('\n');
+}
+
+function isGradeLevelSelected(level) {
+    return selectedGradeLevels.value.includes(level);
+}
+
+function chooseGradeLevel() {
+    const level = gradeLevelChoice.value;
+
+    if (!level) {
+        return;
+    }
+
+    if (level === 'Any grade or year level') {
+        setEligibleGradeLevels([level]);
+    } else {
+        setEligibleGradeLevels([
+            ...selectedGradeLevels.value.filter((selectedLevel) => selectedLevel !== 'Any grade or year level'),
+            level,
+        ]);
+    }
+
+    gradeLevelChoice.value = '';
+}
+
+function removeEligibleGradeLevel(level) {
+    setEligibleGradeLevels(selectedGradeLevels.value.filter((selectedLevel) => selectedLevel !== level));
 }
 
 function applyActiveTargetDefaults() {
@@ -1518,6 +1601,14 @@ function fillScholarshipForm(scholarship) {
         customRequirements: parseCustomRequirements(scholarship.requirements).join('\n'),
         optionalRequirements: parseRequirements(scholarship.optional_requirements),
         customOptionalRequirements: parseCustomRequirements(scholarship.optional_requirements).join('\n'),
+        postQualificationRequirements: scholarship.post_qualification_requirements ?? '',
+        handoffMode: scholarship.handoff_mode ?? 'onsite',
+        handoffInstructions: scholarship.handoff_instructions
+            ?? 'Bring the listed documents to the provider for final verification and the formal application process.',
+        handoffDeadline: scholarship.handoff_deadline ?? '',
+        handoffLocationName: scholarship.handoff_location_name ?? '',
+        handoffLocationAddress: scholarship.handoff_location_address ?? '',
+        handoffUrl: scholarship.handoff_url ?? '',
         reviewRubric: Array.isArray(scholarship.review_rubric) && scholarship.review_rubric.length
             ? scholarship.review_rubric.map((criterion) => ({ ...criterion }))
             : defaultReviewRubric(),
@@ -1528,7 +1619,7 @@ function fillScholarshipForm(scholarship) {
         applicationMode: scholarship.application_mode ?? '',
         selectionStages: selectionStageOptions
             .map((option) => option.value)
-            .filter((value) => (scholarship.selection_stages ?? ['screening', 'distribution']).includes(value)),
+            .filter((value) => (scholarship.selection_stages ?? ['screening']).includes(value)),
         examDurationMinutes: scholarship.exam_duration_minutes ?? '',
         examPassingScore: scholarship.exam_passing_score ?? '',
         programEvents: fillProgramEvents(scholarship.program_events),
@@ -1575,7 +1666,6 @@ function setRequirementLevel(requirement, level) {
 
 function selectCommonRequirements() {
     scholarshipForm.value.requirements = [
-        'Completed application form',
         'Certificate of enrollment',
         'Latest report card or grades',
         'School ID',
@@ -1589,6 +1679,11 @@ function clearRequirements() {
     scholarshipForm.value.customRequirements = '';
     scholarshipForm.value.optionalRequirements = [];
     scholarshipForm.value.customOptionalRequirements = '';
+}
+
+function useProgramLocationForHandoff() {
+    scholarshipForm.value.handoffLocationName = scholarshipForm.value.locationName;
+    scholarshipForm.value.handoffLocationAddress = scholarshipForm.value.locationAddress;
 }
 
 function addReviewCriterion() {
@@ -1996,6 +2091,13 @@ async function saveScholarship() {
         longitude: scholarshipForm.value.longitude || '',
         requirements: allDocumentRequirements.value.join('\n'),
         optional_requirements: allOptionalDocumentRequirements.value.join('\n'),
+        post_qualification_requirements: postQualificationRequirementItems.value.join('\n'),
+        handoff_mode: scholarshipForm.value.handoffMode || '',
+        handoff_instructions: scholarshipForm.value.handoffInstructions || '',
+        handoff_deadline: scholarshipForm.value.handoffDeadline || '',
+        handoff_location_name: scholarshipForm.value.handoffLocationName || '',
+        handoff_location_address: scholarshipForm.value.handoffLocationAddress || '',
+        handoff_url: scholarshipForm.value.handoffUrl || '',
         review_rubric: JSON.stringify(scholarshipForm.value.reviewRubric),
         benefits: JSON.stringify(scholarshipForm.value.benefits),
         award_amount: cashGrantAmount(scholarshipForm.value.benefits),
@@ -2469,7 +2571,7 @@ onBeforeUnmount(() => {
 
                                 <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-mode">
-                                        Application mode
+                                        Pre-screening method
                                         <span :class="requiredHintClass">Required</span>
                                     </label>
                                     <select id="scholarship-mode" v-model="scholarshipForm.applicationMode" :class="inputClass">
@@ -2484,11 +2586,14 @@ onBeforeUnmount(() => {
                                             {{ option.label }}
                                         </option>
                                     </select>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        This describes the portal review, not the provider's final application.
+                                    </p>
                                 </div>
 
                                 <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-application-opens">
-                                        Applications open
+                                        Pre-screening opens
                                         <span :class="optionalHintClass">Optional</span>
                                     </label>
                                     <input
@@ -2499,13 +2604,13 @@ onBeforeUnmount(() => {
                                         :class="inputClass"
                                     >
                                     <p class="mt-2 text-xs leading-5 text-slate-500">
-                                        Leave blank when applications should open immediately after publication.
+                                        Leave blank when portal pre-screening should open immediately after publication.
                                     </p>
                                 </div>
 
                                 <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-deadline">
-                                        Deadline
+                                        Pre-screening deadline
                                         <span :class="requiredHintClass">Required</span>
                                     </label>
                                     <input
@@ -2565,7 +2670,7 @@ onBeforeUnmount(() => {
                                                 <span :class="requiredHintClass">Required</span>
                                             </p>
                                             <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Screening and distribution are included. Add an exam or interview only when your program uses them.
+                                                Review is always included. Add an exam, interview, or later award tracking only when your process needs it.
                                             </p>
                                         </div>
                                         <span class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
@@ -3178,15 +3283,40 @@ onBeforeUnmount(() => {
                                         <label :class="labelClass" for="scholarship-years">
                                             {{ activeTargetForm.levelLabel }}
                                         </label>
-                                        <textarea
+                                        <select
                                             id="scholarship-years"
-                                            v-model="scholarshipForm.eligibleYearLevels"
-                                            rows="2"
-                                            :placeholder="activeTargetForm.levelPlaceholder"
+                                            v-model="gradeLevelChoice"
                                             :class="inputClass"
-                                        ></textarea>
+                                            @change="chooseGradeLevel"
+                                        >
+                                            <option value="">Select a level to add</option>
+                                            <option
+                                                v-for="level in gradeLevelSelectOptions"
+                                                :key="level"
+                                                :value="level"
+                                                :disabled="isGradeLevelSelected(level)"
+                                            >
+                                                {{ level }}
+                                            </option>
+                                        </select>
+                                        <div v-if="selectedGradeLevels.length" class="mt-3 flex flex-wrap gap-2">
+                                            <button
+                                                v-for="level in selectedGradeLevels"
+                                                :key="level"
+                                                type="button"
+                                                class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left text-xs font-semibold text-slate-700 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                                                :title="`Remove ${level}`"
+                                                @click="removeEligibleGradeLevel(level)"
+                                            >
+                                                <span>{{ level }}</span>
+                                                <i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
+                                        <p v-else class="mt-2 text-xs font-semibold text-emerald-700">
+                                            No restriction selected. All applicable levels can match.
+                                        </p>
                                         <p class="mt-2 text-xs leading-5 text-slate-500">
-                                            Use one accepted level per line for cleaner matching.
+                                            Options follow the selected learner group and its track, strand, course, or training path.
                                         </p>
                                     </div>
 
@@ -3288,11 +3418,11 @@ onBeforeUnmount(() => {
                                 <div>
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
-                                            Document requirements
+                                            Pre-screening documents
                                             <span :class="requiredHintClass">At least one</span>
                                         </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            {{ selectedRequirementCount }} required and {{ selectedOptionalRequirementCount }} supporting document{{ selectedOptionalRequirementCount === 1 ? '' : 's' }} selected.
+                                            Applicants upload these only to prove initial eligibility. {{ selectedRequirementCount }} required and {{ selectedOptionalRequirementCount }} supporting document{{ selectedOptionalRequirementCount === 1 ? '' : 's' }} selected.
                                         </p>
                                     </div>
                                 </div>
@@ -3365,7 +3495,7 @@ onBeforeUnmount(() => {
                                             placeholder="One required document per line"
                                             :class="inputClass"
                                         ></textarea>
-                                        <p class="mt-2 text-xs leading-5 text-slate-500">Applicants must provide these before submission can be completed.</p>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">Applicants upload these before pre-screening can be submitted.</p>
                                     </div>
                                     <div :class="fieldCardClass">
                                         <label :class="labelClass" for="scholarship-custom-optional-requirements">Other supporting documents</label>
@@ -3380,6 +3510,130 @@ onBeforeUnmount(() => {
                                         <p class="mt-2 text-xs leading-5 text-slate-500">These may strengthen or clarify an application but never block submission.</p>
                                     </div>
                                 </div>
+
+                                <section class="mt-6 border-t border-slate-200 pt-6">
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                            <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="text-base font-bold text-slate-950">After the applicant qualifies</p>
+                                            <p class="mt-1 max-w-3xl text-xs leading-5 text-slate-500">
+                                                List what the applicant must bring for the provider's formal application. These items are shown for preparation but are not uploaded to this portal.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                        <div :class="[fieldStackClass, 'md:col-span-2']">
+                                            <label :class="labelClass" for="scholarship-post-qualification-requirements">
+                                                Documents to bring
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
+                                            <textarea
+                                                id="scholarship-post-qualification-requirements"
+                                                v-model="scholarshipForm.postQualificationRequirements"
+                                                rows="4"
+                                                maxlength="5000"
+                                                placeholder="One provider-specific document per line"
+                                                :class="inputClass"
+                                            ></textarea>
+                                        </div>
+
+                                        <div :class="fieldStackClass">
+                                            <label :class="labelClass" for="scholarship-handoff-mode">
+                                                How the applicant continues
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
+                                            <select id="scholarship-handoff-mode" v-model="scholarshipForm.handoffMode" :class="inputClass">
+                                                <option v-for="option in handoffModeOptions" :key="option.value" :value="option.value">
+                                                    {{ option.label }}
+                                                </option>
+                                            </select>
+                                        </div>
+
+                                        <div :class="fieldStackClass">
+                                            <label :class="labelClass" for="scholarship-handoff-deadline">
+                                                Formal application deadline
+                                                <span :class="optionalHintClass">Optional</span>
+                                            </label>
+                                            <input
+                                                id="scholarship-handoff-deadline"
+                                                v-model="scholarshipForm.handoffDeadline"
+                                                type="date"
+                                                :min="scholarshipForm.deadline || todayDate"
+                                                :class="inputClass"
+                                            >
+                                        </div>
+
+                                        <template v-if="scholarshipForm.handoffMode === 'onsite'">
+                                            <div :class="fieldStackClass">
+                                                <div class="flex items-center justify-between gap-3">
+                                                    <label :class="labelClass" for="scholarship-handoff-location-name">Office or venue</label>
+                                                    <button type="button" class="mb-1.5 text-xs font-bold text-sky-700 hover:underline" @click="useProgramLocationForHandoff">
+                                                        Use program address
+                                                    </button>
+                                                </div>
+                                                <input
+                                                    id="scholarship-handoff-location-name"
+                                                    v-model="scholarshipForm.handoffLocationName"
+                                                    type="text"
+                                                    maxlength="255"
+                                                    placeholder="Example: Scholarship Office"
+                                                    :class="inputClass"
+                                                >
+                                            </div>
+
+                                            <div :class="fieldStackClass">
+                                                <label :class="labelClass" for="scholarship-handoff-location-address">
+                                                    Where to bring the documents
+                                                    <span :class="requiredHintClass">Required</span>
+                                                </label>
+                                                <input
+                                                    id="scholarship-handoff-location-address"
+                                                    v-model="scholarshipForm.handoffLocationAddress"
+                                                    type="text"
+                                                    maxlength="500"
+                                                    placeholder="Complete office or venue address"
+                                                    :class="inputClass"
+                                                >
+                                            </div>
+                                        </template>
+
+                                        <div v-if="scholarshipForm.handoffMode === 'online'" :class="[fieldStackClass, 'md:col-span-2']">
+                                            <label :class="labelClass" for="scholarship-handoff-url">
+                                                Official continuation link
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
+                                            <input
+                                                id="scholarship-handoff-url"
+                                                v-model="scholarshipForm.handoffUrl"
+                                                type="url"
+                                                maxlength="2048"
+                                                placeholder="https://provider.example.org/formal-application"
+                                                :class="inputClass"
+                                            >
+                                        </div>
+
+                                        <div :class="[fieldStackClass, 'md:col-span-2']">
+                                            <label :class="labelClass" for="scholarship-handoff-instructions">
+                                                Instructions shown after qualification
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
+                                            <textarea
+                                                id="scholarship-handoff-instructions"
+                                                v-model="scholarshipForm.handoffInstructions"
+                                                rows="3"
+                                                maxlength="3000"
+                                                placeholder="Explain what the qualified applicant should do next"
+                                                :class="inputClass"
+                                            ></textarea>
+                                            <p class="mt-2 text-xs leading-5 text-slate-500">
+                                                Detailed instructions are released only after the provider marks the applicant qualified.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </section>
                             </fieldset>
 
                             <fieldset v-show="activeFormSection === 'process'" :class="['mt-7 border-t border-slate-200 pt-7', sectionCardClass]">

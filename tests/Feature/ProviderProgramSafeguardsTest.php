@@ -81,6 +81,9 @@ class ProviderProgramSafeguardsTest extends TestCase
                 'application_mode',
                 'eligibility',
                 'requirements',
+                'post_qualification_requirements',
+                'handoff_mode',
+                'handoff_instructions',
                 'location_name',
                 'contact_email',
             ]);
@@ -100,6 +103,24 @@ class ProviderProgramSafeguardsTest extends TestCase
             ]))
             ->assertUnprocessable()
             ->assertJsonValidationErrors('deadline');
+    }
+
+    public function test_complete_program_submission_saves_the_formal_application_handoff(): void
+    {
+        $provider = $this->verifiedProvider();
+
+        $response = $this->actingAs($provider)
+            ->postJson('/provider/scholarships', $this->completeSubmissionPayload())
+            ->assertCreated()
+            ->assertJsonPath('scholarship.status', 'pending_review')
+            ->assertJsonPath('scholarship.handoff_mode', 'onsite')
+            ->assertJsonPath('scholarship.handoff_location_address', 'Quezon City, Metro Manila');
+
+        $this->assertDatabaseHas('scholarships', [
+            'id' => $response->json('scholarship.id'),
+            'post_qualification_requirements' => "Original certificate of enrollment\nProvider formal application form",
+            'handoff_instructions' => 'Bring the original documents to the scholarship office for the provider formal application.',
+        ]);
     }
 
     public function test_grade_point_requirement_cannot_exceed_five(): void
@@ -167,7 +188,7 @@ class ProviderProgramSafeguardsTest extends TestCase
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
-            'status' => 'approved',
+            'status' => 'awarded',
             'submitted_at' => now(),
         ]);
         $event = ScholarshipEvent::create([
@@ -215,7 +236,7 @@ class ProviderProgramSafeguardsTest extends TestCase
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
-            'status' => 'approved',
+            'status' => 'awarded',
             'submitted_at' => now(),
         ]);
         $event = ScholarshipEvent::create([
@@ -246,7 +267,7 @@ class ProviderProgramSafeguardsTest extends TestCase
             ->assertOk();
 
         $this->assertSame('completed', $event->fresh()->status);
-        $this->assertSame('approved', $application->fresh()->status);
+        $this->assertSame('awarded', $application->fresh()->status);
         $this->assertDatabaseMissing('application_schedules', [
             'scholarship_application_id' => $application->id,
             'type' => 'distribution',
@@ -300,7 +321,7 @@ class ProviderProgramSafeguardsTest extends TestCase
             ->assertJsonValidationErrors('program_events.1.scheduled_at');
     }
 
-    public function test_provider_cannot_approve_more_applicants_than_the_award_slots(): void
+    public function test_pre_screening_can_qualify_multiple_applicants_but_awards_respect_available_slots(): void
     {
         $provider = $this->verifiedProvider();
         $scholarship = Scholarship::create([
@@ -326,19 +347,33 @@ class ProviderProgramSafeguardsTest extends TestCase
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$firstApplication->id}/status", [
                 'status' => 'approved',
-                'decision_reason' => 'approved_for_award',
+                'decision_reason' => 'qualified_for_formal_application',
             ])
             ->assertOk();
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$secondApplication->id}/status", [
                 'status' => 'approved',
+                'decision_reason' => 'qualified_for_formal_application',
+            ])
+            ->assertOk();
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$firstApplication->id}/status", [
+                'status' => 'awarded',
+                'decision_reason' => 'approved_for_award',
+            ])
+            ->assertOk();
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$secondApplication->id}/status", [
+                'status' => 'awarded',
                 'decision_reason' => 'approved_for_award',
             ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('status');
 
-        $this->assertSame('submitted', $secondApplication->fresh()->status);
+        $this->assertSame('approved', $secondApplication->fresh()->status);
     }
 
     private function verifiedProvider(): User
@@ -358,13 +393,18 @@ class ProviderProgramSafeguardsTest extends TestCase
             'eligibility' => 'Open to enrolled college students who meet the document requirements.',
             'eligible_education_levels' => 'college',
             'eligible_locations' => 'Metro Manila',
-            'requirements' => "Completed application form\nCertificate of enrollment",
+            'requirements' => 'Certificate of enrollment',
+            'post_qualification_requirements' => "Original certificate of enrollment\nProvider formal application form",
             'benefits' => json_encode([[
                 'type' => 'school_supplies',
                 'title' => 'School essentials kit',
                 'frequency' => 'one_time',
             ]]),
             'application_mode' => 'online',
+            'handoff_mode' => 'onsite',
+            'handoff_instructions' => 'Bring the original documents to the scholarship office for the provider formal application.',
+            'handoff_location_name' => 'Community Scholarship Office',
+            'handoff_location_address' => 'Quezon City, Metro Manila',
             'location_name' => 'Community Scholarship Office',
             'location_address' => 'Quezon City, Metro Manila',
             'latitude' => 14.6760,

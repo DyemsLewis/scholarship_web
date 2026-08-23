@@ -703,7 +703,7 @@ async function loadScholarships() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/dashboard/data');
+        const response = await window.axios.get('/dashboard/scholarships/data');
 
         user.value = response.data.user;
         scholarships.value = response.data.scholarships;

@@ -27,7 +27,7 @@ class RewardDistributionScheduleTest extends TestCase
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => $applicant->id,
-            'status' => 'approved',
+            'status' => 'awarded',
             'submitted_at' => now(),
         ]);
 

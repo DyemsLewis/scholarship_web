@@ -60,7 +60,6 @@ class ProviderController extends Controller
     ];
 
     private const AWARD_SLOT_STATUSES = [
-        'approved',
         'awarded',
         'distribution_scheduled',
         'disbursed',
@@ -1459,7 +1458,7 @@ class ProviderController extends Controller
         $decisionReason = $validated['decision_reason'] ?? match ($nextStatus) {
             'exam_qualified' => 'for_exam',
             'interview' => 'for_interview',
-            'approved' => 'approved_for_award',
+            'approved' => 'qualified_for_formal_application',
             default => null,
         };
 
@@ -1488,8 +1487,10 @@ class ProviderController extends Controller
 
         return response()->json([
             'message' => $validated['decision'] === 'approve'
-                ? 'Applicant approved for the next configured stage.'
-                : 'Applicant decision recorded as rejected.',
+                ? ($nextStatus === 'approved'
+                    ? 'Applicant qualified for the provider formal application process.'
+                    : 'Applicant advanced to the next pre-screening stage.')
+                : 'Applicant marked as not qualified for the next stage.',
             'application' => $this->applicationPayload($freshApplication, true),
             'review_navigation' => $this->reviewNavigationPayload($freshApplication),
         ]);
@@ -1533,7 +1534,7 @@ class ProviderController extends Controller
                 ->map(fn (ScholarshipApplication $application) => $application->applicant?->name ?: "Application #{$application->id}")
                 ->implode(', ');
             $message = $targetStage === 'distribution'
-                ? 'Only applicants already marked Approved can be bulk approved for distribution.'
+                ? 'Only applicants qualified through portal pre-screening can be recorded as award recipients.'
                 : 'Only applications with accepted required documents that are ready for the configured exam can be selected.';
 
             throw ValidationException::withMessages([
@@ -1571,7 +1572,7 @@ class ProviderController extends Controller
         return response()->json([
             'message' => $targetStage === 'exam'
                 ? "Approved {$applications->count()} applicant(s) for the exam stage."
-                : "Approved {$applications->count()} applicant(s) for distribution.",
+                : "Recorded {$applications->count()} formal scholarship award recipient(s).",
             'updated_count' => $applications->count(),
             'application_ids' => $applicationIds,
         ]);
@@ -2096,9 +2097,9 @@ class ProviderController extends Controller
             : $application->distribution_instructions;
 
         if ($validated['status'] === 'distribution_scheduled'
-            && ! in_array($previousStatus, ['approved', 'awarded', 'distribution_scheduled'], true)) {
+            && ! in_array($previousStatus, ['awarded', 'distribution_scheduled'], true)) {
             throw ValidationException::withMessages([
-                'status' => 'Approve or award the application before scheduling reward distribution.',
+                'status' => 'Record the applicant as an award recipient before scheduling distribution.',
             ]);
         }
 
@@ -2277,7 +2278,7 @@ class ProviderController extends Controller
 
         if ($occupiedSlots >= $scholarship->slots_available) {
             throw ValidationException::withMessages([
-                'status' => 'All available award slots have already been filled. Increase the program slots or review an existing award before approving another applicant.',
+                'status' => 'All available award slots have already been filled. Increase the program slots or review an existing award before recording another recipient.',
             ]);
         }
     }
@@ -2300,7 +2301,7 @@ class ProviderController extends Controller
             'exam_taken' => array_filter(['exam_passed', $approvalStatus, $rejectionStatus]),
             'exam_passed' => array_filter([$approvalStatus, $rejectionStatus]),
             'interview' => ['approved', 'interview_failed'],
-            'approved' => ['awarded', 'distribution_scheduled', 'not_awarded'],
+            'approved' => ['awarded', 'not_awarded'],
             'awarded' => ['distribution_scheduled'],
             'distribution_scheduled' => ['disbursed'],
             'disbursed' => ['renewed'],
@@ -2569,6 +2570,7 @@ class ProviderController extends Controller
         $validated = $this->validateScholarship($request);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipProgramPaths($validated);
+        $validated = $this->normalizeScholarshipRequirements($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
         $validated = $this->normalizeScholarshipExamDetails($validated);
@@ -2638,6 +2640,7 @@ class ProviderController extends Controller
         $validated = $this->validateScholarship($request);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipProgramPaths($validated);
+        $validated = $this->normalizeScholarshipRequirements($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipExamDetails($validated);
@@ -2825,7 +2828,36 @@ class ProviderController extends Controller
         }
 
         if (blank($value('requirements'))) {
-            $errors['requirements'] = 'Add at least one required applicant document.';
+            $errors['requirements'] = 'Add at least one document needed for portal pre-screening.';
+        }
+
+        if (blank($value('post_qualification_requirements'))) {
+            $errors['post_qualification_requirements'] = 'List at least one document a qualified applicant must bring for the formal application.';
+        }
+
+        $handoffMode = $value('handoff_mode');
+
+        if (blank($handoffMode)) {
+            $errors['handoff_mode'] = 'Choose how qualified applicants continue with the provider.';
+        }
+
+        if (blank($value('handoff_instructions'))) {
+            $errors['handoff_instructions'] = 'Add short instructions for qualified applicants.';
+        }
+
+        if ($handoffMode === 'onsite' && blank($value('handoff_location_address'))) {
+            $errors['handoff_location_address'] = 'Add the address where qualified applicants must bring their documents.';
+        }
+
+        if ($handoffMode === 'online' && blank($value('handoff_url'))) {
+            $errors['handoff_url'] = 'Add the official link qualified applicants should use.';
+        }
+
+        $handoffDeadline = $value('handoff_deadline');
+
+        if (filled($handoffDeadline) && filled($deadline)
+            && CarbonImmutable::parse($handoffDeadline)->startOfDay()->isBefore(CarbonImmutable::parse($deadline)->startOfDay())) {
+            $errors['handoff_deadline'] = 'The formal application deadline must be on or after the pre-screening deadline.';
         }
 
         foreach ([
@@ -2891,6 +2923,13 @@ class ProviderController extends Controller
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'requirements' => ['nullable', 'string', 'max:5000'],
             'optional_requirements' => ['nullable', 'string', 'max:5000'],
+            'post_qualification_requirements' => ['nullable', 'string', 'max:5000'],
+            'handoff_mode' => ['nullable', Rule::in(['onsite', 'online', 'provider_contact'])],
+            'handoff_instructions' => ['nullable', 'string', 'max:3000'],
+            'handoff_deadline' => ['nullable', 'date'],
+            'handoff_location_name' => ['nullable', 'string', 'max:255'],
+            'handoff_location_address' => ['nullable', 'string', 'max:500'],
+            'handoff_url' => ['nullable', 'url:http,https', 'max:2048'],
             'award_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'benefits' => ['nullable', 'string', 'max:20000', 'json'],
             'minimum_gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -2950,6 +2989,24 @@ class ProviderController extends Controller
     {
         if (array_key_exists('eligible_courses', $validated)) {
             $validated['eligible_courses'] = LearnerProgramPath::canonicalizeList($validated['eligible_courses']);
+        }
+
+        return $validated;
+    }
+
+    private function normalizeScholarshipRequirements(array $validated): array
+    {
+        foreach (['requirements', 'optional_requirements', 'post_qualification_requirements'] as $field) {
+            if (! array_key_exists($field, $validated)) {
+                continue;
+            }
+
+            $validated[$field] = collect(preg_split('/\r\n|\r|\n/', (string) ($validated[$field] ?? '')))
+                ->map(fn (string $requirement): string => trim($requirement))
+                ->filter()
+                ->reject(fn (string $requirement): bool => Str::lower($requirement) === 'completed application form')
+                ->unique(fn (string $requirement): string => Str::lower($requirement))
+                ->implode("\n");
         }
 
         return $validated;
@@ -3234,6 +3291,13 @@ class ProviderController extends Controller
             'longitude',
             'requirements',
             'optional_requirements',
+            'post_qualification_requirements',
+            'handoff_mode',
+            'handoff_instructions',
+            'handoff_deadline',
+            'handoff_location_name',
+            'handoff_location_address',
+            'handoff_url',
             'review_rubric',
             'award_amount',
             'minimum_gwa',
@@ -3399,6 +3463,8 @@ class ProviderController extends Controller
             'detail_url' => route('provider.applications.show', $application),
             'status' => $application->status,
             'document_checklist' => $application->document_checklist ?? [],
+            'optional_document_checklist' => $application->optional_document_checklist
+                ?? app(ScholarshipEligibilityService::class)->optionalDocumentRequirements($application->scholarship),
             'document_readiness' => $readiness,
             'bulk_advance_targets' => $this->bulkAdvanceTargets($application, $readiness),
             'documents' => $application->documents->map(fn (ApplicationDocument $document) => $this->documentPayload($document))->values(),
@@ -3585,6 +3651,14 @@ class ProviderController extends Controller
             'embed_map_url' => $this->embedMapUrl($scholarship),
             'requirements' => $scholarship->requirements,
             'optional_requirements' => $scholarship->optional_requirements,
+            'post_qualification_requirements' => $scholarship->post_qualification_requirements,
+            'handoff_mode' => $scholarship->handoff_mode,
+            'handoff_instructions' => $scholarship->handoff_instructions,
+            'handoff_deadline' => $scholarship->handoff_deadline?->format('Y-m-d'),
+            'handoff_location_name' => $scholarship->handoff_location_name,
+            'handoff_location_address' => $scholarship->handoff_location_address,
+            'handoff_url' => $scholarship->handoff_url,
+            'handoff_map_url' => $this->handoffMapUrl($scholarship),
             'review_rubric' => $scholarship->review_rubric ?? [],
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),
@@ -3897,6 +3971,15 @@ class ProviderController extends Controller
         return null;
     }
 
+    private function handoffMapUrl(Scholarship $scholarship): ?string
+    {
+        $query = $scholarship->handoff_location_address ?: $scholarship->handoff_location_name;
+
+        return filled($query)
+            ? 'https://www.openstreetmap.org/search?query='.rawurlencode($query)
+            : null;
+    }
+
     private function documentPayload(ApplicationDocument $document): array
     {
         return [
@@ -3982,14 +4065,14 @@ class ProviderController extends Controller
         $allowedStatuses = match ($type) {
             'exam' => ['qualified', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled'],
             'interview' => ['under_review', 'qualified', 'shortlisted', 'interview'],
-            'distribution' => ['approved', 'awarded', 'distribution_scheduled'],
+            'distribution' => ['awarded', 'distribution_scheduled'],
             default => [],
         };
 
         if (! in_array($application->status, $allowedStatuses, true)) {
             throw ValidationException::withMessages([
                 'type' => match ($type) {
-                    'distribution' => 'Approve or award the application before announcing distribution.',
+                    'distribution' => 'Record the applicant as an award recipient before announcing distribution.',
                     'exam' => 'Qualify or shortlist the applicant before announcing an exam.',
                     default => 'Start or qualify the application review before announcing an interview.',
                 },
@@ -4079,7 +4162,7 @@ class ProviderController extends Controller
 
         return match ($nextStatus) {
             'interview' => 'passed_exam',
-            'approved' => 'approved_for_award',
+            'approved' => 'qualified_for_formal_application',
             default => null,
         };
     }
@@ -4180,13 +4263,13 @@ class ProviderController extends Controller
             ? match ($status) {
                 'awarded' => [
                     'type' => 'application_outcome',
-                    'title' => 'Award recorded',
-                    'message' => "Your application for {$programTitle} has been awarded. The provider will publish the reward distribution schedule.",
+                    'title' => 'Scholarship award confirmed',
+                    'message' => "The provider selected you for {$programTitle} after its formal application process. Open your application for award and distribution updates.",
                 ],
                 'not_awarded' => [
                     'type' => 'application_outcome',
-                    'title' => 'Award not recorded',
-                    'message' => "Your application for {$programTitle} was not selected for an award. Review the provider note for details.",
+                    'title' => 'Formal application result',
+                    'message' => "The provider completed its formal process for {$programTitle}, but your application was not selected. Review the provider note for details.",
                 ],
                 'disbursed' => [
                     'type' => 'application_outcome',
@@ -4262,8 +4345,8 @@ class ProviderController extends Controller
             ],
             'approved' => [
                 'type' => 'application_status',
-                'title' => 'Application approved',
-                'message' => "Your application for {$programTitle} has been approved. The provider will post reward distribution details when they are ready.",
+                'title' => 'Qualified for formal application',
+                'message' => "You passed pre-screening for {$programTitle}. Open your submission to review the documents and instructions for continuing with the provider. This is not yet a final scholarship award.",
             ],
             'distribution_scheduled' => [
                 'type' => 'application_outcome',
@@ -4272,8 +4355,8 @@ class ProviderController extends Controller
             ],
             'rejected' => [
                 'type' => 'application_status',
-                'title' => 'Application not selected',
-                'message' => "Your application for {$programTitle} was not selected. Review the provider note for details.",
+                'title' => 'Pre-screening not qualified',
+                'message' => "Your submission for {$programTitle} did not qualify for the next stage. Review the provider note for details.",
             ],
             default => [
                 'type' => 'application_status',
@@ -4292,6 +4375,8 @@ class ProviderController extends Controller
     private function statusLabel(string $status): string
     {
         return match ($status) {
+            'approved' => 'Qualified for formal application',
+            'rejected' => 'Not qualified',
             'exam_qualified' => 'Qualified for exam',
             'exam_scheduled' => 'Exam scheduled',
             'exam_taken' => 'Exam taken',

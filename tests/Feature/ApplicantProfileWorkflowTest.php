@@ -98,6 +98,25 @@ class ApplicantProfileWorkflowTest extends TestCase
         ));
     }
 
+    public function test_scholarship_finder_includes_eligible_and_ineligible_published_programs(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = $this->completeAdultApplicant();
+        $eligible = $this->publishedScholarship($provider, 'College Opportunity', 'Academic merit');
+        $ineligible = $this->publishedScholarship($provider, 'Elementary Opportunity', 'Academic merit');
+        $ineligible->update(['eligible_education_levels' => 'elementary']);
+
+        $scholarships = $this->actingAs($applicant)
+            ->getJson('/dashboard/scholarships/data')
+            ->assertOk()
+            ->json('scholarships');
+        $scholarshipsById = collect($scholarships)->keyBy('id');
+
+        $this->assertCount(2, $scholarships);
+        $this->assertTrue($scholarshipsById[$eligible->id]['eligibility_match']['is_eligible']);
+        $this->assertFalse($scholarshipsById[$ineligible->id]['eligibility_match']['is_eligible']);
+    }
+
     public function test_upcoming_program_is_discoverable_before_applications_open(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);

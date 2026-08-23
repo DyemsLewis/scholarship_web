@@ -65,12 +65,12 @@ const reviewActionCatalog = {
     approve: {
         key: 'approve',
         status: 'approved',
-        label: 'Approve application',
-        description: 'Select the applicant for scholarship support.',
-        confirmLabel: 'Approve application',
-        reason: 'approved_for_award',
-        note: 'Application approved after provider review.',
-        icon: 'fa-solid fa-award',
+        label: 'Qualify applicant',
+        description: 'Allow the applicant to continue with your formal application process.',
+        confirmLabel: 'Mark as qualified',
+        reason: 'qualified_for_formal_application',
+        note: 'Applicant qualified after portal pre-screening.',
+        icon: 'fa-solid fa-circle-check',
     },
     reject: {
         key: 'reject',
@@ -97,6 +97,10 @@ const negativeDecisionReasonOptions = decisionReasonOptions.filter((option) => [
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-3 focus:ring-emerald-100';
 const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500';
 const customStatusLabels = {
+    approved: 'Qualified for formal application',
+    awarded: 'Awarded',
+    not_awarded: 'Not selected',
+    rejected: 'Not qualified',
     exam_qualified: 'Qualified for exam',
     exam_scheduled: 'Exam scheduled',
     exam_taken: 'Exam taken',
@@ -191,7 +195,6 @@ const programWorkspaceAction = computed(() => {
     const waitingType = {
         exam_qualified: 'exam',
         interview: 'interview',
-        approved: 'distribution',
         awarded: 'distribution',
     }[application.value?.status];
 
@@ -241,7 +244,7 @@ const nextPrimarySection = computed(() => (
         ? primaryDetailSections[activePrimarySectionIndex.value + 1]
         : null
 ));
-const selectionStages = computed(() => application.value?.scholarship?.selection_stages ?? ['screening', 'distribution']);
+const selectionStages = computed(() => application.value?.scholarship?.selection_stages ?? ['screening']);
 const nextApprovalStatus = computed(() => {
     const currentStatus = application.value?.status;
 
@@ -329,6 +332,37 @@ const suggestedReviewActions = computed(() => {
         return [];
     }
 
+    if (application.value?.status === 'approved') {
+        return [
+            {
+                key: 'record_award',
+                decision: 'outcome',
+                directStatus: true,
+                status: 'awarded',
+                reason: 'approved_for_award',
+                note: 'Selected by the provider after completing the formal application process.',
+                label: 'Award scholarship',
+                description: 'Confirm that this applicant was selected after your organization completed its formal process.',
+                confirmLabel: 'Confirm award',
+                icon: 'fa-solid fa-award',
+                tone: 'success',
+            },
+            {
+                key: 'record_not_selected',
+                decision: 'outcome',
+                directStatus: true,
+                status: 'not_awarded',
+                reason: 'not_selected',
+                note: 'The applicant was not selected after the provider formal application process.',
+                label: 'Not selected',
+                description: 'Close the application without an award and provide the applicant with a clear reason.',
+                confirmLabel: 'Confirm not selected',
+                icon: 'fa-solid fa-circle-xmark',
+                tone: 'danger',
+            },
+        ];
+    }
+
     const actions = [];
 
     if (nextApprovalStatus.value) {
@@ -341,16 +375,16 @@ const suggestedReviewActions = computed(() => {
             reason: {
                 exam_qualified: 'for_exam',
                 interview: 'for_interview',
-                approved: 'approved_for_award',
+                approved: 'qualified_for_formal_application',
             }[nextApprovalStatus.value] ?? '',
             note: nextApprovalStatus.value === 'approved'
-                ? 'Application approved after eligibility, requirement, and provider review.'
+                ? 'Applicant qualified after eligibility, document, and provider pre-screening.'
                 : `Applicant approved to proceed to ${nextLabel.toLowerCase()}.`,
-            label: nextApprovalStatus.value === 'approved' ? 'Approve applicant' : `Approve for ${nextLabel.replace(/^Qualified for /, '')}`,
+            label: nextApprovalStatus.value === 'approved' ? 'Qualify applicant' : `Approve for ${nextLabel.replace(/^Qualified for /, '')}`,
             description: nextApprovalStatus.value === 'approved'
-                ? (approvalParticipationBlock.value?.message || 'Complete the provider review and approve this application.')
+                ? (approvalParticipationBlock.value?.message || 'Confirm that the applicant passed portal pre-screening and may formally apply with your organization.')
                 : `Move this applicant to the configured ${nextLabel.toLowerCase()} stage.`,
-            confirmLabel: nextApprovalStatus.value === 'approved' ? 'Approve applicant' : `Approve for ${nextLabel.toLowerCase()}`,
+            confirmLabel: nextApprovalStatus.value === 'approved' ? 'Mark as qualified' : `Approve for ${nextLabel.toLowerCase()}`,
             blocked: !documentReviewComplete.value || Boolean(approvalParticipationBlock.value),
             blockedSection: !documentReviewComplete.value ? 'documents' : approvalParticipationBlock.value?.section,
             blockedMessage: !documentReviewComplete.value ? documentReviewBlockMessage.value : approvalParticipationBlock.value?.message,
@@ -409,11 +443,18 @@ const completedStageMessage = computed(() => ({
     exam_qualified: 'The applicant is waiting for the shared exam schedule. You may still reject the application if screening needs to be closed.',
     exam_scheduled: 'Complete the shared exam, then record Passed or Failed once in Program Results.',
     interview: 'Complete the shared interview, then record Passed or Failed once in Program Results.',
-    approved: 'The applicant is approved. Publish distribution details once from the program applicant page.',
+    approved: 'The applicant passed portal pre-screening and can now follow your formal application instructions.',
     awarded: 'The award is confirmed. Publish distribution details once from the program applicant page.',
+    not_awarded: 'The provider formal application process is complete and the applicant was not selected.',
     distribution_scheduled: 'Distribution is scheduled. Use Schedule only to record this applicant\'s release result.',
     disbursed: 'The scholarship release is complete for this applicant.',
 }[application.value?.status] ?? 'No applicant decision is needed at this stage. You can still save review notes and rubric scores.'));
+const decisionPanelTitle = computed(() => application.value?.status === 'approved'
+    ? 'Record the formal application outcome'
+    : 'Record the pre-screening decision');
+const decisionPanelDescription = computed(() => application.value?.status === 'approved'
+    ? 'After your organization finishes its formal process, record whether this applicant received the scholarship.'
+    : 'Decide whether the applicant may continue to your organization’s formal application process.');
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
 const applicationRequirements = computed(() => {
@@ -422,6 +463,15 @@ const applicationRequirements = computed(() => {
         .filter(Boolean);
 
     return checklist.length ? checklist : requiredDocuments.value;
+});
+const optionalApplicationRequirements = computed(() => {
+    const checklist = (application.value?.optional_document_checklist ?? [])
+        .map((requirement) => String(requirement).trim())
+        .filter(Boolean);
+
+    return checklist.length
+        ? checklist
+        : documentRequirements(application.value?.scholarship?.optional_requirements);
 });
 const applicationFileRows = computed(() => {
     const documents = application.value?.documents ?? [];
@@ -443,6 +493,21 @@ const applicationFileRows = computed(() => {
             name: requirement,
             document: documentsByName.get(normalizedName) ?? null,
             required: true,
+        });
+    });
+
+    optionalApplicationRequirements.value.forEach((requirement) => {
+        const normalizedName = normalizeDocumentName(requirement);
+
+        if (!normalizedName || seenNames.has(normalizedName)) {
+            return;
+        }
+
+        seenNames.add(normalizedName);
+        rows.push({
+            name: requirement,
+            document: documentsByName.get(normalizedName) ?? null,
+            required: false,
         });
     });
 
@@ -769,14 +834,25 @@ function statusConfirmation(status) {
             tone: 'danger',
         },
         approved: {
-            title: 'Approve this application?',
-            message: `${applicantName} will be notified that the provider approved the application.`,
-            confirmLabel: 'Approve application',
+            title: 'Mark this applicant as qualified?',
+            message: `${applicantName} will receive the documents and instructions needed to continue the formal application with your organization. This is not a final scholarship award.`,
+            confirmLabel: 'Mark as qualified',
+        },
+        awarded: {
+            title: 'Confirm this scholarship award?',
+            message: `${applicantName} will be notified that your organization selected them after the formal application process.`,
+            confirmLabel: 'Confirm award',
+        },
+        not_awarded: {
+            title: 'Mark this applicant as not selected?',
+            message: `${applicantName} will receive the final outcome, selected reason, and provider note.`,
+            confirmLabel: 'Confirm not selected',
+            tone: 'danger',
         },
         rejected: {
-            title: 'Reject this application?',
-            message: `${applicantName} will receive the rejection status, reason, and provider note.`,
-            confirmLabel: 'Reject application',
+            title: 'Mark this applicant as not qualified?',
+            message: `${applicantName} will receive the pre-screening result, reason, and provider note.`,
+            confirmLabel: 'Mark as not qualified',
             tone: 'danger',
         },
     };
@@ -840,7 +916,7 @@ async function updateStatus() {
         const completedRubricScores = Object.fromEntries(
             Object.entries(rubricScores.value).filter(([, score]) => score !== '' && score !== null),
         );
-        const response = selectedReviewAction.value?.decision
+        const response = selectedReviewAction.value?.decision && !selectedReviewAction.value?.directStatus
             ? await window.axios.patch(`/provider/applications/${application.value.id}/decision`, {
                 decision: selectedReviewAction.value.decision,
                 decision_reason: reviewForm.value.decisionReason || null,
@@ -848,8 +924,10 @@ async function updateStatus() {
                 rubric_scores: completedRubricScores,
             })
             : await window.axios.patch(`/provider/applications/${application.value.id}/status`, {
-                status: application.value.status,
-                decision_reason: application.value.decision_reason,
+                status: selectedReviewAction.value?.directStatus ? reviewForm.value.status : application.value.status,
+                decision_reason: selectedReviewAction.value?.directStatus
+                    ? (reviewForm.value.decisionReason || null)
+                    : application.value.decision_reason,
                 review_notes: reviewForm.value.reviewNotes,
                 rubric_scores: completedRubricScores,
             });
@@ -861,7 +939,8 @@ async function updateStatus() {
                 actionLabel: completedReviewAction.label,
                 message: response.data.message || 'The applicant decision was saved.',
                 remainingCount: Number(response.data.review_navigation?.remaining_count ?? 0),
-                listUrl: response.data.review_navigation?.list_url || '/provider/applications',
+                listUrl: response.data.review_navigation?.list_url
+                    || `/provider/applications?scholarship_id=${application.value?.scholarship?.id ?? ''}&filter=${completedReviewAction.directStatus ? 'formal_application' : 'pending_review'}`,
                 nextApplication: response.data.review_navigation?.next_application ?? null,
             };
         }
@@ -1148,10 +1227,10 @@ onMounted(loadApplication);
                                             Decision
                                         </p>
                                         <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                            Record the final decision
+                                            {{ decisionPanelTitle }}
                                         </h3>
                                         <p class="mt-1 text-sm leading-6 text-slate-600">
-                                            Choose an outcome only after reviewing the applicant, eligibility, documents, and rubric.
+                                            {{ decisionPanelDescription }}
                                         </p>
                                     </div>
                                     <div class="shrink-0 sm:text-right">
@@ -1202,6 +1281,8 @@ onMounted(loadApplication);
                                                     ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
                                                     : action.tone === 'danger'
                                                         ? 'border-rose-200 bg-white hover:border-rose-300 hover:bg-rose-50'
+                                                        : action.tone === 'success'
+                                                            ? 'border-emerald-200 bg-white hover:border-emerald-300 hover:bg-emerald-50'
                                                         : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white',
                                             ]"
                                             @click="selectReviewAction(action)"
@@ -1213,6 +1294,8 @@ onMounted(loadApplication);
                                                         ? 'bg-white/10 text-white'
                                                         : action.tone === 'danger'
                                                             ? 'bg-rose-100 text-rose-700'
+                                                            : action.tone === 'success'
+                                                                ? 'bg-emerald-100 text-emerald-700'
                                                             : 'bg-white text-slate-700 ring-1 ring-slate-200',
                                                 ]"
                                             >
@@ -1512,7 +1595,9 @@ onMounted(loadApplication);
                                             <span
                                                 :class="[
                                                     'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
-                                                    row.document ? 'bg-slate-100 text-slate-700' : 'bg-amber-50 text-amber-700',
+                                                    row.document
+                                                        ? 'bg-slate-100 text-slate-700'
+                                                        : row.required ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500',
                                                 ]"
                                             >
                                                 <i :class="row.document ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file'"></i>
@@ -1522,14 +1607,14 @@ onMounted(loadApplication);
                                                 <div class="flex flex-wrap items-center gap-2">
                                                     <p class="font-bold text-slate-950">{{ row.name }}</p>
                                                     <span v-if="!row.required" class="rounded bg-slate-100 px-2 py-0.5 text-[0.65rem] font-bold uppercase text-slate-500">
-                                                        Additional file
+                                                        Supporting file
                                                     </span>
                                                 </div>
                                                 <p v-if="row.document" class="mt-1 truncate text-xs text-slate-500">
                                                     {{ row.document.original_name }} - {{ formatFileSize(row.document.size) }} - {{ row.document.uploaded_at }}
                                                 </p>
-                                                <p v-else class="mt-1 text-xs font-semibold text-amber-700">
-                                                    Applicant has not uploaded this file
+                                                <p v-else :class="['mt-1 text-xs font-semibold', row.required ? 'text-amber-700' : 'text-slate-500']">
+                                                    {{ row.required ? 'Applicant has not uploaded this file' : 'Optional file not provided' }}
                                                 </p>
                                                 <p v-if="row.document?.review_notes" class="mt-1 line-clamp-1 text-xs text-slate-600">
                                                     Review note: {{ row.document.review_notes }}
@@ -1541,10 +1626,12 @@ onMounted(loadApplication);
                                             <span
                                                 :class="[
                                                     'h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase',
-                                                    row.document ? documentStatusClass(row.document.status) : 'bg-amber-50 text-amber-700',
+                                                    row.document
+                                                        ? documentStatusClass(row.document.status)
+                                                        : row.required ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500',
                                                 ]"
                                             >
-                                                {{ row.document ? labelFromKey(row.document.status || 'pending') : 'Not uploaded' }}
+                                                {{ row.document ? labelFromKey(row.document.status || 'pending') : row.required ? 'Not uploaded' : 'Optional' }}
                                             </span>
                                             <button
                                                 v-if="row.document"

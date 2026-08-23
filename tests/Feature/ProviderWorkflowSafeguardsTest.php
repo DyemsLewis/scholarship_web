@@ -115,7 +115,7 @@ class ProviderWorkflowSafeguardsTest extends TestCase
             ScholarshipApplication::create([
                 'scholarship_id' => $scholarship->id,
                 'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
-                'status' => 'approved',
+                'status' => 'awarded',
                 'document_checklist' => [],
                 'submitted_at' => now(),
             ]);

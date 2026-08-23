@@ -2750,6 +2750,7 @@ class _ApplicationCard extends StatelessWidget {
     final documents = asMapList(application['documents']);
     final timeline = asMapList(application['timeline']);
     final schedules = asMapList(application['schedules']);
+    final formalHandoff = asMap(application['formal_application_handoff']);
     final dssScore = intValue(application['dss_score']);
     final status = stringValue(application['status'], fallback: 'submitted');
     final hasOutcome =
@@ -2799,7 +2800,10 @@ class _ApplicationCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                _StatusPill(label: labelFromKey(status), status: status),
+                _StatusPill(
+                  label: applicationStatusLabel(status),
+                  status: status,
+                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -2816,6 +2820,10 @@ class _ApplicationCard extends StatelessWidget {
                 style: const TextStyle(color: Color(0xFF475569), height: 1.35),
               ),
             ),
+            if (formalHandoff.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _FormalApplicationHandoffCard(handoff: formalHandoff),
+            ],
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(14),
@@ -2967,7 +2975,7 @@ class _ApplicationCard extends StatelessWidget {
                         ),
                         _InfoChip(
                           icon: Icons.flag_outlined,
-                          label: labelFromKey(status),
+                          label: applicationStatusLabel(status),
                         ),
                       ],
                     ),
@@ -3020,6 +3028,174 @@ class _ApplicationCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _FormalApplicationHandoffCard extends StatelessWidget {
+  const _FormalApplicationHandoffCard({required this.handoff});
+
+  final Map<String, dynamic> handoff;
+
+  @override
+  Widget build(BuildContext context) {
+    final requirements = stringList(handoff['requirements']);
+    final deadline = stringValue(handoff['deadline']);
+    final locationName = stringValue(handoff['location_name']);
+    final locationAddress = stringValue(handoff['location_address']);
+    final instructions = stringValue(handoff['instructions']);
+    final mapUrl = stringValue(handoff['map_url']);
+    final providerUrl = stringValue(handoff['url']);
+    final contact = [
+      stringValue(handoff['contact_person']),
+      stringValue(handoff['contact_department']),
+      stringValue(handoff['contact_email']),
+      stringValue(handoff['contact_number']),
+    ].where((value) => value.isNotEmpty).join(' - ');
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF59E0B)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0F172A),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(13)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.arrow_forward_rounded, color: Color(0xFFFCD34D)),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Continue with the provider',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  stringValue(
+                    handoff['notice'],
+                    fallback:
+                        'Portal qualification is not a final scholarship award.',
+                  ),
+                  style: const TextStyle(
+                    color: Color(0xFF475569),
+                    height: 1.4,
+                  ),
+                ),
+                if (deadline.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _InfoChip(
+                    icon: Icons.event_outlined,
+                    label: 'Formal deadline: $deadline',
+                  ),
+                ],
+                if (requirements.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Documents requested by the provider',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final requirement in requirements)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.check_circle_outline,
+                            size: 18,
+                            color: Color(0xFF047857),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(requirement)),
+                        ],
+                      ),
+                    ),
+                  const Text(
+                    'Bring or send these directly to the provider as instructed; do not upload them here unless they also appear in your portal checklist.',
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                if (instructions.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(instructions, style: const TextStyle(height: 1.45)),
+                ],
+                if (locationName.isNotEmpty || locationAddress.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    [locationName, locationAddress]
+                        .where((value) => value.isNotEmpty)
+                        .join('\n'),
+                    style: const TextStyle(
+                      color: Color(0xFF334155),
+                      fontWeight: FontWeight.w700,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                if (contact.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Provider contact: $contact',
+                    style: const TextStyle(
+                      color: Color(0xFF475569),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+                if (mapUrl.isNotEmpty || providerUrl.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (mapUrl.isNotEmpty)
+                        OutlinedButton.icon(
+                          onPressed: () => openExternalMap(context, mapUrl),
+                          icon: const Icon(Icons.map_outlined),
+                          label: const Text('Open map'),
+                        ),
+                      if (providerUrl.isNotEmpty)
+                        FilledButton.icon(
+                          onPressed: () =>
+                              openExternalLink(context, providerUrl),
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('Provider link'),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -4584,7 +4760,8 @@ String statusDescription(Object? value) {
     'exam_failed' => 'The provider recorded that the exam was not passed.',
     'interview_failed' =>
       'The provider recorded that the interview was not passed.',
-    'approved' => 'Your application was approved by the provider.',
+    'approved' =>
+      'You passed portal pre-screening. Follow the provider formal application steps shown above.',
     'awarded' =>
       'The provider recorded your award and will set the reward distribution schedule.',
     'distribution_scheduled' =>
@@ -4594,6 +4771,23 @@ String statusDescription(Object? value) {
     'rejected' => 'The application was closed and not approved.',
     'not_awarded' => 'The application completed review but was not awarded.',
     _ => 'The provider will update this status as review progresses.',
+  };
+}
+
+String applicationStatusLabel(Object? value) {
+  return switch (stringValue(value, fallback: 'submitted')) {
+    'approved' => 'Qualified for formal application',
+    'not_awarded' => 'Not selected',
+    'rejected' => 'Not qualified',
+    'exam_qualified' => 'Qualified for exam',
+    'exam_scheduled' => 'Exam scheduled',
+    'exam_taken' => 'Exam taken',
+    'exam_passed' => 'Passed exam',
+    'exam_failed' => 'Failed exam',
+    'interview_failed' => 'Failed interview',
+    'distribution_scheduled' => 'Distribution scheduled',
+    'disbursed' => 'Distributed',
+    final status => labelFromKey(status),
   };
 }
 

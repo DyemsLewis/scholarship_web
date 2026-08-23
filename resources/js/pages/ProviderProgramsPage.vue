@@ -170,14 +170,6 @@ function programSlotLabel(scholarship) {
         : `${selected} selected`;
 }
 
-function previewRequirements(scholarship) {
-    return String(scholarship.requirements ?? '')
-        .split(/\r?\n|,/)
-        .map((requirement) => requirement.trim())
-        .filter(Boolean)
-        .slice(0, 5);
-}
-
 function programStatusLabel(status) {
     return {
         draft: 'Draft',
@@ -216,16 +208,6 @@ function programStatusGuidance(status) {
         rejected: 'Review the administrator feedback, update the program, and submit it again.',
         closed: 'This program is no longer accepting new applications.',
     }[status] ?? 'Review the program details and choose the next management action.';
-}
-
-function programRequirementCount(scholarship) {
-    const count = String(scholarship.requirements ?? '')
-        .split(/\r?\n|,/)
-        .map((requirement) => requirement.trim())
-        .filter(Boolean)
-        .length;
-
-    return `${count} requirement${count === 1 ? '' : 's'}`;
 }
 
 async function loadProviderData() {
@@ -464,10 +446,10 @@ onMounted(loadProviderData);
             aria-labelledby="provider-program-manage-title"
             @click.self="closePreviewModal"
         >
-            <section class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+            <section class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-md bg-[#f4f6f8] shadow-2xl">
                 <header class="relative overflow-hidden bg-[#081426] px-5 py-5 text-white sm:px-6">
-                    <div class="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,_rgba(251,191,36,0.2),_transparent_65%)]"></div>
-                    <div class="relative flex items-start gap-4">
+                    <div class="pointer-events-none absolute inset-y-0 right-0 w-56 bg-[linear-gradient(135deg,_transparent,_rgba(251,191,36,0.13))]"></div>
+                    <div class="relative flex items-start gap-3">
                         <img
                             :src="selectedPreviewScholarship.image_url"
                             :alt="selectedPreviewScholarship.title"
@@ -475,21 +457,21 @@ onMounted(loadProviderData);
                         >
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Program workspace</p>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Program workspace</p>
                                 <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', programStatusClass(selectedPreviewScholarship.status)]">
                                     {{ programStatusLabel(selectedPreviewScholarship.status) }}
                                 </span>
                             </div>
-                            <h3 id="provider-program-manage-title" class="mt-1 text-xl font-bold leading-tight text-white sm:text-2xl">
+                            <h3 id="provider-program-manage-title" class="mt-1 text-xl font-bold leading-tight text-white">
                                 {{ selectedPreviewScholarship.title }}
                             </h3>
-                            <p class="mt-1 text-xs font-semibold text-slate-300">
-                                {{ selectedPreviewScholarship.category || 'Scholarship program' }} - {{ targetApplicantLabel(selectedPreviewScholarship) }}
+                            <p class="mt-1 truncate text-xs font-semibold text-slate-300">
+                                {{ selectedPreviewScholarship.category || 'Scholarship program' }} for {{ targetApplicantLabel(selectedPreviewScholarship).toLowerCase() }}
                             </p>
                         </div>
                         <button
                             type="button"
-                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/20 text-white transition hover:bg-white hover:text-slate-950"
+                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/15 text-slate-300 transition hover:bg-white hover:text-slate-950"
                             aria-label="Close program workspace"
                             @click="closePreviewModal"
                         >
@@ -499,102 +481,85 @@ onMounted(loadProviderData);
                 </header>
 
                 <div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-                    <div class="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(17rem,0.65fr)]">
-                        <div class="space-y-4">
-                            <section class="rounded-lg border border-slate-200 p-4">
-                                <div class="flex items-start gap-3">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                        <i class="fa-solid fa-arrow-trend-up text-sm" aria-hidden="true"></i>
-                                    </span>
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Current next step</p>
-                                        <p class="mt-1 text-sm font-semibold leading-6 text-slate-800">
-                                            {{ programStatusGuidance(selectedPreviewScholarship.status) }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </section>
+                    <div class="flex items-start gap-3 rounded-md border border-amber-200 bg-white px-4 py-3 shadow-sm">
+                        <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                        </span>
+                        <div>
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Recommended next step</p>
+                            <p class="mt-1 text-sm font-semibold leading-5 text-slate-800">
+                                {{ programStatusGuidance(selectedPreviewScholarship.status) }}
+                            </p>
+                        </div>
+                    </div>
 
-                            <section class="rounded-lg border border-slate-200 p-4">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Program overview</p>
+                    <dl class="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 shadow-sm sm:grid-cols-4">
+                        <div class="bg-white p-3.5">
+                            <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                <i class="fa-regular fa-calendar text-amber-700" aria-hidden="true"></i>
+                                Deadline
+                            </dt>
+                            <dd class="mt-2 text-sm font-bold text-slate-900">{{ programDeadlineLabel(selectedPreviewScholarship.deadline) }}</dd>
+                        </div>
+                        <div class="bg-white p-3.5">
+                            <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                <i class="fa-solid fa-users text-amber-700" aria-hidden="true"></i>
+                                Applicants
+                            </dt>
+                            <dd class="mt-2 text-sm font-bold text-slate-900">
+                                {{ selectedPreviewScholarship.applications_count ?? 0 }} total
+                            </dd>
+                            <p v-if="Number(selectedPreviewScholarship.pending_review_applications_count ?? 0) > 0" class="mt-1 text-[10px] font-bold text-amber-700">
+                                {{ selectedPreviewScholarship.pending_review_applications_count }} to review
+                            </p>
+                        </div>
+                        <div class="bg-white p-3.5">
+                            <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                <i class="fa-solid fa-user-graduate text-amber-700" aria-hidden="true"></i>
+                                Learners
+                            </dt>
+                            <dd class="mt-2 text-sm font-bold text-slate-900">{{ targetApplicantLabel(selectedPreviewScholarship) }}</dd>
+                        </div>
+                        <div class="bg-white p-3.5">
+                            <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                <i class="fa-solid fa-award text-amber-700" aria-hidden="true"></i>
+                                Slots
+                            </dt>
+                            <dd class="mt-2 text-sm font-bold text-slate-900">{{ programSlotLabel(selectedPreviewScholarship) }}</dd>
+                        </div>
+                    </dl>
+
+                    <section class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+                        <div class="grid sm:grid-cols-2 sm:divide-x sm:divide-slate-200">
+                            <div class="p-4">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Program overview</p>
                                 <p class="mt-2 text-sm leading-6 text-slate-600">
                                     {{ selectedPreviewScholarship.description || 'No program description has been added yet.' }}
                                 </p>
-                            </section>
-
-                            <section class="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                                <div class="flex items-start gap-3">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
-                                        <i class="fa-solid fa-gift text-sm" aria-hidden="true"></i>
-                                    </span>
-                                    <div class="min-w-0">
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">Benefits</p>
-                                        <p class="mt-1 text-sm font-semibold leading-6 text-slate-900">
-                                            {{ selectedPreviewScholarship.benefit_summary || 'No benefit summary has been added yet.' }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <section class="rounded-lg border border-slate-200 p-4">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Main requirements</p>
-                                    <span class="text-xs font-semibold text-slate-500">{{ programRequirementCount(selectedPreviewScholarship) }}</span>
-                                </div>
-                                <div v-if="previewRequirements(selectedPreviewScholarship).length" class="mt-3 flex flex-wrap gap-2">
-                                    <span
-                                        v-for="requirement in previewRequirements(selectedPreviewScholarship)"
-                                        :key="requirement"
-                                        class="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
-                                    >
-                                        {{ requirement }}
-                                    </span>
-                                </div>
-                                <p v-else class="mt-2 text-sm text-slate-500">No document requirements added yet.</p>
-                            </section>
+                            </div>
+                            <div class="border-t border-slate-200 bg-amber-50/60 p-4 sm:border-t-0">
+                                <p class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-800">
+                                    <i class="fa-solid fa-gift" aria-hidden="true"></i>
+                                    Benefits
+                                </p>
+                                <p class="mt-2 text-sm font-semibold leading-6 text-slate-900">
+                                    {{ selectedPreviewScholarship.benefit_summary || 'No benefit summary has been added yet.' }}
+                                </p>
+                            </div>
                         </div>
-
-                        <aside class="h-fit rounded-lg border border-slate-200 bg-slate-50 p-4">
-                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">At a glance</p>
-                            <dl class="mt-3 divide-y divide-slate-200">
-                                <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
-                                    <dt class="text-xs font-semibold text-slate-500">Deadline</dt>
-                                    <dd class="text-right text-sm font-bold text-slate-900">{{ programDeadlineLabel(selectedPreviewScholarship.deadline) }}</dd>
-                                </div>
-                                <div class="flex items-center justify-between gap-4 py-3">
-                                    <dt class="text-xs font-semibold text-slate-500">Applicants</dt>
-                                    <dd class="text-right text-sm font-bold text-slate-900">
-                                        {{ selectedPreviewScholarship.applications_count ?? 0 }}
-                                        <span v-if="Number(selectedPreviewScholarship.pending_review_applications_count ?? 0) > 0" class="block text-[10px] text-amber-700">
-                                            {{ selectedPreviewScholarship.pending_review_applications_count }} to review
-                                        </span>
-                                    </dd>
-                                </div>
-                                <div class="flex items-center justify-between gap-4 py-3">
-                                    <dt class="text-xs font-semibold text-slate-500">Award slots</dt>
-                                    <dd class="text-right text-sm font-bold text-slate-900">{{ programSlotLabel(selectedPreviewScholarship) }}</dd>
-                                </div>
-                                <div class="flex items-center justify-between gap-4 py-3">
-                                    <dt class="text-xs font-semibold text-slate-500">Target</dt>
-                                    <dd class="max-w-44 text-right text-sm font-bold text-slate-900">{{ targetApplicantLabel(selectedPreviewScholarship) }}</dd>
-                                </div>
-                                <div class="flex items-center justify-between gap-4 py-3 last:pb-0">
-                                    <dt class="text-xs font-semibold text-slate-500">Location</dt>
-                                    <dd class="max-w-44 truncate text-right text-sm font-bold text-slate-900">
-                                        {{ selectedPreviewScholarship.location_name || selectedPreviewScholarship.location_address || 'Not listed' }}
-                                    </dd>
-                                </div>
-                            </dl>
-                        </aside>
-                    </div>
+                        <div class="flex items-start gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-600">
+                            <i class="fa-solid fa-location-dot mt-0.5 text-amber-700" aria-hidden="true"></i>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Program location</p>
+                                <p class="mt-0.5 font-semibold text-slate-800">
+                                    {{ selectedPreviewScholarship.location_name || selectedPreviewScholarship.location_address || 'Not listed' }}
+                                </p>
+                            </div>
+                        </div>
+                    </section>
                 </div>
 
-                <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                    <div>
-                        <p class="text-sm font-bold text-slate-900">Manage this program</p>
-                        <p class="mt-0.5 text-xs text-slate-500">Choose an action without leaving your program list.</p>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
+                <div class="grid grid-cols-2 gap-2 border-t border-slate-200 bg-white p-4 sm:flex sm:justify-end sm:px-5">
                         <button
                             v-if="hasScholarshipMapPreview(selectedPreviewScholarship)"
                             type="button"
@@ -630,7 +595,6 @@ onMounted(loadProviderData);
                             <i class="fa-solid fa-users mr-1.5" aria-hidden="true"></i>
                             Applicants
                         </a>
-                    </div>
                 </div>
             </section>
         </div>

@@ -53,27 +53,46 @@ function formatAmount(value) {
         minimumFractionDigits: 2,
     }).format(Number(value));
 }
+
+function benefitIcon(type) {
+    return {
+        cash_grant: 'fa-solid fa-peso-sign',
+        tuition_coverage: 'fa-solid fa-school',
+        allowance: 'fa-solid fa-wallet',
+        school_supplies: 'fa-solid fa-book-open',
+        device_support: 'fa-solid fa-laptop',
+        transportation: 'fa-solid fa-bus',
+        accommodation: 'fa-solid fa-house',
+        training: 'fa-solid fa-certificate',
+        mentorship: 'fa-solid fa-people-arrows',
+        fee_waiver: 'fa-solid fa-receipt',
+    }[type] ?? 'fa-solid fa-gift';
+}
 </script>
 
 <template>
-    <div :class="compact ? 'divide-y divide-emerald-100 overflow-hidden rounded-md border border-emerald-200 bg-white' : 'grid gap-3 sm:grid-cols-2'">
+    <div :class="compact ? 'divide-y divide-emerald-100 overflow-hidden rounded-md border border-emerald-200 bg-white' : 'grid items-stretch gap-3 sm:grid-cols-2'">
         <article
             v-for="benefit in displayedBenefits"
             :key="`${benefit.type}-${benefit.title}`"
-            :class="compact ? 'px-3 py-2.5' : 'rounded-lg border border-slate-200 bg-slate-50 p-4'"
+            :class="compact ? 'px-3 py-2.5' : 'relative h-full overflow-hidden rounded-md border border-slate-200 bg-white p-4 shadow-sm'"
         >
+            <span v-if="!compact" class="absolute inset-x-0 top-0 h-1 bg-amber-300"></span>
             <div class="flex items-start gap-3">
-                <span :class="compact ? 'grid h-7 w-7 shrink-0 place-items-center rounded-md bg-emerald-50 text-xs text-emerald-700' : 'grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-amber-700 ring-1 ring-slate-200'">
-                    <i class="fa-solid fa-gift" aria-hidden="true"></i>
+                <span :class="compact ? 'grid h-7 w-7 shrink-0 place-items-center rounded-md bg-emerald-50 text-xs text-emerald-700' : 'grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-amber-300'">
+                    <i :class="benefitIcon(benefit.type)" aria-hidden="true"></i>
                 </span>
-                <div class="min-w-0">
+                <div class="min-w-0 flex-1">
                     <p class="text-sm font-bold text-slate-950">{{ benefit.title }}</p>
-                    <div :class="['flex flex-wrap gap-1.5 text-[11px] font-bold text-slate-600', compact ? 'mt-1' : 'mt-2']">
+                    <p
+                        v-if="benefit.amount !== null && benefit.amount !== undefined && benefit.amount !== ''"
+                        :class="compact ? 'mt-1 text-xs font-bold text-emerald-700' : 'mt-1 text-base font-bold text-amber-800'"
+                    >
+                        {{ formatAmount(benefit.amount) }}
+                    </p>
+                    <div :class="['flex flex-wrap gap-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-600', compact ? 'mt-1' : 'mt-2']">
                         <span v-if="benefit.coverage_label" class="rounded-md bg-white px-2 py-1 ring-1 ring-slate-200">
                             {{ benefit.coverage_label }}
-                        </span>
-                        <span v-if="benefit.amount !== null && benefit.amount !== undefined && benefit.amount !== ''" class="rounded-md bg-white px-2 py-1 ring-1 ring-slate-200">
-                            {{ formatAmount(benefit.amount) }}
                         </span>
                         <span v-if="benefit.frequency_label" class="rounded-md bg-white px-2 py-1 ring-1 ring-slate-200">
                             {{ benefit.frequency_label }}

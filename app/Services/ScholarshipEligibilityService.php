@@ -306,6 +306,20 @@ class ScholarshipEligibilityService
         return $this->splitDocumentRequirements($scholarship?->requirements);
     }
 
+    public function optionalDocumentRequirements(?Scholarship $scholarship): array
+    {
+        $requiredNames = collect($this->documentRequirements($scholarship))
+            ->map(fn (string $document): string => str($document)->lower()->squish()->toString());
+
+        return collect($this->splitDocumentRequirements($scholarship?->optional_requirements))
+            ->reject(fn (string $document): bool => $requiredNames->contains(
+                str($document)->lower()->squish()->toString(),
+            ))
+            ->unique(fn (string $document): string => str($document)->lower()->squish()->toString())
+            ->values()
+            ->all();
+    }
+
     public function splitDocumentRequirements(?string $requirements): array
     {
         $requirements = $this->splitOptions($requirements);

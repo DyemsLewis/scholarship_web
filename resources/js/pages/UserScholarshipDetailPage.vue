@@ -27,10 +27,10 @@ const profileReadiness = ref({
     missing: [],
 });
 const applicationModeOptions = [
-    { value: 'online', label: 'Online submission' },
-    { value: 'onsite', label: 'On-site submission' },
-    { value: 'hybrid', label: 'Online and on-site' },
-    { value: 'provider_review', label: 'Provider review only' },
+    { value: 'online', label: 'Portal pre-screening' },
+    { value: 'onsite', label: 'Assisted on-site pre-screening' },
+    { value: 'hybrid', label: 'Portal with on-site verification' },
+    { value: 'provider_review', label: 'Profile review only' },
 ];
 const preparedDocuments = computed(() => scholarship.value?.prepared_documents ?? {
     required: 0,
@@ -49,6 +49,8 @@ const documentItems = computed(() => {
 });
 const hasDocumentRequirements = computed(() => documentItems.value.length > 0);
 const optionalDocumentItems = computed(() => documentRequirements(scholarship.value?.optional_requirements));
+const postQualificationDocumentItems = computed(() =>
+    documentRequirements(scholarship.value?.post_qualification_requirements));
 const documentRequirementSummary = computed(() => hasDocumentRequirements.value
     ? `${documentItems.value.length} requirement${documentItems.value.length === 1 ? '' : 's'}`
     : 'No documents listed');
@@ -143,16 +145,20 @@ const keyFacts = computed(() => {
         {
             icon: 'fa-solid fa-gift',
             label: 'Benefits',
-            value: current.benefit_summary || formatAmount(current.award_amount),
-            detail: 'Cash and non-cash support listed by the provider',
+            value: current.benefits?.length
+                ? `${current.benefits.length} included benefit${current.benefits.length === 1 ? '' : 's'}`
+                : formatAmount(current.award_amount),
+            detail: current.benefits?.length > 1
+                ? 'See the complete support package below'
+                : (current.benefits?.[0]?.title || 'Support listed by the provider'),
         },
         {
             icon: 'fa-regular fa-calendar',
-            label: 'Apply by',
+            label: 'Pre-screen by',
             value: current.deadline || 'No deadline listed',
             detail: isUpcomingProgram.value
                 ? `Opens ${current.application_opens_at}`
-                : (isAcceptingApplications.value ? 'Applications are open' : 'Applications are closed'),
+                : (isAcceptingApplications.value ? 'Pre-screening is open' : 'Pre-screening is closed'),
         },
         {
             icon: 'fa-solid fa-users',
@@ -162,7 +168,7 @@ const keyFacts = computed(() => {
         },
         {
             icon: 'fa-solid fa-paper-plane',
-            label: 'How to apply',
+            label: 'How to start',
             value: applicationModeLabel(current.application_mode),
             detail: documentRequirementSummary.value,
         },
@@ -187,7 +193,7 @@ const fitHighlights = computed(() => {
 });
 const applyPanelTitle = computed(() => {
     if (scholarship.value?.has_applied) {
-        return 'Application submitted';
+        return 'Pre-screening submitted';
     }
 
     if (isUpcomingProgram.value) {
@@ -195,7 +201,7 @@ const applyPanelTitle = computed(() => {
     }
 
     if (!isAcceptingApplications.value) {
-        return 'Applications are closed';
+        return 'Pre-screening is closed';
     }
 
     if (!canApply.value) {
@@ -206,30 +212,30 @@ const applyPanelTitle = computed(() => {
         return 'Not eligible right now';
     }
 
-    return 'Ready to apply';
+    return 'Ready for pre-screening';
 });
 const applyPanelDescription = computed(() => {
     if (scholarship.value?.has_applied) {
-        return 'You can review this program in your submitted applications.';
+        return 'You can review this program in your submitted pre-screening records.';
     }
 
     if (isUpcomingProgram.value) {
-        return `You can review and save this program now. Applications begin on ${scholarship.value.application_opens_at}.`;
+        return `You can review and save this program now. Pre-screening begins on ${scholarship.value.application_opens_at}.`;
     }
 
     if (!isAcceptingApplications.value) {
-        return 'This program is no longer accepting new applications. You can still save it for reference.';
+        return 'This program is no longer accepting new pre-screening submissions. You can still save it for reference.';
     }
 
     if (!canApply.value) {
-        return 'Finish the required profile fields before starting the application wizard.';
+        return 'Finish the required profile fields before starting pre-screening.';
     }
 
     if (!isEligible.value) {
         return applicationBlockedLabel.value;
     }
 
-    return 'Your profile can start this application. Review the details once more before submitting.';
+    return 'Your profile can start pre-screening. Review the details once more before submitting.';
 });
 const hasContractDetails = computed(() => Boolean(
     scholarship.value?.renewal_policy
@@ -558,7 +564,7 @@ onMounted(loadScholarship);
                                         :href="`/dashboard/applications?scholarship=${scholarship.id}`"
                                         class="rounded-md bg-amber-300 px-4 py-2.5 text-center text-sm font-bold text-slate-950 transition hover:bg-amber-200"
                                     >
-                                        Start application
+                                        Start pre-screening
                                     </a>
                                     <span
                                         v-else-if="isUpcomingProgram"
@@ -570,7 +576,7 @@ onMounted(loadScholarship);
                                         v-else-if="!isAcceptingApplications"
                                         class="rounded-md bg-white/10 px-4 py-2.5 text-center text-sm font-bold text-slate-300 ring-1 ring-white/15"
                                     >
-                                        Applications closed
+                                        Pre-screening closed
                                     </span>
                                     <a
                                         v-else-if="!canApply"
@@ -587,7 +593,7 @@ onMounted(loadScholarship);
                                         Review eligibility
                                     </a>
                                     <span v-else class="rounded-md bg-white/10 px-4 py-2.5 text-center text-sm font-bold text-slate-300 ring-1 ring-white/15">
-                                        Application unavailable
+                                        Pre-screening unavailable
                                     </span>
 
                                     <button
@@ -729,7 +735,7 @@ onMounted(loadScholarship);
                                         <div>
                                             <p class="student-kicker">Documents</p>
                                             <h2 class="mt-1 text-xl font-bold text-slate-950">What should you prepare?</h2>
-                                            <p class="mt-1 text-sm text-slate-500">Files can be prepared before you start the application.</p>
+                                            <p class="mt-1 text-sm text-slate-500">Upload only the files needed for initial eligibility checking.</p>
                                         </div>
                                     </div>
                                     <a href="/dashboard/documents" class="w-fit rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-500">
@@ -785,7 +791,7 @@ onMounted(loadScholarship);
                                         </span>
                                         <div>
                                             <p class="text-sm font-bold text-amber-950">Optional supporting files</p>
-                                            <p class="mt-1 text-xs leading-5 text-amber-900">These can support your application but are not required to submit it.</p>
+                                            <p class="mt-1 text-xs leading-5 text-amber-900">These can support pre-screening but are not required to submit it.</p>
                                         </div>
                                     </div>
                                     <div class="mt-3 flex flex-wrap gap-2">
@@ -796,6 +802,26 @@ onMounted(loadScholarship);
                                         >
                                             {{ requirement }}
                                         </span>
+                                    </div>
+                                </div>
+
+                                <div v-if="postQualificationDocumentItems.length" class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                    <div class="flex items-start gap-3 bg-slate-950 p-4 text-white">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-300 text-slate-950">
+                                            <i class="fa-solid fa-briefcase" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="text-sm font-bold">Prepare only if you qualify</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-300">
+                                                Bring these directly to the provider for the formal application. Do not upload them here unless they are also listed above.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="grid gap-x-5 gap-y-2 p-4 sm:grid-cols-2">
+                                        <div v-for="item in postQualificationDocumentItems" :key="item" class="flex items-start gap-2 text-sm leading-6 text-slate-700">
+                                            <i class="fa-solid fa-circle-check mt-1.5 text-xs text-emerald-700" aria-hidden="true"></i>
+                                            <span>{{ item }}</span>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -811,7 +837,7 @@ onMounted(loadScholarship);
 
                                 <div class="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500">
                                     <i class="fa-solid fa-circle-info mt-1 text-amber-700" aria-hidden="true"></i>
-                                    <p>Application method: <span class="font-bold text-slate-700">{{ applicationModeLabel(scholarship.application_mode) }}</span>. The provider may ask to verify original files later.</p>
+                                    <p>Pre-screening method: <span class="font-bold text-slate-700">{{ applicationModeLabel(scholarship.application_mode) }}</span>. Passing this review does not guarantee the scholarship.</p>
                                 </div>
                             </article>
 
@@ -823,8 +849,8 @@ onMounted(loadScholarship);
                                         </span>
                                         <div>
                                             <p class="student-kicker">Selection process</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">What happens after applying?</h2>
-                                            <p class="mt-1 text-sm text-slate-500">These are the stages chosen by the provider.</p>
+                                            <h2 class="mt-1 text-xl font-bold text-slate-950">What happens after pre-screening?</h2>
+                                            <p class="mt-1 text-sm text-slate-500">These stages determine whether you may continue with the provider's formal application.</p>
                                         </div>
                                     </div>
                                     <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">

@@ -106,7 +106,7 @@ class ProviderQueueOperationsTest extends TestCase
         ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => $selectedApplicant->id,
-            'status' => 'approved',
+            'status' => 'awarded',
             'submitted_at' => now()->subDay(),
         ]);
         ApplicationDocument::create([

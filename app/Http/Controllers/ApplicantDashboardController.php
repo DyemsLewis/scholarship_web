@@ -20,6 +20,7 @@ use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationSchedulePayload;
+use App\Support\ReviewRubric;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
@@ -56,6 +57,21 @@ class ApplicantDashboardController extends Controller
         }
 
         return view('dashboard-scholarships');
+    }
+
+    public function scholarshipsData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        $scholarships = $this->publishedScholarships()
+            ->get()
+            ->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))
+            ->values();
+
+        return response()->json([
+            'user' => $this->userPayload($request),
+            'scholarships' => $scholarships,
+        ]);
     }
 
     public function scholarshipDetail(Request $request, Scholarship $scholarship): View|RedirectResponse
@@ -947,6 +963,7 @@ class ApplicantDashboardController extends Controller
             ->unique()
             ->values()
             ->all();
+        $optionalDocuments = $this->eligibilityService->optionalDocumentRequirements($scholarship);
         $preparedDocumentNames = $requiredDocuments === []
             ? collect()
             : $request->user()->studentDocuments()
@@ -974,6 +991,7 @@ class ApplicantDashboardController extends Controller
                 $scholarship,
                 $request,
                 $requiredDocuments,
+                $optionalDocuments,
                 $eligibilityMatch,
                 $validated,
                 $acceptedAt,
@@ -984,6 +1002,7 @@ class ApplicantDashboardController extends Controller
                     'applicant_id' => $request->user()->id,
                     'status' => 'submitted',
                     'document_checklist' => $requiredDocuments,
+                    'optional_document_checklist' => $optionalDocuments,
                     'eligibility_score' => $eligibilityMatch['score'],
                     'eligibility_breakdown' => $eligibilityMatch,
                     'review_rubric_snapshot' => $scholarship->review_rubric ?? [],
@@ -1006,6 +1025,7 @@ class ApplicantDashboardController extends Controller
                     $request->user(),
                     $application,
                     $requiredDocuments,
+                    $optionalDocuments,
                     $copiedDocumentPaths,
                 );
                 app(DecisionSupportService::class)->syncApplication($application, 'web_application_submitted');
@@ -1435,6 +1455,7 @@ class ApplicantDashboardController extends Controller
             'distance_label' => $distanceKm === null ? null : number_format($distanceKm, 1).' km away',
             'requirements' => $scholarship->requirements,
             'optional_requirements' => $scholarship->optional_requirements,
+            'post_qualification_requirements' => $scholarship->post_qualification_requirements,
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),
             'award_amount' => $scholarship->award_amount,
@@ -1561,6 +1582,10 @@ class ApplicantDashboardController extends Controller
     {
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
+        $rubricReview = ReviewRubric::result(
+            $application->review_rubric_snapshot ?: ($application->scholarship?->review_rubric ?? []),
+            $application->rubric_scores ?? [],
+        );
         $application->loadMissing('schedules');
         $application->scholarship?->loadMissing('events');
         $examStatuses = ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed'];
@@ -1575,6 +1600,8 @@ class ApplicantDashboardController extends Controller
             'detail_url' => route('dashboard.applications.show', $application),
             'status' => $application->status,
             'document_checklist' => $application->document_checklist ?? [],
+            'optional_document_checklist' => $application->optional_document_checklist
+                ?? $this->eligibilityService->optionalDocumentRequirements($application->scholarship),
             'document_readiness' => $this->documentReadiness($application),
             'eligibility_score' => $application->eligibility_score,
             'eligibility_breakdown' => $application->eligibility_breakdown,
@@ -1593,6 +1620,7 @@ class ApplicantDashboardController extends Controller
             'distribution_instructions' => $application->distribution_instructions,
             'requires_student_response' => false,
             'can_respond' => false,
+            'formal_application_handoff' => $this->formalApplicationHandoffPayload($application),
             'schedules' => $application->schedules
                 ->sortBy('scheduled_at')
                 ->map(fn (ApplicationSchedule $schedule) => ApplicationSchedulePayload::make($schedule))
@@ -1601,6 +1629,10 @@ class ApplicantDashboardController extends Controller
             'dss_recommendation' => $dss['recommendation'],
             'dss_breakdown' => $dss,
             'dss_explanation' => $decisionSupport->explainApplication($application, $dss),
+            'rubric_review' => $rubricReview['is_complete'] ? $rubricReview : null,
+            'rubric_scored_at' => $rubricReview['is_complete']
+                ? $application->rubric_scored_at?->format('M d, Y h:i A')
+                : null,
             'status_progress' => $decisionSupport->statusProgress($application),
             'timeline' => $this->timelinePayload($application),
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
@@ -1632,6 +1664,45 @@ class ApplicantDashboardController extends Controller
     private function documentReadiness(ScholarshipApplication $application): array
     {
         return $this->eligibilityService->applicationDocumentReadiness($application);
+    }
+
+    private function formalApplicationHandoffPayload(ScholarshipApplication $application): ?array
+    {
+        if (! in_array($application->status, [
+            'approved',
+            'awarded',
+            'distribution_scheduled',
+            'disbursed',
+            'renewed',
+        ], true)) {
+            return null;
+        }
+
+        $scholarship = $application->scholarship;
+
+        if (! $scholarship) {
+            return null;
+        }
+
+        $mapQuery = $scholarship->handoff_location_address ?: $scholarship->handoff_location_name;
+
+        return [
+            'requirements' => $this->splitDocumentRequirements($scholarship->post_qualification_requirements),
+            'mode' => $scholarship->handoff_mode ?: 'provider_contact',
+            'instructions' => $scholarship->handoff_instructions,
+            'deadline' => $scholarship->handoff_deadline?->format('M d, Y'),
+            'location_name' => $scholarship->handoff_location_name,
+            'location_address' => $scholarship->handoff_location_address,
+            'map_url' => filled($mapQuery)
+                ? 'https://www.openstreetmap.org/search?query='.rawurlencode($mapQuery)
+                : null,
+            'url' => $scholarship->handoff_url,
+            'contact_person' => $scholarship->contact_person,
+            'contact_department' => $scholarship->contact_department,
+            'contact_email' => $scholarship->contact_email,
+            'contact_number' => $scholarship->contact_number,
+            'notice' => 'This portal qualification allows you to continue with the provider. It is not a final scholarship award.',
+        ];
     }
 
     private function documentRequirements(?Scholarship $scholarship): array
@@ -1693,12 +1764,20 @@ class ApplicantDashboardController extends Controller
         User $user,
         ScholarshipApplication $application,
         array $confirmedDocuments,
+        array $optionalDocuments,
         array &$copiedPaths,
     ): void {
         $application->loadMissing('scholarship');
-        $requirements = $confirmedDocuments !== []
+        $requiredDocuments = $confirmedDocuments !== []
             ? collect($confirmedDocuments)->map(fn (string $document) => trim($document))->filter()->values()->all()
             : $this->documentRequirements($application->scholarship);
+        $requirements = collect($requiredDocuments)
+            ->merge($optionalDocuments)
+            ->map(fn (string $document) => trim($document))
+            ->filter()
+            ->unique(fn (string $document) => str($document)->lower()->squish()->toString())
+            ->values()
+            ->all();
 
         if ($requirements === []) {
             return;
