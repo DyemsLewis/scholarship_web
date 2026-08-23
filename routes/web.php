@@ -90,6 +90,7 @@ Route::middleware(['auth', 'admin'])
         Route::get('/billing/{purchase}', [BillingController::class, 'adminWorkspacePage'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.workspace');
         Route::get('/billing/{purchase}/data', [BillingController::class, 'adminWorkspaceData'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.workspace.data');
         Route::patch('/billing/{purchase}/fulfillment', [BillingController::class, 'updateFulfillment'])->middleware('permission:manage_billing')->name('billing.fulfillment');
+        Route::patch('/billing/{purchase}/meeting', [BillingController::class, 'decideProviderMeeting'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.meeting.decide');
         Route::post('/billing/{purchase}/updates', [BillingController::class, 'storeAdminUpdate'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.updates.store');
         Route::post('/billing/{purchase}/deliverables', [BillingController::class, 'uploadAdminDeliverable'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.deliverables.store');
         Route::get('/users', [AdminController::class, 'users'])->middleware('permission:manage_accounts')->name('users');
@@ -142,6 +143,7 @@ Route::middleware(['auth', 'provider'])
         Route::get('/billing/{purchase}', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace');
         Route::get('/billing/{purchase}/data', [BillingController::class, 'providerWorkspaceData'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.data');
         Route::patch('/billing/{purchase}/request', [BillingController::class, 'updateProviderRequest'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.request.update');
+        Route::post('/billing/{purchase}/meeting', [BillingController::class, 'requestProviderMeeting'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.meeting.request');
         Route::post('/billing/{purchase}/updates', [BillingController::class, 'storeProviderUpdate'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.updates.store');
         Route::post('/billing/{purchase}/files', [BillingController::class, 'uploadProviderFile'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.files.store');
         Route::post('/billing/{purchase}/confirm', [BillingController::class, 'confirmProviderCompletion'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.confirm');

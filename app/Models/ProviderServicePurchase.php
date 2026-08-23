@@ -46,6 +46,13 @@ class ProviderServicePurchase extends Model
         'assigned_to',
         'target_due_at',
         'milestones',
+        'meeting_scheduled_for',
+        'meeting_mode',
+        'meeting_purpose',
+        'meeting_status',
+        'meeting_admin_note',
+        'meeting_decided_at',
+        'meeting_decided_by',
         'paid_at',
         'failed_at',
         'fulfilled_at',
@@ -67,6 +74,8 @@ class ProviderServicePurchase extends Model
             'service_terms_accepted_at' => 'datetime',
             'target_due_at' => 'datetime',
             'milestones' => 'array',
+            'meeting_scheduled_for' => 'datetime',
+            'meeting_decided_at' => 'datetime',
             'paid_at' => 'datetime',
             'failed_at' => 'datetime',
             'fulfilled_at' => 'datetime',
@@ -95,6 +104,11 @@ class ProviderServicePurchase extends Model
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    public function meetingDecider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'meeting_decided_by');
     }
 
     public function updates(): HasMany

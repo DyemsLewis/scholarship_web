@@ -374,6 +374,103 @@ class ProviderBillingTest extends TestCase
             ->assertOk();
     }
 
+    public function test_provider_can_request_a_service_meeting_and_admin_can_confirm_it(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchase = $this->pendingPurchase($provider);
+        $purchase->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+            'fulfillment_status' => 'in_progress',
+        ]);
+        $meetingDate = now()->addDays(3)->setTime(10, 30)->startOfMinute();
+
+        $this->actingAs($otherProvider)
+            ->postJson("/provider/billing/{$purchase->id}/meeting", [
+                'meeting_scheduled_for' => $meetingDate->toDateTimeString(),
+                'meeting_mode' => 'online',
+                'meeting_purpose' => 'Discuss the remaining program setup questions.',
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($provider)
+            ->postJson("/provider/billing/{$purchase->id}/meeting", [
+                'meeting_scheduled_for' => $meetingDate->toDateTimeString(),
+                'meeting_mode' => 'online',
+                'meeting_purpose' => 'Discuss the remaining program setup questions.',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('purchase.meeting_status', 'requested')
+            ->assertJsonPath('purchase.meeting_mode', 'online');
+
+        $this->assertDatabaseHas('provider_service_purchases', [
+            'id' => $purchase->id,
+            'meeting_status' => 'requested',
+            'meeting_mode' => 'online',
+        ]);
+        $this->assertDatabaseHas('provider_service_updates', [
+            'provider_service_purchase_id' => $purchase->id,
+            'kind' => 'meeting_request',
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $admin->id,
+            'type' => 'provider_service_meeting',
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/billing/{$purchase->id}/meeting", [
+                'meeting_status' => 'confirmed',
+                'meeting_admin_note' => 'Use the private meeting link included in this service workspace.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('purchase.meeting_status', 'confirmed')
+            ->assertJsonPath('purchase.meeting_decided_by', $admin->id);
+
+        $this->assertDatabaseHas('provider_service_updates', [
+            'provider_service_purchase_id' => $purchase->id,
+            'kind' => 'meeting_confirmed',
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $provider->id,
+            'type' => 'provider_service_meeting',
+        ]);
+    }
+
+    public function test_service_meeting_request_requires_a_future_date_and_decline_requires_a_reason(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchase = $this->pendingPurchase($provider);
+        $purchase->update(['status' => 'paid', 'paid_at' => now(), 'fulfillment_status' => 'ready']);
+
+        $this->actingAs($provider)
+            ->postJson("/provider/billing/{$purchase->id}/meeting", [
+                'meeting_scheduled_for' => now()->subHour()->toDateTimeString(),
+                'meeting_mode' => 'onsite',
+                'meeting_purpose' => 'Review the service request with the admin team.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('meeting_scheduled_for');
+
+        $this->actingAs($provider)
+            ->postJson("/provider/billing/{$purchase->id}/meeting", [
+                'meeting_scheduled_for' => now()->addDays(2)->toDateTimeString(),
+                'meeting_mode' => 'onsite',
+                'meeting_purpose' => 'Review the service request with the admin team.',
+            ])
+            ->assertCreated();
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/billing/{$purchase->id}/meeting", [
+                'meeting_status' => 'declined',
+                'meeting_admin_note' => '',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('meeting_admin_note');
+    }
+
     public function test_provider_controls_completion_and_can_reopen_unresolved_service_work(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);

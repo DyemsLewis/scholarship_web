@@ -137,6 +137,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->seedScholarships($tulayAral, $bukasKinabukasan);
+        $this->call(DemoProviderServiceSeeder::class);
     }
 
     private function seedUser(string $email, string $username, string $role, string $password): User

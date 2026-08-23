@@ -10,6 +10,7 @@ const purchaseId = document.getElementById('app')?.dataset.purchaseId;
 const isLoading = ref(true);
 const isSaving = ref(false);
 const isUploading = ref(false);
+const isMeetingSaving = ref(false);
 const errorMessage = ref('');
 const purchase = ref(null);
 const assignees = ref([]);
@@ -26,6 +27,7 @@ const workflowForm = ref({
     internal_note: '',
 });
 const updateForm = ref({ kind: 'progress_update', message: '' });
+const meetingDecisionForm = ref({ meeting_admin_note: '' });
 
 const supportingFiles = computed(() => purchase.value?.files?.filter((file) => file.category === 'supporting') ?? []);
 const deliverables = computed(() => purchase.value?.files?.filter((file) => file.category === 'deliverable') ?? []);
@@ -44,6 +46,12 @@ function statusClass(value) {
     if (value === 'needs_information') return 'bg-amber-100 text-amber-800';
     if (value === 'in_progress') return 'bg-indigo-100 text-indigo-800';
     return 'bg-slate-100 text-slate-700';
+}
+
+function meetingStatusClass(value) {
+    if (value === 'confirmed') return 'bg-emerald-100 text-emerald-800';
+    if (value === 'declined') return 'bg-rose-100 text-rose-800';
+    return 'bg-amber-100 text-amber-800';
 }
 
 function dateTime(value) {
@@ -70,6 +78,7 @@ function applyPurchase(payload) {
         provider_update: '',
         internal_note: '',
     };
+    meetingDecisionForm.value.meeting_admin_note = payload.meeting_admin_note ?? '';
 }
 
 async function loadWorkspace() {
@@ -126,6 +135,25 @@ async function addUpdate() {
     }
 }
 
+async function decideMeeting(meetingStatus) {
+    if (isMeetingSaving.value) return;
+    isMeetingSaving.value = true;
+
+    try {
+        const response = await window.axios.patch(`/admin/billing/${purchaseId}/meeting`, {
+            meeting_status: meetingStatus,
+            meeting_admin_note: meetingDecisionForm.value.meeting_admin_note.trim() || null,
+        });
+        applyPurchase(response.data.purchase);
+        showPortalToast({ title: meetingStatus === 'confirmed' ? 'Meeting confirmed' : 'Meeting declined', message: response.data.message });
+    } catch (error) {
+        const firstValidationError = Object.values(error.response?.data?.errors ?? {})[0]?.[0];
+        showPortalToast({ type: 'error', title: 'Unable to update meeting', message: firstValidationError ?? error.response?.data?.message ?? 'Review the meeting request and try again.' });
+    } finally {
+        isMeetingSaving.value = false;
+    }
+}
+
 async function uploadDeliverable(event) {
     const input = event.target;
     const file = input.files?.[0];
@@ -178,7 +206,7 @@ onMounted(loadWorkspace);
                         <div class="p-4"><p class="text-xs font-semibold text-slate-500">Target date</p><p class="mt-1 text-sm font-bold text-slate-950">{{ dateTime(purchase.target_due_at) }}</p></div>
                     </section>
 
-                    <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.75fr)]">
+                    <div class="mt-6 space-y-6">
                         <div class="space-y-6">
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider brief</p>
@@ -186,6 +214,55 @@ onMounted(loadWorkspace);
                                 <div class="mt-4 grid gap-4 lg:grid-cols-2">
                                     <div class="rounded-md border border-slate-200 bg-slate-50 p-4"><p class="text-xs font-bold text-slate-500">Situation or challenge</p><p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ purchase.request_summary || 'The provider has not supplied a service brief.' }}</p></div>
                                     <div class="rounded-md border border-slate-200 bg-slate-50 p-4"><p class="text-xs font-bold text-slate-500">Expected result</p><p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ purchase.requested_outcome || 'No expected result was supplied.' }}</p></div>
+                                </div>
+                            </section>
+
+                            <section v-if="purchase.meeting_status" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span>
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Meeting request</p>
+                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Coordinate with the provider</h2>
+                                            <p class="mt-2 text-sm leading-6 text-slate-600">Confirm the proposed schedule or decline it with a short reason so the provider can choose another time.</p>
+                                        </div>
+                                    </div>
+                                    <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold capitalize', meetingStatusClass(purchase.meeting_status)]">{{ purchase.meeting_status }}</span>
+                                </div>
+                                <div class="p-5 sm:p-6">
+                                    <div class="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Proposed schedule</p>
+                                            <p class="mt-1.5 text-sm font-bold text-slate-950">{{ dateTime(purchase.meeting_scheduled_for) }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Meeting format</p>
+                                            <p class="mt-1.5 text-sm font-bold text-slate-950">{{ purchase.meeting_mode === 'online' ? 'Online' : 'On-site' }}</p>
+                                        </div>
+                                        <div class="sm:col-span-2 lg:col-span-1">
+                                            <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Purpose</p>
+                                            <p class="mt-1.5 text-sm leading-6 text-slate-700">{{ purchase.meeting_purpose }}</p>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="purchase.meeting_status === 'requested'" class="mt-5 border-t border-slate-200 pt-5">
+                                        <label class="block">
+                                            <span class="text-sm font-bold text-slate-700">Meeting instructions or decline reason</span>
+                                            <textarea v-model="meetingDecisionForm.meeting_admin_note" rows="2" maxlength="1000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100" placeholder="For example, add the meeting link or explain why another time is needed."></textarea>
+                                        </label>
+                                        <div class="mt-3 flex flex-col gap-2 sm:flex-row">
+                                            <button type="button" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50" :disabled="isMeetingSaving" @click="decideMeeting('confirmed')">{{ isMeetingSaving ? 'Saving...' : 'Confirm meeting' }}</button>
+                                            <button type="button" class="rounded-md border border-rose-300 bg-white px-4 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50" :disabled="isMeetingSaving || meetingDecisionForm.meeting_admin_note.trim().length < 5" @click="decideMeeting('declined')">Decline request</button>
+                                        </div>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">A short reason is required only when declining the request.</p>
+                                    </div>
+
+                                    <div v-else class="mt-5 rounded-md border border-slate-200 bg-white p-4">
+                                        <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Decision details</p>
+                                        <p v-if="purchase.meeting_admin_note" class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ purchase.meeting_admin_note }}</p>
+                                        <p v-else class="mt-2 text-sm text-slate-500">No additional instructions were added.</p>
+                                        <p class="mt-3 text-xs text-slate-400">Updated by {{ purchase.meeting_decided_by_name || 'admin support' }} on {{ dateTime(purchase.meeting_decided_at) }}</p>
+                                    </div>
                                 </div>
                             </section>
 
@@ -225,16 +302,16 @@ onMounted(loadWorkspace);
                                     <p v-if="!purchase.updates?.length" class="p-5 text-sm text-slate-500">No updates recorded.</p>
                                 </div>
                                 <form class="border-t border-slate-200 bg-slate-50 p-4 sm:px-6" @submit.prevent="addUpdate">
-                                    <div class="grid gap-2 sm:grid-cols-[12rem_minmax(0,1fr)_auto] sm:items-end">
-                                        <label class="text-xs font-bold text-slate-700">Update type<select v-model="updateForm.kind" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"><option value="progress_update">Provider update</option><option value="clarification_request">Request information</option><option value="internal_note">Internal note</option></select></label>
-                                        <label class="text-xs font-bold text-slate-700">Message<textarea v-model="updateForm.message" rows="2" maxlength="2000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal" placeholder="Add a clear update"></textarea></label>
-                                        <button type="submit" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50" :disabled="isSaving || !updateForm.message.trim()">Add update</button>
+                                    <label class="block max-w-sm text-xs font-bold text-slate-700">Update type<select v-model="updateForm.kind" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"><option value="progress_update">Provider update</option><option value="clarification_request">Request information</option><option value="internal_note">Internal note</option></select></label>
+                                    <label class="mt-4 block text-xs font-bold text-slate-700">Message<textarea v-model="updateForm.message" rows="3" maxlength="2000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-sm font-normal leading-6" placeholder="Add a clear update"></textarea></label>
+                                    <div class="mt-3 flex justify-start">
+                                        <button type="submit" class="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 sm:w-auto" :disabled="isSaving || !updateForm.message.trim()">Add update</button>
                                     </div>
                                 </form>
                             </section>
                         </div>
 
-                        <aside class="space-y-6">
+                        <div class="space-y-6">
                             <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                 <div class="flex items-center justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Deliverables</p><h2 class="mt-1 text-lg font-bold text-slate-950">Files for provider</h2></div><label v-if="purchase.status === 'paid' && purchase.fulfillment_status !== 'completed'" class="cursor-pointer rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white"><span>{{ isUploading ? 'Uploading...' : 'Upload' }}</span><input type="file" class="sr-only" :disabled="isUploading" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv,.txt" @change="uploadDeliverable"></label></div>
                                 <div class="mt-4 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in deliverables" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-circle-check text-emerald-600" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!deliverables.length" class="p-4 text-sm text-slate-500">No deliverables uploaded.</p></div>
@@ -246,7 +323,7 @@ onMounted(loadWorkspace);
                             </section>
 
                             <section v-if="purchase.fulfillment_status === 'completed'" class="rounded-lg border border-emerald-200 bg-emerald-50 p-5 shadow-sm"><p class="text-sm font-bold text-emerald-900">Provider confirmed completion</p><p class="mt-1 text-sm text-emerald-800">{{ dateTime(purchase.provider_confirmed_at) }}</p><p v-if="purchase.provider_rating" class="mt-3 text-sm font-bold text-slate-900">Rating: {{ purchase.provider_rating }} of 5</p><p v-if="purchase.provider_feedback" class="mt-2 text-sm leading-6 text-slate-700">{{ purchase.provider_feedback }}</p></section>
-                        </aside>
+                        </div>
                     </div>
                 </template>
 

@@ -138,6 +138,64 @@ class BillingController extends Controller
         ]);
     }
 
+    public function requestProviderMeeting(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        $this->authorizeProviderPurchase($request, $purchase);
+        $this->requirePaidService($purchase);
+
+        if ($purchase->fulfillment_status === 'completed') {
+            return response()->json([
+                'message' => 'A meeting cannot be requested for a completed service.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'meeting_scheduled_for' => ['required', 'date', 'after:now'],
+            'meeting_mode' => ['required', Rule::in(['online', 'onsite'])],
+            'meeting_purpose' => ['required', 'string', 'min:10', 'max:1000'],
+        ]);
+
+        $purchase->update([
+            'meeting_scheduled_for' => $validated['meeting_scheduled_for'],
+            'meeting_mode' => $validated['meeting_mode'],
+            'meeting_purpose' => trim($validated['meeting_purpose']),
+            'meeting_status' => 'requested',
+            'meeting_admin_note' => null,
+            'meeting_decided_at' => null,
+            'meeting_decided_by' => null,
+        ]);
+        $purchase->refresh();
+
+        $meetingDate = $this->meetingDateLabel($purchase);
+        $meetingMode = $purchase->meeting_mode === 'online' ? 'Online' : 'On-site';
+        $update = $purchase->updates()->create([
+            'actor_id' => $request->user()->id,
+            'kind' => 'meeting_request',
+            'message' => "Meeting requested for {$meetingDate} ({$meetingMode}). Purpose: {$purchase->meeting_purpose}",
+            'visible_to_provider' => true,
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_service_meeting_requested',
+            "{$request->user()->name} requested a meeting for {$purchase->reference_number}.",
+            $request,
+            ['purchase_id' => $purchase->id, 'meeting_scheduled_for' => $purchase->meeting_scheduled_for?->toISOString()],
+        );
+        $this->notifyBillingAdminsOfUpdate(
+            $purchase,
+            'Provider requested a meeting',
+            "A {$meetingMode} meeting was requested for {$meetingDate} for {$purchase->plan_name}.",
+            "provider_service_meeting_request:{$update->id}",
+            'provider_service_meeting',
+        );
+
+        return response()->json([
+            'message' => 'Meeting request sent for admin confirmation.',
+            'purchase' => $this->workspacePayload($purchase, false),
+        ], 201);
+    }
+
     public function storeProviderUpdate(Request $request, ProviderServicePurchase $purchase): JsonResponse
     {
         $this->authorizeProviderPurchase($request, $purchase);
@@ -589,6 +647,71 @@ class BillingController extends Controller
                 ['value' => 'in_progress', 'label' => 'In progress'],
                 ['value' => 'provider_review', 'label' => 'Ready for provider review'],
             ],
+        ]);
+    }
+
+    public function decideProviderMeeting(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        $this->requirePaidService($purchase);
+
+        if ($purchase->meeting_status !== 'requested' || ! $purchase->meeting_scheduled_for) {
+            return response()->json([
+                'message' => 'There is no pending meeting request to review.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'meeting_status' => ['required', Rule::in(['confirmed', 'declined'])],
+            'meeting_admin_note' => ['nullable', 'required_if:meeting_status,declined', 'string', 'min:5', 'max:1000'],
+        ]);
+        $adminNote = filled($validated['meeting_admin_note'] ?? null)
+            ? trim($validated['meeting_admin_note'])
+            : null;
+
+        $purchase->update([
+            'meeting_status' => $validated['meeting_status'],
+            'meeting_admin_note' => $adminNote,
+            'meeting_decided_at' => now(),
+            'meeting_decided_by' => $request->user()->id,
+        ]);
+        $purchase->refresh();
+
+        $meetingDate = $this->meetingDateLabel($purchase);
+        $isConfirmed = $purchase->meeting_status === 'confirmed';
+        $message = $isConfirmed
+            ? "Meeting confirmed for {$meetingDate}."
+            : "Meeting request for {$meetingDate} was declined.";
+
+        if ($adminNote) {
+            $message .= " Admin note: {$adminNote}";
+        }
+
+        $update = $purchase->updates()->create([
+            'actor_id' => $request->user()->id,
+            'kind' => $isConfirmed ? 'meeting_confirmed' : 'meeting_declined',
+            'message' => $message,
+            'visible_to_provider' => true,
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            $isConfirmed ? 'provider_service_meeting_confirmed' : 'provider_service_meeting_declined',
+            "{$request->user()->name} {$purchase->meeting_status} the meeting for {$purchase->reference_number}.",
+            $request,
+            ['purchase_id' => $purchase->id, 'meeting_scheduled_for' => $purchase->meeting_scheduled_for?->toISOString()],
+        );
+        $this->notifyProviderTeam(
+            $purchase,
+            'provider_service_meeting',
+            $isConfirmed ? 'Service meeting confirmed' : 'Choose another meeting time',
+            $message,
+            "provider_service_meeting_decision:{$update->id}",
+        );
+
+        return response()->json([
+            'message' => $isConfirmed ? 'Meeting confirmed.' : 'Meeting request declined.',
+            'purchase' => $this->workspacePayload($purchase, true),
         ]);
     }
 
@@ -1144,18 +1267,19 @@ class BillingController extends Controller
         string $title,
         string $message,
         string $deduplicationPrefix,
+        string $type = 'provider_service_update',
     ): void {
         User::query()
             ->where('role', 'admin')
             ->where(fn ($query) => $query->whereNull('account_status')->orWhere('account_status', 'active'))
             ->get()
             ->filter(fn (User $user) => $user->hasPortalPermission('manage_billing'))
-            ->each(function (User $user) use ($purchase, $title, $message, $deduplicationPrefix): void {
+            ->each(function (User $user) use ($purchase, $title, $message, $deduplicationPrefix, $type): void {
                 PortalNotification::firstOrCreate([
                     'deduplication_key' => "{$deduplicationPrefix}:{$user->id}",
                 ], [
                     'user_id' => $user->id,
-                    'type' => 'provider_service_update',
+                    'type' => $type,
                     'title' => $title,
                     'message' => $message,
                     'action_url' => "/admin/billing/{$purchase->id}",
@@ -1165,7 +1289,7 @@ class BillingController extends Controller
 
     private function purchasePayload(ProviderServicePurchase $purchase, bool $includeProvider = false): array
     {
-        $purchase->loadMissing(['creator.providerProfile', 'fulfiller.adminProfile', 'assignee.adminProfile']);
+        $purchase->loadMissing(['creator.providerProfile', 'fulfiller.adminProfile', 'assignee.adminProfile', 'meetingDecider.adminProfile']);
         $payload = [
             'id' => $purchase->id,
             'reference_number' => $purchase->reference_number,
@@ -1182,6 +1306,14 @@ class BillingController extends Controller
             'assigned_to_name' => $purchase->assignee?->name,
             'target_due_at' => $purchase->target_due_at?->toISOString(),
             'milestones' => $purchase->milestones ?? [],
+            'meeting_scheduled_for' => $purchase->meeting_scheduled_for?->toISOString(),
+            'meeting_mode' => $purchase->meeting_mode,
+            'meeting_purpose' => $purchase->meeting_purpose,
+            'meeting_status' => $purchase->meeting_status,
+            'meeting_admin_note' => $purchase->meeting_admin_note,
+            'meeting_decided_at' => $purchase->meeting_decided_at?->toISOString(),
+            'meeting_decided_by' => $purchase->meeting_decided_by,
+            'meeting_decided_by_name' => $purchase->meetingDecider?->name,
             'payment_method' => $purchase->payment_method,
             'livemode' => $purchase->livemode,
             'checkout_url' => $purchase->status === 'pending' ? $purchase->checkout_url : null,
@@ -1218,6 +1350,7 @@ class BillingController extends Controller
             'creator.providerProfile',
             'fulfiller.adminProfile',
             'assignee.adminProfile',
+            'meetingDecider.adminProfile',
         ]);
         $plan = config("billing.plans.{$purchase->plan_code}", []);
         $milestones = $purchase->milestones;
@@ -1268,6 +1401,13 @@ class BillingController extends Controller
             'updates' => $updates,
             'files' => $files,
         ];
+    }
+
+    private function meetingDateLabel(ProviderServicePurchase $purchase): string
+    {
+        return $purchase->meeting_scheduled_for
+            ? $purchase->meeting_scheduled_for->timezone(config('app.timezone'))->format('M j, Y g:i A')
+            : 'the selected date';
     }
 
     private function defaultMilestones(array $plan): array
