@@ -1420,6 +1420,8 @@ class ProviderController extends Controller
             'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
         ]);
 
+        $this->requireCompleteApplicationRubric($application, $validated['rubric_scores'] ?? null);
+
         $managedResultStage = match ($application->status) {
             'exam_scheduled' => 'exam',
             'interview' => 'interview',
@@ -1472,6 +1474,7 @@ class ProviderController extends Controller
         }
 
         $request->merge($decisionUpdate);
+        $request->attributes->set('provider_decision_validated', true);
 
         $this->updateApplicationStatus($request, $application);
 
@@ -1990,7 +1993,7 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
         abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
         abort_unless($document->applicant_id === $application->applicant_id, 403);
-        abort_unless($document->document_type === 'academic_record', 403);
+        abort_unless(in_array($document->document_type, ['academic_record', 'school_record'], true), 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
         return Storage::disk('local')->response($document->path, $document->original_name, [
@@ -2071,6 +2074,11 @@ class ProviderController extends Controller
             $this->ensureApplicationDocumentsReadyForStatus($application, $validated['status']);
         }
 
+        $requiredRubricResult = $request->attributes->get('provider_decision_validated', false)
+            || array_key_exists('rubric_scores', $validated)
+                ? $this->requireCompleteApplicationRubric($application, $validated['rubric_scores'] ?? null)
+                : null;
+
         $decisionReason = array_key_exists('decision_reason', $validated)
             ? $validated['decision_reason']
             : $application->decision_reason;
@@ -2111,11 +2119,7 @@ class ProviderController extends Controller
         $outcomeAt = array_key_exists('outcome_at', $validated)
             ? $validated['outcome_at']
             : ($isOutcomeStatus && $previousStatus !== $validated['status'] ? now() : $application->outcome_at);
-        $rubric = $application->review_rubric_snapshot
-            ?: ($application->scholarship?->review_rubric ?? []);
-        $rubricResult = array_key_exists('rubric_scores', $validated)
-            ? ReviewRubric::result($rubric, $validated['rubric_scores'])
-            : null;
+        $rubricResult = $requiredRubricResult;
         $applicantFacingChanged = $previousStatus !== $validated['status']
             || $this->comparableScholarshipValue($application->decision_reason) !== $this->comparableScholarshipValue($decisionReason)
             || $this->comparableScholarshipValue($application->awarded_amount) !== $this->comparableScholarshipValue($validated['awarded_amount'] ?? $application->awarded_amount)
@@ -2886,6 +2890,7 @@ class ProviderController extends Controller
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'requirements' => ['nullable', 'string', 'max:5000'],
+            'optional_requirements' => ['nullable', 'string', 'max:5000'],
             'award_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'benefits' => ['nullable', 'string', 'max:20000', 'json'],
             'minimum_gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -3228,6 +3233,7 @@ class ProviderController extends Controller
             'latitude',
             'longitude',
             'requirements',
+            'optional_requirements',
             'review_rubric',
             'award_amount',
             'minimum_gwa',
@@ -3516,7 +3522,7 @@ class ProviderController extends Controller
             'guardian_email' => $profile?->guardian_email,
             'guardian_is_account_owner' => (bool) $profile?->guardian_is_account_owner,
             'profile_proofs' => ($applicant?->applicantVerificationDocuments ?? collect())
-                ->where('document_type', 'academic_record')
+                ->whereIn('document_type', ['academic_record', 'school_record'])
                 ->sortByDesc('uploaded_at')
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantProfileProofPayload($application, $document))
                 ->values(),
@@ -3578,6 +3584,7 @@ class ProviderController extends Controller
             'map_url' => $this->mapUrl($scholarship),
             'embed_map_url' => $this->embedMapUrl($scholarship),
             'requirements' => $scholarship->requirements,
+            'optional_requirements' => $scholarship->optional_requirements,
             'review_rubric' => $scholarship->review_rubric ?? [],
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),
@@ -4012,6 +4019,34 @@ class ProviderController extends Controller
         throw ValidationException::withMessages([
             'decision' => 'Complete the '.ScholarshipSelectionPlan::label($stageType).' activity and mark the applicant as attended before approving them for the next stage.',
         ]);
+    }
+
+    private function requireCompleteApplicationRubric(
+        ScholarshipApplication $application,
+        ?array $scores,
+    ): ?array {
+        $rubric = $application->review_rubric_snapshot
+            ?: ($application->scholarship?->review_rubric ?? []);
+
+        if ($rubric === []) {
+            return null;
+        }
+
+        if ($scores === null) {
+            throw ValidationException::withMessages([
+                'rubric_scores' => 'Score every provider review criterion before saving the review.',
+            ]);
+        }
+
+        $result = ReviewRubric::result($rubric, $scores);
+
+        if (! $result['is_complete']) {
+            throw ValidationException::withMessages([
+                'rubric_scores' => 'Score every provider review criterion before saving the review.',
+            ]);
+        }
+
+        return $result;
     }
 
     private function applicationStatusForEventResult(

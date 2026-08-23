@@ -62,6 +62,7 @@ const reviewStatusOptions = [
 ];
 
 const documentItems = computed(() => splitItems(scholarship.value?.requirements));
+const optionalDocumentItems = computed(() => splitItems(scholarship.value?.optional_requirements));
 const selectionStages = computed(() => scholarship.value?.selection_stages?.length
     ? scholarship.value.selection_stages
     : ['screening', 'distribution']);
@@ -646,6 +647,14 @@ onMounted(loadScholarship);
                                             </li>
                                         </ul>
                                         <p v-else class="mt-3 text-sm leading-6 text-slate-500">No document requirements listed.</p>
+                                        <div v-if="optionalDocumentItems.length" class="mt-4 border-t border-slate-200 pt-3">
+                                            <p class="text-xs font-bold uppercase tracking-wider text-amber-700">Optional supporting files</p>
+                                            <div class="mt-2 flex flex-wrap gap-2">
+                                                <span v-for="item in optionalDocumentItems" :key="item" class="rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                                                    {{ item }}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </section>
 
                                     <section class="rounded-md border border-slate-200 bg-slate-50 p-4">

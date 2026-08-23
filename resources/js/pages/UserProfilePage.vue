@@ -298,7 +298,22 @@ const academicProofOption = computed(() => {
         context,
     };
 });
-const verificationDocumentOptions = computed(() => [academicProofOption.value]);
+const schoolProofOption = computed(() => {
+    const educationLevel = form.value.education_level;
+    const learnerLabel = ['tvet', 'als'].includes(educationLevel) ? 'learning center' : 'school';
+
+    return {
+        value: 'school_record',
+        label: educationLevel === 'tvet' ? 'Training enrollment proof' : 'School enrollment proof',
+        description: `Upload a current certificate of enrollment, ${learnerLabel} ID, admission letter, or official enrollment record.`,
+        icon: 'fa-solid fa-school',
+        recommended: false,
+        optional: true,
+        featured: false,
+        context: [form.value.school, form.value.enrollment_status].filter(hasValue),
+    };
+});
+const verificationDocumentOptions = computed(() => [academicProofOption.value, schoolProofOption.value]);
 const applicantAge = computed(() => calculateAge(form.value.birthdate));
 const isMinor = computed(() => applicantAge.value !== null && applicantAge.value < 18);
 const needsGuardianContext = computed(() => isMinor.value
@@ -330,11 +345,15 @@ const profileComplete = computed(() => missingProfileFields.value.length === 0);
 const profileVerificationStatus = computed(() => user.value?.applicant_verification_status ?? 'unsubmitted');
 const academicVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'academic_record') ?? null);
+const schoolVerificationDocument = computed(() => verificationDocuments.value
+    .find((document) => document.document_type === 'school_record') ?? null);
 const legacyVerificationDocuments = computed(() => verificationDocuments.value
-    .filter((document) => document.document_type !== 'academic_record'));
+    .filter((document) => !['academic_record', 'school_record'].includes(document.document_type)));
 const verificationDocumentRows = computed(() => verificationDocumentOptions.value.map((option) => ({
     ...option,
-    document: academicVerificationDocument.value,
+    document: option.value === 'academic_record'
+        ? academicVerificationDocument.value
+        : schoolVerificationDocument.value,
 })));
 const verificationSteps = computed(() => {
     const status = profileVerificationStatus.value;
@@ -1430,7 +1449,7 @@ async function uploadVerificationDocument(documentType, event) {
     }
 
     if (!verificationDocumentTermsAccepted.value) {
-        const message = 'Agree to the document terms before uploading your academic record.';
+        const message = 'Agree to the document terms before uploading profile proof.';
         errorMessage.value = message;
         showPortalToast({ type: 'error', message });
         input.value = '';
@@ -1463,9 +1482,10 @@ async function uploadVerificationDocument(documentType, event) {
 
 async function deleteVerificationDocument(document) {
     const isAcademicRecord = document.document_type === 'academic_record';
+    const isSchoolRecord = document.document_type === 'school_record';
     const confirmed = await requestConfirmation({
-        title: isAcademicRecord ? 'Remove academic record?' : 'Remove older proof file?',
-        message: `${document.original_name || 'This file'} will be removed from verification. Its separate copy in Documents will stay available.${isAcademicRecord ? ' Your academic verification will return to not submitted.' : ''}`,
+        title: isAcademicRecord ? 'Remove academic record?' : (isSchoolRecord ? 'Remove school proof?' : 'Remove older proof file?'),
+        message: `${document.original_name || 'This file'} will be removed from profile proof. Its separate copy in Documents will stay available.${isAcademicRecord ? ' Your academic verification will return to not submitted.' : ''}`,
         confirmLabel: 'Remove file',
         tone: 'danger',
     });
@@ -2669,9 +2689,9 @@ watch(() => form.value.grading_scale, (scale) => {
                             <div :class="sectionHeaderClass">
                                 <div>
                                     <p class="student-kicker">Academic evidence</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Academic verification</h3>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Profile proof</h3>
                                     <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Confirm the academic result saved in Learning with one academic or progress record. Birth certificates, government IDs, and income documents are not requested here.
+                                        Confirm the saved academic result and optionally add current school enrollment proof. Birth certificates, government IDs, and income documents are not requested here.
                                     </p>
                                 </div>
                                 <span :class="[sectionStatusPillClass, verificationStatusClass(profileVerificationStatus)]">
@@ -2729,13 +2749,13 @@ watch(() => form.value.grading_scale, (scale) => {
                                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{{ verificationUploadCopy.detail }}</p>
                                         </div>
                                         <span class="shrink-0 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-600">
-                                            {{ academicVerificationDocument ? 'Record saved' : 'Not uploaded' }}
+                                            {{ verificationDocumentRows.filter((row) => row.document).length }} of {{ verificationDocumentRows.length }} saved
                                         </span>
                                     </div>
 
                                     <div class="mt-4">
                                         <TermsAgreement v-model="verificationDocumentTermsAccepted" context="document" />
-                                        <p class="mt-2 text-xs text-slate-500">Agree once, then upload the academic record below. A separate reusable copy is saved automatically in Documents.</p>
+                                        <p class="mt-2 text-xs text-slate-500">Agree once, then upload either proof below. A separate reusable copy is saved automatically in Documents.</p>
                                     </div>
 
                                     <div class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -2755,6 +2775,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                                     <div class="flex flex-wrap items-center gap-2">
                                                         <h5 class="text-sm font-bold text-slate-950">{{ row.label }}</h5>
                                                         <span v-if="row.recommended" class="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">Recommended</span>
+                                                        <span v-if="row.optional" class="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">Optional</span>
                                                         <span v-if="row.document" :class="['rounded px-2 py-0.5 text-[10px] font-bold uppercase', verificationDocumentStatusClass(row.document.status)]">
                                                             {{ verificationDocumentStatusLabel(row.document.status) }}
                                                         </span>
@@ -2823,13 +2844,13 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
 
                                     <p class="mt-3 text-xs leading-5 text-slate-500">
-                                        One current academic record is enough. Replacing an approved record returns the academic result to admin review.
+                                        The academic record supports grade verification. School enrollment proof is optional and does not block profile completion or applications.
                                     </p>
                                 </div>
 
                                 <aside class="border-t border-slate-200 bg-slate-50 p-5 lg:border-l lg:border-t-0 sm:p-6">
                                     <p class="student-kicker">What to upload</p>
-                                    <h4 class="mt-2 text-base font-bold text-slate-950">Only the relevant academic record</h4>
+                                    <h4 class="mt-2 text-base font-bold text-slate-950">Use current school records</h4>
                                     <ul class="mt-4 grid gap-4 text-sm text-slate-600">
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
@@ -2838,6 +2859,10 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
                                             <span>Make sure the saved average, GWA, grade point, or competency result is readable.</span>
+                                        </li>
+                                        <li class="flex items-start gap-3">
+                                            <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
+                                            <span>For school proof, use a current enrollment certificate, school ID, admission letter, or official learning-center record.</span>
                                         </li>
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-shield-halved mt-1 text-emerald-700" aria-hidden="true"></i>
@@ -2871,7 +2896,7 @@ watch(() => form.value.grading_scale, (scale) => {
 
                             <div class="flex items-start gap-3 bg-slate-50 px-5 py-4 text-xs leading-5 text-slate-600 sm:px-6">
                                 <i class="fa-solid fa-lock mt-1 shrink-0 text-slate-500" aria-hidden="true"></i>
-                                <p>Your academic record stays private. Authorized admins can review it, and a provider can view it only inside an application you submitted to that provider.</p>
+                                <p>Your profile proofs stay private. Authorized admins can review them, and a provider can view them only inside an application you submitted to that provider.</p>
                             </div>
                         </section>
 

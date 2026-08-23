@@ -14,6 +14,8 @@ const purchases = ref([]);
 const selectedPlan = ref(null);
 const acceptsTerms = ref(false);
 const syncingReference = ref('');
+const requestSummary = ref('');
+const requestedOutcome = ref('');
 
 function money(amount, currency = 'PHP') {
     return new Intl.NumberFormat('en-PH', {
@@ -71,9 +73,20 @@ function purchaseProgress(purchase) {
             label: 'Service completed',
             description: purchase.fulfillment_notes || 'The support request has been completed.',
             percent: 100,
-            step: 4,
+            step: 5,
             badgeClass: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
             barClass: 'bg-emerald-500',
+        };
+    }
+
+    if (purchase.fulfillment_status === 'provider_review') {
+        return {
+            label: 'Ready for your review',
+            description: 'Review the updates and deliverables, then confirm completion or request additional work.',
+            percent: 90,
+            step: 4,
+            badgeClass: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
+            barClass: 'bg-sky-500',
         };
     }
 
@@ -88,10 +101,21 @@ function purchaseProgress(purchase) {
         };
     }
 
+    if (purchase.fulfillment_status === 'needs_information') {
+        return {
+            label: 'Information needed',
+            description: purchase.fulfillment_notes || 'Platform support needs a response before work can continue.',
+            percent: 35,
+            step: 2,
+            badgeClass: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200',
+            barClass: 'bg-amber-400',
+        };
+    }
+
     return {
-        label: 'Waiting for support',
-        description: purchase.fulfillment_notes || 'Payment is confirmed and the request is in the support queue.',
-        percent: 50,
+        label: 'Ready to start',
+        description: purchase.fulfillment_notes || 'Payment is confirmed and the service brief is ready for assignment.',
+        percent: 40,
         step: 2,
         badgeClass: 'bg-slate-100 text-slate-700 ring-1 ring-slate-200',
         barClass: 'bg-slate-700',
@@ -128,6 +152,8 @@ function openPurchase(plan) {
 
     selectedPlan.value = plan;
     acceptsTerms.value = false;
+    requestSummary.value = '';
+    requestedOutcome.value = '';
 }
 
 function closePurchase() {
@@ -137,6 +163,8 @@ function closePurchase() {
 
     selectedPlan.value = null;
     acceptsTerms.value = false;
+    requestSummary.value = '';
+    requestedOutcome.value = '';
 }
 
 async function startCheckout() {
@@ -150,6 +178,8 @@ async function startCheckout() {
         const response = await window.axios.post('/provider/billing/checkout', {
             plan_code: selectedPlan.value.code,
             accept_terms: acceptsTerms.value,
+            request_summary: requestSummary.value.trim(),
+            requested_outcome: requestedOutcome.value.trim(),
         }, {
             portalToast: false,
         });
@@ -390,7 +420,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                 <div class="min-w-0">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                         <span :class="['inline-flex rounded-md px-2 py-1 text-xs font-bold', purchaseProgress(purchase).badgeClass]">{{ purchaseProgress(purchase).label }}</span>
-                                        <span v-if="purchaseProgress(purchase).step" class="text-[10px] font-bold uppercase text-slate-400">Step {{ purchaseProgress(purchase).step }} of 4</span>
+                                        <span v-if="purchaseProgress(purchase).step" class="text-[10px] font-bold uppercase text-slate-400">Step {{ purchaseProgress(purchase).step }} of 5</span>
                                     </div>
                                     <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
                                         <div :class="['h-full rounded-full transition-all', purchaseProgress(purchase).barClass]" :style="{ width: `${purchaseProgress(purchase).percent}%` }"></div>
@@ -421,7 +451,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                             <span v-else>{{ syncingReference === purchase.reference_number ? 'Checking...' : 'Check payment status' }}</span>
                                         </button>
                                     </div>
-                                    <p v-else-if="purchase.status === 'paid'" class="mt-2 text-[11px] font-semibold text-slate-500">No action needed</p>
+                                    <a v-else-if="purchase.status === 'paid'" :href="purchase.workspace_url" class="mt-2 inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">
+                                        Open workspace <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                    </a>
                                 </div>
                             </article>
                         </div>
@@ -474,6 +506,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                     </ul>
                 </section>
 
+                <section class="mt-5 rounded-md border border-slate-200 p-4">
+                    <p class="text-xs font-bold uppercase text-slate-500">Service brief</p>
+                    <p class="mt-1 text-xs leading-5 text-slate-500">This gives support staff enough context to begin after payment is confirmed.</p>
+                    <label class="mt-4 block text-sm font-bold text-slate-700">
+                        Situation or challenge
+                        <textarea v-model="requestSummary" rows="3" maxlength="2000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal leading-6 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100" placeholder="Briefly explain what your team is trying to set up or improve."></textarea>
+                    </label>
+                    <label class="mt-4 block text-sm font-bold text-slate-700">
+                        Expected result
+                        <textarea v-model="requestedOutcome" rows="2" maxlength="1200" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal leading-6 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100" placeholder="What should platform support deliver or help your team complete?"></textarea>
+                    </label>
+                </section>
+
                 <section class="mt-4 rounded-md bg-slate-950 p-4 text-white">
                     <p class="text-[10px] font-bold uppercase text-amber-300">What happens after payment</p>
                     <div class="mt-3 grid gap-3 sm:grid-cols-3">
@@ -506,7 +551,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 
                 <div class="mt-6 grid gap-3 sm:grid-cols-2">
                     <button type="button" class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="closePurchase">Cancel</button>
-                    <button type="button" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!acceptsTerms || isOpeningCheckout" @click="startCheckout">
+                    <button type="button" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!acceptsTerms || requestSummary.trim().length < 20 || requestedOutcome.trim().length < 10 || isOpeningCheckout" @click="startCheckout">
                         {{ isOpeningCheckout ? 'Opening checkout...' : 'Continue to PayMongo' }}
                     </button>
                 </div>

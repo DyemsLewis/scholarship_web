@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProgramBenefitsEditor from '../components/ProgramBenefitsEditor.vue';
@@ -43,6 +43,10 @@ const customizeRubric = ref(false);
 const selectedTargetPresetKey = ref('');
 const programPathChoice = ref('');
 const customProgramPath = ref('');
+const autosaveReady = ref(false);
+const draftSavedAt = ref('');
+let autosaveTimer = null;
+const createDraftStorageKey = 'scholarship-portal:provider-program:create:v1';
 const {
     confirmation,
     requestConfirmation,
@@ -559,11 +563,18 @@ const targetFormProfiles = {
 
 const customDocumentRequirements = computed(() => splitRequirementText(scholarshipForm.value.customRequirements)
     .filter((requirement) => !documentRequirementOptions.includes(requirement)));
+const customOptionalDocumentRequirements = computed(() => splitRequirementText(scholarshipForm.value.customOptionalRequirements)
+    .filter((requirement) => !documentRequirementOptions.includes(requirement)));
 const allDocumentRequirements = computed(() => [...new Set([
     ...scholarshipForm.value.requirements,
     ...customDocumentRequirements.value,
 ])]);
+const allOptionalDocumentRequirements = computed(() => [...new Set([
+    ...scholarshipForm.value.optionalRequirements,
+    ...customOptionalDocumentRequirements.value,
+])].filter((requirement) => !allDocumentRequirements.value.includes(requirement)));
 const selectedRequirementCount = computed(() => allDocumentRequirements.value.length);
+const selectedOptionalRequirementCount = computed(() => allOptionalDocumentRequirements.value.length);
 const rubricWeightTotal = computed(() => scholarshipForm.value.reviewRubric
     .reduce((total, criterion) => total + Number(criterion.weight || 0), 0));
 const reviewRubricReady = computed(() => scholarshipForm.value.reviewRubric.length > 0
@@ -1046,6 +1057,8 @@ function emptyScholarshipForm() {
             'Proof of income',
         ],
         customRequirements: '',
+        optionalRequirements: [],
+        customOptionalRequirements: '',
         reviewRubric: defaultReviewRubric(),
         benefits: [],
         minimumGwa: '',
@@ -1503,6 +1516,8 @@ function fillScholarshipForm(scholarship) {
         longitude: scholarship.longitude ?? '',
         requirements: parseRequirements(scholarship.requirements),
         customRequirements: parseCustomRequirements(scholarship.requirements).join('\n'),
+        optionalRequirements: parseRequirements(scholarship.optional_requirements),
+        customOptionalRequirements: parseCustomRequirements(scholarship.optional_requirements).join('\n'),
         reviewRubric: Array.isArray(scholarship.review_rubric) && scholarship.review_rubric.length
             ? scholarship.review_rubric.map((criterion) => ({ ...criterion }))
             : defaultReviewRubric(),
@@ -1543,6 +1558,21 @@ function isRequirementSelected(requirement) {
     return scholarshipForm.value.requirements.includes(requirement);
 }
 
+function isOptionalRequirementSelected(requirement) {
+    return scholarshipForm.value.optionalRequirements.includes(requirement);
+}
+
+function setRequirementLevel(requirement, level) {
+    scholarshipForm.value.requirements = scholarshipForm.value.requirements.filter((item) => item !== requirement);
+    scholarshipForm.value.optionalRequirements = scholarshipForm.value.optionalRequirements.filter((item) => item !== requirement);
+
+    if (level === 'required') {
+        scholarshipForm.value.requirements.push(requirement);
+    } else if (level === 'optional') {
+        scholarshipForm.value.optionalRequirements.push(requirement);
+    }
+}
+
 function selectCommonRequirements() {
     scholarshipForm.value.requirements = [
         'Completed application form',
@@ -1551,11 +1581,14 @@ function selectCommonRequirements() {
         'School ID',
         'Proof of income',
     ];
+    scholarshipForm.value.optionalRequirements = [];
 }
 
 function clearRequirements() {
     scholarshipForm.value.requirements = [];
     scholarshipForm.value.customRequirements = '';
+    scholarshipForm.value.optionalRequirements = [];
+    scholarshipForm.value.customOptionalRequirements = '';
 }
 
 function addReviewCriterion() {
@@ -1774,6 +1807,58 @@ function resetScholarshipForm() {
     }
 }
 
+function saveLocalDraft() {
+    if (isEditMode.value || !autosaveReady.value) {
+        return;
+    }
+
+    const savedAt = new Date().toISOString();
+    const form = {
+        ...scholarshipForm.value,
+        termsAccepted: false,
+        imageUrl: '/uploads/scholarship-default.jpg',
+    };
+
+    try {
+        window.localStorage.setItem(createDraftStorageKey, JSON.stringify({ savedAt, form }));
+        draftSavedAt.value = savedAt;
+    } catch (error) {
+        draftSavedAt.value = '';
+    }
+}
+
+function restoreLocalDraft() {
+    if (isEditMode.value) {
+        return;
+    }
+
+    try {
+        const storedDraft = JSON.parse(window.localStorage.getItem(createDraftStorageKey) || 'null');
+
+        if (!storedDraft?.form || typeof storedDraft.form !== 'object') {
+            return;
+        }
+
+        scholarshipForm.value = {
+            ...emptyScholarshipForm(),
+            ...storedDraft.form,
+            termsAccepted: false,
+            imageUrl: '/uploads/scholarship-default.jpg',
+        };
+        draftSavedAt.value = storedDraft.savedAt || '';
+        selectedTargetPresetKey.value = inferTargetFormKey(scholarshipForm.value.eligibleEducationLevels);
+        syncEligibilityOptions();
+        syncCommitmentEditor();
+    } catch (error) {
+        window.localStorage.removeItem(createDraftStorageKey);
+    }
+}
+
+function clearLocalDraft() {
+    window.localStorage.removeItem(createDraftStorageKey);
+    draftSavedAt.value = '';
+}
+
 function handleImageFile(event) {
     const file = event.target.files?.[0] ?? null;
 
@@ -1799,10 +1884,13 @@ async function loadFormData() {
             const scholarshipResponse = await window.axios.get(`/provider/scholarships/${scholarshipId}`);
 
             fillScholarshipForm(scholarshipResponse.data.scholarship);
+        } else {
+            restoreLocalDraft();
         }
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load scholarship form.';
     } finally {
+        autosaveReady.value = true;
         isLoading.value = false;
     }
 }
@@ -1907,6 +1995,7 @@ async function saveScholarship() {
         latitude: scholarshipForm.value.latitude || '',
         longitude: scholarshipForm.value.longitude || '',
         requirements: allDocumentRequirements.value.join('\n'),
+        optional_requirements: allOptionalDocumentRequirements.value.join('\n'),
         review_rubric: JSON.stringify(scholarshipForm.value.reviewRubric),
         benefits: JSON.stringify(scholarshipForm.value.benefits),
         award_amount: cashGrantAmount(scholarshipForm.value.benefits),
@@ -1957,7 +2046,10 @@ async function saveScholarship() {
         if (isEditMode.value) {
             fillScholarshipForm(response.data.scholarship);
         } else {
+            autosaveReady.value = false;
+            clearLocalDraft();
             resetScholarshipForm();
+            autosaveReady.value = true;
         }
     } catch (error) {
         const validationErrors = error.response?.data?.errors ?? {};
@@ -1971,7 +2063,23 @@ async function saveScholarship() {
     }
 }
 
+watch(scholarshipForm, () => {
+    if (!autosaveReady.value || isEditMode.value || isSaving.value) {
+        return;
+    }
+
+    window.clearTimeout(autosaveTimer);
+    autosaveTimer = window.setTimeout(saveLocalDraft, 600);
+}, { deep: true });
+
 onMounted(loadFormData);
+onBeforeUnmount(() => {
+    window.clearTimeout(autosaveTimer);
+
+    if (imagePreviewUrl.value) {
+        URL.revokeObjectURL(imagePreviewUrl.value);
+    }
+});
 </script>
 
 <template>
@@ -2039,6 +2147,19 @@ onMounted(loadFormData);
                                 </p>
                             </div>
                         </div>
+                    </div>
+
+                    <div
+                        v-if="!isEditMode && draftSavedAt"
+                        class="flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <p class="font-semibold text-emerald-900">
+                            <i class="fa-solid fa-cloud-arrow-up mr-2" aria-hidden="true"></i>
+                            Draft recovered and saved automatically on this device.
+                        </p>
+                        <button type="button" class="text-xs font-bold text-emerald-900 underline" @click="clearLocalDraft">
+                            Clear saved copy
+                        </button>
                     </div>
 
                     <form
@@ -2326,7 +2447,7 @@ onMounted(loadFormData);
 
                                 <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-slots">
-                                        Award slots
+                                        Planned recipient slots
                                         <span :class="optionalHintClass">Optional</span>
                                     </label>
                                     <input
@@ -2338,6 +2459,9 @@ onMounted(loadFormData);
                                         placeholder="No fixed limit"
                                         :class="inputClass"
                                     >
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                                        This is the number of applicants who may receive the program benefit, not a limit on submitted applications.
+                                    </p>
                                     <p v-if="awardedSlotsCount > 0" class="mt-2 text-xs leading-5 text-slate-500">
                                         {{ awardedSlotsCount }} slot{{ awardedSlotsCount === 1 ? ' is' : 's are' }} already occupied.
                                     </p>
@@ -2821,17 +2945,17 @@ onMounted(loadFormData);
                             <section v-show="activeFormSection === 'audience'" :class="['mt-6 border-t border-slate-200 pt-6', sectionCardClass]">
                                 <div>
                                     <h3 class="text-sm font-bold text-slate-950">
-                                        Applicant matching
+                                            Required eligibility rules
                                     </h3>
                                     <p class="mt-1 text-xs leading-5 text-slate-500">
-                                        Add restrictions only when they are part of the official eligibility rules.
+                                        These are hard requirements used to determine whether an applicant may proceed. Do not add preferences here.
                                     </p>
                                 </div>
 
                                 <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
-                                        <p class="text-sm font-bold text-slate-950">Detailed matching rules</p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">Optional. Limit school type, course, year level, location, or household income only when needed.</p>
+                                        <p class="text-sm font-bold text-slate-950">Hard matching rules</p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">Applicants who do not meet a selected restriction may be marked ineligible. Leave a field open when it is only a preference.</p>
                                     </div>
                                     <button
                                         type="button"
@@ -3168,7 +3292,7 @@ onMounted(loadFormData);
                                             <span :class="requiredHintClass">At least one</span>
                                         </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            {{ selectedRequirementCount }} document{{ selectedRequirementCount === 1 ? '' : 's' }} selected.
+                                            {{ selectedRequirementCount }} required and {{ selectedOptionalRequirementCount }} supporting document{{ selectedOptionalRequirementCount === 1 ? '' : 's' }} selected.
                                         </p>
                                     </div>
                                 </div>
@@ -3191,54 +3315,70 @@ onMounted(loadFormData);
                                 </div>
 
                                 <div class="mt-4 grid items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                                    <label
+                                    <div
                                         v-for="requirement in documentRequirementOptions"
                                         :key="requirement"
                                         :class="[
-                                            'group flex min-h-full cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition',
+                                            'flex min-h-full flex-col rounded-md border p-3 text-sm transition',
                                             isRequirementSelected(requirement)
-                                                ? 'border-slate-900 bg-white text-slate-950 shadow-sm ring-2 ring-slate-200'
-                                                : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white',
+                                                ? 'border-slate-900 bg-white text-slate-950 shadow-sm'
+                                                : isOptionalRequirementSelected(requirement)
+                                                    ? 'border-amber-300 bg-amber-50/60 text-slate-950'
+                                                    : 'border-slate-200 bg-slate-50 text-slate-600',
                                         ]"
                                     >
-                                        <input
-                                            v-model="scholarshipForm.requirements"
-                                            type="checkbox"
-                                            :value="requirement"
-                                            class="sr-only"
-                                        >
-                                        <span
-                                            :class="[
-                                                'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] font-bold transition',
-                                                isRequirementSelected(requirement)
-                                                    ? 'border-slate-900 bg-slate-900 text-white'
-                                                    : 'border-slate-300 bg-white text-transparent group-hover:border-slate-400',
-                                            ]"
-                                        >
-                                            OK
-                                        </span>
-                                        <span class="leading-5">
-                                            {{ requirement }}
-                                        </span>
-                                    </label>
+                                        <p class="min-h-10 font-semibold leading-5">{{ requirement }}</p>
+                                        <div class="mt-3 grid grid-cols-3 overflow-hidden rounded-md border border-slate-200 bg-white text-[11px] font-bold">
+                                            <button
+                                                type="button"
+                                                :class="['px-2 py-2 transition', isRequirementSelected(requirement) ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100']"
+                                                @click="setRequirementLevel(requirement, 'required')"
+                                            >
+                                                Required
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :class="['border-x border-slate-200 px-2 py-2 transition', isOptionalRequirementSelected(requirement) ? 'bg-amber-100 text-amber-900' : 'text-slate-600 hover:bg-slate-100']"
+                                                @click="setRequirementLevel(requirement, 'optional')"
+                                            >
+                                                Supporting
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :class="['px-2 py-2 transition', !isRequirementSelected(requirement) && !isOptionalRequirementSelected(requirement) ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-100']"
+                                                @click="setRequirementLevel(requirement, 'none')"
+                                            >
+                                                Not used
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div :class="['mt-4', fieldCardClass]">
-                                    <label :class="labelClass" for="scholarship-custom-requirements">
-                                        Custom document requirements
-                                        <span :class="optionalHintClass">Optional</span>
-                                    </label>
-                                    <textarea
-                                        id="scholarship-custom-requirements"
-                                        v-model="scholarshipForm.customRequirements"
-                                        rows="4"
-                                        maxlength="2000"
-                                        placeholder="Example: Signed scholarship agreement&#10;Return service acknowledgment&#10;Data privacy consent"
-                                        :class="inputClass"
-                                    ></textarea>
-                                    <p class="mt-2 text-xs leading-5 text-slate-500">
-                                        Add one requirement per line for provider-specific files that are not in the common list.
-                                    </p>
+                                <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                                    <div :class="fieldCardClass">
+                                        <label :class="labelClass" for="scholarship-custom-requirements">Other required documents</label>
+                                        <textarea
+                                            id="scholarship-custom-requirements"
+                                            v-model="scholarshipForm.customRequirements"
+                                            rows="3"
+                                            maxlength="2000"
+                                            placeholder="One required document per line"
+                                            :class="inputClass"
+                                        ></textarea>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">Applicants must provide these before submission can be completed.</p>
+                                    </div>
+                                    <div :class="fieldCardClass">
+                                        <label :class="labelClass" for="scholarship-custom-optional-requirements">Other supporting documents</label>
+                                        <textarea
+                                            id="scholarship-custom-optional-requirements"
+                                            v-model="scholarshipForm.customOptionalRequirements"
+                                            rows="3"
+                                            maxlength="2000"
+                                            placeholder="One optional supporting document per line"
+                                            :class="inputClass"
+                                        ></textarea>
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">These may strengthen or clarify an application but never block submission.</p>
+                                    </div>
                                 </div>
                             </fieldset>
 
@@ -3246,11 +3386,11 @@ onMounted(loadFormData);
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
-                                            Provider review rubric
+                                            Provider scoring criteria
                                             <span :class="requiredHintClass">Required</span>
                                         </p>
                                         <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                            Use the same criteria for every applicant. Scores support review but never make the final decision.
+                                            Put preferences and comparative qualities here. Reviewers must score every criterion, while the provider still makes the final decision.
                                         </p>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-2">
@@ -3422,6 +3562,23 @@ onMounted(loadFormData);
                                         <p class="mt-3 text-xs font-semibold text-slate-500">
                                             {{ applicationModeLabel(scholarshipForm.applicationMode) }}
                                         </p>
+                                    </div>
+                                </div>
+
+                                <div class="grid gap-4 border-t border-slate-200 bg-white p-4 sm:grid-cols-2 sm:p-5">
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Required before submission</p>
+                                        <p class="mt-2 text-sm font-semibold text-slate-800">
+                                            {{ selectedRequirementCount }} required document{{ selectedRequirementCount === 1 ? '' : 's' }}
+                                        </p>
+                                        <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ allDocumentRequirements.join(', ') || 'No required documents selected.' }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Optional supporting files</p>
+                                        <p class="mt-2 text-sm font-semibold text-slate-800">
+                                            {{ selectedOptionalRequirementCount }} supporting document{{ selectedOptionalRequirementCount === 1 ? '' : 's' }}
+                                        </p>
+                                        <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ allOptionalDocumentRequirements.join(', ') || 'No optional supporting files selected.' }}</p>
                                     </div>
                                 </div>
 

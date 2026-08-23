@@ -308,7 +308,7 @@ class AdminController extends Controller
             'user' => $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
             'verification_documents' => $user->isApplicant()
                 ? $user->applicantVerificationDocuments()
-                    ->where('document_type', 'academic_record')
+                    ->whereIn('document_type', ['academic_record', 'school_record'])
                     ->latest('uploaded_at')
                     ->get()
                     ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
@@ -445,7 +445,8 @@ class AdminController extends Controller
                 'rejected_applicants' => $applicants->filter(fn (User $user) => $user->applicantVerificationDocuments->contains('document_type', 'academic_record')
                     && $user->studentProfile?->verification_status === 'rejected')->count(),
                 'unsubmitted_applicants' => $applicants->filter(fn (User $user) => ! $user->applicantVerificationDocuments->contains('document_type', 'academic_record'))->count(),
-                'applicant_proofs' => $applicants->sum(fn (User $user) => $user->applicantVerificationDocuments->where('document_type', 'academic_record')->count()),
+                'applicant_proofs' => $applicants->sum(fn (User $user) => $user->applicantVerificationDocuments
+                    ->whereIn('document_type', ['academic_record', 'school_record'])->count()),
                 'pending_programs' => (int) ($programStatusCounts['pending_review'] ?? 0),
                 'published_programs' => (int) ($programStatusCounts['published'] ?? 0),
                 'rejected_programs' => (int) ($programStatusCounts['rejected'] ?? 0),
@@ -652,7 +653,7 @@ class AdminController extends Controller
             ]);
 
             $applicant->applicantVerificationDocuments()
-                ->where('document_type', 'academic_record')
+                ->whereIn('document_type', ['academic_record', 'school_record'])
                 ->update([
                     'status' => $documentStatus,
                     'review_notes' => $notes,
@@ -688,7 +689,7 @@ class AdminController extends Controller
             'message' => 'Applicant academic verification updated.',
             'user' => $applicant->fresh(['studentProfile'])->publicPayload(),
             'verification_documents' => $applicant->applicantVerificationDocuments()
-                ->where('document_type', 'academic_record')
+                ->whereIn('document_type', ['academic_record', 'school_record'])
                 ->latest('uploaded_at')
                 ->get()
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
@@ -699,7 +700,7 @@ class AdminController extends Controller
     public function viewApplicantVerificationDocument(Request $request, ApplicantVerificationDocument $document)
     {
         abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($document->document_type === 'academic_record', 403);
+        abort_unless(in_array($document->document_type, ['academic_record', 'school_record'], true), 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
         return Storage::disk('local')->response($document->path, $document->original_name, [
@@ -1397,6 +1398,7 @@ class AdminController extends Controller
             'expected_results_at' => $scholarship->expected_results_at?->format('M d, Y'),
             'official_program_url' => $scholarship->official_program_url,
             'requirements' => $scholarship->requirements,
+            'optional_requirements' => $scholarship->optional_requirements,
             'review_rubric' => $scholarship->review_rubric ?? [],
             'eligible_courses' => $scholarship->eligible_courses,
             'return_service_contract' => $scholarship->return_service_contract,
@@ -1487,7 +1489,7 @@ class AdminController extends Controller
         return [
             ...$applicant->publicPayload(),
             'verification_documents' => $applicant->applicantVerificationDocuments
-                ->where('document_type', 'academic_record')
+                ->whereIn('document_type', ['academic_record', 'school_record'])
                 ->sortByDesc('uploaded_at')
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
                 ->values(),

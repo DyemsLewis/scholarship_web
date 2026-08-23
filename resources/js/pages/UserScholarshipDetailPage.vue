@@ -48,6 +48,7 @@ const documentItems = computed(() => {
     return documentRequirements(scholarship.value?.requirements);
 });
 const hasDocumentRequirements = computed(() => documentItems.value.length > 0);
+const optionalDocumentItems = computed(() => documentRequirements(scholarship.value?.optional_requirements));
 const documentRequirementSummary = computed(() => hasDocumentRequirements.value
     ? `${documentItems.value.length} requirement${documentItems.value.length === 1 ? '' : 's'}`
     : 'No documents listed');
@@ -777,7 +778,28 @@ onMounted(loadScholarship);
                                     </div>
                                 </div>
 
-                                <div v-else class="mt-5 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                <div v-if="optionalDocumentItems.length" class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                            <i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="text-sm font-bold text-amber-950">Optional supporting files</p>
+                                            <p class="mt-1 text-xs leading-5 text-amber-900">These can support your application but are not required to submit it.</p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <span
+                                            v-for="requirement in optionalDocumentItems"
+                                            :key="requirement"
+                                            class="rounded-md bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-amber-200"
+                                        >
+                                            {{ requirement }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div v-if="!hasDocumentRequirements" class="mt-5 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
                                     <span class="student-icon-badge">
                                         <i class="fa-solid fa-check" aria-hidden="true"></i>
                                     </span>

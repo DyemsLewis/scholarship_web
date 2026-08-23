@@ -28,6 +28,7 @@ class Scholarship extends Model
         'latitude',
         'longitude',
         'requirements',
+        'optional_requirements',
         'review_rubric',
         'award_amount',
         'minimum_gwa',

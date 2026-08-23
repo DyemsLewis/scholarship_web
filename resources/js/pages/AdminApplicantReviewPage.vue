@@ -17,13 +17,19 @@ const previewDocument = ref(null);
 const requestedSection = new URLSearchParams(window.location.search).get('section');
 const reviewSections = [
     { key: 'profile', label: 'Academic profile' },
-    { key: 'proof', label: 'Academic record' },
+    { key: 'proof', label: 'Profile proof' },
     { key: 'decision', label: 'Decision' },
 ];
 const activeReviewSection = ref(reviewSections.some((section) => section.key === requestedSection) ? requestedSection : 'profile');
 const activeReviewSectionIndex = computed(() => reviewSections.findIndex((section) => section.key === activeReviewSection.value));
 const previousReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value - 1] ?? null);
 const nextReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value + 1] ?? null);
+
+function academicVerificationDocument(currentApplicant) {
+    return currentApplicant?.verification_documents?.find(
+        (document) => document.document_type === 'academic_record',
+    ) ?? null;
+}
 
 function selectReviewSection(section) {
     activeReviewSection.value = section;
@@ -46,7 +52,7 @@ function applicantReviewStatus(currentApplicant) {
         return status;
     }
 
-    return currentApplicant?.verification_documents?.length ? 'pending' : 'unsubmitted';
+    return academicVerificationDocument(currentApplicant) ? 'pending' : 'unsubmitted';
 }
 
 function applicantReviewStatusLabel(currentApplicant) {
@@ -91,7 +97,10 @@ function documentStatusClass(status) {
 }
 
 function documentTypeLabel(type) {
-    return type === 'academic_record' ? 'Academic record' : 'Older verification file';
+    return {
+        academic_record: 'Academic record',
+        school_record: 'School enrollment proof',
+    }[type] ?? 'Older verification file';
 }
 
 function openDocumentPreview(document) {
@@ -113,7 +122,7 @@ function applicantInitials(currentApplicant) {
 }
 
 function applicantActionOptions(currentApplicant) {
-    if (!currentApplicant?.verification_documents?.length) {
+    if (!academicVerificationDocument(currentApplicant)) {
         return [];
     }
 
@@ -164,7 +173,7 @@ async function updateApplicant(verificationStatus) {
         return;
     }
 
-    if (!applicant.value.verification_documents?.length) {
+    if (!academicVerificationDocument(applicant.value)) {
         decisionError.value = 'The applicant must upload an academic record before verification.';
         return;
     }
@@ -279,7 +288,7 @@ onMounted(loadApplicant);
                                         <span class="block text-sm font-bold">{{ section.label }}</span>
                                         <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
                                             <template v-if="section.key === 'profile'">Saved learning details</template>
-                                            <template v-else-if="section.key === 'proof'">{{ applicant.verification_documents?.length ? 'Record submitted' : 'No record' }}</template>
+                                            <template v-else-if="section.key === 'proof'">{{ academicVerificationDocument(applicant) ? 'Academic record submitted' : 'No academic record' }}</template>
                                             <template v-else>{{ applicantReviewStatusLabel(applicant) }}</template>
                                         </span>
                                     </span>
@@ -373,12 +382,12 @@ onMounted(loadApplicant);
                         <article v-if="activeReviewSection === 'proof'" id="verification-files" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 2 - Academic evidence</p>
-                                    <h3 class="mt-1 text-xl font-bold text-slate-950">Submitted academic record</h3>
-                                    <p class="mt-1 text-sm text-slate-600">Check that the education level, grade or year, grading system, and saved result agree with this record.</p>
+                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 2 - Profile evidence</p>
+                                    <h3 class="mt-1 text-xl font-bold text-slate-950">Submitted academic and school records</h3>
+                                    <p class="mt-1 text-sm text-slate-600">Check the academic record against the saved result. School enrollment proof provides additional school context when submitted.</p>
                                 </div>
                                 <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                    {{ applicant.verification_documents?.length ? '1 record' : 'No record' }}
+                                    {{ applicant.verification_documents?.length ? `${applicant.verification_documents.length} record${applicant.verification_documents.length === 1 ? '' : 's'}` : 'No record' }}
                                 </span>
                             </div>
 
@@ -412,8 +421,10 @@ onMounted(loadApplicant);
                                     </div>
                                 </div>
                             </div>
-                            <p v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-                                No academic record has been uploaded. The saved academic result cannot be verified yet.
+                            <p v-if="!academicVerificationDocument(applicant)" class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                                {{ applicant.verification_documents?.length
+                                    ? 'School enrollment proof is available, but the applicant must still upload an academic record before the saved result can be verified.'
+                                    : 'No academic record has been uploaded. The saved academic result cannot be verified yet.' }}
                             </p>
                         </article>
 
@@ -431,7 +442,7 @@ onMounted(loadApplicant);
                             Confirm that the submitted record supports the academic information saved in the applicant profile.
                         </p>
 
-                        <div v-if="applicant.verification_documents?.length" class="w-full">
+                        <div v-if="academicVerificationDocument(applicant)" class="w-full">
                             <div class="mt-4 flex items-center gap-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700 ring-1 ring-slate-200">
                                 <i class="fa-solid fa-file-circle-check text-slate-500" aria-hidden="true"></i>
                                 <span>Academic record is available for review</span>

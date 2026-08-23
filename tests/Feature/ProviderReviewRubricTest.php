@@ -76,7 +76,7 @@ class ProviderReviewRubricTest extends TestCase
             ->assertJsonValidationErrors('review_rubric');
     }
 
-    public function test_rubric_only_save_does_not_notify_applicant_or_add_status_history(): void
+    public function test_provider_must_score_every_rubric_criterion_before_saving_review(): void
     {
         Mail::fake();
         [$provider, $application] = $this->applicationWithRubric();
@@ -89,11 +89,27 @@ class ProviderReviewRubricTest extends TestCase
                     'academic_merit' => 90,
                 ],
             ])
-            ->assertOk()
-            ->assertJsonPath('message', 'Provider review saved.');
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('rubric_scores');
 
         $this->assertDatabaseCount('portal_notifications', 0);
         $this->assertDatabaseCount('application_status_histories', 0);
+        $this->assertNull($application->fresh()->rubric_total_score);
+    }
+
+    public function test_provider_cannot_make_a_decision_without_scoring_the_rubric(): void
+    {
+        Mail::fake();
+        [$provider, $application] = $this->applicationWithRubric();
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/decision", [
+                'decision' => 'approve',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('rubric_scores');
+
+        $this->assertSame('submitted', $application->fresh()->status);
     }
 
     private function applicationWithRubric(): array

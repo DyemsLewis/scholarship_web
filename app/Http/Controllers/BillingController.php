@@ -4,14 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\PortalNotification;
+use App\Models\ProviderServiceFile;
 use App\Models\ProviderServicePurchase;
+use App\Models\ProviderServiceUpdate;
 use App\Models\User;
 use App\Services\PayMongoCheckoutService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Throwable;
 
@@ -32,7 +36,7 @@ class BillingController extends Controller
 
         $owner = $request->user()->providerOrganizationOwner()->loadMissing('providerProfile');
         $purchases = ProviderServicePurchase::query()
-            ->with('creator.providerProfile')
+            ->with(['creator.providerProfile', 'assignee.adminProfile'])
             ->where('provider_id', $owner->id)
             ->latest()
             ->limit(30)
@@ -64,6 +68,281 @@ class BillingController extends Controller
         ]);
     }
 
+    public function providerWorkspacePage(Request $request, ProviderServicePurchase $purchase): View
+    {
+        $this->authorizeProviderPurchase($request, $purchase);
+
+        return view('provider-service-workspace', ['purchase' => $purchase]);
+    }
+
+    public function providerWorkspaceData(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        $this->authorizeProviderPurchase($request, $purchase);
+
+        return response()->json([
+            'purchase' => $this->workspacePayload($purchase, false),
+        ]);
+    }
+
+    public function updateProviderRequest(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        $this->authorizeProviderPurchase($request, $purchase);
+        $this->requirePaidService($purchase);
+
+        if (in_array($purchase->fulfillment_status, ['provider_review', 'completed'], true)) {
+            return response()->json([
+                'message' => 'Reopen this service before changing its request brief.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'request_summary' => ['required', 'string', 'min:20', 'max:2000'],
+            'requested_outcome' => ['required', 'string', 'min:10', 'max:1200'],
+        ]);
+
+        $purchase->update([
+            'request_summary' => trim($validated['request_summary']),
+            'requested_outcome' => trim($validated['requested_outcome']),
+            'fulfillment_status' => $purchase->fulfillment_status === 'needs_information'
+                ? 'ready'
+                : $purchase->fulfillment_status,
+            'fulfillment_notes' => $purchase->fulfillment_status === 'needs_information'
+                ? 'The provider supplied additional information. The request is ready for support review.'
+                : $purchase->fulfillment_notes,
+        ]);
+
+        $update = $purchase->updates()->create([
+            'actor_id' => $request->user()->id,
+            'kind' => 'provider_response',
+            'message' => 'The provider updated the service brief and requested outcome.',
+            'visible_to_provider' => true,
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_service_brief_updated',
+            "{$request->user()->name} updated the brief for {$purchase->reference_number}.",
+            $request,
+            ['purchase_id' => $purchase->id],
+        );
+        $this->notifyBillingAdminsOfUpdate(
+            $purchase,
+            'Service brief updated',
+            "The provider updated the brief for {$purchase->plan_name}.",
+            "provider_service_brief:{$update->id}",
+        );
+
+        return response()->json([
+            'message' => 'Service brief updated.',
+            'purchase' => $this->workspacePayload($purchase->fresh(), false),
+        ]);
+    }
+
+    public function storeProviderUpdate(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        $this->authorizeProviderPurchase($request, $purchase);
+        $this->requirePaidService($purchase);
+
+        if (in_array($purchase->fulfillment_status, ['provider_review', 'completed'], true)) {
+            return response()->json([
+                'message' => 'Reopen this service before adding another response.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'message' => ['required', 'string', 'min:3', 'max:2000'],
+        ]);
+        $update = $purchase->updates()->create([
+            'actor_id' => $request->user()->id,
+            'kind' => 'provider_response',
+            'message' => trim($validated['message']),
+            'visible_to_provider' => true,
+        ]);
+
+        if ($purchase->fulfillment_status === 'needs_information') {
+            $purchase->update([
+                'fulfillment_status' => 'ready',
+                'fulfillment_notes' => 'The provider responded. The request is ready for support review.',
+            ]);
+        }
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_service_response_added',
+            "{$request->user()->name} responded on {$purchase->reference_number}.",
+            $request,
+            ['purchase_id' => $purchase->id, 'update_id' => $update->id],
+        );
+        $this->notifyBillingAdminsOfUpdate(
+            $purchase,
+            'Provider responded to a service request',
+            "A new response was added to {$purchase->plan_name}.",
+            "provider_service_response:{$update->id}",
+        );
+
+        return response()->json([
+            'message' => 'Response added.',
+            'purchase' => $this->workspacePayload($purchase->fresh(), false),
+        ], 201);
+    }
+
+    public function uploadProviderFile(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        $this->authorizeProviderPurchase($request, $purchase);
+        $this->requirePaidService($purchase);
+
+        if (in_array($purchase->fulfillment_status, ['provider_review', 'completed'], true)) {
+            return response()->json([
+                'message' => 'Reopen this service before uploading another file.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'service_file' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx,csv,txt'],
+        ]);
+        $file = $validated['service_file'];
+        $path = $file->store("provider-services/{$purchase->id}/supporting", 'local');
+
+        if (! is_string($path)) {
+            throw ValidationException::withMessages([
+                'service_file' => 'The supporting file could not be stored. Please try again.',
+            ]);
+        }
+
+        $serviceFile = $purchase->files()->create([
+            'uploaded_by' => $request->user()->id,
+            'category' => 'supporting',
+            'original_name' => $file->getClientOriginalName(),
+            'path' => $path,
+            'mime_type' => $file->getMimeType(),
+            'size' => $file->getSize(),
+            'visible_to_provider' => true,
+        ]);
+        $update = $purchase->updates()->create([
+            'actor_id' => $request->user()->id,
+            'kind' => 'provider_file',
+            'message' => "Supporting file uploaded: {$serviceFile->original_name}",
+            'visible_to_provider' => true,
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_service_file_uploaded',
+            "{$request->user()->name} uploaded a supporting file to {$purchase->reference_number}.",
+            $request,
+            ['purchase_id' => $purchase->id, 'file_id' => $serviceFile->id],
+        );
+        $this->notifyBillingAdminsOfUpdate(
+            $purchase,
+            'Provider uploaded a service file',
+            "A supporting file was added to {$purchase->plan_name}.",
+            "provider_service_file:{$update->id}",
+        );
+
+        return response()->json([
+            'message' => 'Supporting file uploaded.',
+            'purchase' => $this->workspacePayload($purchase->fresh(), false),
+        ], 201);
+    }
+
+    public function confirmProviderCompletion(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        $this->authorizeProviderPurchase($request, $purchase);
+        $this->requirePaidService($purchase);
+
+        if ($purchase->fulfillment_status !== 'provider_review') {
+            return response()->json([
+                'message' => 'This service must be ready for provider review before it can be confirmed complete.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'rating' => ['nullable', 'integer', 'between:1,5'],
+            'feedback' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $purchase->update([
+            'fulfillment_status' => 'completed',
+            'provider_confirmed_at' => now(),
+            'provider_feedback' => filled($validated['feedback'] ?? null) ? trim($validated['feedback']) : null,
+            'provider_rating' => $validated['rating'] ?? null,
+            'fulfilled_at' => now(),
+            'reopened_at' => null,
+        ]);
+        $update = $purchase->updates()->create([
+            'actor_id' => $request->user()->id,
+            'kind' => 'completion_confirmed',
+            'message' => 'The provider confirmed that the service was completed.',
+            'visible_to_provider' => true,
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_service_completion_confirmed',
+            "{$request->user()->name} confirmed completion of {$purchase->reference_number}.",
+            $request,
+            ['purchase_id' => $purchase->id, 'rating' => $purchase->provider_rating],
+        );
+        $this->notifyBillingAdminsOfUpdate(
+            $purchase,
+            'Provider confirmed service completion',
+            "{$purchase->plan_name} was accepted by the provider.",
+            "provider_service_confirmed:{$update->id}",
+        );
+
+        return response()->json([
+            'message' => 'Service completion confirmed.',
+            'purchase' => $this->workspacePayload($purchase->fresh(), false),
+        ]);
+    }
+
+    public function reopenProviderService(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        $this->authorizeProviderPurchase($request, $purchase);
+        $this->requirePaidService($purchase);
+
+        if (! in_array($purchase->fulfillment_status, ['provider_review', 'completed'], true)) {
+            return response()->json([
+                'message' => 'Only a service awaiting confirmation or already completed can be reopened.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+        $update = $purchase->updates()->create([
+            'actor_id' => $request->user()->id,
+            'kind' => 'reopened',
+            'message' => trim($validated['reason']),
+            'visible_to_provider' => true,
+        ]);
+        $purchase->update([
+            'fulfillment_status' => 'in_progress',
+            'provider_confirmed_at' => null,
+            'fulfilled_at' => null,
+            'reopened_at' => now(),
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_service_reopened',
+            "{$request->user()->name} reopened {$purchase->reference_number}.",
+            $request,
+            ['purchase_id' => $purchase->id, 'update_id' => $update->id],
+        );
+        $this->notifyBillingAdminsOfUpdate(
+            $purchase,
+            'Provider reopened a service request',
+            "{$purchase->plan_name} needs additional work.",
+            "provider_service_reopened:{$update->id}",
+        );
+
+        return response()->json([
+            'message' => 'Service reopened for additional work.',
+            'purchase' => $this->workspacePayload($purchase->fresh(), false),
+        ]);
+    }
+
     public function checkout(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -78,6 +357,8 @@ class BillingController extends Controller
         $validated = $request->validate([
             'plan_code' => ['required', 'string', Rule::in(array_keys($plans))],
             'accept_terms' => ['accepted'],
+            'request_summary' => ['required', 'string', 'min:20', 'max:2000'],
+            'requested_outcome' => ['required', 'string', 'min:10', 'max:1200'],
         ]);
         $plan = $plans[$validated['plan_code']];
         $actor = $request->user();
@@ -91,9 +372,13 @@ class BillingController extends Controller
             'amount' => (int) $plan['amount'],
             'currency' => config('billing.currency', 'PHP'),
             'status' => 'pending',
-            'fulfillment_status' => 'queued',
+            'fulfillment_status' => 'ready',
             'reference_number' => $this->uniqueReferenceNumber(),
             'service_terms_accepted_at' => now(),
+            'request_summary' => trim($validated['request_summary']),
+            'requested_outcome' => trim($validated['requested_outcome']),
+            'priority' => 'normal',
+            'milestones' => $this->defaultMilestones($plan),
         ]);
 
         try {
@@ -270,6 +555,177 @@ class BillingController extends Controller
         return view('admin-billing');
     }
 
+    public function adminWorkspacePage(Request $request, ProviderServicePurchase $purchase): View
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return view('admin-service-workspace', ['purchase' => $purchase]);
+    }
+
+    public function adminWorkspaceData(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $assignees = User::query()
+            ->where('role', 'admin')
+            ->where(fn ($query) => $query->whereNull('account_status')->orWhere('account_status', 'active'))
+            ->with('adminProfile')
+            ->orderBy('username')
+            ->get()
+            ->filter(fn (User $admin) => $admin->hasPortalPermission('manage_billing'))
+            ->map(fn (User $admin) => [
+                'id' => $admin->id,
+                'name' => $admin->name,
+                'email' => $admin->email,
+            ])
+            ->values();
+
+        return response()->json([
+            'purchase' => $this->workspacePayload($purchase, true),
+            'assignees' => $assignees,
+            'status_options' => [
+                ['value' => 'needs_information', 'label' => 'Needs information'],
+                ['value' => 'ready', 'label' => 'Ready to start'],
+                ['value' => 'in_progress', 'label' => 'In progress'],
+                ['value' => 'provider_review', 'label' => 'Ready for provider review'],
+            ],
+        ]);
+    }
+
+    public function storeAdminUpdate(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        $this->requirePaidService($purchase);
+
+        $validated = $request->validate([
+            'kind' => ['required', Rule::in(['progress_update', 'clarification_request', 'internal_note'])],
+            'message' => ['required', 'string', 'min:3', 'max:2000'],
+        ]);
+        $isInternal = $validated['kind'] === 'internal_note';
+        $update = $purchase->updates()->create([
+            'actor_id' => $request->user()->id,
+            'kind' => $validated['kind'],
+            'message' => trim($validated['message']),
+            'visible_to_provider' => ! $isInternal,
+        ]);
+
+        if ($validated['kind'] === 'clarification_request') {
+            $purchase->update([
+                'fulfillment_status' => 'needs_information',
+                'fulfillment_notes' => trim($validated['message']),
+            ]);
+        }
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_service_update_added',
+            "{$request->user()->name} added a {$validated['kind']} to {$purchase->reference_number}.",
+            $request,
+            [
+                'purchase_id' => $purchase->id,
+                'update_id' => $update->id,
+                'visible_to_provider' => ! $isInternal,
+            ],
+        );
+
+        if (! $isInternal) {
+            $this->notifyProviderTeam(
+                $purchase,
+                'provider_service_update',
+                $validated['kind'] === 'clarification_request' ? 'Information needed for your service' : 'Provider service update',
+                trim($validated['message']),
+                "provider_service_update:{$update->id}",
+            );
+        }
+
+        return response()->json([
+            'message' => $isInternal ? 'Internal note added.' : 'Provider update posted.',
+            'purchase' => $this->workspacePayload($purchase->fresh(), true),
+        ], 201);
+    }
+
+    public function uploadAdminDeliverable(Request $request, ProviderServicePurchase $purchase): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        $this->requirePaidService($purchase);
+
+        if ($purchase->fulfillment_status === 'completed') {
+            return response()->json([
+                'message' => 'The provider must reopen this service before another deliverable is uploaded.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'service_file' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx,csv,txt'],
+        ]);
+        $file = $validated['service_file'];
+        $path = $file->store("provider-services/{$purchase->id}/deliverables", 'local');
+
+        if (! is_string($path)) {
+            throw ValidationException::withMessages([
+                'service_file' => 'The deliverable could not be stored. Please try again.',
+            ]);
+        }
+
+        $serviceFile = $purchase->files()->create([
+            'uploaded_by' => $request->user()->id,
+            'category' => 'deliverable',
+            'original_name' => $file->getClientOriginalName(),
+            'path' => $path,
+            'mime_type' => $file->getMimeType(),
+            'size' => $file->getSize(),
+            'visible_to_provider' => true,
+        ]);
+        $update = $purchase->updates()->create([
+            'actor_id' => $request->user()->id,
+            'kind' => 'deliverable',
+            'message' => "Deliverable uploaded: {$serviceFile->original_name}",
+            'visible_to_provider' => true,
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_service_deliverable_uploaded',
+            "{$request->user()->name} uploaded a deliverable to {$purchase->reference_number}.",
+            $request,
+            ['purchase_id' => $purchase->id, 'file_id' => $serviceFile->id],
+        );
+        $this->notifyProviderTeam(
+            $purchase,
+            'provider_service_deliverable',
+            'Service deliverable available',
+            "A new deliverable is available for {$purchase->plan_name}.",
+            "provider_service_deliverable:{$update->id}",
+        );
+
+        return response()->json([
+            'message' => 'Deliverable uploaded and shared with the provider.',
+            'purchase' => $this->workspacePayload($purchase->fresh(), true),
+        ], 201);
+    }
+
+    public function viewServiceFile(Request $request, ProviderServiceFile $file)
+    {
+        $this->authorizeServiceFile($request, $file);
+        abort_unless(Storage::disk('local')->exists($file->path), 404);
+
+        return Storage::disk('local')->response($file->path, $file->original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function downloadServiceFile(Request $request, ProviderServiceFile $file)
+    {
+        $this->authorizeServiceFile($request, $file);
+        abort_unless(Storage::disk('local')->exists($file->path), 404);
+
+        return Storage::disk('local')->download($file->path, $file->original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     public function adminData(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
@@ -285,7 +741,7 @@ class BillingController extends Controller
         $search = trim($validated['search'] ?? '');
 
         $query = ProviderServicePurchase::query()
-            ->with(['provider.providerProfile', 'creator.providerProfile', 'fulfiller.adminProfile'])
+            ->with(['provider.providerProfile', 'creator.providerProfile', 'fulfiller.adminProfile', 'assignee.adminProfile'])
             ->when($paymentStatus !== 'all', fn ($builder) => $builder->where('status', $paymentStatus))
             ->when($fulfillmentStatus !== 'all', fn ($builder) => $builder->where('fulfillment_status', $fulfillmentStatus))
             ->when($search !== '', function ($builder) use ($search): void {
@@ -309,7 +765,10 @@ class BillingController extends Controller
             'counts' => [
                 'all' => (int) $counts->sum(),
                 'queued' => (int) ($counts['queued'] ?? 0),
+                'needs_information' => (int) ($counts['needs_information'] ?? 0),
+                'ready' => (int) (($counts['ready'] ?? 0) + ($counts['queued'] ?? 0)),
                 'in_progress' => (int) ($counts['in_progress'] ?? 0),
+                'provider_review' => (int) ($counts['provider_review'] ?? 0),
                 'completed' => (int) ($counts['completed'] ?? 0),
             ],
             'purchases' => collect($purchases->items())
@@ -329,8 +788,22 @@ class BillingController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
 
         $validated = $request->validate([
-            'fulfillment_status' => ['required', Rule::in(ProviderServicePurchase::FULFILLMENT_STATUSES)],
+            'fulfillment_status' => ['required', Rule::in([
+                'needs_information',
+                'ready',
+                'in_progress',
+                'provider_review',
+            ])],
             'fulfillment_notes' => ['nullable', 'string', 'max:2000'],
+            'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
+            'priority' => ['nullable', Rule::in(['low', 'normal', 'high', 'urgent'])],
+            'target_due_at' => ['nullable', 'date'],
+            'milestones' => ['nullable', 'array', 'max:12'],
+            'milestones.*.id' => ['required_with:milestones', 'string', 'max:80'],
+            'milestones.*.label' => ['required_with:milestones', 'string', 'max:160'],
+            'milestones.*.completed' => ['required_with:milestones', 'boolean'],
+            'provider_update' => ['nullable', 'string', 'max:2000'],
+            'internal_note' => ['nullable', 'string', 'max:2000'],
         ]);
 
         if ($purchase->status !== 'paid') {
@@ -339,15 +812,86 @@ class BillingController extends Controller
             ], 422);
         }
 
+        if (filled($validated['assigned_to'] ?? null)) {
+            $assignee = User::query()->find($validated['assigned_to']);
+
+            if (! $assignee?->isAdmin()
+                || ! in_array($assignee->account_status, [null, 'active'], true)
+                || ! $assignee->hasPortalPermission('manage_billing')) {
+                throw ValidationException::withMessages([
+                    'assigned_to' => 'Choose an active administrator with service-management permission.',
+                ]);
+            }
+        }
+
+        $milestones = array_key_exists('milestones', $validated)
+            ? collect($validated['milestones'])
+                ->map(fn (array $milestone) => [
+                    'id' => $milestone['id'],
+                    'label' => trim($milestone['label']),
+                    'completed' => (bool) $milestone['completed'],
+                ])
+                ->values()
+                ->all()
+            : ($purchase->milestones ?? []);
+        $providerUpdate = filled($validated['provider_update'] ?? null)
+            ? trim($validated['provider_update'])
+            : null;
+
+        if ($validated['fulfillment_status'] === 'needs_information' && ! $providerUpdate) {
+            throw ValidationException::withMessages([
+                'provider_update' => 'Explain what information the provider needs to supply.',
+            ]);
+        }
+
+        if ($validated['fulfillment_status'] === 'provider_review') {
+            if ($milestones === [] || collect($milestones)->contains(fn (array $milestone) => ! $milestone['completed'])) {
+                throw ValidationException::withMessages([
+                    'milestones' => 'Complete every service milestone before sending the work for provider review.',
+                ]);
+            }
+
+            if (! $providerUpdate) {
+                throw ValidationException::withMessages([
+                    'provider_update' => 'Add a completion summary for the provider before requesting confirmation.',
+                ]);
+            }
+        }
+
         $previousStatus = $purchase->fulfillment_status;
         $purchase->update([
             'fulfillment_status' => $validated['fulfillment_status'],
             'fulfillment_notes' => filled($validated['fulfillment_notes'] ?? null)
                 ? trim($validated['fulfillment_notes'])
                 : null,
+            'assigned_to' => $validated['assigned_to'] ?? null,
+            'priority' => $validated['priority'] ?? $purchase->priority,
+            'target_due_at' => $validated['target_due_at'] ?? null,
+            'milestones' => $milestones,
             'fulfilled_by' => $request->user()->id,
-            'fulfilled_at' => $validated['fulfillment_status'] === 'completed' ? now() : null,
+            'fulfilled_at' => null,
+            'provider_confirmed_at' => null,
         ]);
+
+        if ($providerUpdate) {
+            $purchase->updates()->create([
+                'actor_id' => $request->user()->id,
+                'kind' => $validated['fulfillment_status'] === 'needs_information'
+                    ? 'clarification_request'
+                    : 'progress_update',
+                'message' => $providerUpdate,
+                'visible_to_provider' => true,
+            ]);
+        }
+
+        if (filled($validated['internal_note'] ?? null)) {
+            $purchase->updates()->create([
+                'actor_id' => $request->user()->id,
+                'kind' => 'internal_note',
+                'message' => trim($validated['internal_note']),
+                'visible_to_provider' => false,
+            ]);
+        }
 
         ActivityLog::record(
             $request->user(),
@@ -362,19 +906,19 @@ class BillingController extends Controller
             ],
         );
 
-        if ($previousStatus !== $purchase->fulfillment_status) {
+        if ($previousStatus !== $purchase->fulfillment_status || $providerUpdate) {
             $this->notifyProviderTeam(
                 $purchase,
                 'provider_service_status',
                 'Provider service status updated',
-                "{$purchase->plan_name} is now {$this->statusLabel($purchase->fulfillment_status)}.",
-                "provider_service_status:{$purchase->id}:{$purchase->fulfillment_status}",
+                $providerUpdate ?: "{$purchase->plan_name} is now {$this->statusLabel($purchase->fulfillment_status)}.",
+                'provider_service_status:'.$purchase->id.':'.Str::uuid(),
             );
         }
 
         return response()->json([
             'message' => 'Service status updated.',
-            'purchase' => $this->purchasePayload($purchase->fresh(['provider.providerProfile', 'creator.providerProfile', 'fulfiller.adminProfile']), true),
+            'purchase' => $this->workspacePayload($purchase->fresh(), true),
         ]);
     }
 
@@ -560,7 +1104,7 @@ class BillingController extends Controller
             ->where(fn ($query) => $query->whereNull('account_status')->orWhere('account_status', 'active'))
             ->get()
             ->filter(fn (User $user) => ! $user->isManagedAccount() || $user->hasPortalPermission('manage_billing'))
-            ->each(function (User $user) use ($type, $title, $message, $deduplicationPrefix): void {
+            ->each(function (User $user) use ($purchase, $type, $title, $message, $deduplicationPrefix): void {
                 PortalNotification::firstOrCreate([
                     'deduplication_key' => "{$deduplicationPrefix}:{$user->id}",
                 ], [
@@ -568,7 +1112,7 @@ class BillingController extends Controller
                     'type' => $type,
                     'title' => $title,
                     'message' => $message,
-                    'action_url' => '/provider/billing',
+                    'action_url' => "/provider/billing/{$purchase->id}",
                 ]);
             });
     }
@@ -590,13 +1134,38 @@ class BillingController extends Controller
                     'type' => 'provider_service_queue',
                     'title' => 'Paid provider service ready',
                     'message' => "{$providerName} paid for {$purchase->plan_name}. Open Service Payments to begin fulfillment.",
-                    'action_url' => '/admin/billing',
+                    'action_url' => "/admin/billing/{$purchase->id}",
+                ]);
+            });
+    }
+
+    private function notifyBillingAdminsOfUpdate(
+        ProviderServicePurchase $purchase,
+        string $title,
+        string $message,
+        string $deduplicationPrefix,
+    ): void {
+        User::query()
+            ->where('role', 'admin')
+            ->where(fn ($query) => $query->whereNull('account_status')->orWhere('account_status', 'active'))
+            ->get()
+            ->filter(fn (User $user) => $user->hasPortalPermission('manage_billing'))
+            ->each(function (User $user) use ($purchase, $title, $message, $deduplicationPrefix): void {
+                PortalNotification::firstOrCreate([
+                    'deduplication_key' => "{$deduplicationPrefix}:{$user->id}",
+                ], [
+                    'user_id' => $user->id,
+                    'type' => 'provider_service_update',
+                    'title' => $title,
+                    'message' => $message,
+                    'action_url' => "/admin/billing/{$purchase->id}",
                 ]);
             });
     }
 
     private function purchasePayload(ProviderServicePurchase $purchase, bool $includeProvider = false): array
     {
+        $purchase->loadMissing(['creator.providerProfile', 'fulfiller.adminProfile', 'assignee.adminProfile']);
         $payload = [
             'id' => $purchase->id,
             'reference_number' => $purchase->reference_number,
@@ -606,6 +1175,13 @@ class BillingController extends Controller
             'currency' => $purchase->currency,
             'status' => $purchase->status,
             'fulfillment_status' => $purchase->fulfillment_status,
+            'priority' => $purchase->priority ?? 'normal',
+            'request_summary' => $purchase->request_summary,
+            'requested_outcome' => $purchase->requested_outcome,
+            'assigned_to' => $purchase->assigned_to,
+            'assigned_to_name' => $purchase->assignee?->name,
+            'target_due_at' => $purchase->target_due_at?->toISOString(),
+            'milestones' => $purchase->milestones ?? [],
             'payment_method' => $purchase->payment_method,
             'livemode' => $purchase->livemode,
             'checkout_url' => $purchase->status === 'pending' ? $purchase->checkout_url : null,
@@ -613,8 +1189,15 @@ class BillingController extends Controller
             'created_at' => $purchase->created_at?->toISOString(),
             'paid_at' => $purchase->paid_at?->toISOString(),
             'fulfilled_at' => $purchase->fulfilled_at?->toISOString(),
+            'provider_confirmed_at' => $purchase->provider_confirmed_at?->toISOString(),
+            'provider_feedback' => $purchase->provider_feedback,
+            'provider_rating' => $purchase->provider_rating,
+            'reopened_at' => $purchase->reopened_at?->toISOString(),
             'fulfillment_notes' => $purchase->fulfillment_notes,
             'fulfilled_by' => $purchase->fulfiller?->name,
+            'workspace_url' => $includeProvider
+                ? "/admin/billing/{$purchase->id}"
+                : "/provider/billing/{$purchase->id}",
         ];
 
         if ($includeProvider) {
@@ -626,6 +1209,113 @@ class BillingController extends Controller
         }
 
         return $payload;
+    }
+
+    private function workspacePayload(ProviderServicePurchase $purchase, bool $includeInternal): array
+    {
+        $purchase->loadMissing([
+            'provider.providerProfile',
+            'creator.providerProfile',
+            'fulfiller.adminProfile',
+            'assignee.adminProfile',
+        ]);
+        $plan = config("billing.plans.{$purchase->plan_code}", []);
+        $milestones = $purchase->milestones;
+
+        if (! is_array($milestones) || $milestones === []) {
+            $milestones = $this->defaultMilestones(is_array($plan) ? $plan : []);
+        }
+
+        $updates = $purchase->updates()
+            ->with(['actor.adminProfile', 'actor.providerProfile'])
+            ->when(! $includeInternal, fn ($query) => $query->where('visible_to_provider', true))
+            ->oldest()
+            ->get()
+            ->map(fn (ProviderServiceUpdate $update) => [
+                'id' => $update->id,
+                'kind' => $update->kind,
+                'message' => $update->message,
+                'visible_to_provider' => $update->visible_to_provider,
+                'actor_name' => $update->actor?->name ?: 'Platform support',
+                'actor_role' => $update->actor?->role ?: 'system',
+                'created_at' => $update->created_at?->toISOString(),
+            ])
+            ->values();
+        $files = $purchase->files()
+            ->with(['uploader.adminProfile', 'uploader.providerProfile'])
+            ->when(! $includeInternal, fn ($query) => $query->where('visible_to_provider', true))
+            ->latest()
+            ->get()
+            ->map(fn (ProviderServiceFile $file) => [
+                'id' => $file->id,
+                'category' => $file->category,
+                'original_name' => $file->original_name,
+                'mime_type' => $file->mime_type,
+                'size' => $file->size,
+                'visible_to_provider' => $file->visible_to_provider,
+                'uploaded_by' => $file->uploader?->name ?: 'Platform support',
+                'created_at' => $file->created_at?->toISOString(),
+                'view_url' => route('service-files.view', $file),
+                'download_url' => route('service-files.download', $file),
+            ])
+            ->values();
+
+        return [
+            ...$this->purchasePayload($purchase, $includeInternal),
+            'milestones' => $milestones,
+            'plan_description' => $plan['description'] ?? null,
+            'plan_features' => array_values($plan['features'] ?? []),
+            'updates' => $updates,
+            'files' => $files,
+        ];
+    }
+
+    private function defaultMilestones(array $plan): array
+    {
+        return collect($plan['features'] ?? [])
+            ->values()
+            ->map(fn (string $feature, int $index) => [
+                'id' => 'milestone_'.($index + 1),
+                'label' => $feature,
+                'completed' => false,
+            ])
+            ->all();
+    }
+
+    private function authorizeProviderPurchase(Request $request, ProviderServicePurchase $purchase): void
+    {
+        $user = $request->user();
+
+        abort_unless($user?->isProvider(), 403);
+        abort_unless($user->providerOrganizationId() === $purchase->provider_id, 403);
+    }
+
+    private function authorizeServiceFile(Request $request, ProviderServiceFile $file): void
+    {
+        $file->loadMissing('purchase');
+        $user = $request->user();
+
+        abort_unless($user, 403);
+
+        if ($user->isAdmin()) {
+            abort_unless($user->hasPortalPermission('manage_billing'), 403);
+
+            return;
+        }
+
+        abort_unless($user->isProvider(), 403);
+        abort_unless($user->hasPortalPermission('manage_billing'), 403);
+        abort_unless($file->visible_to_provider, 403);
+        abort_unless($file->purchase?->provider_id === $user->providerOrganizationId(), 403);
+    }
+
+    private function requirePaidService(ProviderServicePurchase $purchase): void
+    {
+        if ($purchase->status !== 'paid') {
+            throw ValidationException::withMessages([
+                'service' => 'The payment must be confirmed before the service workspace can be updated.',
+            ]);
+        }
     }
 
     private function uniqueReferenceNumber(): string

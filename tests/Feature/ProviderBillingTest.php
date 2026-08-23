@@ -6,8 +6,10 @@ use App\Models\ProviderServicePurchase;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ProviderBillingTest extends TestCase
@@ -73,6 +75,8 @@ class ProviderBillingTest extends TestCase
         $response = $this->actingAs($provider)->postJson('/provider/billing/checkout', [
             'plan_code' => 'assisted_setup',
             'accept_terms' => true,
+            'request_summary' => 'We need help checking the setup of our first scholarship program.',
+            'requested_outcome' => 'A reviewed program that is ready for publication.',
         ])->assertCreated()
             ->assertJsonPath('checkout_url', 'https://checkout.paymongo.com/cs_test_checkout')
             ->assertJsonPath('purchase.status', 'pending');
@@ -84,6 +88,9 @@ class ProviderBillingTest extends TestCase
         $this->assertSame('PHP', $purchase->currency);
         $this->assertSame('cs_test_checkout', $purchase->checkout_session_id);
         $this->assertNotNull($purchase->service_terms_accepted_at);
+        $this->assertSame('ready', $purchase->fulfillment_status);
+        $this->assertSame('We need help checking the setup of our first scholarship program.', $purchase->request_summary);
+        $this->assertCount(3, $purchase->milestones);
 
         Http::assertSent(function (ClientRequest $request) use ($purchase): bool {
             return $request->url() === 'https://api.paymongo.com/v2/checkout_sessions'
@@ -103,6 +110,8 @@ class ProviderBillingTest extends TestCase
         $this->actingAs($provider)->postJson('/provider/billing/checkout', [
             'plan_code' => 'assisted_setup',
             'accept_terms' => false,
+            'request_summary' => 'We need help checking the setup of our first scholarship program.',
+            'requested_outcome' => 'A reviewed program that is ready for publication.',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors('accept_terms');
 
@@ -279,6 +288,174 @@ class ProviderBillingTest extends TestCase
             'user_id' => $provider->id,
             'type' => 'provider_service_status',
         ]);
+    }
+
+    public function test_service_workspace_supports_assignment_updates_files_and_private_admin_notes(): void
+    {
+        Storage::fake('local');
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchase = $this->pendingPurchase($provider);
+        $purchase->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+            'fulfillment_status' => 'ready',
+            'request_summary' => 'Our team needs help reviewing a new scholarship program workflow.',
+            'requested_outcome' => 'A clear and publication-ready program setup.',
+            'milestones' => [
+                ['id' => 'milestone_1', 'label' => 'Program form walkthrough', 'completed' => false],
+                ['id' => 'milestone_2', 'label' => 'Publishing-readiness check', 'completed' => false],
+            ],
+        ]);
+
+        $this->actingAs($otherProvider)
+            ->getJson("/provider/billing/{$purchase->id}/data")
+            ->assertForbidden();
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/billing/{$purchase->id}/fulfillment", [
+                'fulfillment_status' => 'in_progress',
+                'assigned_to' => $admin->id,
+                'priority' => 'high',
+                'target_due_at' => now()->addWeek()->toDateString(),
+                'milestones' => [
+                    ['id' => 'milestone_1', 'label' => 'Program form walkthrough', 'completed' => true],
+                    ['id' => 'milestone_2', 'label' => 'Publishing-readiness check', 'completed' => false],
+                ],
+                'fulfillment_notes' => 'The first review is underway.',
+                'provider_update' => 'We completed the initial walkthrough and are checking publication readiness.',
+                'internal_note' => 'Coordinate the final check with the portal manager.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('purchase.assigned_to', $admin->id)
+            ->assertJsonPath('purchase.priority', 'high')
+            ->assertJsonCount(2, 'purchase.updates');
+
+        $providerWorkspace = $this->actingAs($provider)
+            ->getJson("/provider/billing/{$purchase->id}/data")
+            ->assertOk()
+            ->assertJsonPath('purchase.assigned_to', $admin->id)
+            ->assertJsonCount(1, 'purchase.updates')
+            ->assertJsonMissing(['message' => 'Coordinate the final check with the portal manager.']);
+
+        $this->assertSame('progress_update', $providerWorkspace->json('purchase.updates.0.kind'));
+
+        $providerFileResponse = $this->actingAs($provider)
+            ->post("/provider/billing/{$purchase->id}/files", [
+                'service_file' => UploadedFile::fake()->create('program-draft.pdf', 100, 'application/pdf'),
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonFragment(['category' => 'supporting']);
+
+        $providerFile = collect($providerFileResponse->json('purchase.files'))->firstWhere('category', 'supporting');
+
+        $this->actingAs($admin)
+            ->get($providerFile['view_url'])
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private');
+
+        $this->actingAs($otherProvider)
+            ->get($providerFile['view_url'])
+            ->assertForbidden();
+
+        $deliverableResponse = $this->actingAs($admin)
+            ->post("/admin/billing/{$purchase->id}/deliverables", [
+                'service_file' => UploadedFile::fake()->create('review-recommendations.pdf', 120, 'application/pdf'),
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonFragment(['category' => 'deliverable']);
+
+        $deliverable = collect($deliverableResponse->json('purchase.files'))->firstWhere('category', 'deliverable');
+
+        $this->actingAs($provider)
+            ->get($deliverable['view_url'])
+            ->assertOk();
+    }
+
+    public function test_provider_controls_completion_and_can_reopen_unresolved_service_work(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchase = $this->pendingPurchase($provider);
+        $purchase->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+            'fulfillment_status' => 'in_progress',
+            'request_summary' => 'Review our application workflow and identify setup issues.',
+            'requested_outcome' => 'A workflow ready for our next application cycle.',
+            'milestones' => [
+                ['id' => 'milestone_1', 'label' => 'Workflow review', 'completed' => false],
+            ],
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/billing/{$purchase->id}/fulfillment", [
+                'fulfillment_status' => 'completed',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('fulfillment_status');
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/billing/{$purchase->id}/fulfillment", [
+                'fulfillment_status' => 'provider_review',
+                'assigned_to' => $admin->id,
+                'priority' => 'normal',
+                'milestones' => [
+                    ['id' => 'milestone_1', 'label' => 'Workflow review', 'completed' => true],
+                ],
+                'provider_update' => 'The workflow review is complete. Please review the recommendations and confirm the result.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('purchase.fulfillment_status', 'provider_review');
+
+        $this->actingAs($provider)
+            ->postJson("/provider/billing/{$purchase->id}/confirm", [
+                'rating' => 5,
+                'feedback' => 'The recommendations are clear and useful.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('purchase.fulfillment_status', 'completed')
+            ->assertJsonPath('purchase.provider_rating', 5);
+
+        $this->assertDatabaseHas('provider_service_purchases', [
+            'id' => $purchase->id,
+            'fulfillment_status' => 'completed',
+            'provider_rating' => 5,
+        ]);
+
+        $this->actingAs($provider)
+            ->postJson("/provider/billing/{$purchase->id}/reopen", [
+                'reason' => 'One of the recommended workflow steps still needs clarification.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('purchase.fulfillment_status', 'in_progress');
+
+        $this->assertNull($purchase->fresh()->provider_confirmed_at);
+    }
+
+    public function test_provider_response_moves_information_request_back_to_ready(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchase = $this->pendingPurchase($provider);
+        $purchase->update(['status' => 'paid', 'paid_at' => now(), 'fulfillment_status' => 'ready']);
+
+        $this->actingAs($admin)
+            ->postJson("/admin/billing/{$purchase->id}/updates", [
+                'kind' => 'clarification_request',
+                'message' => 'Which scholarship program should be included in this setup review?',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('purchase.fulfillment_status', 'needs_information');
+
+        $this->actingAs($provider)
+            ->postJson("/provider/billing/{$purchase->id}/updates", [
+                'message' => 'Please review our Senior High School Support Program.',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('purchase.fulfillment_status', 'ready');
     }
 
     private function pendingPurchase(User $provider): ProviderServicePurchase

@@ -1,25 +1,23 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 
 const isLoading = ref(true);
-const isSaving = ref(false);
 const errorMessage = ref('');
 const search = ref('');
 const paymentStatus = ref('paid');
 const fulfillmentStatus = ref('all');
-const counts = ref({ all: 0, queued: 0, in_progress: 0, completed: 0 });
+const counts = ref({ all: 0, needs_information: 0, ready: 0, in_progress: 0, provider_review: 0, completed: 0 });
 const purchases = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0 });
-const selectedPurchase = ref(null);
-const editStatus = ref('queued');
-const editNotes = ref('');
 
 const fulfillmentFilters = [
     { value: 'all', label: 'All paid' },
-    { value: 'queued', label: 'Queued' },
+    { value: 'needs_information', label: 'Needs information' },
+    { value: 'ready', label: 'Ready' },
     { value: 'in_progress', label: 'In progress' },
+    { value: 'provider_review', label: 'Provider review' },
     { value: 'completed', label: 'Completed' },
 ];
 
@@ -95,53 +93,9 @@ function chooseFulfillmentFilter(value) {
     loadPurchases(1);
 }
 
-function openStatusEditor(purchase) {
-    selectedPurchase.value = purchase;
-    editStatus.value = purchase.fulfillment_status;
-    editNotes.value = purchase.fulfillment_notes ?? '';
-}
-
-function closeStatusEditor() {
-    if (isSaving.value) {
-        return;
-    }
-
-    selectedPurchase.value = null;
-}
-
-async function saveStatus() {
-    if (!selectedPurchase.value || isSaving.value) {
-        return;
-    }
-
-    isSaving.value = true;
-
-    try {
-        await window.axios.patch(`/admin/billing/${selectedPurchase.value.id}/fulfillment`, {
-            fulfillment_status: editStatus.value,
-            fulfillment_notes: editNotes.value || null,
-        });
-        selectedPurchase.value = null;
-        await loadPurchases(pagination.value.current_page);
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to update this service.';
-    } finally {
-        isSaving.value = false;
-    }
-}
-
-function handleKeydown(event) {
-    if (event.key === 'Escape') {
-        closeStatusEditor();
-    }
-}
-
 onMounted(() => {
-    window.addEventListener('keydown', handleKeydown);
     loadPurchases();
 });
-
-onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 </script>
 
 <template>
@@ -151,10 +105,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
                 <header class="admin-hero">
-                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Service Payments</p>
-                    <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Provider service queue</h1>
+                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Provider Services</p>
+                    <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Service request queue</h1>
                     <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                        Track optional provider support after PayMongo confirms payment. Scholarship access and decisions remain separate.
+                        Assign paid support requests, follow milestones, exchange updates, and deliver completed work.
                     </p>
 
                     <div class="mt-5 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
@@ -222,7 +176,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                     </td>
                                     <td class="whitespace-nowrap px-5 py-4 font-bold text-slate-900">{{ money(purchase.amount, purchase.currency) }}</td>
                                     <td class="px-5 py-4 text-right">
-                                        <button v-if="purchase.status === 'paid'" type="button" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="openStatusEditor(purchase)">Update service</button>
+                                        <a v-if="purchase.status === 'paid'" :href="purchase.workspace_url" class="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Open workspace <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
                                         <span v-else class="text-xs font-semibold text-slate-400">No action</span>
                                     </td>
                                 </tr>
@@ -244,39 +198,4 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
         </section>
     </main>
 
-    <div v-if="selectedPurchase" class="fixed inset-0 z-[90] grid place-items-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="service-status-title" @click.self="closeStatusEditor">
-        <section class="w-full max-w-lg rounded-lg bg-white p-6 text-slate-900 shadow-2xl [color-scheme:light]">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">{{ selectedPurchase.reference_number }}</p>
-                    <h2 id="service-status-title" class="mt-2 text-xl font-bold text-slate-950">Update provider service</h2>
-                    <p class="mt-1 text-sm text-slate-500">{{ selectedPurchase.provider?.name }} - {{ selectedPurchase.plan_name }}</p>
-                </div>
-                <button type="button" class="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Close" @click="closeStatusEditor">
-                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                </button>
-            </div>
-
-            <label class="mt-5 block">
-                <span class="mb-2 block text-sm font-semibold text-slate-700">Service status</span>
-                <select v-model="editStatus" class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
-                    <option class="bg-white text-slate-900" value="queued">Queued</option>
-                    <option class="bg-white text-slate-900" value="in_progress">In progress</option>
-                    <option class="bg-white text-slate-900" value="completed">Completed</option>
-                </select>
-            </label>
-
-            <label class="mt-4 block">
-                <span class="mb-2 block text-sm font-semibold text-slate-700">Provider note <span class="font-normal text-slate-400">(optional)</span></span>
-                <textarea v-model="editNotes" rows="4" maxlength="2000" class="w-full resize-y rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100" placeholder="Add a short progress or completion note"></textarea>
-            </label>
-
-            <div class="mt-6 flex justify-end gap-3">
-                <button type="button" class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="closeStatusEditor">Cancel</button>
-                <button type="button" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50" :disabled="isSaving" @click="saveStatus">
-                    {{ isSaving ? 'Saving...' : 'Save status' }}
-                </button>
-            </div>
-        </section>
-    </div>
 </template>

@@ -425,6 +425,10 @@ function handleScholarshipImageError(event) {
 }
 
 function compactDeadlineLabel(scholarship) {
+    if (isUpcomingProgram(scholarship)) {
+        return `Opens ${scholarship.application_opens_at}`;
+    }
+
     const days = deadlineDays(scholarship);
 
     if (days === null) {
@@ -964,6 +968,10 @@ onBeforeUnmount(() => {
 
                                 <div class="flex flex-1 flex-col p-4">
                                     <div class="flex flex-wrap items-center gap-2">
+                                        <p v-if="isUpcomingProgram(scholarship)" class="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800">
+                                            <i class="fa-regular fa-clock mr-1"></i>
+                                            Upcoming
+                                        </p>
                                         <p class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
                                             {{ scholarship.eligibility_match?.score ?? 0 }}% match
                                         </p>

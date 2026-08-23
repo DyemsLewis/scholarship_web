@@ -14,7 +14,7 @@ const navLinks = [
     { section: 'Workspace', key: 'reviews', href: '/admin/reviews', label: 'Reviews', icon: 'fa-solid fa-clipboard-check', permission: 'manage_reviews' },
     { section: 'Workspace', key: 'reports', href: '/admin/reports', label: 'Reported Issues', icon: 'fa-solid fa-circle-exclamation', permission: 'manage_reports' },
     { section: 'Administration', key: 'users', href: '/admin/manage-users', label: 'Manage Users', icon: 'fa-solid fa-users-gear', permission: 'manage_accounts' },
-    { section: 'Administration', key: 'billing', href: '/admin/billing', label: 'Service Payments', icon: 'fa-solid fa-receipt', permission: 'manage_billing' },
+    { section: 'Administration', key: 'billing', href: '/admin/billing', label: 'Service Requests', icon: 'fa-solid fa-headset', permission: 'manage_billing' },
     { section: 'Administration', key: 'logs', href: '/admin/logs', label: 'Activity Logs', icon: 'fa-solid fa-clock-rotate-left', permission: 'view_logs' },
     { section: 'Account', key: 'profile', href: '/admin/profile', label: 'Profile', icon: 'fa-solid fa-id-badge' },
 ];

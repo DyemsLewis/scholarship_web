@@ -41,6 +41,27 @@ class ProviderProgramSafeguardsTest extends TestCase
         ]);
     }
 
+    public function test_provider_can_separate_required_and_supporting_documents(): void
+    {
+        $provider = $this->verifiedProvider();
+
+        $response = $this->actingAs($provider)
+            ->postJson('/provider/scholarships', [
+                'title' => 'Document Levels Draft',
+                'requirements' => "Certificate of enrollment\nLatest report card or grades",
+                'optional_requirements' => "Good moral certificate\nRecommendation letter",
+                'status' => 'draft',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('scholarship.optional_requirements', "Good moral certificate\nRecommendation letter");
+
+        $this->assertDatabaseHas('scholarships', [
+            'id' => $response->json('scholarship.id'),
+            'requirements' => "Certificate of enrollment\nLatest report card or grades",
+            'optional_requirements' => "Good moral certificate\nRecommendation letter",
+        ]);
+    }
+
     public function test_incomplete_program_cannot_be_submitted_for_review(): void
     {
         $provider = $this->verifiedProvider();

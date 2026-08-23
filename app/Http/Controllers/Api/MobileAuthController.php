@@ -791,7 +791,7 @@ class MobileAuthController extends Controller
     private function statsPayload(User $user): array
     {
         return [
-            'available_scholarships' => Scholarship::query()->acceptingApplications()->count(),
+            'available_scholarships' => Scholarship::query()->discoverable()->count(),
             'applications' => ScholarshipApplication::query()->where('applicant_id', $user->id)->count(),
             'saved' => ScholarshipBookmark::query()->where('user_id', $user->id)->count(),
         ];
@@ -853,6 +853,7 @@ class MobileAuthController extends Controller
             'distance_km' => $distanceKm,
             'distance_label' => $distanceKm === null ? null : number_format($distanceKm, 1).' km away',
             'requirements' => $scholarship->requirements,
+            'optional_requirements' => $scholarship->optional_requirements,
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),
             'award_amount' => $scholarship->award_amount,

@@ -74,6 +74,7 @@ class ApplicationDocumentPreparationTest extends TestCase
             'eligible_locations' => 'Philippines',
             'income_requirement' => 'Any',
             'requirements' => "Certificate of enrollment\nLatest report card or grades",
+            'optional_requirements' => "Good moral certificate\nRecommendation letter",
             'deadline' => now()->addMonth()->toDateString(),
             'status' => 'published',
         ]);
@@ -85,7 +86,8 @@ class ApplicationDocumentPreparationTest extends TestCase
             ])
             ->assertUnprocessable()
             ->assertJsonPath('message', 'Upload every required document before continuing with your application.')
-            ->assertJsonCount(2, 'missing_documents');
+            ->assertJsonCount(2, 'missing_documents')
+            ->assertJsonMissing(['missing_documents' => 'Good moral certificate']);
 
         foreach ([
             'Certificate of enrollment' => 'enrollment.pdf',

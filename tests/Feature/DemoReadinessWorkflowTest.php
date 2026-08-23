@@ -188,10 +188,15 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertJsonPath('application.status', 'under_review');
 
         $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$applicationId}/status", [
-                'status' => 'approved',
-                'decision_reason' => 'meets_all_criteria',
+            ->patchJson("/provider/applications/{$applicationId}/decision", [
+                'decision' => 'approve',
                 'review_notes' => 'The applicant meets the published criteria.',
+                'rubric_scores' => [
+                    'eligibility_fit' => 95,
+                    'academic_merit' => 90,
+                    'financial_need' => 90,
+                    'document_quality' => 95,
+                ],
             ])
             ->assertOk()
             ->assertJsonPath('application.status', 'approved');
@@ -293,8 +298,8 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertOk();
 
         $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$application->id}/status", [
-                'status' => 'rejected',
+            ->patchJson("/provider/applications/{$application->id}/decision", [
+                'decision' => 'reject',
                 'decision_reason' => 'incomplete_requirements',
                 'review_notes' => 'The required supporting records were incomplete.',
             ])

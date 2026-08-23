@@ -9,7 +9,7 @@ const navLinks = [
     { section: 'Workspace', href: '/provider/reports', label: 'Reported Issues', icon: 'fa-solid fa-circle-exclamation', permission: 'manage_reports' },
     { section: 'Organization', href: '/provider/profile', label: 'Organization Profile', icon: 'fa-solid fa-building-user' },
     { section: 'Organization', href: '/provider/team', label: 'Team & Access', icon: 'fa-solid fa-user-group', permission: 'manage_team' },
-    { section: 'Organization', href: '/provider/billing', label: 'Optional Services', icon: 'fa-solid fa-receipt', permission: 'manage_billing' },
+    { section: 'Organization', href: '/provider/billing', label: 'Support Services', icon: 'fa-solid fa-headset', permission: 'manage_billing' },
 ];
 
 const visibleNavLinks = computed(() => navLinks.filter((link) => (

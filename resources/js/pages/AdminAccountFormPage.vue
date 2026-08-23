@@ -208,7 +208,11 @@ const applicantVerificationClass = computed(() => {
 });
 const applicantVerificationDocumentOptions = {
     academic_record: 'Academic record',
+    school_record: 'School enrollment proof',
 };
+const hasAcademicVerificationDocument = computed(() => verificationDocuments.value.some(
+    (document) => document.document_type === 'academic_record',
+));
 
 function handleMiddleInitialInput(event) {
     form.value.middleInitial = event.target.value.replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase();
@@ -457,6 +461,11 @@ async function resendVerificationEmail() {
 
 async function updateApplicantVerification(status) {
     if (!accountId || account.value?.role !== 'applicant') {
+        return;
+    }
+
+    if (!hasAcademicVerificationDocument.value) {
+        errorMessage.value = 'The applicant must upload an academic record before academic verification can be updated.';
         return;
     }
 
@@ -995,13 +1004,13 @@ onMounted(loadAccount);
                     <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
                         <div>
                             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                Academic verification
+                                Profile proof
                             </p>
                             <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                Review academic record
+                                Review academic and school records
                             </h3>
                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                Compare the saved academic result with the submitted grade record, then approve it or explain what must be corrected.
+                                Compare the saved academic result with the submitted grade record. School enrollment proof provides optional supporting context.
                             </p>
                         </div>
                         <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.12em]', applicantVerificationClass]">
@@ -1052,7 +1061,7 @@ onMounted(loadAccount);
                             <div class="flex flex-col gap-2 sm:flex-row lg:justify-end">
                                 <button
                                     type="button"
-                                    :disabled="Boolean(accountAction) || verificationDocuments.length === 0"
+                                    :disabled="Boolean(accountAction) || !hasAcademicVerificationDocument"
                                     class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                                     @click="updateApplicantVerification('pending')"
                                 >
@@ -1060,7 +1069,7 @@ onMounted(loadAccount);
                                 </button>
                                 <button
                                     type="button"
-                                    :disabled="Boolean(accountAction) || verificationDocuments.length === 0"
+                                    :disabled="Boolean(accountAction) || !hasAcademicVerificationDocument"
                                     class="rounded-md border border-rose-300 bg-rose-50 px-3.5 py-2.5 text-sm font-bold text-rose-800 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
                                     @click="updateApplicantVerification('rejected')"
                                 >
@@ -1068,7 +1077,7 @@ onMounted(loadAccount);
                                 </button>
                                 <button
                                     type="button"
-                                    :disabled="Boolean(accountAction) || verificationDocuments.length === 0"
+                                    :disabled="Boolean(accountAction) || !hasAcademicVerificationDocument"
                                     class="rounded-md bg-slate-900 px-3.5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                                     @click="updateApplicantVerification('approved')"
                                 >

@@ -24,7 +24,6 @@ const validSections = ['applicant', 'eligibility', 'documents', 'decision', 'sch
 const activeSection = ref(validSections.includes(normalizedRequestedSection)
     ? normalizedRequestedSection
     : 'applicant');
-const showRubricDetails = ref(false);
 const showDssDetails = ref(false);
 const reviewForm = ref(emptyReviewForm());
 const selectedDocument = ref(null);
@@ -805,6 +804,12 @@ async function updateStatus() {
         return;
     }
 
+    if (rubricReview.value.criteria?.length && !rubricDraftSummary.value.isComplete) {
+        activeSection.value = 'decision';
+        errorMessage.value = 'Score every provider review criterion before saving the review.';
+        return;
+    }
+
     if (selectedReviewAction.value?.blocked) {
         activeSection.value = selectedReviewAction.value.blockedSection || 'decision';
         errorMessage.value = selectedReviewAction.value.blockedMessage || 'Complete the required review steps before continuing.';
@@ -1332,7 +1337,7 @@ onMounted(loadApplication);
                             </section>
 
                             <section v-if="activeSection === 'decision' && rubricReview.criteria?.length" class="order-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                             Review Rubric
@@ -1341,16 +1346,9 @@ onMounted(loadApplication);
                                             Consistent applicant scoring
                                         </h3>
                                         <p class="mt-1 text-sm leading-6 text-slate-600">
-                                            Score each criterion from 0 to 100. The weighted total appears when all criteria are complete.
+                                            Score every provider criterion from 0 to 100 before saving the review or decision.
                                         </p>
                                     </div>
-                                    <button
-                                        type="button"
-                                        class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                        @click="showRubricDetails = !showRubricDetails"
-                                    >
-                                        {{ showRubricDetails ? 'Hide criteria' : 'Score rubric' }}
-                                    </button>
                                 </div>
 
                                 <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -1376,7 +1374,7 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <div v-if="showRubricDetails" class="mt-4 grid gap-3">
+                                <div class="mt-4 grid gap-3">
                                     <div
                                         v-for="criterion in rubricReview.criteria"
                                         :key="criterion.key"
@@ -1385,6 +1383,7 @@ onMounted(loadApplication);
                                         <div>
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <p class="font-bold text-slate-950">{{ criterion.label }}</p>
+                                                <span class="text-xs font-bold text-rose-600">Required</span>
                                                 <span class="rounded bg-white px-2 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
                                                     {{ criterion.weight }}%
                                                 </span>
@@ -1405,13 +1404,14 @@ onMounted(loadApplication);
                                                 max="100"
                                                 step="1"
                                                 placeholder="0-100"
+                                                required
                                                 :class="inputClass"
                                             >
                                         </div>
                                     </div>
                                 </div>
 
-                                <p v-if="showRubricDetails" class="mt-3 text-xs leading-5 text-slate-500">
+                                <p class="mt-3 text-xs leading-5 text-slate-500">
                                     {{ rubricReview.decision_notice }} Use the final decision section below to save these scores.
                                 </p>
                             </section>

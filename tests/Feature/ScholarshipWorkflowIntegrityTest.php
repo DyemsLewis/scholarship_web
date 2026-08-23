@@ -60,6 +60,37 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
         $this->assertDatabaseCount('scholarship_applications', 0);
     }
 
+    public function test_upcoming_published_program_is_visible_before_applications_open(): void
+    {
+        $applicant = $this->completeApplicant();
+        [, $scholarship] = $this->publishedScholarship([
+            'application_opens_at' => now()->addWeek()->toDateString(),
+            'deadline' => now()->addMonth()->toDateString(),
+        ]);
+
+        $this->actingAs($applicant)
+            ->getJson('/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('stats.available_scholarships', 1)
+            ->assertJsonPath('scholarships.0.id', $scholarship->id)
+            ->assertJsonPath('scholarships.0.is_accepting_applications', false)
+            ->assertJsonPath('scholarships.0.can_start_application', false);
+
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/scholarships/{$scholarship->id}/data")
+            ->assertOk()
+            ->assertJsonPath('scholarship.id', $scholarship->id)
+            ->assertJsonPath('scholarship.is_accepting_applications', false);
+
+        $this->actingAs($applicant)
+            ->postJson('/dashboard/applications', [
+                'scholarship_id' => $scholarship->id,
+                'terms_accepted' => true,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Applications open on '.$scholarship->application_opens_at->format('M d, Y').'.');
+    }
+
     public function test_mobile_app_requires_complete_profile_before_application(): void
     {
         $applicant = User::factory()->create();

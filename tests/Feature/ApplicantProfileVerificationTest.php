@@ -81,6 +81,105 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->assertDatabaseCount('applicant_verification_documents', 0);
     }
 
+    public function test_optional_school_proof_is_reusable_without_resetting_academic_verification(): void
+    {
+        Storage::fake('local');
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('latest-grades.pdf', 120, 'application/pdf'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated();
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+                'verification_status' => 'approved',
+            ])
+            ->assertOk();
+
+        $schoolProofResponse = $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'school_record',
+                'document_file' => UploadedFile::fake()->create('certificate-of-enrollment.pdf', 120, 'application/pdf'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('user.applicant_verification_status', 'approved')
+            ->assertJsonPath('user.is_profile_verified', true)
+            ->assertJsonPath('prepared_document.document_name', 'Certificate of enrollment')
+            ->assertJsonPath('prepared_documents_count', 2);
+
+        $schoolProof = ApplicantVerificationDocument::query()
+            ->where('applicant_id', $applicant->id)
+            ->where('document_type', 'school_record')
+            ->firstOrFail();
+
+        $this->assertDatabaseHas('student_documents', [
+            'user_id' => $applicant->id,
+            'document_name' => 'Certificate of enrollment',
+        ]);
+        $this->assertSame('approved', $applicant->studentProfile()->firstOrFail()->verification_status);
+
+        $this->actingAs($admin)
+            ->getJson("/admin/users/{$applicant->id}")
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $schoolProof->id,
+                'document_type' => 'school_record',
+            ]);
+
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'School Proof Review Scholarship',
+            'category' => 'Academic merit',
+            'description' => 'Tests application-scoped school proof review.',
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $applicationResponse = $this->actingAs($provider)
+            ->getJson("/provider/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $schoolProof->id,
+                'document_type' => 'school_record',
+            ]);
+
+        $schoolProofPayload = collect($applicationResponse->json('application.applicant.profile_proofs'))
+            ->firstWhere('document_type', 'school_record');
+
+        $this->actingAs($provider)
+            ->get($schoolProofPayload['view_url'])
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private');
+
+        $this->actingAs($otherProvider)
+            ->get($schoolProofPayload['view_url'])
+            ->assertForbidden();
+
+        $this->actingAs($applicant)
+            ->deleteJson("/dashboard/profile/verification-documents/{$schoolProof->id}")
+            ->assertOk()
+            ->assertJsonPath('user.applicant_verification_status', 'approved')
+            ->assertJsonPath('prepared_documents_count', 2);
+
+        $this->assertSame('approved', $applicant->studentProfile()->firstOrFail()->verification_status);
+        $this->assertNotNull($schoolProofResponse->json('prepared_document.id'));
+    }
+
     public function test_academic_verification_record_is_copied_to_documents_and_survives_verification_deletion(): void
     {
         Storage::fake('local');
