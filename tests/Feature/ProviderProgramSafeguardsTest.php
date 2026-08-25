@@ -85,7 +85,6 @@ class ProviderProgramSafeguardsTest extends TestCase
                 'handoff_mode',
                 'handoff_instructions',
                 'location_name',
-                'contact_email',
             ]);
 
         $this->assertDatabaseMissing('scholarships', [

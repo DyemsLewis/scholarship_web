@@ -10,6 +10,7 @@ use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
 use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
+use App\Models\ScholarshipAnnouncement;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipEvent;
 use App\Models\ScholarshipFunnelEvent;
@@ -96,6 +97,20 @@ class ProviderController extends Controller
         abort_unless($request->user()->isProvider(), 403);
 
         return view('provider-programs');
+    }
+
+    public function programWorkspace(Request $request, Scholarship $scholarship): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isProvider(), 403);
+        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+
+        return view('provider-program-workspace', [
+            'scholarship' => $scholarship,
+        ]);
     }
 
     public function programForm(Request $request): View|RedirectResponse
@@ -474,6 +489,8 @@ class ProviderController extends Controller
                 'provider_website' => ['nullable', 'string', 'max:255'],
                 'provider_address' => ['nullable', 'string', 'max:500'],
                 'provider_description' => ['nullable', 'string', 'max:1500'],
+                'provider_contact_email' => ['nullable', 'email', 'max:255'],
+                'provider_contact_number' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
             ];
         }
 
@@ -489,6 +506,13 @@ class ProviderController extends Controller
             'provider_website' => $validated['provider_website'] ?? null,
             'provider_address' => $validated['provider_address'] ?? null,
             'provider_description' => $validated['provider_description'] ?? null,
+            'provider_contact_email' => strtolower(trim((string) ($validated['provider_contact_email']
+                ?? $profile?->provider_contact_email
+                ?? $providerOwner->email))),
+            'provider_contact_number' => $validated['provider_contact_number']
+                ?? $profile?->provider_contact_number
+                ?? $profile?->contact_number
+                ?? $validated['contact_number'],
             'verification_status' => $profile?->verification_status ?? 'pending',
             'verification_notes' => $profile?->verification_notes,
             'verified_by' => $profile?->verified_by,
@@ -2022,6 +2046,128 @@ class ProviderController extends Controller
         );
     }
 
+    public function handleApplicationCorrection(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+
+        $validated = $request->validate([
+            'action' => ['required', Rule::in(['request', 'resolve'])],
+            'message' => [Rule::requiredIf($request->input('action') === 'request'), 'nullable', 'string', 'min:5', 'max:1500'],
+        ]);
+
+        if (in_array($application->status, [
+            'withdrawn',
+            'rejected',
+            'not_awarded',
+            'exam_failed',
+            'interview_failed',
+            'disbursed',
+            'renewed',
+        ], true)) {
+            throw ValidationException::withMessages([
+                'action' => 'A correction cannot be requested after this application has been closed.',
+            ]);
+        }
+
+        if ($validated['action'] === 'resolve' && ! in_array($application->correction_status, ['requested', 'submitted'], true)) {
+            throw ValidationException::withMessages([
+                'action' => 'There is no open correction request to resolve.',
+            ]);
+        }
+
+        $application->update($validated['action'] === 'request'
+            ? [
+                'correction_status' => 'requested',
+                'correction_message' => $validated['message'],
+                'correction_response' => null,
+                'correction_requested_by' => $request->user()->id,
+                'correction_requested_at' => now(),
+                'correction_responded_at' => null,
+                'correction_resolved_at' => null,
+            ]
+            : [
+                'correction_status' => 'resolved',
+                'correction_resolved_at' => now(),
+            ]);
+
+        $application->loadMissing(['applicant', 'scholarship']);
+        $isRequest = $validated['action'] === 'request';
+        PortalNotification::create([
+            'user_id' => $application->applicant_id,
+            'type' => 'application_correction',
+            'title' => $isRequest ? 'Application correction requested' : 'Application correction accepted',
+            'message' => $isRequest
+                ? "The provider requested an update for your {$application->scholarship->title} application."
+                : "The provider completed the correction review for your {$application->scholarship->title} application.",
+            'action_url' => route('dashboard.applications.show', $application, false),
+        ]);
+        ActivityLog::record(
+            $request->user(),
+            $isRequest ? 'application_correction_requested' : 'application_correction_resolved',
+            $isRequest
+                ? "{$request->user()->name} requested a correction for application #{$application->id}."
+                : "{$request->user()->name} resolved the correction for application #{$application->id}.",
+            $request,
+            ['application_id' => $application->id],
+        );
+
+        $freshApplication = $application->fresh()->load([
+            'applicant.studentProfile',
+            'documents.reviewer',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.events',
+        ]);
+
+        return response()->json([
+            'message' => $isRequest ? 'Correction request sent to the applicant.' : 'Correction marked as resolved.',
+            'application' => $this->applicationPayload($freshApplication, true),
+        ]);
+    }
+
+    public function handleApplicationWaitlist(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+
+        $validated = $request->validate([
+            'action' => ['required', Rule::in(['waitlist', 'promote', 'restore'])],
+            'note' => ['nullable', 'string', 'max:1500'],
+        ]);
+
+        $targetStatus = match ($validated['action']) {
+            'waitlist' => 'waitlisted',
+            'promote' => 'awarded',
+            'restore' => 'approved',
+        };
+
+        if ($validated['action'] === 'waitlist' && $application->status !== 'approved') {
+            throw ValidationException::withMessages([
+                'action' => 'Only applicants who passed portal pre-screening can be placed on the waitlist.',
+            ]);
+        }
+
+        if (in_array($validated['action'], ['promote', 'restore'], true) && $application->status !== 'waitlisted') {
+            throw ValidationException::withMessages([
+                'action' => 'Only a waitlisted applicant can use this action.',
+            ]);
+        }
+
+        $request->merge([
+            'status' => $targetStatus,
+            'decision_reason' => $validated['action'] === 'promote'
+                ? 'approved_for_award'
+                : ($validated['action'] === 'waitlist' ? 'funds_limited' : 'qualified_for_formal_application'),
+            'review_notes' => ($validated['note'] ?? null) ?: $application->review_notes,
+            'outcome_notes' => $validated['action'] === 'promote'
+                ? (($validated['note'] ?? null) ?: 'Promoted from the alternate recipient waitlist.')
+                : $application->outcome_notes,
+        ]);
+
+        return $this->updateApplicationStatus($request, $application);
+    }
+
     public function updateApplicationStatus(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -2042,6 +2188,7 @@ class ProviderController extends Controller
                 'exam_failed',
                 'interview_failed',
                 'approved',
+                'waitlisted',
                 'awarded',
                 'distribution_scheduled',
                 'not_awarded',
@@ -2095,6 +2242,12 @@ class ProviderController extends Controller
         $distributionInstructions = array_key_exists('distribution_instructions', $validated)
             ? $validated['distribution_instructions']
             : $application->distribution_instructions;
+        $waitlistPosition = $validated['status'] === 'waitlisted'
+            ? ($application->waitlist_position ?: ((int) ScholarshipApplication::query()
+                ->where('scholarship_id', $application->scholarship_id)
+                ->where('status', 'waitlisted')
+                ->max('waitlist_position') + 1))
+            : null;
 
         if ($validated['status'] === 'distribution_scheduled'
             && ! in_array($previousStatus, ['awarded', 'distribution_scheduled'], true)) {
@@ -2146,6 +2299,10 @@ class ProviderController extends Controller
             'rubric_total_score' => $rubricResult ? $rubricResult['total_score'] : $application->rubric_total_score,
             'rubric_scored_by' => $rubricResult ? $request->user()->id : $application->rubric_scored_by,
             'rubric_scored_at' => $rubricResult && $rubricResult['completed'] > 0 ? now() : $application->rubric_scored_at,
+            'waitlist_position' => $waitlistPosition,
+            'waitlisted_at' => $validated['status'] === 'waitlisted'
+                ? ($application->waitlisted_at ?? now())
+                : null,
         ];
 
         DB::transaction(function () use (
@@ -2301,7 +2458,8 @@ class ProviderController extends Controller
             'exam_taken' => array_filter(['exam_passed', $approvalStatus, $rejectionStatus]),
             'exam_passed' => array_filter([$approvalStatus, $rejectionStatus]),
             'interview' => ['approved', 'interview_failed'],
-            'approved' => ['awarded', 'not_awarded'],
+            'approved' => ['waitlisted', 'awarded', 'not_awarded'],
+            'waitlisted' => ['approved', 'awarded', 'not_awarded'],
             'awarded' => ['distribution_scheduled'],
             'distribution_scheduled' => ['disbursed'],
             'disbursed' => ['renewed'],
@@ -2328,6 +2486,7 @@ class ProviderController extends Controller
             'exam_passed',
             'interview',
             'approved',
+            'waitlisted',
             'awarded',
             'distribution_scheduled',
             'disbursed',
@@ -2503,15 +2662,118 @@ class ProviderController extends Controller
         ]);
     }
 
+    public function storeScholarshipAnnouncement(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+
+        $validated = $request->validate([
+            'audience' => ['required', Rule::in([
+                'active_applicants',
+                'under_review',
+                'qualified_applicants',
+                'selected_recipients',
+            ])],
+            'title' => ['required', 'string', 'min:5', 'max:120'],
+            'message' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+
+        $recipientQuery = $scholarship->applications()
+            ->with('applicant')
+            ->whereHas('applicant', fn ($query) => $query
+                ->where('role', 'applicant')
+                ->where('account_status', 'active'));
+
+        match ($validated['audience']) {
+            'active_applicants' => $recipientQuery->whereNotIn('status', [
+                'withdrawn',
+                'rejected',
+                'not_awarded',
+                'exam_failed',
+                'interview_failed',
+                'disbursed',
+                'renewed',
+            ]),
+            'under_review' => $recipientQuery->whereIn('status', [
+                'submitted',
+                'under_review',
+                'qualified',
+                'shortlisted',
+                'exam_qualified',
+                'exam_scheduled',
+                'exam_taken',
+                'exam_passed',
+                'interview',
+            ]),
+            'qualified_applicants' => $recipientQuery->whereIn('status', ['approved', 'waitlisted']),
+            'selected_recipients' => $recipientQuery->whereIn('status', self::AWARD_SLOT_STATUSES),
+        };
+
+        $recipients = $recipientQuery->get()->unique('applicant_id')->values();
+
+        if ($recipients->isEmpty()) {
+            throw ValidationException::withMessages([
+                'audience' => 'No applicants currently match this audience.',
+            ]);
+        }
+
+        $announcement = DB::transaction(function () use ($request, $scholarship, $validated, $recipients): ScholarshipAnnouncement {
+            $announcement = $scholarship->announcements()->create([
+                ...$validated,
+                'recipient_count' => $recipients->count(),
+                'published_by' => $request->user()->id,
+                'published_at' => now(),
+            ]);
+
+            foreach ($recipients as $application) {
+                PortalNotification::create([
+                    'user_id' => $application->applicant_id,
+                    'type' => 'program_announcement',
+                    'title' => $validated['title'],
+                    'message' => "{$scholarship->title}: {$validated['message']}",
+                    'action_url' => route('dashboard.applications.show', $application, false),
+                    'deduplication_key' => "program-announcement:{$announcement->id}:user:{$application->applicant_id}",
+                ]);
+            }
+
+            return $announcement;
+        });
+
+        ActivityLog::record(
+            $request->user(),
+            'program_announcement_published',
+            "{$request->user()->name} published an announcement for {$scholarship->title}.",
+            $request,
+            [
+                'scholarship_id' => $scholarship->id,
+                'announcement_id' => $announcement->id,
+                'audience' => $validated['audience'],
+                'recipient_count' => $recipients->count(),
+            ],
+        );
+
+        return response()->json([
+            'message' => "Announcement sent to {$recipients->count()} applicant".($recipients->count() === 1 ? '.' : 's.'),
+            'announcement' => $this->scholarshipAnnouncementPayload($announcement->load('publisher')),
+        ], 201);
+    }
+
     public function showScholarship(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
         abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
 
+        $scholarship->load(['announcements.publisher']);
+
         return response()->json([
-            'scholarship' => $this->scholarshipPayload(
-                $scholarship->loadCount($this->providerProgramCountRelations()),
-            ),
+            'scholarship' => [
+                ...$this->scholarshipPayload(
+                    $scholarship->loadCount($this->providerProgramCountRelations()),
+                ),
+                'announcements' => $scholarship->announcements
+                    ->map(fn (ScholarshipAnnouncement $announcement) => $this->scholarshipAnnouncementPayload($announcement))
+                    ->values(),
+            ],
         ]);
     }
 
@@ -2574,6 +2836,7 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
         $validated = $this->normalizeScholarshipExamDetails($validated);
+        $validated = $this->applyProviderProgramContactDefaults($validated, $request->user());
         [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request);
         $this->ensureScholarshipReadyForSubmission($validated, $benefits);
@@ -2644,6 +2907,7 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipExamDetails($validated);
+        $validated = $this->applyProviderProgramContactDefaults($validated, $request->user(), $scholarship);
         [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request, $scholarship);
         $this->ensureScholarshipReadyForSubmission($validated, $benefits, $scholarship);
@@ -2956,6 +3220,26 @@ class ProviderController extends Controller
             'terms_accepted' => $requiresCompleteSubmission ? ['accepted'] : ['nullable'],
             'review_rubric' => ['nullable', 'string', 'max:8000', 'json'],
         ]);
+    }
+
+    private function applyProviderProgramContactDefaults(
+        array $validated,
+        User $actor,
+        ?Scholarship $scholarship = null,
+    ): array {
+        $profile = $actor->providerOrganizationOwner()->providerProfile()->first();
+
+        if (blank($validated['contact_email'] ?? null)) {
+            $validated['contact_email'] = $scholarship?->contact_email
+                ?: $profile?->provider_contact_email;
+        }
+
+        if (blank($validated['contact_number'] ?? null)) {
+            $validated['contact_number'] = $scholarship?->contact_number
+                ?: $profile?->provider_contact_number;
+        }
+
+        return $validated;
     }
 
     private function normalizeScholarshipAcademicRequirement(array $validated): array
@@ -3484,6 +3768,16 @@ class ProviderController extends Controller
             'status_progress' => $decisionSupport->statusProgress($application),
             'notes' => $application->notes,
             'review_notes' => $application->review_notes,
+            'correction_status' => $application->correction_status,
+            'correction_message' => $application->correction_message,
+            'correction_response' => $application->correction_response,
+            'correction_requested_at' => $application->correction_requested_at?->format('M d, Y h:i A'),
+            'correction_responded_at' => $application->correction_responded_at?->format('M d, Y h:i A'),
+            'correction_resolved_at' => $application->correction_resolved_at?->format('M d, Y h:i A'),
+            'withdrawal_reason' => $application->withdrawal_reason,
+            'withdrawn_at' => $application->withdrawn_at?->format('M d, Y h:i A'),
+            'waitlist_position' => $application->waitlist_position,
+            'waitlisted_at' => $application->waitlisted_at?->format('M d, Y h:i A'),
             'decision_reason' => $application->decision_reason,
             'awarded_amount' => $application->awarded_amount,
             'outcome_notes' => $application->outcome_notes,
@@ -3699,6 +3993,26 @@ class ProviderController extends Controller
             'views_count' => $scholarship->views_count,
             'created_at' => $scholarship->created_at?->format('M d, Y'),
             'updated_at' => $scholarship->updated_at?->format('M d, Y'),
+        ];
+    }
+
+    private function scholarshipAnnouncementPayload(ScholarshipAnnouncement $announcement): array
+    {
+        return [
+            'id' => $announcement->id,
+            'audience' => $announcement->audience,
+            'audience_label' => match ($announcement->audience) {
+                'active_applicants' => 'All active applicants',
+                'under_review' => 'Applicants under review',
+                'qualified_applicants' => 'Qualified applicants and alternates',
+                'selected_recipients' => 'Selected recipients',
+                default => Str::headline($announcement->audience),
+            },
+            'title' => $announcement->title,
+            'message' => $announcement->message,
+            'recipient_count' => $announcement->recipient_count,
+            'publisher' => $announcement->publisher?->name,
+            'published_at' => $announcement->published_at?->format('M d, Y h:i A'),
         ];
     }
 
@@ -3931,6 +4245,8 @@ class ProviderController extends Controller
             'provider_website' => $profile?->provider_website,
             'provider_address' => $profile?->provider_address,
             'provider_description' => $profile?->provider_description,
+            'provider_contact_email' => $profile?->provider_contact_email,
+            'provider_contact_number' => $profile?->provider_contact_number,
             'verification_status' => $profile?->verification_status,
             'verification_notes' => $profile?->verification_notes,
         ];
@@ -4350,6 +4666,11 @@ class ProviderController extends Controller
                 'title' => 'Qualified for formal application',
                 'message' => "You passed pre-screening for {$programTitle}. Open your submission to review the documents and instructions for continuing with the provider. This is not yet a final scholarship award.",
             ],
+            'waitlisted' => [
+                'type' => 'application_outcome',
+                'title' => 'Added to the alternate recipient list',
+                'message' => "You remain eligible for {$programTitle}, but the provider placed you on its waitlist. You will be notified if a slot becomes available.",
+            ],
             'distribution_scheduled' => [
                 'type' => 'application_outcome',
                 'title' => 'Reward distribution scheduled',
@@ -4378,6 +4699,8 @@ class ProviderController extends Controller
     {
         return match ($status) {
             'approved' => 'Qualified for formal application',
+            'waitlisted' => 'Waitlisted alternate',
+            'withdrawn' => 'Withdrawn',
             'rejected' => 'Not qualified',
             'exam_qualified' => 'Qualified for exam',
             'exam_scheduled' => 'Exam scheduled',

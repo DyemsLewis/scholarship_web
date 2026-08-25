@@ -358,6 +358,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'provider_website' => $providerProfile?->provider_website,
             'provider_address' => $providerProfile?->provider_address,
             'provider_description' => $providerProfile?->provider_description,
+            'provider_contact_email' => $providerProfile?->provider_contact_email,
+            'provider_contact_number' => $providerProfile?->provider_contact_number,
             'verification_status' => $providerProfile?->verification_status,
             'verification_notes' => $providerProfile?->verification_notes,
             'can_post_scholarships' => $this->isProvider()

@@ -98,6 +98,13 @@ class Scholarship extends Model
         return $this->hasMany(ScholarshipEvent::class);
     }
 
+    public function announcements(): HasMany
+    {
+        return $this->hasMany(ScholarshipAnnouncement::class)
+            ->latest('published_at')
+            ->latest('id');
+    }
+
     public function benefits(): HasMany
     {
         return $this->hasMany(ScholarshipBenefit::class)->orderBy('sort_order')->orderBy('id');

@@ -10,6 +10,7 @@ import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { decisionReasonOptions, negativeDecisionStatuses } from '../support/applicationDecisionReasons';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
+import { showPortalToast } from '../support/portalToast';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
@@ -32,6 +33,9 @@ const selectedReviewActionKey = ref('');
 const documentReviewError = ref('');
 const rubricScores = ref({});
 const postDecisionSummary = ref(null);
+const showCorrectionForm = ref(false);
+const correctionMessage = ref('');
+const isHandlingCorrection = ref(false);
 const {
     confirmation,
     requestConfirmation,
@@ -98,6 +102,8 @@ const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2
 const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500';
 const customStatusLabels = {
     approved: 'Qualified for formal application',
+    waitlisted: 'Waitlisted alternate',
+    withdrawn: 'Withdrawn',
     awarded: 'Awarded',
     not_awarded: 'Not selected',
     rejected: 'Not qualified',
@@ -348,6 +354,19 @@ const suggestedReviewActions = computed(() => {
                 tone: 'success',
             },
             {
+                key: 'add_to_waitlist',
+                decision: 'outcome',
+                directStatus: true,
+                status: 'waitlisted',
+                reason: 'funds_limited',
+                note: 'Applicant remains eligible and was placed on the alternate recipient waitlist.',
+                label: 'Add to waitlist',
+                description: 'Keep this eligible applicant as an alternate if an award slot becomes available.',
+                confirmLabel: 'Add to waitlist',
+                icon: 'fa-solid fa-list-ol',
+                tone: 'default',
+            },
+            {
                 key: 'record_not_selected',
                 decision: 'outcome',
                 directStatus: true,
@@ -359,6 +378,37 @@ const suggestedReviewActions = computed(() => {
                 confirmLabel: 'Confirm not selected',
                 icon: 'fa-solid fa-circle-xmark',
                 tone: 'danger',
+            },
+        ];
+    }
+
+    if (application.value?.status === 'waitlisted') {
+        return [
+            {
+                key: 'promote_alternate',
+                decision: 'outcome',
+                directStatus: true,
+                status: 'awarded',
+                reason: 'approved_for_award',
+                note: 'Promoted from the alternate recipient waitlist after a slot became available.',
+                label: 'Promote alternate',
+                description: 'Use the available award slot for this waitlisted applicant.',
+                confirmLabel: 'Promote recipient',
+                icon: 'fa-solid fa-arrow-up-right-dots',
+                tone: 'success',
+            },
+            {
+                key: 'remove_from_waitlist',
+                decision: 'outcome',
+                directStatus: true,
+                status: 'approved',
+                reason: 'qualified_for_formal_application',
+                note: 'Removed from the alternate list and returned to qualified status.',
+                label: 'Remove from waitlist',
+                description: 'Return this applicant to the qualified formal-application stage.',
+                confirmLabel: 'Remove from waitlist',
+                icon: 'fa-solid fa-rotate-left',
+                tone: 'default',
             },
         ];
     }
@@ -444,17 +494,46 @@ const completedStageMessage = computed(() => ({
     exam_scheduled: 'Complete the shared exam, then record Passed or Failed once in Program Results.',
     interview: 'Complete the shared interview, then record Passed or Failed once in Program Results.',
     approved: 'The applicant passed portal pre-screening and can now follow your formal application instructions.',
+    waitlisted: 'This qualified applicant is on the alternate recipient list. Promote them when an award slot becomes available.',
+    withdrawn: 'The applicant withdrew this application. The record remains available for reference and no further decision is needed.',
     awarded: 'The award is confirmed. Publish distribution details once from the program applicant page.',
     not_awarded: 'The provider formal application process is complete and the applicant was not selected.',
     distribution_scheduled: 'Distribution is scheduled. Use Schedule only to record this applicant\'s release result.',
     disbursed: 'The scholarship release is complete for this applicant.',
 }[application.value?.status] ?? 'No applicant decision is needed at this stage. You can still save review notes and rubric scores.'));
-const decisionPanelTitle = computed(() => application.value?.status === 'approved'
-    ? 'Record the formal application outcome'
-    : 'Record the pre-screening decision');
-const decisionPanelDescription = computed(() => application.value?.status === 'approved'
-    ? 'After your organization finishes its formal process, record whether this applicant received the scholarship.'
-    : 'Decide whether the applicant may continue to your organization’s formal application process.');
+const decisionPanelTitle = computed(() => {
+    if (application.value?.status === 'withdrawn') {
+        return 'Application withdrawn';
+    }
+
+    if (['approved', 'waitlisted'].includes(application.value?.status)) {
+        return 'Record the formal application outcome';
+    }
+
+    return 'Record the pre-screening decision';
+});
+const decisionPanelDescription = computed(() => {
+    if (application.value?.status === 'withdrawn') {
+        return 'Keep the withdrawal reason for your records. This application no longer needs review.';
+    }
+
+    if (['approved', 'waitlisted'].includes(application.value?.status)) {
+        return 'After your organization finishes its formal process, record the final recipient outcome.';
+    }
+
+    return 'Decide whether the applicant may continue to your organization’s formal application process.';
+});
+const canRequestCorrection = computed(() => application.value
+    && ![
+        'withdrawn',
+        'rejected',
+        'not_awarded',
+        'exam_failed',
+        'interview_failed',
+        'disbursed',
+        'renewed',
+    ].includes(application.value.status)
+    && !['requested', 'submitted'].includes(application.value.correction_status));
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
 const applicationRequirements = computed(() => {
@@ -561,11 +640,11 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
+    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled'].includes(status)) {
+    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled', 'waitlisted'].includes(status)) {
         return 'bg-slate-100 text-slate-800';
     }
 
@@ -838,6 +917,11 @@ function statusConfirmation(status) {
             message: `${applicantName} will receive the documents and instructions needed to continue the formal application with your organization. This is not a final scholarship award.`,
             confirmLabel: 'Mark as qualified',
         },
+        waitlisted: {
+            title: 'Add this applicant to the waitlist?',
+            message: `${applicantName} will be notified that they remain eligible as an alternate recipient.` ,
+            confirmLabel: 'Add to waitlist',
+        },
         awarded: {
             title: 'Confirm this scholarship award?',
             message: `${applicantName} will be notified that your organization selected them after the formal application process.`,
@@ -872,6 +956,77 @@ async function loadApplication() {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load application details.';
     } finally {
         isLoading.value = false;
+    }
+}
+
+async function requestApplicationCorrection() {
+    const message = correctionMessage.value.trim();
+
+    if (!application.value || message.length < 5) {
+        errorMessage.value = 'Tell the applicant what needs to be corrected.';
+        return;
+    }
+
+    isHandlingCorrection.value = true;
+    errorMessage.value = '';
+
+    try {
+        const response = await window.axios.patch(`/provider/applications/${application.value.id}/correction`, {
+            action: 'request',
+            message,
+        });
+
+        applyApplication(response.data.application);
+        correctionMessage.value = '';
+        showCorrectionForm.value = false;
+        showPortalToast({
+            title: 'Correction requested',
+            message: response.data.message,
+        });
+    } catch (error) {
+        errorMessage.value = error.response?.data?.errors?.message?.[0]
+            ?? error.response?.data?.errors?.action?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to send the correction request.';
+    } finally {
+        isHandlingCorrection.value = false;
+    }
+}
+
+async function resolveApplicationCorrection() {
+    if (!application.value || isHandlingCorrection.value) {
+        return;
+    }
+
+    const confirmed = await requestConfirmation({
+        title: 'Complete this correction review?',
+        message: 'Confirm that the applicant has provided the requested changes and that you have reviewed them.',
+        confirmLabel: 'Mark as resolved',
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
+    isHandlingCorrection.value = true;
+    errorMessage.value = '';
+
+    try {
+        const response = await window.axios.patch(`/provider/applications/${application.value.id}/correction`, {
+            action: 'resolve',
+        });
+
+        applyApplication(response.data.application);
+        showPortalToast({
+            title: 'Correction resolved',
+            message: response.data.message,
+        });
+    } catch (error) {
+        errorMessage.value = error.response?.data?.errors?.action?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to resolve the correction request.';
+    } finally {
+        isHandlingCorrection.value = false;
     }
 }
 
@@ -1241,8 +1396,124 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
+                                <div
+                                    v-if="application.status === 'withdrawn'"
+                                    class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4"
+                                >
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-rose-100 text-rose-700">
+                                            <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="font-bold text-rose-950">Withdrawn by the applicant</p>
+                                            <p class="mt-1 text-sm leading-6 text-rose-900">
+                                                {{ application.withdrawal_reason || 'No withdrawal reason was provided.' }}
+                                            </p>
+                                            <p v-if="application.withdrawn_at" class="mt-1 text-xs font-semibold text-rose-700">
+                                                Withdrawn {{ application.withdrawn_at }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="application.status === 'waitlisted'"
+                                    class="mt-5 flex flex-col gap-3 rounded-md border border-sky-200 bg-sky-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-sky-100 text-sky-700">
+                                            <i class="fa-solid fa-list-ol" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="font-bold text-sky-950">Alternate recipient</p>
+                                            <p class="mt-1 text-sm leading-6 text-sky-900">
+                                                Keep this qualified applicant available if an award slot opens.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <span v-if="application.waitlist_position" class="w-fit rounded-md bg-white px-3 py-2 text-sm font-bold text-sky-900 ring-1 ring-sky-200">
+                                        Position {{ application.waitlist_position }}
+                                    </span>
+                                </div>
+
+                                <div
+                                    v-if="application.correction_status"
+                                    :class="[
+                                        'mt-5 rounded-md border p-4',
+                                        application.correction_status === 'submitted'
+                                            ? 'border-sky-200 bg-sky-50'
+                                            : application.correction_status === 'resolved'
+                                                ? 'border-emerald-200 bg-emerald-50'
+                                                : 'border-amber-200 bg-amber-50',
+                                    ]"
+                                >
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Applicant correction</p>
+                                            <p class="mt-1 font-bold text-slate-950">
+                                                {{ application.correction_status === 'submitted' ? 'Changes sent for review' : application.correction_status === 'resolved' ? 'Correction resolved' : 'Waiting for applicant changes' }}
+                                            </p>
+                                            <p v-if="application.correction_message" class="mt-2 text-sm leading-6 text-slate-700">
+                                                <strong>Requested:</strong> {{ application.correction_message }}
+                                            </p>
+                                            <p v-if="application.correction_response" class="mt-1 text-sm leading-6 text-slate-700">
+                                                <strong>Applicant response:</strong> {{ application.correction_response }}
+                                            </p>
+                                        </div>
+                                        <button
+                                            v-if="application.correction_status === 'submitted'"
+                                            type="button"
+                                            :disabled="isHandlingCorrection"
+                                            class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                                            @click="resolveApplicationCorrection"
+                                        >
+                                            Mark resolved
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div v-if="showCorrectionForm" class="mt-5 rounded-md border border-slate-300 bg-slate-50 p-4">
+                                    <label :class="labelClass">What should the applicant correct?</label>
+                                    <textarea
+                                        v-model="correctionMessage"
+                                        rows="3"
+                                        maxlength="1500"
+                                        placeholder="Example: Replace the unreadable report card and update your current grade level."
+                                        :class="inputClass"
+                                    ></textarea>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            :disabled="isHandlingCorrection"
+                                            class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                                            @click="requestApplicationCorrection"
+                                        >
+                                            Send correction request
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="isHandlingCorrection"
+                                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                                            @click="showCorrectionForm = false; correctionMessage = ''"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div class="mt-5">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Available actions</p>
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Available actions</p>
+                                        <button
+                                            v-if="canRequestCorrection && !showCorrectionForm"
+                                            type="button"
+                                            class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                            @click="showCorrectionForm = true"
+                                        >
+                                            <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
+                                            Request correction
+                                        </button>
+                                    </div>
                                     <button
                                         v-if="nextApprovalStatus && !documentReviewComplete"
                                         type="button"

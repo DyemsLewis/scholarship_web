@@ -4,6 +4,7 @@ import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
+import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { labelFromKey } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
@@ -40,7 +41,8 @@ const documentFileInput = ref(null);
 const activeUploadRequirement = ref('');
 
 const steps = [
-    { label: 'Program', detail: 'Review your match', icon: 'fa-solid fa-graduation-cap' },
+    { label: 'Program', detail: 'Review the program', icon: 'fa-solid fa-graduation-cap' },
+    { label: 'Eligibility', detail: 'Check the criteria', icon: 'fa-solid fa-user-check' },
     { label: 'Documents', detail: 'Prepare your files', icon: 'fa-solid fa-folder-open' },
     { label: 'Confirm', detail: 'Check and submit', icon: 'fa-solid fa-paper-plane' },
 ];
@@ -117,8 +119,26 @@ const selectedApplicationMode = computed(() => applicationModeLabel(selectedScho
 const selectedApplicationModeDescription = computed(() => applicationModeDescription(selectedScholarship.value?.application_mode));
 const selectedNeedsOriginalVerification = computed(() => ['onsite', 'hybrid'].includes(selectedScholarship.value?.application_mode));
 const selectedSelectionPlan = computed(() => selectionPlanFor(selectedScholarship.value));
+const selectedEligibilityCriteria = computed(() => {
+    const scholarship = selectedScholarship.value;
+
+    if (!scholarship) {
+        return [];
+    }
+
+    return [
+        { label: 'Education level', value: criteriaLabel(scholarship.eligible_education_levels), icon: 'fa-solid fa-school' },
+        { label: 'Grade / year level', value: criteriaLabel(scholarship.eligible_year_levels), icon: 'fa-solid fa-layer-group' },
+        { label: 'Track, strand, or course', value: criteriaLabel(scholarship.eligible_courses), icon: 'fa-solid fa-book-open' },
+        { label: 'School type', value: criteriaLabel(scholarship.eligible_school_types), icon: 'fa-solid fa-building-columns' },
+        { label: 'Location coverage', value: criteriaLabel(scholarship.eligible_locations || scholarship.location_name), icon: 'fa-solid fa-location-dot' },
+        { label: 'Household income', value: scholarship.income_requirement || 'Any', icon: 'fa-solid fa-wallet' },
+        { label: 'Academic requirement', value: academicRequirementLabel(scholarship), icon: 'fa-solid fa-chart-line' },
+    ];
+});
 const readyApplicationCount = computed(() => applications.value.filter((application) => Number(application.document_readiness?.accepted_percent ?? application.document_readiness?.uploaded_percent ?? 0) >= 100).length);
 const activeApplicationCount = computed(() => applications.value.filter((application) => ![
+    'withdrawn',
     'rejected',
     'not_awarded',
     'disbursed',
@@ -158,6 +178,7 @@ const applicationQueue = computed(() => [...applications.value].sort((first, sec
         qualified: 4,
         submitted: 3,
         approved: 2,
+        waitlisted: 2,
         awarded: 1,
         distribution_scheduled: 2,
         disbursed: 1,
@@ -166,6 +187,7 @@ const applicationQueue = computed(() => [...applications.value].sort((first, sec
         interview_failed: 0,
         rejected: 0,
         not_awarded: 0,
+        withdrawn: 0,
     };
 
     const firstRank = statusRank[first.status ?? 'submitted'] ?? 0;
@@ -177,11 +199,19 @@ const nextStepLabel = computed(() => steps[currentStep.value + 1]?.label
     ? `Continue to ${steps[currentStep.value + 1].label}`
     : 'Continue');
 const canGoNext = computed(() => {
+    if (!selectedScholarship.value) {
+        return false;
+    }
+
+    if (currentStep.value === 0) {
+        return true;
+    }
+
     if (!selectedCanStartApplication.value) {
         return false;
     }
 
-    if (currentStep.value === 1) {
+    if (currentStep.value === 2) {
         return allDocumentsChecked.value;
     }
 
@@ -194,15 +224,19 @@ function canOpenWizardStep(index) {
         return true;
     }
 
+    if (index === 1) {
+        return Boolean(selectedScholarship.value);
+    }
+
     if (!selectedCanStartApplication.value) {
         return false;
     }
 
-    if (index === 1) {
+    if (index === 2) {
         return true;
     }
 
-    if (index === 2) {
+    if (index === 3) {
         return allDocumentsChecked.value;
     }
 
@@ -276,6 +310,8 @@ function formatAmount(amount) {
 function statusLabel(status) {
     const labels = {
         approved: 'Qualified for formal application',
+        waitlisted: 'Waitlisted alternate',
+        withdrawn: 'Withdrawn',
         rejected: 'Not qualified',
         exam_qualified: 'Qualified for exam',
         exam_scheduled: 'Exam scheduled',
@@ -301,11 +337,11 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
+    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled'].includes(status)) {
+    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled', 'waitlisted'].includes(status)) {
         return 'bg-slate-100 text-slate-700';
     }
 
@@ -457,6 +493,19 @@ function selectionStageDescription(stage) {
         interview: 'Applicants who reach this stage receive the interview schedule and instructions.',
         distribution: 'Selected recipients receive the benefit release details from the provider.',
     }[stage?.value] ?? stage?.detail ?? 'The provider will share instructions if you reach this stage.';
+}
+
+function criteriaLabel(value) {
+    const items = Array.isArray(value)
+        ? value
+        : String(value ?? '').split(/\r?\n|,/);
+
+    const labels = items
+        .map((item) => String(item).trim())
+        .filter(Boolean)
+        .map(labelFromKey);
+
+    return labels.length ? labels.join(', ') : 'Any';
 }
 
 function documentRequirements(requirements) {
@@ -820,7 +869,7 @@ watch(selectedScholarship, (scholarship) => {
                             </div>
                         </header>
 
-                        <nav class="grid gap-2 border-b border-slate-200 bg-slate-50 p-3 sm:grid-cols-3" aria-label="Pre-screening process">
+                        <nav class="grid gap-2 border-b border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Pre-screening process">
                             <button
                                 v-for="(step, index) in steps"
                                 :key="step.label"
@@ -867,61 +916,78 @@ watch(selectedScholarship, (scholarship) => {
 
                             <div v-else-if="currentStep === 0 && selectedScholarship" class="grid gap-5">
                                 <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                    <header class="relative flex flex-col gap-5 overflow-hidden bg-slate-950 p-5 text-white sm:flex-row sm:items-start sm:justify-between sm:p-6">
+                                    <header class="relative flex flex-col gap-4 overflow-hidden bg-slate-950 p-4 text-white sm:flex-row sm:items-center sm:justify-between sm:p-5">
                                         <span class="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full border-[24px] border-amber-300/10" aria-hidden="true"></span>
                                         <div class="flex min-w-0 items-start gap-4">
-                                            <img :src="selectedScholarship.image_url" :alt="selectedScholarship.title" class="h-16 w-16 shrink-0 rounded-md bg-white object-contain p-2 ring-1 ring-white/20">
+                                            <img :src="selectedScholarship.image_url" :alt="selectedScholarship.title" class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-white/20">
                                             <div class="min-w-0">
                                                 <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-amber-300">{{ selectedScholarship.provider?.name || 'Scholarship Provider' }}</p>
-                                                <h3 class="mt-1 text-2xl font-bold leading-tight text-white">{{ selectedScholarship.title }}</h3>
-                                                <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-300">{{ selectedScholarship.description || 'No program description has been posted yet.' }}</p>
+                                                <h3 class="mt-1 text-xl font-bold leading-tight text-white">{{ selectedScholarship.title }}</h3>
                                             </div>
                                         </div>
-                                        <span :class="['relative w-fit shrink-0 rounded-md px-3 py-2 text-xs font-bold ring-1', selectedIsEligible ? 'bg-emerald-400/15 text-emerald-200 ring-emerald-300/25' : 'bg-rose-400/15 text-rose-200 ring-rose-300/25']">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% match</span>
+                                        <div class="relative flex w-full shrink-0 flex-row gap-2 sm:w-auto sm:items-center">
+                                            <span :class="['rounded-md px-3 py-2 text-center text-xs font-bold ring-1', selectedIsEligible ? 'bg-emerald-400/15 text-emerald-200 ring-emerald-300/25' : 'bg-rose-400/15 text-rose-200 ring-rose-300/25']">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% match</span>
+                                            <a :href="`/dashboard/scholarships/${selectedScholarship.id}`" class="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-900 transition hover:bg-amber-100 sm:flex-none">
+                                                More details
+                                                <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                            </a>
+                                        </div>
                                     </header>
 
-                                    <dl class="grid gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-3">
-                                        <div class="flex items-start gap-3 bg-amber-50 p-4 sm:col-span-2 lg:col-span-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900"><i class="fa-solid fa-gift" aria-hidden="true"></i></span><div><dt class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">Benefits</dt><dd class="mt-1 text-sm font-bold leading-6 text-slate-950">{{ selectedScholarship.benefit_summary || formatAmount(selectedScholarship.award_amount) }}</dd></div></div>
-                                        <div class="flex items-start gap-3 bg-white p-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Deadline</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedScholarship.deadline || 'No deadline' }}</dd></div></div>
-                                        <div class="flex items-start gap-3 bg-white p-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Academic requirement</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ academicRequirementLabel(selectedScholarship) }}</dd></div></div>
-                                        <div class="flex items-start gap-3 bg-white p-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Files to prepare</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedRequirements.length ? `${selectedRequirements.length} required` : 'None initially' }}</dd></div></div>
-                                    </dl>
-
-                                    <div :class="['flex items-start gap-3 border-b px-5 py-4', selectedIsEligible ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50']">
-                                        <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', selectedIsEligible ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white']"><i :class="selectedIsEligible ? 'fa-solid fa-check' : 'fa-solid fa-exclamation'" aria-hidden="true"></i></span>
-                                        <div>
-                                            <p :class="['text-sm font-bold', selectedIsEligible ? 'text-emerald-950' : 'text-rose-950']">{{ selectedIsEligible ? 'Your profile meets the listed criteria' : 'Your profile needs attention' }}</p>
-                                            <p :class="['mt-1 text-sm leading-6', selectedIsEligible ? 'text-emerald-800' : 'text-rose-800']">{{ selectedIsEligible ? (selectedScholarship.eligibility || 'You meet the published eligibility rules.') : selectedEligibilityMessage }}</p>
-                                        </div>
-                                    </div>
-
-                                    <div class="grid gap-px bg-slate-200 lg:grid-cols-2">
-                                        <section class="bg-white p-5">
-                                            <div class="flex items-start justify-between gap-3">
-                                                <div><p class="student-kicker">Application details</p><h4 class="mt-1 font-bold text-slate-950">What the provider receives</h4></div>
-                                                <a href="/dashboard/profile" class="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Edit profile</a>
-                                            </div>
-                                            <div class="mt-4 flex items-center gap-3 rounded-md bg-slate-50 p-3">
-                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
-                                                <div><p class="text-sm font-bold text-slate-900">{{ user?.name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ user?.course_or_strand || 'Track not set' }} · {{ user?.year_level || 'Grade/year not set' }}</p></div>
-                                            </div>
-                                            <div class="mt-3 border-l-2 border-amber-400 pl-3">
-                                                <p class="text-xs font-bold text-slate-700">{{ selectedApplicationMode }}</p>
-                                                <p class="mt-1 text-xs leading-5 text-slate-500">{{ selectedApplicationModeDescription }}</p>
-                                            </div>
+                                    <div class="grid gap-4 p-4 sm:p-5">
+                                        <section>
+                                            <p class="student-kicker">Support package</p>
+                                            <h4 class="mt-1 text-lg font-bold text-slate-950">What recipients receive</h4>
+                                            <p class="mt-1 text-sm text-slate-500">Financial and non-cash support included by the provider.</p>
+                                            <ScholarshipBenefitsPanel
+                                                v-if="selectedScholarship.benefits?.length"
+                                                class="mt-3"
+                                                :benefits="selectedScholarship.benefits"
+                                                uniform
+                                                dense
+                                            />
+                                            <p v-else class="mt-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">{{ selectedScholarship.benefit_summary || formatAmount(selectedScholarship.award_amount) }}</p>
                                         </section>
 
-                                        <section class="bg-slate-50 p-5">
-                                            <div class="flex items-center justify-between gap-3"><div><p class="student-kicker">After submission</p><h4 class="mt-1 font-bold text-slate-950">Selection process</h4></div><span class="text-xs font-bold text-slate-500">{{ selectedSelectionPlan.length }} stages</span></div>
-                                            <ol class="mt-4 grid gap-2 sm:grid-cols-2">
-                                                <li v-for="(stage, index) in selectedSelectionPlan" :key="stage.value" class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700"><span class="grid h-6 w-6 shrink-0 place-items-center rounded bg-slate-950 text-[10px] text-amber-300">{{ index + 1 }}</span>{{ stage.label }}</li>
-                                            </ol>
-                                        </section>
+                                        <dl class="grid gap-3 sm:grid-cols-3">
+                                            <div class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-xs text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-calendar-plus" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Application starts</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedScholarship.application_opens_at || 'Open now' }}</dd></div></div>
+                                            <div class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-xs text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Deadline</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedScholarship.deadline || 'No deadline listed' }}</dd></div></div>
+                                            <div class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-xs text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-users" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Available slots</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedScholarship.slots_available ?? 'Not specified' }}</dd></div></div>
+                                        </dl>
+
                                     </div>
                                 </section>
                             </div>
 
-                            <div v-else-if="currentStep === 1 && selectedScholarship" class="grid gap-5">
+                            <div v-else-if="currentStep === 1 && selectedScholarship" class="grid gap-4">
+                                <section :class="['overflow-hidden rounded-lg border', selectedIsEligible ? 'border-slate-200 bg-white' : 'border-rose-200 bg-rose-50']">
+                                    <header :class="['flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-center sm:justify-between', selectedIsEligible ? 'border-slate-200 bg-slate-50' : 'border-white/80']">
+                                        <div class="flex items-start gap-3">
+                                            <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md', selectedIsEligible ? 'bg-slate-950 text-amber-300' : 'bg-rose-600 text-white']"><i :class="selectedIsEligible ? 'fa-solid fa-check' : 'fa-solid fa-exclamation'" aria-hidden="true"></i></span>
+                                            <div>
+                                                <p :class="['text-xs font-bold uppercase tracking-[0.14em]', selectedIsEligible ? 'text-amber-700' : 'text-rose-700']">Your eligibility result</p>
+                                                <h3 :class="['mt-1 text-xl font-bold', selectedIsEligible ? 'text-slate-950' : 'text-rose-950']">{{ selectedIsEligible ? 'Your profile meets the listed criteria' : 'Your profile needs attention' }}</h3>
+                                                <p :class="['mt-1 text-sm leading-6', selectedIsEligible ? 'text-slate-600' : 'text-rose-800']">{{ selectedIsEligible ? (selectedScholarship.eligibility || 'Your profile meets the published eligibility rules.') : selectedEligibilityMessage }}</p>
+                                            </div>
+                                        </div>
+                                        <span :class="['w-fit shrink-0 rounded-md px-3 py-2 text-sm font-bold', selectedIsEligible ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-800']">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% match</span>
+                                    </header>
+
+                                    <dl class="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                                        <div v-for="criterion in selectedEligibilityCriteria" :key="criterion.label" class="flex items-start gap-3 rounded-md border border-white/80 bg-white p-3 shadow-sm last:lg:col-span-2">
+                                            <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', selectedIsEligible ? 'bg-slate-100 text-slate-700' : 'bg-rose-100 text-rose-700']"><i :class="criterion.icon" aria-hidden="true"></i></span>
+                                            <div class="min-w-0"><dt class="text-[11px] font-semibold text-slate-500">{{ criterion.label }}</dt><dd class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ criterion.value }}</dd></div>
+                                        </div>
+                                    </dl>
+                                </section>
+
+                                <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div><p class="text-sm font-bold text-slate-900">Need to update your information?</p><p class="mt-1 text-xs leading-5 text-slate-500">Changes to your education, location, or household details may update this result.</p></div>
+                                    <a href="/dashboard/profile" class="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 sm:w-auto">Edit profile <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+                                </div>
+                            </div>
+
+                            <div v-else-if="currentStep === 2 && selectedScholarship" class="grid gap-5">
                                 <input ref="documentFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="hidden" @change="handleDocumentFileChange">
 
                                 <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -1010,7 +1076,7 @@ watch(selectedScholarship, (scholarship) => {
                                 </section>
                             </div>
 
-                            <div v-else-if="currentStep === 2 && selectedScholarship" class="grid gap-5">
+                            <div v-else-if="currentStep === 3 && selectedScholarship" class="grid gap-5">
                                 <div class="grid gap-4">
                                     <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
                                         <header class="flex items-start gap-4 border-b border-slate-200 p-5">
@@ -1193,51 +1259,24 @@ watch(selectedScholarship, (scholarship) => {
                                             <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
                                                 {{ statusLabel(application.status) }}
                                             </span>
-                                            <span
-                                                v-if="application.distribution_scheduled_for && !hasDistributionSchedule(application)"
-                                                class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase text-slate-700"
-                                            >
-                                                Distribution {{ application.distribution_scheduled_for }}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div
-                                        v-if="primarySchedule(application)"
-                                        class="mt-4 border-t border-slate-200 pt-3"
-                                    >
-                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                            <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md', primarySchedule(application).status === 'scheduled' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">
-                                                <i :class="scheduleTypeIcon(primarySchedule(application).type)" aria-hidden="true"></i>
-                                            </span>
-                                            <div class="min-w-0 flex-1">
-                                                <div class="flex flex-wrap items-center gap-2">
-                                                    <p :class="['text-[10px] font-bold uppercase tracking-[0.12em]', primarySchedule(application).status === 'scheduled' ? 'text-amber-700' : 'text-slate-500']">
-                                                        {{ schedulePreviewLabel(primarySchedule(application)) }}
-                                                    </p>
-                                                    <span class="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
-                                                        {{ labelFromKey(primarySchedule(application).status) }}
-                                                    </span>
-                                                </div>
-                                                <p class="mt-1 truncate text-sm font-bold text-slate-950">
-                                                    {{ scheduleTypeLabel(primarySchedule(application).type) }}
-                                                </p>
-                                                <p class="mt-0.5 text-xs leading-5 text-slate-500">
-                                                    {{ primarySchedule(application).scheduled_label }}
-                                                    <span class="px-1 text-slate-300">|</span>
-                                                    {{ scheduleModeLabel(primarySchedule(application).mode) }}
-                                                </p>
-                                                <p v-if="primarySchedule(application).venue" class="mt-0.5 truncate text-xs text-slate-500">
-                                                    {{ primarySchedule(application).venue }}
-                                                </p>
-                                            </div>
-                                            <a
-                                                :href="application.detail_url || `/dashboard/applications/${application.id}`"
-                                                class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
-                                            >
-                                                Open schedule
-                                                <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
-                                            </a>
+                                        <span
+                                            v-if="application.distribution_scheduled_for && !hasDistributionSchedule(application)"
+                                            class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase text-slate-700"
+                                        >
+                                            Distribution {{ application.distribution_scheduled_for }}
+                                        </span>
+                                        <span
+                                            v-if="application.correction_status === 'requested'"
+                                            class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
+                                        >
+                                            Update requested
+                                        </span>
+                                        <span
+                                            v-else-if="application.correction_status === 'submitted'"
+                                            class="w-fit rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold uppercase text-sky-800"
+                                        >
+                                            Correction sent
+                                        </span>
                                         </div>
                                     </div>
 
@@ -1257,12 +1296,22 @@ watch(selectedScholarship, (scholarship) => {
                                         >
                                             Responded {{ application.student_responded_at }}
                                         </span>
-                                        <a
-                                            :href="application.detail_url || `/dashboard/applications/${application.id}`"
-                                            class="ml-auto rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-700 transition hover:bg-slate-50"
-                                        >
-                                            View details
-                                        </a>
+                                        <div class="ml-auto flex flex-wrap gap-2">
+                                            <a
+                                                v-if="primarySchedule(application)"
+                                                :href="application.detail_url || `/dashboard/applications/${application.id}`"
+                                                class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
+                                            >
+                                                Open schedule
+                                                <i class="fa-solid fa-calendar-days text-[10px]" aria-hidden="true"></i>
+                                            </a>
+                                            <a
+                                                :href="application.detail_url || `/dashboard/applications/${application.id}`"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-700 transition hover:bg-slate-50"
+                                            >
+                                                View details
+                                            </a>
+                                        </div>
                                     </div>
 
                                     <details v-if="application.status_progress?.steps?.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">

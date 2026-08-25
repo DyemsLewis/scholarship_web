@@ -47,6 +47,7 @@ const pages = {
     providerServiceWorkspace: () => import('./pages/ProviderServiceWorkspacePage.vue'),
     providerInsights: () => import('./pages/ProviderInsightsPage.vue'),
     providerProgramForm: () => import('./pages/ProviderProgramFormPage.vue'),
+    providerProgramWorkspace: () => import('./pages/ProviderProgramWorkspacePage.vue'),
     providerProfile: () => import('./pages/ProviderProfilePage.vue'),
     providerPrograms: () => import('./pages/ProviderProgramsPage.vue'),
     providerTeam: () => import('./pages/ProviderTeamPage.vue'),

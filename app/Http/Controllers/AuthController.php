@@ -175,6 +175,8 @@ class AuthController extends Controller
                     'provider_website' => $profileData['provider_website'] ?? null,
                     'provider_address' => $profileData['provider_address'],
                     'provider_description' => $profileData['provider_description'] ?? null,
+                    'provider_contact_email' => strtolower(trim((string) ($profileData['provider_contact_email'] ?? $pending->email))),
+                    'provider_contact_number' => $profileData['provider_contact_number'] ?? $profileData['number'],
                 ]);
             } else {
                 $user->studentProfile()->create($profile);
@@ -542,6 +544,8 @@ class AuthController extends Controller
             'provider_website' => ['nullable', 'url', 'max:255'],
             'provider_address' => ['required', 'string', 'max:500'],
             'provider_description' => ['nullable', 'string', 'max:1000'],
+            'provider_contact_email' => ['nullable', 'email', 'max:255'],
+            'provider_contact_number' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
         ];
     }
 

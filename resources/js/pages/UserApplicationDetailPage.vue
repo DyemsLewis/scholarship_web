@@ -26,6 +26,12 @@ const previewDocument = ref(null);
 const showMapModal = ref(false);
 const documentTermsAccepted = ref(false);
 const acknowledgingScheduleId = ref(null);
+const showWithdrawalModal = ref(false);
+const withdrawalReason = ref('');
+const isWithdrawing = ref(false);
+const showCorrectionModal = ref(false);
+const correctionResponse = ref('');
+const isSendingCorrection = ref(false);
 const activeSection = ref('overview');
 const requiresOriginalVerification = computed(() => ['onsite', 'hybrid'].includes(
     application.value?.scholarship?.application_mode,
@@ -119,7 +125,7 @@ const scheduleHistory = computed(() => schedules.value.filter((schedule) => sche
 const currentScheduleDate = computed(() => formatScheduleDate(currentSchedule.value));
 const filesNeedingAction = computed(() => applicationFileRows.value.filter((row) => row.required
     && (!row.document || ['needs_replacement', 'rejected'].includes(row.document.status))));
-const applicationIsClosed = computed(() => ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'disbursed'].includes(application.value?.status));
+const applicationIsClosed = computed(() => ['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'disbursed'].includes(application.value?.status));
 const applicationSections = computed(() => [
     { key: 'overview', label: 'Overview' },
     { key: 'files', label: 'Required files', count: filesNeedingAction.value.length },
@@ -164,6 +170,8 @@ const hasUserMapLocation = computed(() => hasCoordinates(user.value?.latitude, u
 function statusLabel(status) {
     const labels = {
         approved: 'Qualified for formal application',
+        waitlisted: 'Waitlisted alternate',
+        withdrawn: 'Withdrawn',
         awarded: 'Awarded',
         not_awarded: 'Not selected',
         rejected: 'Not qualified',
@@ -191,11 +199,11 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
+    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled'].includes(status)) {
+    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled', 'waitlisted'].includes(status)) {
         return 'bg-slate-100 text-slate-700';
     }
 
@@ -419,6 +427,14 @@ function applicantNextAction(current) {
 
     if (current.formal_application_handoff) {
         return 'You passed portal pre-screening. Review what to bring and continue directly with the provider.';
+    }
+
+    if (current.status === 'waitlisted') {
+        return 'You are on the alternate recipient list. Keep your contact details current and watch for a slot update.';
+    }
+
+    if (current.status === 'withdrawn') {
+        return 'This application was withdrawn and is no longer under review.';
     }
 
     if (['awarded', 'disbursed', 'renewed'].includes(current.status)) {
@@ -649,6 +665,52 @@ async function acknowledgeSchedule(schedule) {
         void handledError;
     } finally {
         acknowledgingScheduleId.value = null;
+    }
+}
+
+async function withdrawApplication() {
+    if (!application.value || withdrawalReason.value.trim().length < 5) {
+        showPortalToast({ type: 'error', title: 'Reason required', message: 'Briefly explain why you are withdrawing this application.' });
+        return;
+    }
+
+    isWithdrawing.value = true;
+
+    try {
+        const response = await window.axios.patch(`/dashboard/applications/${application.value.id}/withdraw`, {
+            reason: withdrawalReason.value.trim(),
+        });
+        application.value = response.data.application;
+        showWithdrawalModal.value = false;
+        withdrawalReason.value = '';
+        showPortalToast({ type: 'success', title: 'Application withdrawn', message: response.data.message });
+    } catch (handledError) {
+        void handledError;
+    } finally {
+        isWithdrawing.value = false;
+    }
+}
+
+async function submitCorrectionResponse() {
+    if (!application.value || correctionResponse.value.trim().length < 3) {
+        showPortalToast({ type: 'error', title: 'Response required', message: 'Describe what you updated before sending the correction.' });
+        return;
+    }
+
+    isSendingCorrection.value = true;
+
+    try {
+        const response = await window.axios.patch(`/dashboard/applications/${application.value.id}/correction-response`, {
+            response: correctionResponse.value.trim(),
+        });
+        application.value = response.data.application;
+        showCorrectionModal.value = false;
+        correctionResponse.value = '';
+        showPortalToast({ type: 'success', title: 'Correction sent', message: response.data.message });
+    } catch (handledError) {
+        void handledError;
+    } finally {
+        isSendingCorrection.value = false;
     }
 }
 
@@ -1544,6 +1606,55 @@ onMounted(loadApplication);
                             </section>
 
                             <section
+                                v-if="activeSection === 'overview' && application.correction_status"
+                                :class="[
+                                    'rounded-lg border p-4 shadow-sm',
+                                    application.correction_status === 'requested'
+                                        ? 'border-amber-200 bg-amber-50'
+                                        : application.correction_status === 'submitted'
+                                            ? 'border-sky-200 bg-sky-50'
+                                            : 'border-emerald-200 bg-emerald-50',
+                                ]"
+                            >
+                                <div class="flex items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white text-slate-800 shadow-sm">
+                                        <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
+                                    </span>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="student-kicker">Application correction</p>
+                                        <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                            {{ application.correction_status === 'requested' ? 'Provider needs an update' : application.correction_status === 'submitted' ? 'Correction sent for review' : 'Correction completed' }}
+                                        </h3>
+                                        <p v-if="application.correction_message" class="mt-2 text-sm leading-6 text-slate-700">{{ application.correction_message }}</p>
+                                        <p v-if="application.correction_response" class="mt-2 rounded-md bg-white/80 px-3 py-2 text-xs leading-5 text-slate-600"><strong>Your response:</strong> {{ application.correction_response }}</p>
+                                        <div v-if="application.correction_status === 'requested'" class="mt-3 flex flex-wrap gap-2">
+                                            <button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="showCorrectionModal = true">Send correction</button>
+                                            <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openSection('files')">Update files</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section v-if="activeSection === 'overview'" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <p class="student-kicker">Application options</p>
+                                        <h3 class="mt-1 text-base font-bold text-slate-950">Need to stop this application?</h3>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">Withdrawal ends provider review but keeps the application history for your records.</p>
+                                    </div>
+                                    <button
+                                        v-if="application.can_withdraw"
+                                        type="button"
+                                        class="shrink-0 rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
+                                        @click="showWithdrawalModal = true"
+                                    >
+                                        Withdraw application
+                                    </button>
+                                    <span v-else-if="application.status === 'withdrawn'" class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Withdrawn {{ application.withdrawn_at }}</span>
+                                </div>
+                            </section>
+
+                            <section
                                 v-if="activeSection === 'overview' && !schedules.some((schedule) => schedule.type === 'distribution') && (application.awarded_amount || application.distribution_scheduled_for || application.distribution_instructions || ['awarded', 'distribution_scheduled', 'disbursed', 'renewed'].includes(application.status))"
                                 class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
                             >
@@ -1586,6 +1697,43 @@ onMounted(loadApplication);
                 <ApplicantFooter />
             </div>
         </section>
+
+        <div v-if="showCorrectionModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6" @click.self="showCorrectionModal = false">
+            <form class="w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-2xl" @submit.prevent="submitCorrectionResponse">
+                <div class="border-b border-slate-200 p-5">
+                    <p class="student-kicker">Application correction</p>
+                    <h2 class="mt-1 text-xl font-bold text-slate-950">Tell the provider what you updated</h2>
+                    <p class="mt-2 text-sm leading-6 text-slate-600">Update the requested profile details or files first, then send a short response.</p>
+                </div>
+                <div class="p-5">
+                    <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">{{ application?.correction_message }}</div>
+                    <label class="mt-4 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500" for="correction-response">What did you update?</label>
+                    <textarea id="correction-response" v-model="correctionResponse" rows="4" maxlength="1500" class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-600" placeholder="Example: I replaced my report card with the latest copy."></textarea>
+                </div>
+                <div class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4">
+                    <button type="button" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100" @click="showCorrectionModal = false">Cancel</button>
+                    <button type="submit" :disabled="isSendingCorrection" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60">{{ isSendingCorrection ? 'Sending...' : 'Send correction' }}</button>
+                </div>
+            </form>
+        </div>
+
+        <div v-if="showWithdrawalModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6" @click.self="showWithdrawalModal = false">
+            <form class="w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-2xl" @submit.prevent="withdrawApplication">
+                <div class="border-b border-slate-200 p-5">
+                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-rose-700">Withdraw application</p>
+                    <h2 class="mt-1 text-xl font-bold text-slate-950">Stop this application?</h2>
+                    <p class="mt-2 text-sm leading-6 text-slate-600">The provider will stop reviewing it. This action cannot be reversed from the applicant portal.</p>
+                </div>
+                <div class="p-5">
+                    <label class="block text-xs font-bold uppercase tracking-[0.12em] text-slate-500" for="withdrawal-reason">Reason for withdrawing</label>
+                    <textarea id="withdrawal-reason" v-model="withdrawalReason" rows="4" maxlength="1000" class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-rose-400" placeholder="Briefly explain why you no longer want to continue."></textarea>
+                </div>
+                <div class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4">
+                    <button type="button" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100" @click="showWithdrawalModal = false">Keep application</button>
+                    <button type="submit" :disabled="isWithdrawing" class="rounded-md bg-rose-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-800 disabled:opacity-60">{{ isWithdrawing ? 'Withdrawing...' : 'Withdraw application' }}</button>
+                </div>
+            </form>
+        </div>
 
         <div
             v-if="showMapModal && applicationScholarship"

@@ -24,7 +24,7 @@ const activeStageStatuses = [
     'exam_passed',
     'distribution_scheduled',
 ];
-const formalApplicationStatuses = ['approved'];
+const formalApplicationStatuses = ['approved', 'waitlisted'];
 const decidedStatuses = [
     'awarded',
     'not_awarded',
@@ -33,6 +33,7 @@ const decidedStatuses = [
     'rejected',
     'exam_failed',
     'interview_failed',
+    'withdrawn',
 ];
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -419,6 +420,8 @@ const allVisibleBulkSelected = computed(() => bulkEligibleVisibleApplications.va
     && bulkEligibleVisibleApplications.value.every((application) => selectedBulkApplicationIds.value.includes(application.id)));
 const customStatusLabels = {
     approved: 'Qualified for formal application',
+    waitlisted: 'Waitlisted alternate',
+    withdrawn: 'Withdrawn',
     rejected: 'Not qualified',
     exam_qualified: 'Qualified for exam',
     exam_scheduled: 'Exam scheduled',
@@ -501,11 +504,11 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
+    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
-    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled'].includes(status)) {
+    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled', 'waitlisted'].includes(status)) {
         return 'bg-slate-100 text-slate-700';
     }
 
@@ -1557,6 +1560,9 @@ onMounted(loadProviderData);
                                             {{ documentIssueCount(application) }} file issue{{ documentIssueCount(application) === 1 ? '' : 's' }}
                                         </span>
                                         <span v-if="application.documents_changed_since_review" class="text-amber-700">Files updated</span>
+                                        <span v-if="application.correction_status === 'requested'" class="text-amber-700">Correction requested</span>
+                                        <span v-if="application.correction_status === 'submitted'" class="text-sky-700">Correction ready to review</span>
+                                        <span v-if="application.status === 'waitlisted' && application.waitlist_position" class="text-sky-700">Alternate #{{ application.waitlist_position }}</span>
                                     </div>
                                 </div>
 
@@ -1580,7 +1586,7 @@ onMounted(loadProviderData);
                                         class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
                                         @click="openApplicationPreview(application)"
                                     >
-                                        {{ application.status === 'approved' ? 'Record outcome' : decidedStatuses.includes(application.status) ? 'View' : 'Review' }}
+                                        {{ application.status === 'approved' ? 'Record outcome' : application.status === 'waitlisted' ? 'Manage alternate' : decidedStatuses.includes(application.status) ? 'View' : 'Review' }}
                                     </button>
                                 </div>
                             </article>

@@ -76,9 +76,9 @@ class ProgramCatalogSeedTest extends TestCase
         $this->assertSame('provider_review', $schoolEssentialsProgram->application_mode);
         $this->assertSame('85.00', $stemProgram->minimum_gwa);
         $this->assertSame('STEM', $stemProgram->eligible_courses);
-        $this->assertSame(['screening', 'interview', 'distribution'], $collegeProgram->selection_stages);
-        $this->assertSame(['screening', 'distribution'], $schoolEssentialsProgram->selection_stages);
-        $this->assertSame(['screening', 'exam', 'interview', 'distribution'], $stemProgram->selection_stages);
+        $this->assertSame(['screening', 'interview'], $collegeProgram->selection_stages);
+        $this->assertSame(['screening'], $schoolEssentialsProgram->selection_stages);
+        $this->assertSame(['screening', 'exam', 'interview'], $stemProgram->selection_stages);
         $this->assertTrue($programs->every(fn (Scholarship $program): bool => $program->benefits()->exists()));
         $this->assertNull($schoolEssentialsProgram->award_amount);
         $this->assertSame(
@@ -98,14 +98,14 @@ class ProgramCatalogSeedTest extends TestCase
 
         $events = ScholarshipEvent::query()->with('scholarship')->get();
 
-        $this->assertCount(7, $events);
-        $this->assertTrue($programs->every(fn (Scholarship $program): bool => in_array('distribution', $program->selection_stages, true)));
+        $this->assertCount(3, $events);
+        $this->assertTrue($programs->every(fn (Scholarship $program): bool => ! in_array('distribution', $program->selection_stages, true)));
         $this->assertSame(
-            ['distribution', 'interview'],
+            ['interview'],
             $collegeProgram->events()->orderBy('type')->pluck('type')->all(),
         );
         $this->assertSame(
-            ['distribution', 'exam', 'interview'],
+            ['exam', 'interview'],
             $stemProgram->events()->orderBy('type')->pluck('type')->all(),
         );
         $this->assertTrue($events->every(

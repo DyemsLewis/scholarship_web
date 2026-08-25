@@ -24,6 +24,8 @@ const form = ref({
     providerWebsite: '',
     providerAddress: '',
     providerDescription: '',
+    providerContactEmail: '',
+    providerContactNumber: '',
     password: '',
     passwordConfirmation: '',
     termsAccepted: false,
@@ -230,6 +232,8 @@ async function submitForm() {
             provider_website: form.value.providerWebsite,
             provider_address: form.value.providerAddress,
             provider_description: form.value.providerDescription,
+            provider_contact_email: form.value.providerContactEmail,
+            provider_contact_number: form.value.providerContactNumber,
         });
     }
 
@@ -392,6 +396,28 @@ onBeforeUnmount(() => {
                         <textarea id="provider-description" v-model="form.providerDescription" rows="2" placeholder="Briefly describe your organization or scholarship office" :class="inputClass"></textarea>
                     </div>
                 </div>
+
+                <div class="mt-4 rounded-md border border-amber-200 bg-amber-50/70 p-4">
+                    <div class="flex items-start gap-3">
+                        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-200 text-xs text-amber-900">
+                            <i class="fa-solid fa-headset" aria-hidden="true"></i>
+                        </span>
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-950">Applicant contact</h3>
+                            <p class="mt-1 text-xs leading-5 text-slate-600">Applicants will use these organization contacts for scholarship questions. They are separate from your login details.</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <label :class="labelClass" for="provider-contact-email">Public email</label>
+                            <input id="provider-contact-email" v-model="form.providerContactEmail" type="email" autocomplete="organization-email" required placeholder="scholarships@example.org" :class="inputClass">
+                        </div>
+                        <div>
+                            <label :class="labelClass" for="provider-contact-number">Public phone</label>
+                            <input id="provider-contact-number" v-model="form.providerContactNumber" type="tel" inputmode="tel" autocomplete="organization-tel" required placeholder="09XX XXX XXXX" :class="inputClass">
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <section :class="formSectionClass">
@@ -400,8 +426,8 @@ onBeforeUnmount(() => {
                         <i class="fa-solid fa-user" aria-hidden="true"></i>
                     </span>
                     <div>
-                        <h2 class="font-bold text-slate-950">{{ isProviderRegistration ? 'Primary contact' : 'Personal information' }}</h2>
-                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ isProviderRegistration ? 'The person responsible for this provider account.' : 'Your basic contact details for the applicant account.' }}</p>
+                        <h2 class="font-bold text-slate-950">{{ isProviderRegistration ? 'Representative account' : 'Personal information' }}</h2>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ isProviderRegistration ? 'Private details for the person who signs in and manages this provider account.' : 'Your basic contact details for the applicant account.' }}</p>
                     </div>
                 </div>
 
@@ -422,11 +448,11 @@ onBeforeUnmount(() => {
 
                 <div class="mt-4 grid gap-4 sm:grid-cols-2">
                     <div>
-                        <label :class="labelClass" for="email">Email address</label>
+                        <label :class="labelClass" for="email">{{ isProviderRegistration ? 'Login email' : 'Email address' }}</label>
                         <input id="email" v-model="form.email" type="email" autocomplete="email" required placeholder="name@example.com" :class="inputClass">
                     </div>
                     <div>
-                        <label :class="labelClass" for="number">Contact number</label>
+                        <label :class="labelClass" for="number">{{ isProviderRegistration ? 'Representative phone' : 'Contact number' }}</label>
                         <input id="number" :value="form.number" type="tel" inputmode="numeric" autocomplete="tel" required placeholder="09XX XXX XXXX" :class="inputClass" @input="(event) => { event.target.setCustomValidity(''); handleNumberInput(event); }">
                     </div>
                 </div>

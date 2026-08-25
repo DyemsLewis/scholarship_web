@@ -43,6 +43,8 @@ const form = reactive({
     provider_website: '',
     provider_address: '',
     provider_description: '',
+    provider_contact_email: '',
+    provider_contact_number: '',
 });
 
 const providerTypeOptions = [
@@ -148,6 +150,8 @@ function applyUser(payload) {
     form.provider_website = payload?.provider_website ?? '';
     form.provider_address = payload?.provider_address ?? '';
     form.provider_description = payload?.provider_description ?? '';
+    form.provider_contact_email = payload?.provider_contact_email ?? '';
+    form.provider_contact_number = payload?.provider_contact_number ?? '';
 }
 
 function applyVerificationDocuments(documents) {
@@ -380,10 +384,11 @@ onMounted(loadProviderProfile);
                                 </div>
                             </div>
                             <div class="flex items-start gap-3 border-t border-white/10 p-4 sm:border-t-0">
-                                <i class="fa-solid fa-envelope mt-0.5 text-amber-300" aria-hidden="true"></i>
+                                <i class="fa-solid fa-headset mt-0.5 text-amber-300" aria-hidden="true"></i>
                                 <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Email</p>
-                                    <p class="mt-1 truncate text-sm font-semibold text-white">{{ user?.email || 'Not set' }}</p>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Applicant contact</p>
+                                    <p class="mt-1 truncate text-sm font-semibold text-white">{{ user?.provider_contact_email || 'Email not set' }}</p>
+                                    <p class="mt-0.5 truncate text-xs text-slate-400">{{ user?.provider_contact_number || 'Phone not set' }}</p>
                                 </div>
                             </div>
                             <div class="flex items-start gap-3 border-t border-white/10 p-4 sm:border-t-0">
@@ -413,7 +418,7 @@ onMounted(loadProviderProfile);
                             </span>
                             <span>
                                 <span class="block text-sm font-bold">Organization details</span>
-                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'details' ? 'text-slate-300' : 'text-slate-500']">Public profile and representative account</span>
+                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'details' ? 'text-slate-300' : 'text-slate-500']">Public contacts and private account details</span>
                             </span>
                         </button>
                         <button
@@ -633,13 +638,37 @@ onMounted(loadProviderProfile);
                                 ></textarea>
                                 <span v-if="fieldError('provider_description')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_description') }}</span>
                             </label>
+
+                            <div class="mt-4 rounded-md border border-amber-200 bg-amber-50/70 p-4">
+                                <div class="flex items-start gap-3">
+                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
+                                        <i class="fa-solid fa-headset" aria-hidden="true"></i>
+                                    </span>
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-950">Applicant contact</p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-600">Shown on scholarship listings and used as the default contact when you create a program.</p>
+                                    </div>
+                                </div>
+                                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                    <label>
+                                        <span :class="labelClass">Public email</span>
+                                        <input v-model="form.provider_contact_email" type="email" autocomplete="organization-email" required placeholder="scholarships@example.org" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
+                                        <span v-if="fieldError('provider_contact_email')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_email') }}</span>
+                                    </label>
+                                    <label>
+                                        <span :class="labelClass">Public phone</span>
+                                        <input v-model="form.provider_contact_number" type="tel" autocomplete="organization-tel" required placeholder="0917 000 0000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
+                                        <span v-if="fieldError('provider_contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_number') }}</span>
+                                    </label>
+                                </div>
+                            </div>
                             </div>
                         </section>
 
                         <section class="grid gap-5 border-t border-slate-200 p-5 sm:p-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
                             <div>
                                 <p class="text-sm font-bold text-slate-950">Representative account</p>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">The authorized person responsible for this provider account.</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Private login and contact details for the person managing this account.</p>
                             </div>
                             <div>
                                 <div class="grid gap-4 md:grid-cols-[1fr_5rem_1fr]">
@@ -662,7 +691,7 @@ onMounted(loadProviderProfile);
 
                             <div class="mt-4 grid gap-4 md:grid-cols-2">
                                 <label>
-                                    <span :class="labelClass">Email</span>
+                                    <span :class="labelClass">Login email</span>
                                     <input v-model="form.email" type="email" placeholder="provider@example.com" :class="inputClass">
                                     <span v-if="fieldError('email')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('email') }}</span>
                                 </label>
@@ -672,11 +701,15 @@ onMounted(loadProviderProfile);
                                     <span v-if="fieldError('username')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('username') }}</span>
                                 </label>
                                 <label>
-                                    <span :class="labelClass">Contact number</span>
+                                    <span :class="labelClass">Representative phone</span>
                                     <input v-model="form.contact_number" type="text" placeholder="0917 000 0000" :class="inputClass">
                                     <span v-if="fieldError('contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('contact_number') }}</span>
                                 </label>
                             </div>
+                            <p class="mt-4 inline-flex items-center gap-2 text-xs text-slate-500">
+                                <i class="fa-solid fa-lock text-slate-400" aria-hidden="true"></i>
+                                These representative details are not used as applicant-facing program contacts.
+                            </p>
                             </div>
                         </section>
 

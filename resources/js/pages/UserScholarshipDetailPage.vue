@@ -656,7 +656,7 @@ onMounted(loadScholarship);
                                 <p class="student-kicker">Support package</p>
                                 <h2 class="mt-1 text-xl font-bold text-slate-950">What recipients receive</h2>
                                 <p class="mt-1 text-sm text-slate-500">Financial and non-cash support included by the provider.</p>
-                                <ScholarshipBenefitsPanel class="mt-5" :benefits="scholarship.benefits" />
+                                <ScholarshipBenefitsPanel class="mt-5" :benefits="scholarship.benefits" uniform />
                             </article>
 
                             <article id="eligibility" class="student-card scroll-mt-6 p-5 sm:p-6">

@@ -1310,6 +1310,155 @@ class ApplicantDashboardController extends Controller
         ], 422);
     }
 
+    public function withdrawApplication(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:5', 'max:1000'],
+        ]);
+        $closedStatuses = [
+            'withdrawn',
+            'rejected',
+            'not_awarded',
+            'exam_failed',
+            'interview_failed',
+            'awarded',
+            'disbursed',
+            'renewed',
+        ];
+        $previousStatus = $application->status;
+
+        if (in_array($previousStatus, $closedStatuses, true)) {
+            throw ValidationException::withMessages([
+                'reason' => 'This application can no longer be withdrawn online. Contact the provider if you need help.',
+            ]);
+        }
+
+        DB::transaction(function () use ($application, $request, $validated, $previousStatus): void {
+            $currentStatus = ScholarshipApplication::query()
+                ->whereKey($application->id)
+                ->lockForUpdate()
+                ->value('status');
+
+            if ($currentStatus !== $previousStatus) {
+                throw ValidationException::withMessages([
+                    'reason' => 'This application changed recently. Refresh the page before withdrawing it.',
+                ]);
+            }
+
+            $application->update([
+                'status' => 'withdrawn',
+                'withdrawal_reason' => $validated['reason'],
+                'withdrawn_by' => $request->user()->id,
+                'withdrawn_at' => now(),
+                'waitlist_position' => null,
+            ]);
+
+            ApplicationStatusHistory::create([
+                'scholarship_application_id' => $application->id,
+                'changed_by' => $request->user()->id,
+                'from_status' => $previousStatus,
+                'to_status' => 'withdrawn',
+                'decision_reason' => 'applicant_withdrawal',
+                'review_notes' => $validated['reason'],
+                'changed_at' => now(),
+            ]);
+        });
+
+        $application->loadMissing('scholarship');
+        PortalNotification::create([
+            'user_id' => $application->scholarship->provider_id,
+            'type' => 'application_withdrawn',
+            'title' => 'Application withdrawn',
+            'message' => "{$request->user()->name} withdrew their application for {$application->scholarship->title}.",
+            'action_url' => route('provider.applications.show', $application, false),
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'application_withdrawn',
+            "{$request->user()->name} withdrew application #{$application->id}.",
+            $request,
+            ['application_id' => $application->id, 'previous_status' => $previousStatus],
+        );
+        ScholarshipFunnelEvent::record(
+            $request->user(),
+            'application_status_withdrawn',
+            $application->scholarship,
+            $application,
+            'web',
+            ['previous_status' => $previousStatus],
+        );
+
+        $freshApplication = $application->fresh()->load([
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+            'scholarship.events',
+        ]);
+        app(DecisionSupportService::class)->syncApplication($freshApplication, 'applicant_withdrawn');
+
+        return response()->json([
+            'message' => 'Application withdrawn. The provider has been notified.',
+            'application' => $this->applicationPayload($freshApplication),
+        ]);
+    }
+
+    public function respondToCorrection(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+
+        $validated = $request->validate([
+            'response' => ['required', 'string', 'min:3', 'max:1500'],
+        ]);
+
+        if ($application->correction_status !== 'requested') {
+            throw ValidationException::withMessages([
+                'response' => 'There is no open correction request for this application.',
+            ]);
+        }
+
+        $application->update([
+            'correction_status' => 'submitted',
+            'correction_response' => $validated['response'],
+            'correction_responded_at' => now(),
+            'correction_resolved_at' => null,
+        ]);
+        $application->loadMissing('scholarship');
+
+        PortalNotification::create([
+            'user_id' => $application->scholarship->provider_id,
+            'type' => 'application_correction',
+            'title' => 'Applicant submitted a correction',
+            'message' => "{$request->user()->name} responded to the correction request for {$application->scholarship->title}.",
+            'action_url' => route('provider.applications.show', $application, false).'?section=documents',
+        ]);
+        ActivityLog::record(
+            $request->user(),
+            'application_correction_submitted',
+            "{$request->user()->name} submitted a correction for application #{$application->id}.",
+            $request,
+            ['application_id' => $application->id],
+        );
+
+        $freshApplication = $application->fresh()->load([
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+            'scholarship.events',
+        ]);
+
+        return response()->json([
+            'message' => 'Correction sent to the provider for review.',
+            'application' => $this->applicationPayload($freshApplication),
+        ]);
+    }
+
     public function acknowledgeApplicationSchedule(
         Request $request,
         ScholarshipApplication $application,
@@ -1614,6 +1763,26 @@ class ApplicantDashboardController extends Controller
             'documents' => $application->documents->map(fn (ApplicationDocument $document) => $this->documentPayload($document))->values(),
             'notes' => $application->notes,
             'review_notes' => $application->review_notes,
+            'correction_status' => $application->correction_status,
+            'correction_message' => $application->correction_message,
+            'correction_response' => $application->correction_response,
+            'correction_requested_at' => $application->correction_requested_at?->format('M d, Y h:i A'),
+            'correction_responded_at' => $application->correction_responded_at?->format('M d, Y h:i A'),
+            'correction_resolved_at' => $application->correction_resolved_at?->format('M d, Y h:i A'),
+            'withdrawal_reason' => $application->withdrawal_reason,
+            'withdrawn_at' => $application->withdrawn_at?->format('M d, Y h:i A'),
+            'waitlist_position' => $application->waitlist_position,
+            'waitlisted_at' => $application->waitlisted_at?->format('M d, Y h:i A'),
+            'can_withdraw' => ! in_array($application->status, [
+                'withdrawn',
+                'rejected',
+                'not_awarded',
+                'exam_failed',
+                'interview_failed',
+                'awarded',
+                'disbursed',
+                'renewed',
+            ], true),
             'decision_reason' => $application->decision_reason,
             'awarded_amount' => $application->awarded_amount,
             'display_award_amount' => $application->awarded_amount ?? $application->scholarship?->award_amount,
@@ -1751,6 +1920,10 @@ class ApplicantDashboardController extends Controller
         ?ApplicationDocument $document = null,
         bool $allowRequestedReplacement = true,
     ): void {
+        if ($application->correction_status === 'requested') {
+            return;
+        }
+
         if (in_array($application->status, ['submitted', 'under_review', 'qualified', 'shortlisted'], true)) {
             return;
         }

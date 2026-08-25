@@ -53,6 +53,8 @@ Route::get('/dashboard/student-documents/{document}/download', [ApplicantDashboa
 Route::delete('/dashboard/student-documents/{document}', [ApplicantDashboardController::class, 'deletePreparedDocument'])->middleware('auth')->name('dashboard.student-documents.destroy');
 Route::post('/dashboard/applications', [ApplicantDashboardController::class, 'storeApplication'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applications.store');
 Route::patch('/dashboard/applications/{application}/response', [ApplicantDashboardController::class, 'respondToApplication'])->middleware('auth')->name('dashboard.applications.response');
+Route::patch('/dashboard/applications/{application}/withdraw', [ApplicantDashboardController::class, 'withdrawApplication'])->middleware(['auth', 'throttle:6,1'])->name('dashboard.applications.withdraw');
+Route::patch('/dashboard/applications/{application}/correction-response', [ApplicantDashboardController::class, 'respondToCorrection'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applications.correction-response');
 Route::patch('/dashboard/applications/{application}/schedules/{schedule}/acknowledge', [ApplicantDashboardController::class, 'acknowledgeApplicationSchedule'])->middleware('auth')->name('dashboard.applications.schedules.acknowledge');
 Route::post('/dashboard/applications/{application}/documents', [ApplicantDashboardController::class, 'uploadDocument'])->middleware('auth')->name('dashboard.applications.documents.store');
 Route::delete('/dashboard/documents/{document}', [ApplicantDashboardController::class, 'deleteDocument'])->middleware('auth')->name('dashboard.documents.destroy');
@@ -125,6 +127,7 @@ Route::middleware(['auth', 'provider'])
         Route::get('/programs', [ProviderController::class, 'programs'])->name('programs');
         Route::redirect('/exams', '/provider/programs')->name('exams');
         Route::get('/programs/create', [ProviderController::class, 'programForm'])->middleware('permission:manage_programs')->name('programs.create');
+        Route::get('/programs/{scholarship}', [ProviderController::class, 'programWorkspace'])->whereNumber('scholarship')->name('programs.show');
         Route::get('/programs/{scholarship}/edit', [ProviderController::class, 'programForm'])->middleware('permission:manage_programs')->name('programs.edit');
         Route::get('/programs/{scholarship}/applications', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications');
         Route::get('/applications', [ProviderController::class, 'applications'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications');
@@ -180,12 +183,15 @@ Route::middleware(['auth', 'provider'])
         Route::post('/applications/{application}/schedules', [ProviderController::class, 'upsertApplicationSchedule'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.schedules.upsert');
         Route::patch('/applications/{application}/schedules/{schedule}', [ProviderController::class, 'updateApplicationScheduleTracking'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.schedules.tracking');
         Route::patch('/applications/{application}/decision', [ProviderController::class, 'decideApplication'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.decision');
+        Route::patch('/applications/{application}/correction', [ProviderController::class, 'handleApplicationCorrection'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.correction');
+        Route::patch('/applications/{application}/waitlist', [ProviderController::class, 'handleApplicationWaitlist'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.waitlist');
         Route::patch('/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.status');
         Route::patch('/documents/{document}/status', [ProviderController::class, 'updateDocumentStatus'])->middleware(['permission:review_applications', 'provider.approved'])->name('documents.status');
         Route::get('/export/applications', [ProviderController::class, 'exportApplications'])->middleware(['permission:review_applications', 'provider.approved'])->name('export.applications');
         Route::get('/scholarships', [ProviderController::class, 'scholarships'])->name('scholarships');
         Route::post('/scholarships', [ProviderController::class, 'storeScholarship'])->middleware('permission:manage_programs')->name('scholarships.store');
         Route::post('/scholarships/{scholarship}/events', [ProviderController::class, 'upsertScholarshipEvent'])->middleware(['permission:manage_programs', 'provider.approved'])->name('scholarships.events.upsert');
+        Route::post('/scholarships/{scholarship}/announcements', [ProviderController::class, 'storeScholarshipAnnouncement'])->middleware(['permission:review_applications', 'provider.approved'])->name('scholarships.announcements.store');
         Route::patch('/scholarships/{scholarship}/events/{event}/complete', [ProviderController::class, 'completeScholarshipEvent'])->middleware(['permission:review_applications', 'provider.approved'])->name('scholarships.events.complete');
         Route::patch('/scholarships/{scholarship}/events/{event}/attendance', [ProviderController::class, 'bulkUpdateScholarshipEventAttendance'])->middleware(['permission:review_applications', 'provider.approved'])->name('scholarships.events.attendance');
         Route::get('/scholarships/{scholarship}', [ProviderController::class, 'showScholarship'])->name('scholarships.show');

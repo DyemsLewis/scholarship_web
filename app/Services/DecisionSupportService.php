@@ -203,7 +203,7 @@ class DecisionSupportService
         $currentStage = $this->progressStage($application, $selectionStages);
         $stageIndex = $flow->search(fn (array $step): bool => $step['key'] === $currentStage);
         $stageIndex = $stageIndex === false ? 0 : $stageIndex;
-        $isClosedWithoutAward = in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'], true);
+        $isClosedWithoutAward = in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'withdrawn'], true);
         $isComplete = in_array($status, ['disbursed', 'renewed'], true);
         $steps = $flow
             ->map(function (array $step, int $index) use ($stageIndex, $isClosedWithoutAward, $isComplete): array {
@@ -273,7 +273,7 @@ class DecisionSupportService
             'under_review', 'qualified', 'shortlisted', 'other' => 'screening',
             'exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed' => 'exam',
             'interview', 'interview_failed' => 'interview',
-            'approved' => 'handoff',
+            'approved', 'waitlisted' => 'handoff',
             'awarded', 'distribution_scheduled', 'disbursed', 'renewed' => 'distribution',
             default => 'screening',
         };
@@ -634,7 +634,7 @@ class DecisionSupportService
             'exam_scheduled' => 84,
             'exam_qualified' => 80,
             'under_review' => 75,
-            'rejected', 'not_awarded', 'exam_failed', 'interview_failed' => 10,
+            'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'withdrawn' => 10,
             default => 60,
         };
     }
@@ -687,7 +687,7 @@ class DecisionSupportService
             return 'Award outcome is already recorded.';
         }
 
-        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'], true)) {
+        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'withdrawn'], true)) {
             return 'Application is closed; review notes explain the final decision.';
         }
 
@@ -711,7 +711,7 @@ class DecisionSupportService
             return 'Keep outcome details updated for renewal or reporting.';
         }
 
-        if (in_array($application->status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'], true)) {
+        if (in_array($application->status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'withdrawn'], true)) {
             return 'No action is required unless the provider reopens the application.';
         }
 
@@ -754,8 +754,8 @@ class DecisionSupportService
     {
         return match ($status) {
             'approved', 'awarded', 'disbursed', 'renewed', 'exam_passed' => 'success',
-            'rejected', 'not_awarded', 'exam_failed', 'interview_failed' => 'danger',
-            'under_review', 'qualified', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled' => 'info',
+            'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'withdrawn' => 'danger',
+            'under_review', 'qualified', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled', 'waitlisted' => 'info',
             default => 'warning',
         };
     }
@@ -776,12 +776,14 @@ class DecisionSupportService
             'exam_failed' => 'This application did not advance after the exam. Check the provider note for context.',
             'interview_failed' => 'This application did not advance after the interview. Check the provider note for context.',
             'approved' => 'You passed portal pre-screening. Review the documents and instructions for continuing with the provider.',
+            'waitlisted' => 'You are an eligible alternate. The provider will notify you if an award slot becomes available.',
             'awarded' => 'Your award is recorded. Wait for the provider to post reward distribution details.',
             'distribution_scheduled' => 'Reward distribution is scheduled; follow the provider instructions.',
             'disbursed' => 'Scholarship support has been released.',
             'renewed' => 'Scholarship renewal has been recorded.',
             'rejected' => 'This pre-screening submission did not qualify for the next stage. Check the provider note.',
             'not_awarded' => 'The provider recorded that the formal process ended without an award.',
+            'withdrawn' => 'You withdrew this application. No further review action is required.',
             default => 'Continue monitoring this application.',
         };
     }
@@ -804,6 +806,8 @@ class DecisionSupportService
     {
         return match ($status) {
             'approved' => 'Qualified for formal application',
+            'waitlisted' => 'Waitlisted alternate',
+            'withdrawn' => 'Withdrawn',
             'awarded' => 'Awarded',
             'not_awarded' => 'Not selected',
             'rejected' => 'Not qualified',

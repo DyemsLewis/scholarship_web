@@ -46,6 +46,8 @@ class UserFactory extends Factory
                     ...$profile,
                     'provider_name' => fake()->company(),
                     'provider_type' => 'foundation',
+                    'provider_contact_email' => $user->email,
+                    'provider_contact_number' => $profile['contact_number'],
                     'verification_status' => 'approved',
                     'verified_at' => now(),
                 ]);

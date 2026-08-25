@@ -55,6 +55,8 @@ class DatabaseSeeder extends Seeder
             'provider_website' => null,
             'provider_address' => 'Barangay San Isidro, Antipolo City, Rizal',
             'provider_description' => 'A small community foundation that provides practical education assistance to learners from nearby low-income households.',
+            'provider_contact_email' => 'tulayaral@scholarship.test',
+            'provider_contact_number' => '09171234567',
             'verification_status' => 'approved',
             'verification_notes' => 'Fictional community provider approved for local demonstration.',
             'verified_at' => now(),
@@ -79,6 +81,8 @@ class DatabaseSeeder extends Seeder
             'provider_website' => null,
             'provider_address' => 'Barangay Nueva, San Pedro City, Laguna',
             'provider_description' => 'A local education foundation supporting school participation, learning materials, and STEM opportunities for young learners.',
+            'provider_contact_email' => 'bukasfoundation@scholarship.test',
+            'provider_contact_number' => '09172345678',
             'verification_status' => 'approved',
             'verification_notes' => 'Fictional community provider approved for local demonstration.',
             'verified_at' => now(),
@@ -168,7 +172,7 @@ class DatabaseSeeder extends Seeder
         $common = [
             'review_rubric' => ReviewRubric::DEFAULT,
             'application_mode' => 'online',
-            'selection_stages' => ['screening', 'distribution'],
+            'selection_stages' => ['screening'],
             'program_cycle' => $programCycle,
             'application_opens_at' => now()->startOfDay()->toDateString(),
             'deadline' => $deadline->toDateString(),
@@ -245,19 +249,7 @@ class DatabaseSeeder extends Seeder
                         'description' => 'Basic learning materials are provided during the release orientation, subject to availability.',
                     ],
                 ],
-                'events' => [
-                    [
-                        'type' => 'distribution',
-                        'title' => 'Senior High Benefit Release and Orientation',
-                        'scheduled_at' => $deadline->copy()->addDays(20)->setTime(9, 0),
-                        'mode' => 'onsite',
-                        'venue' => 'Tulay Aral Community Desk',
-                        'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
-                        'latitude' => 14.6255000,
-                        'longitude' => 121.1245000,
-                        'instructions' => 'Approved learners should bring their school ID and enrollment proof to receive the cash grant and school supplies. A parent or guardian may accompany a minor learner during orientation and release.',
-                    ],
-                ],
+                'events' => [],
             ],
             [
                 'provider' => $tulayAral,
@@ -265,7 +257,7 @@ class DatabaseSeeder extends Seeder
                 'data' => [
                     ...$common,
                     'application_mode' => 'onsite',
-                    'selection_stages' => ['screening', 'interview', 'distribution'],
+                    'selection_stages' => ['screening', 'interview'],
                     'image_path' => '/images/programs/tulay-aral-logo.png',
                     'category' => 'Community grant',
                     'description' => 'A college-entry support package that combines a PHP 15,000 one-time cash grant with transition mentoring for enrollment, books, school materials, and first-year preparation.',
@@ -336,17 +328,6 @@ class DatabaseSeeder extends Seeder
                         'longitude' => 121.1245000,
                         'instructions' => 'Shortlisted applicants should bring proof of admission and be ready to discuss their college plan and intended use of the support package.',
                     ],
-                    [
-                        'type' => 'distribution',
-                        'title' => 'College Starter Benefit Release',
-                        'scheduled_at' => $deadline->copy()->addDays(25)->setTime(10, 0),
-                        'mode' => 'onsite',
-                        'venue' => 'Tulay Aral Community Desk',
-                        'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
-                        'latitude' => 14.6255000,
-                        'longitude' => 121.1245000,
-                        'instructions' => 'Approved applicants should bring a valid school ID, current enrollment proof, and the signed benefit acknowledgment form for the cash grant and mentoring orientation.',
-                    ],
                 ],
             ],
             [
@@ -409,19 +390,7 @@ class DatabaseSeeder extends Seeder
                         'description' => 'Selected families may use learning devices at the community hub during scheduled hours.',
                     ],
                 ],
-                'events' => [
-                    [
-                        'type' => 'distribution',
-                        'title' => 'School Essentials Package Release',
-                        'scheduled_at' => $deadline->copy()->addDays(18)->setTime(10, 0),
-                        'mode' => 'onsite',
-                        'venue' => 'Bukas Kinabukasan Learning Hub',
-                        'location_address' => 'Barangay Nueva, San Pedro City, Laguna',
-                        'latitude' => 14.3595000,
-                        'longitude' => 121.0473000,
-                        'instructions' => 'The parent or guardian should attend with a valid ID and the learner school ID or enrollment certificate to receive the school essentials package and device-access instructions.',
-                    ],
-                ],
+                'events' => [],
             ],
             [
                 'provider' => $bukasKinabukasan,
@@ -430,7 +399,7 @@ class DatabaseSeeder extends Seeder
                     ...$common,
                     'application_mode' => 'onsite',
                     'image_path' => '/images/programs/bukas-kinabukasan-logo.png',
-                    'selection_stages' => ['screening', 'exam', 'interview', 'distribution'],
+                    'selection_stages' => ['screening', 'exam', 'interview'],
                     'exam_duration_minutes' => 60,
                     'exam_passing_score' => 75,
                     'category' => 'STEM scholarship',
@@ -520,17 +489,6 @@ class DatabaseSeeder extends Seeder
                         'longitude' => 121.0473000,
                         'instructions' => 'Applicants who pass the exam should be ready to discuss their STEM goals, school plans, and community interests.',
                     ],
-                    [
-                        'type' => 'distribution',
-                        'title' => 'STEM Pathways Benefit Package Release',
-                        'scheduled_at' => $deadline->copy()->addDays(30)->setTime(10, 0),
-                        'mode' => 'onsite',
-                        'venue' => 'Bukas Kinabukasan Learning Hub',
-                        'location_address' => 'Barangay Nueva, San Pedro City, Laguna',
-                        'latitude' => 14.3595000,
-                        'longitude' => 121.0473000,
-                        'instructions' => 'Approved recipients should bring a valid school ID, enrollment proof, and the signed scholarship acknowledgment form for the learning grant, enrichment session, and mentoring orientation.',
-                    ],
                 ],
             ],
         ];
@@ -547,6 +505,14 @@ class DatabaseSeeder extends Seeder
                     fn (array $benefit, int $index): array => [...$benefit, 'sort_order' => $index]
                 )->all()
             );
+
+            $eventTypes = collect($program['events'] ?? [])->pluck('type')->filter()->values();
+
+            if ($eventTypes->isEmpty()) {
+                $scholarship->events()->delete();
+            } else {
+                $scholarship->events()->whereNotIn('type', $eventTypes)->delete();
+            }
 
             foreach ($program['events'] ?? [] as $eventData) {
                 $event = $scholarship->events()->updateOrCreate([
