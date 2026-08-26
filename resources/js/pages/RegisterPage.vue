@@ -138,7 +138,7 @@ function handleMiddleInitialInput(event) {
 }
 
 function handleNumberInput(event) {
-    form.value.number = event.target.value.replace(/[^\d+\s()-]/g, '');
+    form.value.number = event.target.value.replace(/[^\d+\s()-]/g, '').slice(0, 20);
 }
 
 function handleVerificationCodeInput(event) {
@@ -181,8 +181,8 @@ async function submitForm() {
 
     const numberDigits = form.value.number.replace(/\D/g, '');
 
-    if (numberDigits.length < 10) {
-        const message = 'Enter at least 10 digits in your contact number.';
+    if (numberDigits.length < 10 || numberDigits.length > 15) {
+        const message = 'Enter a contact number with 10 to 15 digits.';
         showToast('error', 'Registration failed', message);
         formElement.value
             ?.querySelector('#number')
@@ -414,7 +414,7 @@ onBeforeUnmount(() => {
                         </div>
                         <div>
                             <label :class="labelClass" for="provider-contact-number">Public phone</label>
-                            <input id="provider-contact-number" v-model="form.providerContactNumber" type="tel" inputmode="tel" autocomplete="organization-tel" required placeholder="09XX XXX XXXX" :class="inputClass">
+                            <input id="provider-contact-number" v-model="form.providerContactNumber" type="tel" inputmode="tel" autocomplete="organization-tel" required maxlength="20" placeholder="09XX XXX XXXX" :class="inputClass">
                         </div>
                     </div>
                 </div>
@@ -453,7 +453,7 @@ onBeforeUnmount(() => {
                     </div>
                     <div>
                         <label :class="labelClass" for="number">{{ isProviderRegistration ? 'Representative phone' : 'Contact number' }}</label>
-                        <input id="number" :value="form.number" type="tel" inputmode="numeric" autocomplete="tel" required placeholder="09XX XXX XXXX" :class="inputClass" @input="(event) => { event.target.setCustomValidity(''); handleNumberInput(event); }">
+                        <input id="number" :value="form.number" type="tel" inputmode="numeric" autocomplete="tel" required maxlength="20" placeholder="09XX XXX XXXX" :class="inputClass" @input="(event) => { event.target.setCustomValidity(''); handleNumberInput(event); }">
                     </div>
                 </div>
             </section>

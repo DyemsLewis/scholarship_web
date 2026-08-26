@@ -211,7 +211,9 @@ const readinessItems = computed(() => {
             : {
                 label: 'Prepared files',
                 percent: recommendationReadiness,
-                detail: 'Across your recommended programs.',
+                detail: recommendationReadiness > 0
+                    ? 'Across your recommended programs.'
+                    : 'Start with common school files when you are ready.',
                 href: '/dashboard/documents',
                 action: 'Prepare',
             },

@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use App\Models\PendingRegistration;
 use App\Models\PortalNotification;
 use App\Models\User;
+use App\Rules\PhoneNumber;
 use App\Services\PasswordResetLinkService;
 use App\Support\Terms;
 use Illuminate\Auth\Events\Verified;
@@ -520,7 +521,7 @@ class AuthController extends Controller
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', 'unique:users,username'],
-            'number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'number' => ['required', 'string', 'max:30', new PhoneNumber],
             'role' => ['required', 'string', 'in:applicant,provider'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'terms_accepted' => ['accepted'],
@@ -545,7 +546,7 @@ class AuthController extends Controller
             'provider_address' => ['required', 'string', 'max:500'],
             'provider_description' => ['nullable', 'string', 'max:1000'],
             'provider_contact_email' => ['nullable', 'email', 'max:255'],
-            'provider_contact_number' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'provider_contact_number' => ['nullable', 'string', 'max:30', new PhoneNumber],
         ];
     }
 

@@ -48,6 +48,21 @@ class ApplicantProfileWorkflowTest extends TestCase
         $this->assertTrue($applicant->fresh()->applicantProfileReadiness()['complete']);
     }
 
+    public function test_profile_birthdate_must_represent_an_age_between_five_and_one_hundred(): void
+    {
+        $applicant = User::factory()->create();
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', ['birthdate' => now()->subYears(4)->toDateString()])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('birthdate');
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', ['birthdate' => now()->subYears(101)->toDateString()])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('birthdate');
+    }
+
     public function test_profile_endpoint_returns_catalog_matches_and_saved_preferences(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);

@@ -32,12 +32,8 @@ const imageFile = ref(null);
 const imagePreviewUrl = ref('');
 const providerLocationMessage = ref('');
 const providerAddressLookupTrigger = ref(0);
-const eventLocationMapStage = ref('');
-const eventLocationMapMessage = ref('');
-const eventAddressLookupTrigger = ref(0);
 const activeFormSection = ref('details');
 const showAudienceDetails = ref(false);
-const showStageSchedules = ref(false);
 const showLocationMap = ref(false);
 const customizeRubric = ref(false);
 const selectedTargetPresetKey = ref('');
@@ -68,13 +64,12 @@ const formGridClass = 'grid items-start gap-x-5 gap-y-5 md:grid-cols-2';
 const currentLocalDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
     .toISOString();
 const todayDate = currentLocalDateTime.slice(0, 10);
-const minimumScheduleDateTime = currentLocalDateTime.slice(0, 16);
 const formSections = [
     { id: 'details', label: 'Details', help: 'Name, category, cycle, description, and program logo.' },
     { id: 'support', label: 'Support', help: 'Benefits, recipient slots, and the pre-screening timeline.' },
     { id: 'eligibility', label: 'Eligibility', help: 'Who can apply and how applicants are matched.' },
     { id: 'application', label: 'Application', help: 'Verification method, required files, and what happens after qualification.' },
-    { id: 'selection', label: 'Selection', help: 'Review stages, confirmed schedules, and provider scoring.' },
+    { id: 'selection', label: 'Selection', help: 'Pre-screening flow, later stages, and provider scoring.' },
     { id: 'contact', label: 'Contact', help: 'Program location and the public contact applicants can reach.' },
     { id: 'review', label: 'Review', help: 'Preview the listing, choose how to save it, and submit.' },
 ];
@@ -190,39 +185,35 @@ const selectionStageOptions = [
     {
         value: 'screening',
         label: 'Pre-screening review',
-        description: 'Review eligibility, profile details, and submitted requirements.',
+        description: 'Review eligibility, profile details, and submitted files inside the portal. No schedule is needed.',
         icon: 'fa-solid fa-list-check',
         required: true,
     },
     {
         value: 'exam',
         label: 'Exam',
-        description: 'Provider conducts and grades an exam before the pre-screening decision.',
+        description: 'Qualified applicants complete a provider-managed exam after passing pre-screening.',
         icon: 'fa-solid fa-clipboard-question',
         required: false,
     },
     {
         value: 'interview',
         label: 'Interview',
-        description: 'Meet shortlisted applicants before confirming qualification.',
+        description: 'Shortlisted applicants meet the provider before the final decision.',
         icon: 'fa-solid fa-comments',
         required: false,
     },
     {
         value: 'distribution',
-        label: 'Award outcome',
-        description: 'Optionally track an award release after the provider completes its formal process.',
+        label: 'Award release',
+        description: 'Optionally publish release or onboarding details after final recipients are selected.',
         icon: 'fa-solid fa-hand-holding-dollar',
         required: false,
     },
 ];
+const reviewStageOptions = selectionStageOptions.filter((stage) => stage.value !== 'distribution');
+const awardReleaseStage = selectionStageOptions.find((stage) => stage.value === 'distribution');
 const scholarshipForm = ref(emptyScholarshipForm());
-const scheduleModeOptions = [
-    { value: 'onsite', label: 'On-site' },
-    { value: 'online', label: 'Online' },
-    { value: 'hybrid', label: 'Hybrid' },
-    { value: 'provider_managed', label: 'Provider managed' },
-];
 const gradeScaleOptions = [
     {
         value: '',
@@ -828,24 +819,6 @@ const hiddenSelectedSchoolTypeLabels = computed(() => {
 
     return optionLabels(hiddenValues, schoolTypeOptions);
 });
-const schedulableSelectionStages = computed(() => selectionStageOptions.filter((stage) => (
-    stage.value !== 'screening'
-    && scholarshipForm.value.selectionStages.includes(stage.value)
-)));
-const scheduledProgramEventCount = computed(() => schedulableSelectionStages.value
-    .filter((stage) => hasText(scholarshipForm.value.programEvents[stage.value]?.scheduledAt))
-    .length);
-const activeEventMapStage = computed(() => selectionStageOptions.find((stage) => stage.value === eventLocationMapStage.value) ?? null);
-const activeEventMap = computed(() => scholarshipForm.value.programEvents[eventLocationMapStage.value] ?? null);
-const activeEventMapAddress = computed(() => {
-    if (!activeEventMap.value) {
-        return '';
-    }
-
-    return [activeEventMap.value.venue, activeEventMap.value.locationAddress]
-        .filter((value) => hasText(value))
-        .join(', ');
-});
 const statusOptions = computed(() => {
     const options = [
         { value: 'draft', label: 'Save as draft', help: 'Only provider can see it.' },
@@ -1081,29 +1054,6 @@ function defaultReviewRubric() {
     ];
 }
 
-function emptyProgramEvent(type) {
-    return {
-        id: null,
-        type,
-        title: '',
-        scheduledAt: '',
-        mode: 'onsite',
-        venue: '',
-        locationAddress: '',
-        latitude: '',
-        longitude: '',
-        onlineUrl: '',
-        instructions: '',
-    };
-}
-
-function emptyProgramEvents() {
-    return Object.fromEntries(selectionStageOptions.map((stage) => [
-        stage.value,
-        emptyProgramEvent(stage.value),
-    ]));
-}
-
 function emptyScholarshipForm() {
     return {
         title: '',
@@ -1146,7 +1096,6 @@ function emptyScholarshipForm() {
         selectionStages: ['screening'],
         examDurationMinutes: '',
         examPassingScore: '',
-        programEvents: emptyProgramEvents(),
         renewalPolicy: '',
         returnServiceContract: '',
         otherContractTerms: defaultCommitmentText,
@@ -1162,32 +1111,6 @@ function emptyScholarshipForm() {
         imageUrl: '/uploads/scholarship-default.jpg',
         termsAccepted: false,
     };
-}
-
-function fillProgramEvents(events) {
-    const programEvents = emptyProgramEvents();
-
-    (Array.isArray(events) ? events : []).forEach((event) => {
-        if (!programEvents[event.type]) {
-            return;
-        }
-
-        programEvents[event.type] = {
-            id: event.id ?? null,
-            type: event.type,
-            title: event.title ?? '',
-            scheduledAt: event.scheduled_at ?? '',
-            mode: event.mode ?? 'onsite',
-            venue: event.venue ?? '',
-            locationAddress: event.location_address ?? '',
-            latitude: event.latitude ?? '',
-            longitude: event.longitude ?? '',
-            onlineUrl: event.online_url ?? '',
-            instructions: event.instructions ?? '',
-        };
-    });
-
-    return programEvents;
 }
 
 function splitRequirementText(requirements) {
@@ -1238,79 +1161,6 @@ function toggleSelectionStage(stage) {
     scholarshipForm.value.selectionStages = selectionStageOptions
         .map((optionItem) => optionItem.value)
         .filter((optionValue) => selected.includes(optionValue) || optionValue === 'screening');
-}
-
-function scheduleModeNeedsVenue(mode) {
-    return ['onsite', 'hybrid'].includes(mode);
-}
-
-function scheduleModeShowsOnlineUrl(mode) {
-    return ['online', 'hybrid'].includes(mode);
-}
-
-function scheduleModeRequiresOnlineUrl(mode, stageType) {
-    return scheduleModeShowsOnlineUrl(mode) && stageType !== 'distribution';
-}
-
-function programEventsPayload() {
-    return schedulableSelectionStages.value
-        .map((stage) => scholarshipForm.value.programEvents[stage.value])
-        .filter((event) => hasText(event?.scheduledAt))
-        .map((event) => ({
-            type: event.type,
-            title: event.title,
-            scheduled_at: event.scheduledAt,
-            mode: event.mode,
-            venue: event.venue,
-            location_address: event.locationAddress,
-            latitude: event.latitude || null,
-            longitude: event.longitude || null,
-            online_url: event.onlineUrl,
-            instructions: event.instructions,
-        }));
-}
-
-function programEventValidationMessage() {
-    let previousScheduledStage = null;
-
-    for (const stage of schedulableSelectionStages.value) {
-        const event = scholarshipForm.value.programEvents[stage.value];
-
-        if (!hasText(event?.scheduledAt)) {
-            continue;
-        }
-
-        if (scheduleModeNeedsVenue(event.mode) && !hasText(event.venue)) {
-            return `Add a venue for the ${stage.label.toLowerCase()} schedule.`;
-        }
-
-        if (scheduleModeRequiresOnlineUrl(event.mode, stage.value) && !hasText(event.onlineUrl)) {
-            return `Add the online link for the ${stage.label.toLowerCase()} schedule.`;
-        }
-
-        if (!hasText(event.instructions)) {
-            return `Add instructions for applicants who reach the ${stage.label.toLowerCase()} stage.`;
-        }
-
-        if (
-            previousScheduledStage
-            && new Date(event.scheduledAt).getTime() < new Date(previousScheduledStage.event.scheduledAt).getTime()
-        ) {
-            return `${stage.label} must be scheduled after ${previousScheduledStage.stage.label.toLowerCase()}.`;
-        }
-
-        previousScheduledStage = { stage, event };
-    }
-
-    return '';
-}
-
-function minimumDateTimeForEvent(event) {
-    if (event?.id && hasText(event.scheduledAt) && event.scheduledAt < minimumScheduleDateTime) {
-        return event.scheduledAt;
-    }
-
-    return minimumScheduleDateTime;
 }
 
 function selectAllOptions(field, options) {
@@ -1648,7 +1498,6 @@ function fillScholarshipForm(scholarship) {
             .filter((value) => (scholarship.selection_stages ?? ['screening']).includes(value)),
         examDurationMinutes: scholarship.exam_duration_minutes ?? '',
         examPassingScore: scholarship.exam_passing_score ?? '',
-        programEvents: fillProgramEvents(scholarship.program_events),
         renewalPolicy: scholarship.renewal_policy ?? '',
         returnServiceContract: scholarship.return_service_contract ?? '',
         otherContractTerms: scholarship.other_contract_terms ?? '',
@@ -1821,97 +1670,13 @@ function handleScholarshipLocationError(message) {
     providerLocationMessage.value = message;
 }
 
-function clearProgramEventMapPoint(stageValue) {
-    const event = scholarshipForm.value.programEvents[stageValue];
-
-    if (!event) {
-        return;
-    }
-
-    event.latitude = '';
-    event.longitude = '';
-}
-
-function lookupProgramEventAddress() {
-    if (!activeEventMapAddress.value) {
-        eventLocationMapMessage.value = 'Enter the event venue or address first.';
-        return;
-    }
-
-    eventLocationMapMessage.value = 'Searching the event address on the map...';
-    eventAddressLookupTrigger.value += 1;
-}
-
-function openProgramEventMap(stageValue) {
-    showLocationMap.value = false;
-    eventLocationMapStage.value = stageValue;
-    eventLocationMapMessage.value = '';
-
-    nextTick(() => {
-        if (activeEventMapAddress.value && !activeEventMap.value?.latitude) {
-            lookupProgramEventAddress();
-        }
-    });
-}
-
-function closeProgramEventMap() {
-    eventLocationMapStage.value = '';
-    eventLocationMapMessage.value = '';
-}
-
-function handleProgramEventLocationResolved(location) {
-    if (!activeEventMap.value) {
-        return;
-    }
-
-    activeEventMap.value.latitude = Number(location.latitude).toFixed(7);
-    activeEventMap.value.longitude = Number(location.longitude).toFixed(7);
-    eventLocationMapMessage.value = 'Address found. The pin is saved with this stage when you save the program.';
-}
-
-function handleProgramEventLocationPicked(location) {
-    if (!activeEventMap.value) {
-        return;
-    }
-
-    const address = location.address ?? {};
-    const suggestedVenue = address.office
-        || address.amenity
-        || address.building
-        || address.school
-        || address.university
-        || address.tourism;
-
-    activeEventMap.value.latitude = Number(location.latitude).toFixed(7);
-    activeEventMap.value.longitude = Number(location.longitude).toFixed(7);
-    activeEventMap.value.venue = activeEventMap.value.venue || suggestedVenue || '';
-    activeEventMap.value.locationAddress = location.displayName
-        || [
-            [address.house_number, address.road].filter(Boolean).join(' '),
-            address.neighbourhood || address.suburb || address.quarter,
-            address.city || address.municipality || address.town,
-            address.province || address.state,
-        ].filter(Boolean).join(', ')
-        || activeEventMap.value.locationAddress;
-    eventLocationMapMessage.value = location.displayName
-        ? 'Pin set. The event address was filled from the selected location.'
-        : 'Pin set. Save the program to keep this event location.';
-}
-
-function handleProgramEventLocationError(message) {
-    eventLocationMapMessage.value = message;
-}
-
 function resetScholarshipForm() {
     scholarshipForm.value = emptyScholarshipForm();
     existingApplicationCount.value = 0;
     awardedSlotsCount.value = 0;
     activeFormSection.value = 'details';
     showAudienceDetails.value = false;
-    showStageSchedules.value = false;
     showLocationMap.value = false;
-    eventLocationMapStage.value = '';
-    eventLocationMapMessage.value = '';
     customizeRubric.value = false;
     selectedTargetPresetKey.value = '';
     selectedEligibilityOptions.value = [];
@@ -2051,15 +1816,6 @@ async function saveScholarship() {
         return;
     }
 
-    const scheduleError = programEventValidationMessage();
-
-    if (scheduleError) {
-        showStageSchedules.value = true;
-        await openFormSection('selection');
-        formError.value = scheduleError;
-        return;
-    }
-
     if (
         termsRequiredForSave.value
         && (
@@ -2138,7 +1894,6 @@ async function saveScholarship() {
         exam_passing_score: scholarshipForm.value.selectionStages.includes('exam')
             ? scholarshipForm.value.examPassingScore || ''
             : '',
-        program_events: JSON.stringify(programEventsPayload()),
         renewal_policy: scholarshipForm.value.renewalPolicy || '',
         return_service_contract: scholarshipForm.value.returnServiceContract || '',
         other_contract_terms: scholarshipForm.value.otherContractTerms || '',
@@ -2698,21 +2453,21 @@ onBeforeUnmount(() => {
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
                                             <p class="text-base font-bold text-slate-950">
-                                                Review stages
+                                                Pre-screening and next stages
                                                 <span :class="requiredHintClass">Required</span>
                                             </p>
                                             <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Review is always included. Add an exam, interview, or later award tracking only when your process needs it.
+                                                Every application starts with portal pre-screening. Add only the stages qualified applicants must complete afterward.
                                             </p>
                                         </div>
                                         <span class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                                            {{ scholarshipForm.selectionStages.length }} stages
+                                            Pre-screening first
                                         </span>
                                     </div>
 
-                                    <div class="mt-4 grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                    <div class="mt-4 grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3">
                                         <button
-                                            v-for="stage in selectionStageOptions"
+                                            v-for="stage in reviewStageOptions"
                                             :key="stage.value"
                                             type="button"
                                             :aria-pressed="scholarshipForm.selectionStages.includes(stage.value)"
@@ -2737,6 +2492,34 @@ onBeforeUnmount(() => {
                                             </span>
                                             <span class="mt-3 block font-bold text-slate-950">{{ stage.label }}</span>
                                             <span class="mt-1 block text-xs leading-5 text-slate-500">{{ stage.description }}</span>
+                                        </button>
+                                    </div>
+
+                                    <div v-if="awardReleaseStage" class="mt-4 border-t border-slate-200 pt-4">
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">After the final decision</p>
+                                        <button
+                                            type="button"
+                                            :aria-pressed="scholarshipForm.selectionStages.includes(awardReleaseStage.value)"
+                                            :disabled="selectionPlanLocked"
+                                            :class="[
+                                                'mt-2 flex w-full items-start gap-3 rounded-md border p-3 text-left transition sm:items-center',
+                                                scholarshipForm.selectionStages.includes(awardReleaseStage.value)
+                                                    ? 'border-slate-900 bg-white shadow-sm'
+                                                    : 'border-dashed border-slate-300 bg-slate-50 hover:border-slate-400 hover:bg-white',
+                                                selectionPlanLocked ? 'cursor-default opacity-70' : 'cursor-pointer',
+                                            ]"
+                                            @click="toggleSelectionStage(awardReleaseStage.value)"
+                                        >
+                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', scholarshipForm.selectionStages.includes(awardReleaseStage.value) ? 'bg-slate-950 text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200']">
+                                                <i :class="awardReleaseStage.icon" aria-hidden="true"></i>
+                                            </span>
+                                            <span class="min-w-0 flex-1">
+                                                <span class="block text-sm font-bold text-slate-950">{{ awardReleaseStage.label }}</span>
+                                                <span class="mt-1 block text-xs leading-5 text-slate-500">{{ awardReleaseStage.description }}</span>
+                                            </span>
+                                            <span :class="['shrink-0 text-[10px] font-bold uppercase', scholarshipForm.selectionStages.includes(awardReleaseStage.value) ? 'text-emerald-700' : 'text-slate-400']">
+                                                {{ selectionPlanLocked ? 'Protected' : (scholarshipForm.selectionStages.includes(awardReleaseStage.value) ? 'Included' : 'Optional') }}
+                                            </span>
                                         </button>
                                     </div>
                                 </div>
@@ -2794,162 +2577,29 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
 
-                                <div v-show="activeFormSection === 'selection'" :class="sectionCardClass">
-                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div v-show="activeFormSection === 'selection'" class="flex flex-col gap-4 rounded-lg bg-slate-950 p-4 text-white sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                                    <div class="flex min-w-0 items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white/10 text-amber-300">
+                                            <i class="fa-solid fa-calendar-check" aria-hidden="true"></i>
+                                        </span>
                                         <div>
-                                            <p class="text-base font-bold text-slate-950">Stage schedules</p>
-                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Dates are optional. Add one only when it is confirmed; the remaining details will appear after a date is selected.
+                                            <p class="text-sm font-bold">Add dates only when applicants reach the stage</p>
+                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-300">
+                                                Pre-screening does not need a schedule. Publish one shared exam, interview, or award-release schedule later from the Program Workspace; qualified applicants will be notified automatically.
                                             </p>
                                         </div>
-                                        <button
-                                            type="button"
-                                            class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                            :aria-expanded="showStageSchedules"
-                                            @click="showStageSchedules = !showStageSchedules"
-                                        >
-                                            <span>{{ showStageSchedules ? 'Hide schedules' : `Manage schedules (${scheduledProgramEventCount})` }}</span>
-                                            <i :class="['fa-solid fa-chevron-down text-[10px] transition-transform', showStageSchedules ? 'rotate-180' : '']" aria-hidden="true"></i>
-                                        </button>
                                     </div>
-
-                                    <div v-if="showStageSchedules" class="mt-4 grid gap-3 border-t border-slate-200 pt-4">
-                                        <article
-                                            v-for="stage in schedulableSelectionStages"
-                                            :key="`schedule-${stage.value}`"
-                                            class="rounded-md border border-slate-200 bg-white p-4"
-                                        >
-                                            <div class="flex items-center justify-between gap-3">
-                                                <span class="flex min-w-0 items-center gap-3">
-                                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-white">
-                                                        <i :class="stage.icon" aria-hidden="true"></i>
-                                                    </span>
-                                                    <span>
-                                                        <span class="block text-sm font-bold text-slate-950">{{ stage.label }}</span>
-                                                        <span class="block text-xs text-slate-500">Shared with applicants when confirmed</span>
-                                                    </span>
-                                                </span>
-                                                <span :class="['shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', scholarshipForm.programEvents[stage.value].scheduledAt ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-slate-100 text-slate-500']">
-                                                    {{ scholarshipForm.programEvents[stage.value].scheduledAt ? 'Scheduled' : 'Optional' }}
-                                                </span>
-                                            </div>
-
-                                            <div class="mt-4 grid gap-4 border-t border-slate-200 pt-4 md:grid-cols-2">
-                                                <div :class="fieldStackClass">
-                                                    <label :class="labelClass" :for="`program-event-date-${stage.value}`">Date and time</label>
-                                                    <input
-                                                        :id="`program-event-date-${stage.value}`"
-                                                        v-model="scholarshipForm.programEvents[stage.value].scheduledAt"
-                                                        type="datetime-local"
-                                                        :min="minimumDateTimeForEvent(scholarshipForm.programEvents[stage.value])"
-                                                        :class="inputClass"
-                                                    >
-                                                </div>
-
-                                                <div :class="fieldStackClass">
-                                                    <label :class="labelClass" :for="`program-event-mode-${stage.value}`">Mode</label>
-                                                    <select
-                                                        :id="`program-event-mode-${stage.value}`"
-                                                        v-model="scholarshipForm.programEvents[stage.value].mode"
-                                                        :class="inputClass"
-                                                    >
-                                                        <option v-for="option in scheduleModeOptions" :key="option.value" :value="option.value">
-                                                            {{ option.label }}
-                                                        </option>
-                                                    </select>
-                                                </div>
-
-                                                <template v-if="scholarshipForm.programEvents[stage.value].scheduledAt">
-                                                <div class="md:col-span-2">
-                                                    <label :class="labelClass" :for="`program-event-title-${stage.value}`">Schedule title</label>
-                                                    <input
-                                                        :id="`program-event-title-${stage.value}`"
-                                                        v-model="scholarshipForm.programEvents[stage.value].title"
-                                                        type="text"
-                                                        :placeholder="`${stage.label} schedule`"
-                                                        :class="inputClass"
-                                                    >
-                                                </div>
-
-                                                <div v-if="scheduleModeNeedsVenue(scholarshipForm.programEvents[stage.value].mode)">
-                                                    <label :class="labelClass" :for="`program-event-venue-${stage.value}`">
-                                                        Event venue
-                                                        <span :class="requiredHintClass">Required</span>
-                                                    </label>
-                                                    <input
-                                                        :id="`program-event-venue-${stage.value}`"
-                                                        v-model="scholarshipForm.programEvents[stage.value].venue"
-                                                        type="text"
-                                                        placeholder="Example: Community hall or provider office"
-                                                        :class="inputClass"
-                                                    >
-                                                </div>
-
-                                                <div v-if="scheduleModeNeedsVenue(scholarshipForm.programEvents[stage.value].mode)">
-                                                    <label :class="labelClass" :for="`program-event-address-${stage.value}`">
-                                                        Event address
-                                                        <span :class="optionalHintClass">Optional</span>
-                                                    </label>
-                                                    <input
-                                                        :id="`program-event-address-${stage.value}`"
-                                                        v-model="scholarshipForm.programEvents[stage.value].locationAddress"
-                                                        type="text"
-                                                        placeholder="General venue address"
-                                                        :class="inputClass"
-                                                        @input="clearProgramEventMapPoint(stage.value)"
-                                                    >
-                                                    <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                                        <p class="text-xs leading-5 text-slate-500">
-                                                            It can differ from the program address.
-                                                        </p>
-                                                        <button
-                                                            type="button"
-                                                            class="shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                                            @click="openProgramEventMap(stage.value)"
-                                                        >
-                                                            <i class="fa-solid fa-map-location-dot mr-1" aria-hidden="true"></i>
-                                                            {{ scholarshipForm.programEvents[stage.value].latitude ? 'Review pin' : 'Set map pin' }}
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                <div
-                                                    v-if="scheduleModeShowsOnlineUrl(scholarshipForm.programEvents[stage.value].mode)"
-                                                    class="md:col-span-2"
-                                                >
-                                                    <label :class="labelClass" :for="`program-event-url-${stage.value}`">
-                                                        Private online link
-                                                        <span v-if="stage.value === 'distribution'" :class="optionalHintClass">Optional</span>
-                                                        <span v-else :class="requiredHintClass">Required</span>
-                                                    </label>
-                                                    <input
-                                                        :id="`program-event-url-${stage.value}`"
-                                                        v-model="scholarshipForm.programEvents[stage.value].onlineUrl"
-                                                        type="url"
-                                                        placeholder="https://..."
-                                                        :class="inputClass"
-                                                    >
-                                                    <p class="mt-2 text-xs leading-5 text-slate-500">
-                                                        {{ stage.value === 'distribution'
-                                                            ? 'Add a release portal or briefing link only when recipients need one.'
-                                                            : 'Visible only to applicants who reach this stage.' }}
-                                                    </p>
-                                                </div>
-
-                                                <div class="md:col-span-2">
-                                                    <label :class="labelClass" :for="`program-event-instructions-${stage.value}`">Applicant instructions</label>
-                                                    <textarea
-                                                        :id="`program-event-instructions-${stage.value}`"
-                                                        v-model="scholarshipForm.programEvents[stage.value].instructions"
-                                                        rows="3"
-                                                        placeholder="What should applicants bring, prepare, or do?"
-                                                        :class="inputClass"
-                                                    ></textarea>
-                                                </div>
-                                                </template>
-                                            </div>
-                                        </article>
-                                    </div>
+                                    <a
+                                        v-if="isEditMode"
+                                        :href="`/provider/programs/${scholarshipId}/applications?workspace=schedule`"
+                                        class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-amber-100"
+                                    >
+                                        Open schedule workspace
+                                        <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                                    </a>
+                                    <span v-else class="shrink-0 rounded-md bg-white/10 px-3 py-2 text-xs font-bold text-slate-200">
+                                        Available after saving
+                                    </span>
                                 </div>
 
                                 <div v-show="activeFormSection === 'contact'" :class="[sectionCardClass, 'grid items-stretch gap-4 lg:grid-cols-2']">
@@ -3009,7 +2659,9 @@ onBeforeUnmount(() => {
                                         <input
                                             id="scholarship-contact-number"
                                             v-model="scholarshipForm.contactNumber"
-                                            type="text"
+                                            type="tel"
+                                            inputmode="tel"
+                                            maxlength="20"
                                             placeholder="0917 123 4567"
                                             :class="inputClass"
                                         >
@@ -3336,6 +2988,7 @@ onBeforeUnmount(() => {
                                             </option>
                                         </select>
                                     </div>
+
                                 </div>
                             </section>
 
@@ -4042,83 +3695,5 @@ onBeforeUnmount(() => {
             </div>
         </Teleport>
 
-        <Teleport to="body">
-            <div
-                v-if="activeEventMap && activeEventMapStage"
-                class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="program-event-map-title"
-                tabindex="-1"
-                @click.self="closeProgramEventMap"
-                @keydown.esc="closeProgramEventMap"
-            >
-                <section class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
-                    <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
-                            <i :class="activeEventMapStage.icon" aria-hidden="true"></i>
-                        </span>
-                        <div class="min-w-0 flex-1">
-                            <p class="text-[10px] font-bold uppercase text-amber-700">
-                                {{ activeEventMapStage.label }} schedule
-                            </p>
-                            <h2 id="program-event-map-title" class="mt-1 text-lg font-bold text-slate-950 sm:text-xl">
-                                Set the event map pin
-                            </h2>
-                            <p class="mt-1 truncate text-xs text-slate-500">
-                                {{ activeEventMapAddress || 'Add an event venue or address, then select its location on the map.' }}
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
-                            aria-label="Close event location map"
-                            @click="closeProgramEventMap"
-                        >
-                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                        </button>
-                    </header>
-
-                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-4">
-                        <LeafletMapPreview
-                            :address="activeEventMapAddress"
-                            :latitude="activeEventMap.latitude"
-                            :longitude="activeEventMap.longitude"
-                            :title="`${activeEventMapStage.label} event map`"
-                            :marker-text="activeEventMap.venue || `${activeEventMapStage.label} venue`"
-                            :geocode-trigger="eventAddressLookupTrigger"
-                            height="min(58vh, 32rem)"
-                            picker
-                            @resolved="handleProgramEventLocationResolved"
-                            @picked="handleProgramEventLocationPicked"
-                            @error="handleProgramEventLocationError"
-                        />
-                    </div>
-
-                    <footer class="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                        <p :class="['text-xs font-semibold', activeEventMap.latitude ? 'text-emerald-700' : 'text-slate-500']">
-                            {{ eventLocationMapMessage || (activeEventMap.latitude ? 'Event pin selected.' : 'Click the map to place the event pin.') }}
-                        </p>
-                        <div class="flex shrink-0 gap-2">
-                            <button
-                                type="button"
-                                :disabled="!activeEventMapAddress"
-                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                @click="lookupProgramEventAddress"
-                            >
-                                Search address
-                            </button>
-                            <button
-                                type="button"
-                                class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
-                                @click="closeProgramEventMap"
-                            >
-                                {{ activeEventMap.latitude ? 'Use this location' : 'Close map' }}
-                            </button>
-                        </div>
-                    </footer>
-                </section>
-            </div>
-        </Teleport>
     </main>
 </template>

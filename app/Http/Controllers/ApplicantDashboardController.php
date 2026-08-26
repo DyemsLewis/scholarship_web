@@ -14,6 +14,7 @@ use App\Models\ScholarshipBookmark;
 use App\Models\ScholarshipFunnelEvent;
 use App\Models\StudentDocument;
 use App\Models\User;
+use App\Rules\PhoneNumber;
 use App\Services\ApplicantDocumentLibraryService;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
@@ -757,7 +758,7 @@ class ApplicantDashboardController extends Controller
             'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'suffix' => ['nullable', 'string', 'max:20'],
             'gender' => ['nullable', Rule::in(['female', 'male', 'non_binary', 'prefer_not_to_say'])],
-            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
             'account_managed_by' => ['nullable', Rule::in(['learner', 'parent_guardian', 'relative', 'school_representative', 'other'])],
             'education_level' => ['nullable', 'string', 'max:100'],
             'school' => ['nullable', 'string', 'max:255'],
@@ -782,10 +783,10 @@ class ApplicantDashboardController extends Controller
             'region' => ['nullable', 'string', 'max:255'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
-            'birthdate' => ['nullable', 'date', 'before:today'],
+            'birthdate' => ['nullable', 'date', 'before_or_equal:'.now()->subYears(5)->toDateString(), 'after_or_equal:'.now()->subYears(100)->toDateString()],
             'guardian_name' => ['nullable', 'string', 'max:255'],
             'guardian_relationship' => ['nullable', 'string', 'max:100'],
-            'guardian_contact' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'guardian_contact' => ['nullable', 'string', 'max:30', new PhoneNumber],
             'guardian_email' => ['nullable', 'email', 'max:255'],
             'guardian_is_account_owner' => ['nullable', 'boolean'],
         ]);

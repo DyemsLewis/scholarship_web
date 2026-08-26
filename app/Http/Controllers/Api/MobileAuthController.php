@@ -15,6 +15,7 @@ use App\Models\ScholarshipBookmark;
 use App\Models\ScholarshipFunnelEvent;
 use App\Models\StudentDocument;
 use App\Models\User;
+use App\Rules\PhoneNumber;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
 use App\Support\AcademicRequirement;
@@ -40,7 +41,7 @@ class MobileAuthController extends Controller
             'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', 'unique:users,username'],
-            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
@@ -196,7 +197,7 @@ class MobileAuthController extends Controller
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'suffix' => ['nullable', 'string', 'max:20'],
             'gender' => ['nullable', Rule::in(['female', 'male', 'non_binary', 'prefer_not_to_say'])],
-            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
             'education_level' => ['nullable', 'string', 'max:100'],
             'school' => ['nullable', 'string', 'max:255'],
             'school_type' => ['nullable', 'string', 'max:100'],
@@ -220,9 +221,9 @@ class MobileAuthController extends Controller
             'region' => ['nullable', 'string', 'max:255'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
-            'birthdate' => ['nullable', 'date', 'before:today'],
+            'birthdate' => ['nullable', 'date', 'before_or_equal:'.now()->subYears(5)->toDateString(), 'after_or_equal:'.now()->subYears(100)->toDateString()],
             'guardian_name' => ['nullable', 'string', 'max:255'],
-            'guardian_contact' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'guardian_contact' => ['nullable', 'string', 'max:30', new PhoneNumber],
         ]);
 
         if (! AcademicRequirement::requiresNumeric($validated['grading_scale'] ?? null)) {

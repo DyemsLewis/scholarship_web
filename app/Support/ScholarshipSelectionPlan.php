@@ -113,7 +113,7 @@ class ScholarshipSelectionPlan
             'screening' => 'screening',
             'exam' => 'exam',
             'interview' => 'interview',
-            'distribution' => 'reward distribution',
+            'distribution' => 'award release',
             default => 'activity',
         };
     }

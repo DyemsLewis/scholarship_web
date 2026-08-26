@@ -657,7 +657,7 @@ onMounted(loadProviderProfile);
                                     </label>
                                     <label>
                                         <span :class="labelClass">Public phone</span>
-                                        <input v-model="form.provider_contact_number" type="tel" autocomplete="organization-tel" required placeholder="0917 000 0000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
+                                        <input v-model="form.provider_contact_number" type="tel" inputmode="tel" autocomplete="organization-tel" required maxlength="20" placeholder="0917 000 0000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
                                         <span v-if="fieldError('provider_contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_number') }}</span>
                                     </label>
                                 </div>
@@ -702,7 +702,7 @@ onMounted(loadProviderProfile);
                                 </label>
                                 <label>
                                     <span :class="labelClass">Representative phone</span>
-                                    <input v-model="form.contact_number" type="text" placeholder="0917 000 0000" :class="inputClass">
+                                    <input v-model="form.contact_number" type="tel" inputmode="tel" maxlength="20" placeholder="0917 000 0000" :class="inputClass">
                                     <span v-if="fieldError('contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('contact_number') }}</span>
                                 </label>
                             </div>

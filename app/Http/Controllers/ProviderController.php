@@ -15,6 +15,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipEvent;
 use App\Models\ScholarshipFunnelEvent;
 use App\Models\User;
+use App\Rules\PhoneNumber;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipBenefitService as SB;
 use App\Services\ScholarshipEligibilityService;
@@ -479,7 +480,7 @@ class ProviderController extends Controller
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
-            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
         ];
 
         if ($canManageOrganization) {
@@ -490,7 +491,7 @@ class ProviderController extends Controller
                 'provider_address' => ['nullable', 'string', 'max:500'],
                 'provider_description' => ['nullable', 'string', 'max:1500'],
                 'provider_contact_email' => ['nullable', 'email', 'max:255'],
-                'provider_contact_number' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+                'provider_contact_number' => ['nullable', 'string', 'max:30', new PhoneNumber],
             ];
         }
 
@@ -3164,7 +3165,7 @@ class ProviderController extends Controller
     {
         $requiresCompleteSubmission = ! in_array($request->input('status'), ['draft', 'closed'], true);
 
-        return $request->validate([
+        $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:100'],
             'program_cycle' => ['nullable', 'string', 'max:100'],
@@ -3208,7 +3209,7 @@ class ProviderController extends Controller
             'return_service_contract' => ['nullable', 'string', 'max:3000'],
             'other_contract_terms' => ['nullable', 'string', 'max:3000'],
             'contact_email' => ['nullable', 'email', 'max:255'],
-            'contact_number' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\s().-]{7,30}$/'],
+            'contact_number' => ['nullable', 'string', 'max:30', new PhoneNumber],
             'application_opens_at' => ['nullable', 'date'],
             'expected_results_at' => ['nullable', 'date'],
             'official_program_url' => ['nullable', 'url:http,https', 'max:2048'],
@@ -3220,6 +3221,8 @@ class ProviderController extends Controller
             'terms_accepted' => $requiresCompleteSubmission ? ['accepted'] : ['nullable'],
             'review_rubric' => ['nullable', 'string', 'max:8000', 'json'],
         ]);
+
+        return $validated;
     }
 
     private function applyProviderProgramContactDefaults(
@@ -4183,7 +4186,7 @@ class ProviderController extends Controller
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($account?->id)],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($account?->id)],
-            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
             'account_title' => ['required', 'string', Rule::in(array_keys(self::PROVIDER_TEAM_ROLES))],
             'permissions' => ['required', 'array', 'min:1'],
             'permissions.*' => ['required', 'string', 'distinct', Rule::in($permissions)],
@@ -4533,7 +4536,7 @@ class ProviderController extends Controller
         return match ($type) {
             'exam' => 'exam',
             'interview' => 'interview',
-            'distribution' => 'reward distribution',
+            'distribution' => 'award release',
             default => 'activity',
         };
     }

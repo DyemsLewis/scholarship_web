@@ -65,6 +65,12 @@ const formPanelClass = 'rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-
 const formPanelTitleClass = 'text-sm font-bold text-slate-950';
 const formPanelDescriptionClass = 'mt-1 text-xs leading-5 text-slate-500';
 const optionButtonBaseClass = 'inline-flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm font-semibold transition';
+const birthdateMaximum = new Date();
+birthdateMaximum.setFullYear(birthdateMaximum.getFullYear() - 5);
+const birthdateMinimum = new Date();
+birthdateMinimum.setFullYear(birthdateMinimum.getFullYear() - 100);
+const birthdateMinimumValue = birthdateMinimum.toISOString().slice(0, 10);
+const birthdateMaximumValue = birthdateMaximum.toISOString().slice(0, 10);
 
 const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
 const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
@@ -1250,7 +1256,7 @@ function handleMiddleInitialInput(event) {
 }
 
 function handlePhoneInput(key, event) {
-    form.value[key] = event.target.value.replace(/[^\d+\s().-]/g, '');
+    form.value[key] = event.target.value.replace(/[^\d+\s().-]/g, '').slice(0, 20);
 }
 
 async function uploadProfilePhoto(event) {
@@ -2186,7 +2192,8 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <div class="grid items-start gap-4 md:grid-cols-3">
                                         <div>
                                             <label :class="labelClass" for="profile-birthdate">Birthdate</label>
-                                            <input id="profile-birthdate" v-model="form.birthdate" type="date" :max="new Date().toISOString().slice(0, 10)" :class="inputClass">
+                                            <input id="profile-birthdate" v-model="form.birthdate" type="date" :min="birthdateMinimumValue" :max="birthdateMaximumValue" :class="inputClass">
+                                            <p class="mt-1 text-xs text-slate-500">Applicants must be 5 to 100 years old.</p>
                                             <p v-if="applicantAge !== null" class="mt-1 text-xs font-semibold text-slate-500">
                                                 Age {{ applicantAge }}<span v-if="isMinor"> - guardian details required</span>
                                             </p>
@@ -2200,7 +2207,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                         <div>
                                             <label :class="labelClass" for="profile-contact">Contact number</label>
-                                            <input id="profile-contact" :value="form.contact_number" placeholder="09XX XXX XXXX" :class="inputClass" @input="handlePhoneInput('contact_number', $event)">
+                                            <input id="profile-contact" :value="form.contact_number" maxlength="20" placeholder="09XX XXX XXXX" :class="inputClass" @input="handlePhoneInput('contact_number', $event)">
                                         </div>
                                     </div>
                                 </div>
@@ -2276,7 +2283,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                         <div>
                                             <label :class="labelClass" for="profile-guardian-contact">Guardian contact</label>
-                                            <input id="profile-guardian-contact" :value="form.guardian_contact" placeholder="09XX XXX XXXX" :class="inputClass" @input="handlePhoneInput('guardian_contact', $event)">
+                                            <input id="profile-guardian-contact" :value="form.guardian_contact" maxlength="20" placeholder="09XX XXX XXXX" :class="inputClass" @input="handlePhoneInput('guardian_contact', $event)">
                                         </div>
                                         <div>
                                             <label :class="labelClass" for="profile-guardian-email">Guardian email <span class="font-normal text-slate-400">(optional)</span></label>

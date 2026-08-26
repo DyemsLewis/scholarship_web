@@ -10,6 +10,7 @@ use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Rules\PhoneNumber;
 use App\Services\DecisionSupportService;
 use App\Services\PasswordResetLinkService;
 use App\Services\ScholarshipPublicationGuard;
@@ -338,7 +339,7 @@ class AdminController extends Controller
             'display_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
-            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
         ]);
 
         $middleInitial = strtoupper($validated['middle_initial']);
@@ -739,7 +740,7 @@ class AdminController extends Controller
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', 'unique:users,username'],
-            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
             'role' => ['required', 'string', 'in:applicant,provider,admin'],
             'account_title' => [Rule::requiredIf($request->input('role') === 'admin'), 'nullable', 'string', 'max:80'],
             'permissions' => [Rule::requiredIf($request->input('role') === 'admin'), 'nullable', 'array', 'min:1'],
@@ -840,7 +841,7 @@ class AdminController extends Controller
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
-            'contact_number' => ['required', 'string', 'max:30', 'regex:/^[0-9+\s().-]{10,30}$/'],
+            'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
             'role' => ['required', 'string', 'in:applicant,provider,admin'],
             'account_title' => [Rule::requiredIf($willBeManagedAdmin), 'nullable', 'string', 'max:80'],
             'permissions' => [Rule::requiredIf($willBeManagedAdmin), 'nullable', 'array', 'min:1'],

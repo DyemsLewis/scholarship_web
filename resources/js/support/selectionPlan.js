@@ -19,9 +19,9 @@ export const selectionStageDefinitions = [
     },
     {
         value: 'distribution',
-        label: 'Award outcome',
+        label: 'Award release',
         icon: 'fa-solid fa-hand-holding-dollar',
-        detail: 'Optional award and release tracking',
+        detail: 'Optional release or onboarding after the final decision',
     },
 ];
 

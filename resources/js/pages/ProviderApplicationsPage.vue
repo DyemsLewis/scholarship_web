@@ -87,7 +87,7 @@ const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffs
 const scheduleTypeCatalog = [
     { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question', help: 'Provider-managed exam schedule' },
     { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments', help: 'Shared interview instructions' },
-    { value: 'distribution', label: 'Distribution', icon: 'fa-solid fa-hand-holding-dollar', help: 'Award release announcement' },
+    { value: 'distribution', label: 'Award release', icon: 'fa-solid fa-hand-holding-dollar', help: 'Release or recipient onboarding details' },
 ];
 const scheduleModeOptions = [
     { value: 'onsite', label: 'On-site' },
@@ -429,7 +429,7 @@ const customStatusLabels = {
     exam_passed: 'Passed exam',
     exam_failed: 'Failed exam',
     interview_failed: 'Failed interview',
-    distribution_scheduled: 'Distribution scheduled',
+    distribution_scheduled: 'Award release scheduled',
     disbursed: 'Distributed',
     for_exam: 'Meets exam eligibility',
     exam_completed: 'Exam completed',
@@ -722,6 +722,16 @@ function toggleVisibleAttendance() {
 }
 
 async function completeProgramEvent(event) {
+    const eventLabel = scheduleTypeLabel(event.type).toLowerCase();
+
+    if (!await requestConfirmation({
+        title: `Mark this ${eventLabel} complete?`,
+        message: 'This unlocks participant results for the shared activity. Confirm only after the activity has ended.',
+        confirmLabel: 'Mark complete',
+    })) {
+        return;
+    }
+
     completingEventId.value = event.id;
     attendanceError.value = '';
 
@@ -740,6 +750,19 @@ async function completeProgramEvent(event) {
 async function applyBulkAttendance() {
     if (!bulkAttendanceStatus.value || selectedAttendanceIds.value.length === 0) {
         attendanceError.value = 'Select applicants and choose a result.';
+        return;
+    }
+
+    const resultLabel = bulkAttendanceOptions.value
+        .find((option) => option.value === bulkAttendanceStatus.value)?.label
+        ?.toLowerCase() ?? 'selected result';
+    const eventLabel = scheduleTypeLabel(activeAttendanceEvent.value?.type).toLowerCase();
+
+    if (!await requestConfirmation({
+        title: `Apply “${resultLabel}” to ${selectedAttendanceIds.value.length} applicant${selectedAttendanceIds.value.length === 1 ? '' : 's'}?`,
+        message: `The selected applicants will receive this ${eventLabel} result and any next-stage status update that applies.`,
+        confirmLabel: 'Apply results',
+    })) {
         return;
     }
 
@@ -1094,7 +1117,7 @@ onMounted(loadProviderData);
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program Schedule</p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">Schedule applicant activities</h3>
                                 <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Add dates for exams, interviews, or distribution. Screening stays in application review and does not need a schedule.
+                                    Publish confirmed exam, interview, or award-release details after applicants reach that stage. Pre-screening stays in application review and does not need a schedule.
                                 </p>
                             </div>
                             <a :href="`/provider/programs/${selectedScholarshipId}/edit`" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
@@ -1222,7 +1245,7 @@ onMounted(loadProviderData);
                         <div v-if="attendanceEvents.length === 0" class="p-5">
                             <div class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5">
                                 <p class="text-sm font-bold text-slate-900">No activity is scheduled yet</p>
-                                <p class="mt-1 text-sm text-slate-500">Publish an exam, interview, or distribution schedule above to manage its participants here.</p>
+                                <p class="mt-1 text-sm text-slate-500">Publish an exam, interview, or award-release schedule above to manage its participants here.</p>
                             </div>
                         </div>
 
