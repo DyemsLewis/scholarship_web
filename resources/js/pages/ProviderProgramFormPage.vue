@@ -35,7 +35,7 @@ const providerAddressLookupTrigger = ref(0);
 const eventLocationMapStage = ref('');
 const eventLocationMapMessage = ref('');
 const eventAddressLookupTrigger = ref(0);
-const activeFormSection = ref('overview');
+const activeFormSection = ref('details');
 const showAudienceDetails = ref(false);
 const showStageSchedules = ref(false);
 const showLocationMap = ref(false);
@@ -59,7 +59,7 @@ const labelClass = 'mb-1.5 block text-sm font-semibold text-slate-700';
 const requiredHintClass = 'ml-1 text-xs font-normal text-amber-700';
 const optionalHintClass = 'ml-1 text-xs font-normal text-slate-400';
 const inputClass = 'w-full min-w-0 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100';
-const sectionCardClass = 'min-w-0';
+const sectionCardClass = 'min-w-0 rounded-lg border border-slate-200 bg-slate-50/60 p-4 sm:p-5';
 const fieldCardClass = 'min-w-0';
 const fieldStackClass = 'min-w-0 flex flex-col';
 const basicFieldStackClass = fieldStackClass;
@@ -70,11 +70,13 @@ const currentLocalDateTime = new Date(Date.now() - new Date().getTimezoneOffset(
 const todayDate = currentLocalDateTime.slice(0, 10);
 const minimumScheduleDateTime = currentLocalDateTime.slice(0, 16);
 const formSections = [
-    { id: 'overview', label: 'Program', help: 'Basic details, benefits, and pre-screening dates.' },
-    { id: 'audience', label: 'Eligibility', help: 'Who can apply and how students are matched.' },
-    { id: 'documents', label: 'Requirements', help: 'Online proof, program location, and documents needed after qualification.' },
-    { id: 'process', label: 'Selection', help: 'Pre-screening stages, schedules, contact, and scoring.' },
-    { id: 'finish', label: 'Publish', help: 'Choose how to save this program.' },
+    { id: 'details', label: 'Details', help: 'Name, category, cycle, description, and program logo.' },
+    { id: 'support', label: 'Support', help: 'Benefits, recipient slots, and the pre-screening timeline.' },
+    { id: 'eligibility', label: 'Eligibility', help: 'Who can apply and how applicants are matched.' },
+    { id: 'application', label: 'Application', help: 'Verification method, required files, and what happens after qualification.' },
+    { id: 'selection', label: 'Selection', help: 'Review stages, confirmed schedules, and provider scoring.' },
+    { id: 'contact', label: 'Contact', help: 'Program location and the public contact applicants can reach.' },
+    { id: 'review', label: 'Review', help: 'Preview the listing, choose how to save it, and submit.' },
 ];
 const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
 const customEligibilityOption = '__custom__';
@@ -646,7 +648,7 @@ const resultsDateReady = computed(() => !hasText(scholarshipForm.value.expectedR
 const programReadinessItems = computed(() => [
     {
         label: 'Program overview',
-        section: 'overview',
+        section: 'details',
         complete: hasText(scholarshipForm.value.title)
             && hasText(scholarshipForm.value.category)
             && hasText(scholarshipForm.value.programCycle)
@@ -654,18 +656,17 @@ const programReadinessItems = computed(() => [
         help: 'Title, category, program cycle, and a clear description.',
     },
     {
-        label: 'Offer details',
-        section: 'overview',
+        label: 'Support and dates',
+        section: 'support',
         complete: scholarshipForm.value.benefits.length > 0
             && deadlineReady.value
             && applicationWindowReady.value
-            && resultsDateReady.value
-            && hasText(scholarshipForm.value.applicationMode),
-        help: 'At least one benefit, a valid application window, and submission method.',
+            && resultsDateReady.value,
+        help: 'At least one benefit and a valid pre-screening timeline.',
     },
     {
         label: 'Eligibility and matching rules',
-        section: 'audience',
+        section: 'eligibility',
         complete: hasText(scholarshipForm.value.eligibility)
             && (
                 scholarshipForm.value.eligibleEducationLevels.length > 0
@@ -681,8 +682,14 @@ const programReadinessItems = computed(() => [
         help: 'Eligibility text and at least one finder rule.',
     },
     {
+        label: 'Verification method',
+        section: 'application',
+        complete: hasText(scholarshipForm.value.applicationMode),
+        help: 'How applicants will complete portal pre-screening.',
+    },
+    {
         label: 'Document checklist',
-        section: 'documents',
+        section: 'application',
         complete: isProfileReviewOnly.value || selectedRequirementCount.value > 0,
         help: isProfileReviewOnly.value
             ? 'No program files are required for the initial profile review.'
@@ -690,7 +697,7 @@ const programReadinessItems = computed(() => [
     },
     {
         label: 'Formal application handoff',
-        section: 'documents',
+        section: 'application',
         complete: postQualificationRequirementItems.value.length > 0
             && hasText(scholarshipForm.value.handoffMode)
             && hasText(scholarshipForm.value.handoffInstructions)
@@ -699,8 +706,27 @@ const programReadinessItems = computed(() => [
         help: 'Documents and instructions released when an applicant qualifies.',
     },
     {
+        label: 'Selection flow',
+        section: 'selection',
+        complete: scholarshipForm.value.selectionStages.includes('screening'),
+        help: 'A review stage and any additional stages used by the provider.',
+    },
+    ...(scholarshipForm.value.selectionStages.includes('exam') ? [{
+        label: 'Exam details',
+        section: 'selection',
+        complete: hasText(scholarshipForm.value.examDurationMinutes)
+            && hasText(scholarshipForm.value.examPassingScore),
+        help: 'Provider-managed exam duration and passing score for this program.',
+    }] : []),
+    {
+        label: 'Review scoring',
+        section: 'selection',
+        complete: reviewRubricReady.value,
+        help: 'A complete rubric with weights totaling 100%.',
+    },
+    {
         label: 'Program location',
-        section: 'documents',
+        section: 'contact',
         complete: hasText(scholarshipForm.value.locationName)
             && hasText(scholarshipForm.value.locationAddress)
             && hasText(scholarshipForm.value.latitude)
@@ -708,27 +734,11 @@ const programReadinessItems = computed(() => [
         help: 'Address and map pin for distance estimates.',
     },
     {
-        label: 'Pre-screening workflow',
-        section: 'process',
-        complete: hasText(scholarshipForm.value.applicationMode)
-            && (
-                hasText(scholarshipForm.value.contactEmail)
-                || hasText(scholarshipForm.value.contactNumber)
-            ),
-        help: 'How students submit for pre-screening and who they can contact.',
-    },
-    ...(scholarshipForm.value.selectionStages.includes('exam') ? [{
-        label: 'Exam details',
-        section: 'process',
-        complete: hasText(scholarshipForm.value.examDurationMinutes)
-            && hasText(scholarshipForm.value.examPassingScore),
-        help: 'Provider-managed exam duration and passing score for this program.',
-    }] : []),
-    {
-        label: 'Review scoring',
-        section: 'process',
-        complete: reviewRubricReady.value,
-        help: 'A complete rubric with weights totaling 100%.',
+        label: 'Applicant contact',
+        section: 'contact',
+        complete: hasText(scholarshipForm.value.contactEmail)
+            || hasText(scholarshipForm.value.contactNumber),
+        help: 'An official email address or phone number applicants can use.',
     },
 ]);
 const missingProgramReadinessItems = computed(() => programReadinessItems.value.filter((item) => !item.complete));
@@ -736,16 +746,15 @@ const activeFormSectionIndex = computed(() => formSections.findIndex((section) =
 const activeFormSectionMeta = computed(() => formSections[activeFormSectionIndex.value] ?? formSections[0]);
 const formSectionProgress = computed(() => {
     const sectionChecks = {
-        overview: hasText(scholarshipForm.value.title)
+        details: hasText(scholarshipForm.value.title)
             && hasText(scholarshipForm.value.category)
             && hasText(scholarshipForm.value.programCycle)
-            && hasText(scholarshipForm.value.description)
-            && scholarshipForm.value.benefits.length > 0
+            && hasText(scholarshipForm.value.description),
+        support: scholarshipForm.value.benefits.length > 0
             && deadlineReady.value
             && applicationWindowReady.value
-            && resultsDateReady.value
-            && hasText(scholarshipForm.value.applicationMode),
-        audience: hasText(scholarshipForm.value.eligibility)
+            && resultsDateReady.value,
+        eligibility: hasText(scholarshipForm.value.eligibility)
             && (
                 scholarshipForm.value.eligibleEducationLevels.length > 0
                 || hasText(scholarshipForm.value.eligibleCourses)
@@ -753,24 +762,25 @@ const formSectionProgress = computed(() => {
                 || hasText(scholarshipForm.value.eligibleYearLevels)
                 || hasText(scholarshipForm.value.eligibleLocations)
             ),
-        process: scholarshipForm.value.selectionStages.includes('screening')
-            && (hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber))
+        application: hasText(scholarshipForm.value.applicationMode)
+            && (isProfileReviewOnly.value || selectedRequirementCount.value > 0)
+            && postQualificationRequirementItems.value.length > 0
+            && hasText(scholarshipForm.value.handoffMode)
+            && hasText(scholarshipForm.value.handoffInstructions)
+            && (scholarshipForm.value.handoffMode !== 'onsite' || hasText(scholarshipForm.value.handoffLocationAddress))
+            && (scholarshipForm.value.handoffMode !== 'online' || hasText(scholarshipForm.value.handoffUrl)),
+        selection: scholarshipForm.value.selectionStages.includes('screening')
             && (!scholarshipForm.value.selectionStages.includes('exam') || (
                 hasText(scholarshipForm.value.examDurationMinutes)
                 && hasText(scholarshipForm.value.examPassingScore)
             ))
             && reviewRubricReady.value,
-        documents: (isProfileReviewOnly.value || selectedRequirementCount.value > 0)
-            && postQualificationRequirementItems.value.length > 0
-            && hasText(scholarshipForm.value.handoffMode)
-            && hasText(scholarshipForm.value.handoffInstructions)
-            && (scholarshipForm.value.handoffMode !== 'onsite' || hasText(scholarshipForm.value.handoffLocationAddress))
-            && (scholarshipForm.value.handoffMode !== 'online' || hasText(scholarshipForm.value.handoffUrl))
-            && hasText(scholarshipForm.value.locationName)
+        contact: hasText(scholarshipForm.value.locationName)
             && hasText(scholarshipForm.value.locationAddress)
             && hasText(scholarshipForm.value.latitude)
-            && hasText(scholarshipForm.value.longitude),
-        finish: !termsRequiredForSave.value || scholarshipForm.value.termsAccepted,
+            && hasText(scholarshipForm.value.longitude)
+            && (hasText(scholarshipForm.value.contactEmail) || hasText(scholarshipForm.value.contactNumber)),
+        review: !termsRequiredForSave.value || scholarshipForm.value.termsAccepted,
     };
 
     return Object.fromEntries(formSections.map((section) => [section.id, Boolean(sectionChecks[section.id])]));
@@ -904,9 +914,8 @@ function readinessFocusTarget(item) {
         return 'scholarship-description';
     }
 
-    if (item.label === 'Offer details') {
+    if (item.label === 'Support and dates') {
         if (scholarshipForm.value.benefits.length === 0) return 'program-benefit-type';
-        if (!hasText(scholarshipForm.value.applicationMode)) return 'scholarship-mode';
         if (!applicationWindowReady.value) return 'scholarship-application-opens';
         if (!resultsDateReady.value) return 'scholarship-expected-results';
 
@@ -919,6 +928,7 @@ function readinessFocusTarget(item) {
             : 'target-applicant-preset';
     }
 
+    if (item.label === 'Verification method') return 'scholarship-mode';
     if (item.label === 'Document checklist') return 'scholarship-custom-requirements';
     if (item.label === 'Formal application handoff') {
         if (!postQualificationRequirementItems.value.length) return 'scholarship-post-qualification-requirements';
@@ -936,7 +946,8 @@ function readinessFocusTarget(item) {
         return 'scholarship-map-toggle';
     }
 
-    if (item.label === 'Pre-screening workflow') return 'scholarship-contact-email';
+    if (item.label === 'Selection flow') return 'scholarship-selection-stages';
+    if (item.label === 'Applicant contact') return 'scholarship-contact-email';
     if (item.label === 'Exam details') return 'scholarship-exam-duration';
     if (item.label === 'Review scoring') return `rubric-label-${scholarshipForm.value.reviewRubric[0]?.key}`;
 
@@ -1895,7 +1906,7 @@ function resetScholarshipForm() {
     scholarshipForm.value = emptyScholarshipForm();
     existingApplicationCount.value = 0;
     awardedSlotsCount.value = 0;
-    activeFormSection.value = 'overview';
+    activeFormSection.value = 'details';
     showAudienceDetails.value = false;
     showStageSchedules.value = false;
     showLocationMap.value = false;
@@ -2009,13 +2020,13 @@ async function saveScholarship() {
     formError.value = '';
 
     if (!hasText(scholarshipForm.value.title)) {
-        await focusFormField('overview', 'scholarship-title');
+        await focusFormField('details', 'scholarship-title');
         formError.value = 'Add a scholarship title before saving.';
         return;
     }
 
     if (termsRequiredForSave.value && !hasText(scholarshipForm.value.description)) {
-        await focusFormField('overview', 'scholarship-description');
+        await focusFormField('details', 'scholarship-description');
         formError.value = 'Add a clear scholarship description before continuing.';
         return;
     }
@@ -2035,7 +2046,7 @@ async function saveScholarship() {
     }
 
     if (termsRequiredForSave.value && !scholarshipForm.value.termsAccepted) {
-        await openFormSection('finish');
+        await openFormSection('review');
         formError.value = 'Accept the provider scholarship terms before submitting or updating this program.';
         return;
     }
@@ -2044,7 +2055,7 @@ async function saveScholarship() {
 
     if (scheduleError) {
         showStageSchedules.value = true;
-        await openFormSection('process');
+        await openFormSection('selection');
         formError.value = scheduleError;
         return;
     }
@@ -2057,7 +2068,7 @@ async function saveScholarship() {
         )
     ) {
         customizeRubric.value = true;
-        await focusFormField('process', `rubric-label-${scholarshipForm.value.reviewRubric[0]?.key}`);
+        await focusFormField('selection', `rubric-label-${scholarshipForm.value.reviewRubric[0]?.key}`);
         formError.value = 'Add a label for every review criterion and make the weights total 100%.';
         return;
     }
@@ -2286,14 +2297,14 @@ onBeforeUnmount(() => {
                         @submit.prevent="saveScholarship"
                     >
                         <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                            <nav class="grid grid-cols-5 overflow-x-auto" aria-label="Program form sections">
+                            <nav class="flex overflow-x-auto" aria-label="Program form sections">
                                     <button
                                         v-for="(section, index) in formSections"
                                         :key="section.id"
                                         type="button"
                                         :aria-current="activeFormSection === section.id ? 'step' : undefined"
                                         :class="[
-                                            'flex min-w-[7.5rem] items-center justify-center gap-2 border-b-2 px-3 py-3 text-center transition',
+                                            'flex min-w-[8rem] flex-1 items-center justify-center gap-2 border-b-2 px-3 py-3 text-center transition',
                                             activeFormSection === section.id
                                                 ? 'border-amber-500 bg-amber-50/60 text-slate-950'
                                                 : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900',
@@ -2329,7 +2340,7 @@ onBeforeUnmount(() => {
                             <div class="p-5 sm:p-7">
 
                         <div
-                            v-if="activeFormSection === 'finish' && publishWarnings.length"
+                            v-if="activeFormSection === 'review' && publishWarnings.length"
                             class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
                         >
                             <p class="font-bold">
@@ -2340,8 +2351,8 @@ onBeforeUnmount(() => {
                             </p>
                         </div>
 
-                        <div v-show="['overview', 'audience', 'finish'].includes(activeFormSection)" :class="['grid gap-6', sectionCardClass]">
-                            <div v-show="activeFormSection === 'overview'" class="grid gap-5 md:grid-cols-[minmax(0,1fr)_20rem]">
+                        <div v-show="['details', 'support', 'eligibility', 'application', 'review'].includes(activeFormSection)" :class="['grid gap-6', sectionCardClass]">
+                            <div v-show="activeFormSection === 'details'" class="grid gap-5 md:grid-cols-[minmax(0,1fr)_20rem]">
                                 <div :class="fieldStackClass">
                                     <label :class="labelClass" for="scholarship-title">
                                         Scholarship title
@@ -2382,7 +2393,7 @@ onBeforeUnmount(() => {
                                 </div>
                             </div>
 
-                            <div v-show="activeFormSection === 'audience'" id="scholarship-eligibility" :class="fieldStackClass">
+                            <div v-show="activeFormSection === 'eligibility'" id="scholarship-eligibility" :class="fieldStackClass">
                                 <div :class="labelClass">
                                     Eligibility criteria
                                     <span :class="requiredHintClass">Required</span>
@@ -2449,7 +2460,7 @@ onBeforeUnmount(() => {
                             </div>
 
                             <div :class="formGridClass">
-                                <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'details'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-category">
                                         Category
                                         <span :class="requiredHintClass">Required</span>
@@ -2468,7 +2479,7 @@ onBeforeUnmount(() => {
                                     </select>
                                 </div>
 
-                                <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'details'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-program-cycle">
                                         Program cycle
                                         <span :class="requiredHintClass">Required</span>
@@ -2483,7 +2494,7 @@ onBeforeUnmount(() => {
                                     >
                                 </div>
 
-                                <div v-show="activeFormSection === 'overview'" :class="[fieldStackClass, 'md:col-span-2']">
+                                <div v-show="activeFormSection === 'details'" :class="[fieldStackClass, 'md:col-span-2']">
                                     <label :class="labelClass" for="scholarship-description">
                                         Description
                                         <span :class="requiredHintClass">Required</span>
@@ -2497,16 +2508,17 @@ onBeforeUnmount(() => {
                                     ></textarea>
                                 </div>
 
-                                <div v-show="activeFormSection === 'overview'" class="border-t border-slate-200 pt-6 md:col-span-2">
-                                    <p class="text-sm font-bold text-slate-950">Award and applications</p>
+                                <div v-show="activeFormSection === 'support'" class="md:col-span-2">
+                                    <p class="text-base font-bold text-slate-950">Support package</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">Add the financial or non-cash assistance recipients may receive.</p>
                                 </div>
 
                                 <ProgramBenefitsEditor
-                                    v-show="activeFormSection === 'overview'"
+                                    v-show="activeFormSection === 'support'"
                                     v-model="scholarshipForm.benefits"
                                 />
 
-                                <div v-show="activeFormSection === 'audience'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'eligibility'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-grade-scale">
                                         Academic basis
                                         <span :class="optionalHintClass">Optional</span>
@@ -2530,7 +2542,7 @@ onBeforeUnmount(() => {
                                     </p>
                                 </div>
 
-                                <div v-if="activeFormSection === 'audience' && academicRequirementNeedsValue" :class="basicFieldStackClass">
+                                <div v-if="activeFormSection === 'eligibility' && academicRequirementNeedsValue" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-minimum-gwa">
                                         {{ selectedGradeScaleOption.inputLabel }}
                                         <span :class="requiredHintClass">Required</span>
@@ -2550,7 +2562,7 @@ onBeforeUnmount(() => {
                                     </p>
                                 </div>
 
-                                <div v-else-if="activeFormSection === 'audience'" :class="basicFieldStackClass">
+                                <div v-else-if="activeFormSection === 'eligibility'" :class="basicFieldStackClass">
                                     <p class="text-sm font-semibold text-slate-500">
                                         Academic cutoff
                                     </p>
@@ -2562,7 +2574,7 @@ onBeforeUnmount(() => {
                                     </p>
                                 </div>
 
-                                <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'support'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-slots">
                                         Planned recipient slots
                                         <span :class="optionalHintClass">Optional</span>
@@ -2584,7 +2596,7 @@ onBeforeUnmount(() => {
                                     </p>
                                 </div>
 
-                                <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'application'" :class="[basicFieldStackClass, 'md:col-span-2']">
                                     <label :class="labelClass" for="scholarship-mode">
                                         Verification method
                                         <span :class="requiredHintClass">Required</span>
@@ -2606,7 +2618,12 @@ onBeforeUnmount(() => {
                                     </p>
                                 </div>
 
-                                <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'support'" class="border-t border-slate-200 pt-6 md:col-span-2">
+                                    <p class="text-base font-bold text-slate-950">Availability and dates</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">Set the portal pre-screening window and an estimated results date.</p>
+                                </div>
+
+                                <div v-show="activeFormSection === 'support'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-application-opens">
                                         Pre-screening opens
                                         <span :class="optionalHintClass">Optional</span>
@@ -2623,7 +2640,7 @@ onBeforeUnmount(() => {
                                     </p>
                                 </div>
 
-                                <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'support'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-deadline">
                                         Pre-screening deadline
                                         <span :class="requiredHintClass">Required</span>
@@ -2637,7 +2654,7 @@ onBeforeUnmount(() => {
                                     >
                                 </div>
 
-                                <div v-show="activeFormSection === 'overview'" :class="basicFieldStackClass">
+                                <div v-show="activeFormSection === 'support'" :class="basicFieldStackClass">
                                     <label :class="labelClass" for="scholarship-expected-results">
                                         Expected initial results
                                         <span :class="optionalHintClass">Optional</span>
@@ -2654,7 +2671,7 @@ onBeforeUnmount(() => {
                                     </p>
                                 </div>
 
-                                <div v-show="activeFormSection === 'finish'" :class="[basicFieldStackClass, 'md:col-span-2']">
+                                <div v-show="activeFormSection === 'review'" :class="[basicFieldStackClass, 'md:col-span-2']">
                                     <label :class="labelClass" for="scholarship-status">
                                         Save as
                                     </label>
@@ -2676,8 +2693,8 @@ onBeforeUnmount(() => {
 
                         </div>
 
-                            <section v-show="activeFormSection === 'process'" class="flex flex-col gap-6">
-                                <div :class="sectionCardClass">
+                            <section v-show="['selection', 'contact'].includes(activeFormSection)" class="flex flex-col gap-6">
+                                <div id="scholarship-selection-stages" v-show="activeFormSection === 'selection'" :class="sectionCardClass">
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
                                             <p class="text-base font-bold text-slate-950">
@@ -2725,7 +2742,7 @@ onBeforeUnmount(() => {
                                 </div>
 
                                 <div
-                                    v-if="scholarshipForm.selectionStages.includes('exam')"
+                                    v-if="activeFormSection === 'selection' && scholarshipForm.selectionStages.includes('exam')"
                                     :class="fieldCardClass"
                                 >
                                     <div class="flex items-start gap-3">
@@ -2777,7 +2794,7 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
 
-                                <div :class="sectionCardClass">
+                                <div v-show="activeFormSection === 'selection'" :class="sectionCardClass">
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
                                             <p class="text-base font-bold text-slate-950">Stage schedules</p>
@@ -2935,14 +2952,14 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
 
-                                <div :class="[sectionCardClass, 'grid items-stretch gap-4 lg:grid-cols-2']">
+                                <div v-show="activeFormSection === 'contact'" :class="[sectionCardClass, 'grid items-stretch gap-4 lg:grid-cols-2']">
                                     <div class="lg:col-span-2">
                                         <p class="text-base font-bold text-slate-950">
                                             Applicant contact
                                             <span :class="requiredHintClass">Email or number required</span>
                                         </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Use the official contact applicants should reach for program questions.
+                                            Use the official contact applicants should reach for program questions. These fields start with the public contact saved in your provider profile.
                                         </p>
                                     </div>
 
@@ -3016,53 +3033,10 @@ onBeforeUnmount(() => {
                                         </p>
                                     </div>
 
-                                    <div class="rounded-md border border-slate-200 bg-slate-50 p-4 lg:col-span-2">
-                                        <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.8fr)]">
-                                            <div>
-                                                <p class="text-sm font-bold text-slate-950">Possible commitment after acceptance</p>
-                                                <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                    This is only a short preview, not the final agreement. The provider will explain and confirm any commitment after the applicant is accepted.
-                                                </p>
-                                            </div>
-                                            <div :class="fieldStackClass">
-                                                <label :class="labelClass" for="scholarship-commitment-option">Commitment preview</label>
-                                                <select
-                                                    id="scholarship-commitment-option"
-                                                    v-model="selectedCommitmentOption"
-                                                    :class="inputClass"
-                                                    @change="applySelectedCommitment"
-                                                >
-                                                    <option v-for="option in commitmentOptions" :key="option.value" :value="option.value">
-                                                        {{ option.label }}
-                                                    </option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div v-if="selectedCommitmentOption === 'custom'" class="mt-4 border-t border-slate-200 pt-4">
-                                            <label :class="labelClass" for="scholarship-custom-commitment">
-                                                Custom short preview
-                                                <span :class="optionalHintClass">Optional</span>
-                                            </label>
-                                            <textarea
-                                                id="scholarship-custom-commitment"
-                                                v-model="customCommitmentText"
-                                                rows="3"
-                                                maxlength="600"
-                                                placeholder="Briefly state what may apply. The full agreement can be explained after acceptance."
-                                                :class="inputClass"
-                                                @input="applyCustomCommitment"
-                                            ></textarea>
-                                            <div class="mt-2 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                                                <span>Do not paste the complete contract or terms here.</span>
-                                                <span>{{ customCommitmentText.length }}/600</span>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
                             </section>
 
-                            <section v-show="activeFormSection === 'audience'" :class="['mt-6 border-t border-slate-200 pt-6', sectionCardClass]">
+                            <section v-show="activeFormSection === 'eligibility'" :class="['mt-6 border-t border-slate-200 pt-6', sectionCardClass]">
                                 <div>
                                     <h3 class="text-sm font-bold text-slate-950">
                                             Required eligibility rules
@@ -3365,7 +3339,7 @@ onBeforeUnmount(() => {
                                 </div>
                             </section>
 
-                            <fieldset v-show="activeFormSection === 'documents'" :class="['border-b border-slate-200 pb-7', sectionCardClass]">
+                            <fieldset v-show="activeFormSection === 'contact'" :class="['mt-6', sectionCardClass]">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
@@ -3429,7 +3403,7 @@ onBeforeUnmount(() => {
                                 </p>
                             </fieldset>
 
-                            <fieldset v-show="activeFormSection === 'documents'" :class="['pt-7', sectionCardClass]">
+                            <fieldset v-show="activeFormSection === 'application'" :class="['mt-6', sectionCardClass]">
                                 <div>
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
@@ -3658,9 +3632,53 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
                                 </section>
+
+                                <section class="mt-6 rounded-md border border-slate-200 bg-slate-50 p-4">
+                                    <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.8fr)]">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">Possible commitment after acceptance</p>
+                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                                                Add only a short preview. Your organization can explain and confirm the final agreement after accepting the applicant.
+                                            </p>
+                                        </div>
+                                        <div :class="fieldStackClass">
+                                            <label :class="labelClass" for="scholarship-commitment-option">Commitment preview</label>
+                                            <select
+                                                id="scholarship-commitment-option"
+                                                v-model="selectedCommitmentOption"
+                                                :class="inputClass"
+                                                @change="applySelectedCommitment"
+                                            >
+                                                <option v-for="option in commitmentOptions" :key="option.value" :value="option.value">
+                                                    {{ option.label }}
+                                                </option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="selectedCommitmentOption === 'custom'" class="mt-4 border-t border-slate-200 pt-4">
+                                        <label :class="labelClass" for="scholarship-custom-commitment">
+                                            Custom short preview
+                                            <span :class="optionalHintClass">Optional</span>
+                                        </label>
+                                        <textarea
+                                            id="scholarship-custom-commitment"
+                                            v-model="customCommitmentText"
+                                            rows="3"
+                                            maxlength="600"
+                                            placeholder="Briefly state what may apply. The full agreement can be explained after acceptance."
+                                            :class="inputClass"
+                                            @input="applyCustomCommitment"
+                                        ></textarea>
+                                        <div class="mt-2 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                                            <span>Do not paste the complete contract or terms here.</span>
+                                            <span>{{ customCommitmentText.length }}/600</span>
+                                        </div>
+                                    </div>
+                                </section>
                             </fieldset>
 
-                            <fieldset v-show="activeFormSection === 'process'" :class="['mt-7 border-t border-slate-200 pt-7', sectionCardClass]">
+                            <fieldset v-show="activeFormSection === 'selection'" :class="['mt-6', sectionCardClass]">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold text-slate-700">
@@ -3761,7 +3779,7 @@ onBeforeUnmount(() => {
                                 </p>
                             </fieldset>
 
-                        <section v-show="activeFormSection === 'finish'" :class="['border-b border-slate-200 pb-6', sectionCardClass]">
+                        <section v-show="activeFormSection === 'review'" :class="['mt-6', sectionCardClass]">
                             <div class="mb-4 flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Applicant preview</p>
@@ -3888,7 +3906,7 @@ onBeforeUnmount(() => {
                             </p>
                         </section>
 
-                        <div v-show="activeFormSection === 'finish'" class="pt-6">
+                        <div v-show="activeFormSection === 'review'" class="pt-6">
                             <TermsAgreement
                                 v-if="termsRequiredForSave"
                                 v-model="scholarshipForm.termsAccepted"
@@ -3929,7 +3947,7 @@ onBeforeUnmount(() => {
                                             Next: {{ formSections[activeFormSectionIndex + 1]?.label }}
                                         </button>
                                         <button
-                                            v-if="activeFormSection === 'finish'"
+                                            v-if="activeFormSection === 'review'"
                                             type="submit"
                                             :disabled="isSaving || !canPostScholarships"
                                             class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
