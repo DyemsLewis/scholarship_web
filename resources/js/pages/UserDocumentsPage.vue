@@ -25,6 +25,8 @@ const preparedDocumentTermsAccepted = ref(false);
 const updatingPreparedId = ref(null);
 const removingPreparedId = ref(null);
 const previewDocument = ref(null);
+const documentsPerPage = 7;
+const documentsPage = ref(1);
 const applicationsPerPage = 3;
 const applicationsPage = ref(1);
 const documentDescriptions = {
@@ -55,6 +57,8 @@ const commonDocumentRows = computed(() => documentOptions.value.map((name) => ({
     description: documentDescriptions[name] ?? 'A reusable document commonly requested by scholarship providers.',
     document: preparedDocumentsByName.value.get(name) ?? null,
 })));
+const documentTotalPages = computed(() => pageCount(commonDocumentRows.value.length, documentsPerPage));
+const paginatedDocumentRows = computed(() => paginateItems(commonDocumentRows.value, documentsPage.value, documentsPerPage));
 const otherPreparedDocuments = computed(() => preparedDocuments.value
     .filter((document) => !documentOptions.value.includes(document.document_name)));
 const commonDocumentReadyCount = computed(() => documentOptions.value
@@ -111,7 +115,12 @@ function setApplicationsPage(page) {
     applicationsPage.value = clampPage(page, applicationTotalPages.value);
 }
 
+function setDocumentsPage(page) {
+    documentsPage.value = clampPage(page, documentTotalPages.value);
+}
+
 function clampPagination() {
+    documentsPage.value = clampPage(documentsPage.value, documentTotalPages.value);
     applicationsPage.value = clampPage(applicationsPage.value, applicationTotalPages.value);
 }
 
@@ -399,7 +408,7 @@ onBeforeUnmount(() => {
 
                         <div class="divide-y divide-slate-200">
                             <article
-                                v-for="row in commonDocumentRows"
+                                v-for="row in paginatedDocumentRows"
                                 :key="row.name"
                                 class="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between"
                             >
@@ -465,6 +474,28 @@ onBeforeUnmount(() => {
                                 </div>
                             </article>
                         </div>
+
+                        <footer v-if="documentTotalPages > 1" class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
+                            <button
+                                type="button"
+                                :disabled="documentsPage <= 1"
+                                class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                @click="setDocumentsPage(documentsPage - 1)"
+                            >
+                                <i class="fa-solid fa-chevron-left text-[10px]" aria-hidden="true"></i>
+                                Previous
+                            </button>
+                            <span class="text-xs font-bold text-slate-500">Page {{ documentsPage }} of {{ documentTotalPages }}</span>
+                            <button
+                                type="button"
+                                :disabled="documentsPage >= documentTotalPages"
+                                class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                @click="setDocumentsPage(documentsPage + 1)"
+                            >
+                                Next
+                                <i class="fa-solid fa-chevron-right text-[10px]" aria-hidden="true"></i>
+                            </button>
+                        </footer>
 
                         <div v-if="otherPreparedDocuments.length" class="border-t border-slate-200">
                             <div class="bg-slate-50 px-5 py-3">

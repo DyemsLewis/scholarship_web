@@ -22,7 +22,6 @@ const form = ref({
     providerName: '',
     providerType: '',
     providerWebsite: '',
-    providerAddress: '',
     providerDescription: '',
     providerContactEmail: '',
     providerContactNumber: '',
@@ -104,16 +103,16 @@ const shellCopy = computed(() => {
         return {
             eyebrow: 'Provider Registration',
             title: 'Create your provider account',
-            description: 'Add the organization and contact details needed to manage scholarship programs.',
+            description: 'Create the representative account and add the organization basics needed to get started.',
             panelBadge: 'Provider Access Desk',
             panelTitle: 'A workspace for scholarship providers',
             panelText: 'Provider accounts are separate from applicant accounts so scholarship management stays organized.',
             panelHighlights: [
-                'Save organization details for scholarship listings.',
+                'Create the organization and representative account.',
                 'Keep one contact person connected to the account.',
-                'Manage programs from a separate provider dashboard.',
+                'Complete the provider profile and upload proof after signing in.',
             ],
-            panelNote: 'We verify the contact email before creating the provider account.',
+            panelNote: 'After email verification, complete the office address and organization proof from the Provider Profile.',
         };
     }
 
@@ -230,7 +229,6 @@ async function submitForm() {
             provider_name: form.value.providerName,
             provider_type: form.value.providerType,
             provider_website: form.value.providerWebsite,
-            provider_address: form.value.providerAddress,
             provider_description: form.value.providerDescription,
             provider_contact_email: form.value.providerContactEmail,
             provider_contact_number: form.value.providerContactNumber,
@@ -367,7 +365,7 @@ onBeforeUnmount(() => {
                     </span>
                     <div>
                         <h2 class="font-bold text-slate-950">Organization</h2>
-                        <p class="mt-1 text-xs leading-5 text-slate-500">Information shown on your provider profile and scholarship listings.</p>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">Add the organization basics. The representative can complete the full provider profile after signing in.</p>
                     </div>
                 </div>
 
@@ -383,11 +381,7 @@ onBeforeUnmount(() => {
                             <option v-for="option in providerTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                         </select>
                     </div>
-                    <div>
-                        <label :class="labelClass" for="provider-address">Office address</label>
-                        <input id="provider-address" v-model="form.providerAddress" type="text" autocomplete="street-address" required placeholder="Office or campus address" :class="inputClass">
-                    </div>
-                    <div>
+                    <div class="sm:col-span-2">
                         <label :class="labelClass" for="provider-website">Website <span class="font-normal text-slate-400">(optional)</span></label>
                         <input id="provider-website" v-model="form.providerWebsite" type="url" inputmode="url" autocomplete="url" placeholder="https://example.org" :class="inputClass">
                     </div>
@@ -395,6 +389,11 @@ onBeforeUnmount(() => {
                         <label :class="labelClass" for="provider-description">Short description <span class="font-normal text-slate-400">(optional)</span></label>
                         <textarea id="provider-description" v-model="form.providerDescription" rows="2" placeholder="Briefly describe your organization or scholarship office" :class="inputClass"></textarea>
                     </div>
+                </div>
+
+                <div class="mt-4 flex items-start gap-3 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-600">
+                    <i class="fa-solid fa-circle-info mt-0.5 text-amber-700" aria-hidden="true"></i>
+                    <p>After the account is created, open <span class="font-bold text-slate-900">Provider Profile</span> to add the office address and upload organization proof for administrator verification.</p>
                 </div>
 
                 <div class="mt-4 rounded-md border border-amber-200 bg-amber-50/70 p-4">

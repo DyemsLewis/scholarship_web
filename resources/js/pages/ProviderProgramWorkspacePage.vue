@@ -223,7 +223,7 @@ onMounted(loadProgram);
                 </div>
 
                 <template v-else-if="scholarship">
-                    <section class="mt-5 overflow-hidden rounded-xl border border-slate-800 bg-white shadow-[0_20px_55px_rgba(8,20,38,0.14)]">
+                    <section class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <header class="relative overflow-hidden bg-[#081426] px-5 py-6 text-white sm:px-7">
                             <div class="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border-[42px] border-amber-300/10"></div>
                             <div class="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -265,61 +265,68 @@ onMounted(loadProgram);
                             </div>
                         </dl>
 
-                        <div class="grid lg:grid-cols-[minmax(0,1fr)_22rem]">
-                            <div class="p-5 sm:p-7">
-                                <div class="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900"><i class="fa-solid fa-arrow-right text-sm" aria-hidden="true"></i></span>
-                                    <div>
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-800">What happens next</p>
-                                        <p class="mt-1 text-sm font-semibold leading-6 text-slate-800">{{ statusGuidance(scholarship.status) }}</p>
-                                    </div>
+                        <div class="flex flex-col gap-3 border-b border-amber-200 bg-amber-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                            <div class="flex min-w-0 items-start gap-3">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900"><i class="fa-solid fa-arrow-right text-sm" aria-hidden="true"></i></span>
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-800">What happens next</p>
+                                    <p class="mt-1 text-sm font-semibold leading-6 text-slate-800">{{ statusGuidance(scholarship.status) }}</p>
                                 </div>
-
-                                <div class="mt-6 grid gap-6 md:grid-cols-2">
-                                    <section>
-                                        <div class="flex items-center gap-2"><span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-solid fa-align-left text-xs" aria-hidden="true"></i></span><h2 class="text-base font-bold text-slate-950">About the program</h2></div>
-                                        <p class="mt-3 line-clamp-5 text-sm leading-6 text-slate-600">{{ scholarship.description || 'No description has been added.' }}</p>
-                                    </section>
-                                    <section>
-                                        <div class="flex items-center gap-2"><span class="grid h-8 w-8 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-gift text-xs" aria-hidden="true"></i></span><h2 class="text-base font-bold text-slate-950">Support package</h2></div>
-                                        <p class="mt-3 line-clamp-5 text-sm font-semibold leading-6 text-slate-700">{{ scholarship.benefit_summary || 'No benefit summary has been added.' }}</p>
-                                    </section>
-                                </div>
-
-                                <button v-if="hasMap" type="button" class="mt-6 flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-left transition hover:border-slate-300 hover:bg-white" @click="showMap = true">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-amber-700 ring-1 ring-slate-200"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span>
-                                    <span class="min-w-0 flex-1"><span class="block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Program location</span><span class="mt-0.5 block truncate text-sm font-bold text-slate-900">{{ locationLabel }}</span></span>
-                                    <span class="text-xs font-bold text-slate-500">View map <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i></span>
-                                </button>
                             </div>
+                        </div>
 
-                            <aside class="border-t border-slate-200 bg-slate-50 p-5 sm:p-6 lg:border-l lg:border-t-0">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Main workspace</p>
-                                <h2 class="mt-1 text-xl font-bold text-slate-950">Applicant review</h2>
-                                <p class="mt-2 text-sm leading-6 text-slate-600">Review submitted profiles, supporting files, decisions, and program schedules in one place.</p>
-                                <div class="mt-4 rounded-lg border border-slate-200 bg-white p-4">
-                                    <div class="flex items-center justify-between gap-3"><span class="text-sm font-bold text-slate-900">Waiting for review</span><span class="grid min-w-8 place-items-center rounded-md bg-amber-100 px-2 py-1 text-sm font-bold text-amber-900">{{ scholarship.pending_review_applications_count ?? 0 }}</span></div>
-                                    <p class="mt-2 text-xs leading-5 text-slate-500">Start with applicants whose documents are ready for checking.</p>
+                        <section class="flex flex-col gap-4 border-b border-slate-200 bg-slate-50 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+                            <div class="flex min-w-0 items-start gap-3">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white text-amber-700 ring-1 ring-slate-200"><i class="fa-solid fa-users-viewfinder" aria-hidden="true"></i></span>
+                                <div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h2 class="text-lg font-bold text-slate-950">Applicant workspace</h2>
+                                        <span class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{{ scholarship.pending_review_applications_count ?? 0 }} waiting</span>
+                                    </div>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">Review profiles, files, decisions, and schedules for this program.</p>
+                                    <div v-if="!providerIsApproved" class="mt-2 text-xs font-semibold text-amber-800">
+                                        Provider verification is required before applicant records become available.
+                                        <a href="/provider/profile#verification-documents" class="ml-1 font-bold text-slate-900 hover:underline">View verification</a>
+                                    </div>
+                                    <p v-else-if="!canAccessApplicantWorkspace" class="mt-2 text-xs font-semibold text-slate-500">Your account does not have applicant review permission.</p>
                                 </div>
-                                <a v-if="canAccessApplicantWorkspace" :href="`/provider/programs/${scholarship.id}/applications`" class="mt-4 flex w-full items-center justify-between rounded-md bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800">
-                                    Open applicant workspace
-                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                </a>
-                                <div v-else-if="!providerIsApproved" class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3">
-                                    <p class="text-xs font-bold text-amber-900">Provider verification is pending</p>
-                                    <p class="mt-1 text-xs leading-5 text-amber-800">Applicant records become available after an administrator approves the organization.</p>
-                                    <a href="/provider/profile#verification-documents" class="mt-2 inline-flex items-center gap-2 text-xs font-bold text-slate-900 hover:underline">View verification <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
-                                </div>
-                                <p v-else class="mt-4 rounded-md bg-slate-200 px-3 py-2 text-xs font-semibold text-slate-600">Your account does not have applicant review permission.</p>
+                            </div>
+                            <a v-if="canAccessApplicantWorkspace" :href="`/provider/programs/${scholarship.id}/applications`" class="inline-flex w-fit shrink-0 items-center gap-3 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
+                                Open applicant workspace
+                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                            </a>
+                        </section>
 
-                                <div v-if="canManagePrograms" class="mt-6 border-t border-slate-200 pt-4">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Program tools</p>
-                                    <button type="button" :disabled="isDuplicating" class="mt-2 flex w-full items-center justify-between rounded-md px-2 py-2.5 text-left text-sm font-bold text-slate-600 transition hover:bg-white hover:text-slate-950 disabled:opacity-60" @click="duplicateProgram">
-                                        <span><i class="fa-regular fa-copy mr-3 text-amber-700" aria-hidden="true"></i>{{ isDuplicating ? 'Duplicating...' : 'Duplicate as draft' }}</span>
-                                        <i class="fa-solid fa-chevron-right text-[10px] text-slate-400" aria-hidden="true"></i>
-                                    </button>
+                        <div class="grid md:grid-cols-2">
+                            <section class="px-5 py-5 sm:px-6 md:border-r md:border-slate-200">
+                                <div class="flex items-center gap-2">
+                                    <i class="fa-solid fa-align-left text-sm text-amber-700" aria-hidden="true"></i>
+                                    <h2 class="text-base font-bold text-slate-950">About the program</h2>
                                 </div>
-                            </aside>
+                                <p class="mt-3 text-sm leading-6 text-slate-600">{{ scholarship.description || 'No description has been added.' }}</p>
+                            </section>
+                            <section class="border-t border-slate-200 px-5 py-5 sm:px-6 md:border-t-0">
+                                <div class="flex items-center gap-2">
+                                    <i class="fa-solid fa-gift text-sm text-amber-700" aria-hidden="true"></i>
+                                    <h2 class="text-base font-bold text-slate-950">Support package</h2>
+                                </div>
+                                <p class="mt-3 text-sm font-semibold leading-6 text-slate-700">{{ scholarship.benefit_summary || 'No benefit summary has been added.' }}</p>
+                            </section>
+                        </div>
+
+                        <div v-if="hasMap || canManagePrograms" class="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                            <button v-if="hasMap" type="button" class="flex min-w-0 items-center gap-3 text-left" @click="showMap = true">
+                                <i class="fa-solid fa-location-dot shrink-0 text-amber-700" aria-hidden="true"></i>
+                                <span class="min-w-0">
+                                    <span class="block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Program location</span>
+                                    <span class="mt-0.5 block truncate text-sm font-bold text-slate-900">{{ locationLabel }}</span>
+                                </span>
+                                <span class="hidden text-xs font-bold text-slate-500 sm:inline">View map <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i></span>
+                            </button>
+                            <button v-if="canManagePrograms" type="button" :disabled="isDuplicating" class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" @click="duplicateProgram">
+                                <i class="fa-regular fa-copy text-amber-700" aria-hidden="true"></i>
+                                {{ isDuplicating ? 'Duplicating...' : 'Duplicate as draft' }}
+                            </button>
                         </div>
                     </section>
 

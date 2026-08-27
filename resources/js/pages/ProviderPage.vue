@@ -19,6 +19,14 @@ const canManageProfile = computed(() => Boolean(
 
 const recentPrograms = computed(() => scholarships.value.slice(0, 3));
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
+const providerProfileNeedsCompletion = computed(() => !String(user.value?.provider_address ?? '').trim());
+const verificationActionHref = computed(() => {
+    if (user.value?.can_post_scholarships || providerProfileNeedsCompletion.value) {
+        return '/provider/profile';
+    }
+
+    return '/provider/profile#verification-documents';
+});
 const verificationPrompt = computed(() => {
     if (!user.value?.email_verified) {
         return {
@@ -37,6 +45,14 @@ const verificationPrompt = computed(() => {
             title: 'Provider verification needs an authorized manager',
             description: 'Ask the provider owner or staff with organization profile access to complete the verification process.',
             action: 'View verification status',
+        };
+    }
+
+    if (providerProfileNeedsCompletion.value) {
+        return {
+            title: 'Complete your provider profile',
+            description: 'Add the office address and review the organization contacts before submitting proof for admin verification.',
+            action: 'Complete profile',
         };
     }
 
@@ -262,7 +278,7 @@ onMounted(loadProviderData);
                         </div>
                         <div class="flex shrink-0 gap-2">
                             <a
-                                :href="user?.can_post_scholarships ? '/provider/profile' : '/provider/profile#verification-documents'"
+                                :href="verificationActionHref"
                                 class="rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                             >
                                 {{ user?.can_post_scholarships ? 'Profile' : verificationPrompt.action }}

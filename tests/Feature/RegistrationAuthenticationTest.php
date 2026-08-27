@@ -74,6 +74,7 @@ class RegistrationAuthenticationTest extends TestCase
         $this->assertTrue($user->hasVerifiedEmail());
         $this->assertNotNull($user->providerProfile);
         $this->assertSame('Demo Scholarship Foundation', $user->providerProfile->provider_name);
+        $this->assertNull($user->providerProfile->provider_address);
     }
 
     public function test_incorrect_code_does_not_create_an_account(): void
@@ -185,7 +186,6 @@ class RegistrationAuthenticationTest extends TestCase
             'provider_name' => 'Demo Scholarship Foundation',
             'provider_type' => 'foundation',
             'provider_website' => 'https://example.test',
-            'provider_address' => 'Antipolo City, Rizal',
             'provider_description' => 'A provider account used to verify registration behavior.',
             'password' => 'password123',
             'password_confirmation' => 'password123',
