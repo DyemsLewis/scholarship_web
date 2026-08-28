@@ -9,6 +9,7 @@ use App\Models\ScholarshipFunnelEvent;
 use App\Models\User;
 use App\Services\DecisionSupportService;
 use App\Support\AcademicRequirement;
+use App\Support\ReviewRubric;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -80,30 +81,35 @@ class DataQualityTrackingTest extends TestCase
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/status", [
-                'status' => 'under_review',
+                'status' => 'submitted',
                 'review_notes' => 'Eligibility and documents are being reviewed.',
             ])
             ->assertOk();
 
         $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$application->id}/status", [
-                'status' => 'rejected',
+            ->patchJson("/provider/applications/{$application->id}/stages/screening/result", [
+                'result' => 'not_passed',
                 'decision_reason' => 'missing_documents',
-                'review_notes' => 'A required document was not submitted.',
+                'notes' => 'A required document was not submitted.',
+                'rubric_scores' => [
+                    'eligibility_fit' => 65,
+                    'academic_merit' => 80,
+                    'financial_need' => 85,
+                    'document_quality' => 20,
+                ],
             ])
             ->assertOk();
 
         $outcomeEvent = ScholarshipFunnelEvent::query()
             ->where('scholarship_application_id', $application->id)
-            ->where('event_type', 'application_status_rejected')
+            ->where('event_type', 'application_stage_screening_not_passed')
             ->sole();
 
         $this->assertSame($applicant->id, $outcomeEvent->user_id);
         $this->assertSame('provider', $outcomeEvent->source);
-        $this->assertSame('under_review', $outcomeEvent->metadata['previous_status']);
         $this->assertSame('missing_documents', $outcomeEvent->metadata['canonical_decision_reason']);
-        $this->assertSame(3, DssCalculationSnapshot::query()->where('scholarship_application_id', $application->id)->count());
-        $this->assertSame('provider_status_updated', DssCalculationSnapshot::query()->latest('id')->value('source'));
+        $this->assertSame(2, DssCalculationSnapshot::query()->where('scholarship_application_id', $application->id)->count());
+        $this->assertSame('provider_stage_result', DssCalculationSnapshot::query()->latest('id')->value('source'));
     }
 
     public function test_incompatible_or_non_numeric_grading_scales_are_flagged_for_manual_review(): void
@@ -146,6 +152,7 @@ class DataQualityTrackingTest extends TestCase
             'deadline' => now()->addMonth()->toDateString(),
             'status' => 'published',
             'views_count' => 0,
+            'review_rubric' => ReviewRubric::DEFAULT,
         ]);
 
         return [$provider, $applicant->fresh(), $scholarship];

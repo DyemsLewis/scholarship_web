@@ -6,6 +6,7 @@ use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Services\ApplicationWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -93,8 +94,8 @@ class ApplicationHandlingWorkflowTest extends TestCase
     {
         $provider = User::factory()->create(['role' => 'provider']);
         $program = $this->program($provider);
-        $first = $this->application($program, User::factory()->create(['role' => 'applicant']), 'approved');
-        $second = $this->application($program, User::factory()->create(['role' => 'applicant']), 'approved');
+        $first = $this->applicationAtFinalDecision($program, User::factory()->create(['role' => 'applicant']), $provider);
+        $second = $this->applicationAtFinalDecision($program, User::factory()->create(['role' => 'applicant']), $provider);
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$first->id}/waitlist", ['action' => 'waitlist'])
@@ -130,7 +131,7 @@ class ApplicationHandlingWorkflowTest extends TestCase
             'provider_id' => $provider->id,
             'title' => 'Community Scholarship Program',
             'description' => 'A scholarship used to test applicant handling workflows.',
-            'selection_stages' => ['screening', 'distribution'],
+            'selection_stages' => ['screening', 'formal_application', 'decision'],
             'award_slots' => 2,
             'status' => 'published',
         ]);
@@ -144,5 +145,14 @@ class ApplicationHandlingWorkflowTest extends TestCase
             'status' => $status,
             'submitted_at' => now(),
         ]);
+    }
+
+    private function applicationAtFinalDecision(Scholarship $program, User $applicant, User $provider): ScholarshipApplication
+    {
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start($this->application($program, $applicant, 'submitted'));
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $provider);
+
+        return $workflow->recordStageResult($application, 'formal_application', 'passed', $provider);
     }
 }

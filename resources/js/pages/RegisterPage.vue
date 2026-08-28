@@ -19,25 +19,10 @@ const form = ref({
     email: '',
     username: '',
     number: '',
-    providerName: '',
-    providerType: '',
-    providerWebsite: '',
-    providerDescription: '',
-    providerContactEmail: '',
-    providerContactNumber: '',
     password: '',
     passwordConfirmation: '',
     termsAccepted: false,
 });
-
-const providerTypeOptions = [
-    { value: 'school', label: 'School / University' },
-    { value: 'foundation', label: 'Foundation' },
-    { value: 'government', label: 'Government Office' },
-    { value: 'company', label: 'Company / Sponsor' },
-    { value: 'non_profit', label: 'Non-profit Organization' },
-    { value: 'other', label: 'Other Provider' },
-];
 
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
@@ -102,17 +87,17 @@ const shellCopy = computed(() => {
     if (isProviderRegistration) {
         return {
             eyebrow: 'Provider Registration',
-            title: 'Create your provider account',
-            description: 'Create the representative account and add the organization basics needed to get started.',
+            title: 'Create a representative account',
+            description: 'Register the person who will manage the scholarship provider account.',
             panelBadge: 'Provider Access Desk',
-            panelTitle: 'A workspace for scholarship providers',
-            panelText: 'Provider accounts are separate from applicant accounts so scholarship management stays organized.',
+            panelTitle: 'Start with the representative',
+            panelText: 'Organization information is completed securely after the representative signs in.',
             panelHighlights: [
-                'Create the organization and representative account.',
-                'Keep one contact person connected to the account.',
-                'Complete the provider profile and upload proof after signing in.',
+                'Create private login details for the representative.',
+                'Verify the representative email before account creation.',
+                'Complete the organization profile and verification proof after login.',
             ],
-            panelNote: 'After email verification, complete the office address and organization proof from the Provider Profile.',
+            panelNote: 'Publishing remains unavailable until the provider profile and organization proof are reviewed.',
         };
     }
 
@@ -223,17 +208,6 @@ async function submitForm() {
         password_confirmation: form.value.passwordConfirmation,
         terms_accepted: form.value.termsAccepted ? '1' : '',
     };
-
-    if (isProviderRegistration) {
-        Object.assign(payload, {
-            provider_name: form.value.providerName,
-            provider_type: form.value.providerType,
-            provider_website: form.value.providerWebsite,
-            provider_description: form.value.providerDescription,
-            provider_contact_email: form.value.providerContactEmail,
-            provider_contact_number: form.value.providerContactNumber,
-        });
-    }
 
     try {
         const response = await window.axios.post('/register', payload);
@@ -358,67 +332,6 @@ onBeforeUnmount(() => {
                 </span>
             </div>
 
-            <section v-if="isProviderRegistration" :class="formSectionClass">
-                <div class="flex items-start gap-3 border-b border-slate-200 pb-4">
-                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-amber-300">
-                        <i class="fa-solid fa-building-columns" aria-hidden="true"></i>
-                    </span>
-                    <div>
-                        <h2 class="font-bold text-slate-950">Organization</h2>
-                        <p class="mt-1 text-xs leading-5 text-slate-500">Add the organization basics. The representative can complete the full provider profile after signing in.</p>
-                    </div>
-                </div>
-
-                <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                    <div>
-                        <label :class="labelClass" for="provider-name">Organization name</label>
-                        <input id="provider-name" v-model="form.providerName" type="text" autocomplete="organization" required placeholder="Organization name" :class="inputClass">
-                    </div>
-                    <div>
-                        <label :class="labelClass" for="provider-type">Provider type</label>
-                        <select id="provider-type" v-model="form.providerType" required :class="inputClass">
-                            <option value="" disabled>Select provider type</option>
-                            <option v-for="option in providerTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                        </select>
-                    </div>
-                    <div class="sm:col-span-2">
-                        <label :class="labelClass" for="provider-website">Website <span class="font-normal text-slate-400">(optional)</span></label>
-                        <input id="provider-website" v-model="form.providerWebsite" type="url" inputmode="url" autocomplete="url" placeholder="https://example.org" :class="inputClass">
-                    </div>
-                    <div class="sm:col-span-2">
-                        <label :class="labelClass" for="provider-description">Short description <span class="font-normal text-slate-400">(optional)</span></label>
-                        <textarea id="provider-description" v-model="form.providerDescription" rows="2" placeholder="Briefly describe your organization or scholarship office" :class="inputClass"></textarea>
-                    </div>
-                </div>
-
-                <div class="mt-4 flex items-start gap-3 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-600">
-                    <i class="fa-solid fa-circle-info mt-0.5 text-amber-700" aria-hidden="true"></i>
-                    <p>After the account is created, open <span class="font-bold text-slate-900">Provider Profile</span> to add the office address and upload organization proof for administrator verification.</p>
-                </div>
-
-                <div class="mt-4 rounded-md border border-amber-200 bg-amber-50/70 p-4">
-                    <div class="flex items-start gap-3">
-                        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-200 text-xs text-amber-900">
-                            <i class="fa-solid fa-headset" aria-hidden="true"></i>
-                        </span>
-                        <div>
-                            <h3 class="text-sm font-bold text-slate-950">Applicant contact</h3>
-                            <p class="mt-1 text-xs leading-5 text-slate-600">Applicants will use these organization contacts for scholarship questions. They are separate from your login details.</p>
-                        </div>
-                    </div>
-                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <label :class="labelClass" for="provider-contact-email">Public email</label>
-                            <input id="provider-contact-email" v-model="form.providerContactEmail" type="email" autocomplete="organization-email" required placeholder="scholarships@example.org" :class="inputClass">
-                        </div>
-                        <div>
-                            <label :class="labelClass" for="provider-contact-number">Public phone</label>
-                            <input id="provider-contact-number" v-model="form.providerContactNumber" type="tel" inputmode="tel" autocomplete="organization-tel" required maxlength="20" placeholder="09XX XXX XXXX" :class="inputClass">
-                        </div>
-                    </div>
-                </div>
-            </section>
-
             <section :class="formSectionClass">
                 <div class="flex items-start gap-3 border-b border-slate-200 pb-4">
                     <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-amber-300">
@@ -454,6 +367,11 @@ onBeforeUnmount(() => {
                         <label :class="labelClass" for="number">{{ isProviderRegistration ? 'Representative phone' : 'Contact number' }}</label>
                         <input id="number" :value="form.number" type="tel" inputmode="numeric" autocomplete="tel" required maxlength="20" placeholder="09XX XXX XXXX" :class="inputClass" @input="(event) => { event.target.setCustomValidity(''); handleNumberInput(event); }">
                     </div>
+                </div>
+
+                <div v-if="isProviderRegistration" class="mt-4 flex items-start gap-3 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-600">
+                    <i class="fa-solid fa-circle-info mt-0.5 text-amber-700" aria-hidden="true"></i>
+                    <p>After logging in, complete the organization name, type, address, description, public contacts, and verification proof from <span class="font-bold text-slate-900">Provider Profile</span>.</p>
                 </div>
             </section>
 

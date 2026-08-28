@@ -158,83 +158,38 @@ class DecisionSupportService
 
     public function statusProgress(ScholarshipApplication $application): array
     {
-        $application->loadMissing(['statusHistories', 'scholarship']);
-
+        $workflow = app(ApplicationWorkflowService::class)->payload($application);
         $status = $application->status ?: 'submitted';
-        $selectionStages = ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages);
-        $preScreeningStages = collect($selectionStages)
-            ->reject(fn (string $stage): bool => $stage === 'distribution')
-            ->values();
-        $flow = collect([[
-            'key' => 'submitted',
-            'label' => 'Submitted',
-            'description' => 'Pre-screening received',
-        ]])->concat($preScreeningStages->map(fn (string $stage): array => [
-            'key' => $stage,
-            'label' => match ($stage) {
-                'screening' => 'Review',
-                'exam' => 'Exam',
-                'interview' => 'Interview',
-                'distribution' => 'Reward distribution',
-                default => str($stage)->headline()->toString(),
-            },
-            'description' => match ($stage) {
-                'screening' => 'Eligibility and file review',
-                'exam' => 'Provider-managed exam',
-                'interview' => 'Provider conversation',
-                'distribution' => 'Scholarship release',
-                default => 'Provider-managed stage',
-            },
-        ]))->push([
-            'key' => 'handoff',
-            'label' => 'Formal application',
-            'description' => 'Continue directly with the provider',
-        ]);
-
-        if (in_array('distribution', $selectionStages, true)) {
-            $flow->push([
-                'key' => 'distribution',
-                'label' => 'Award outcome',
-                'description' => 'Optional provider outcome tracking',
-            ]);
-        }
-
-        $flow = $flow->values();
-        $currentStage = $this->progressStage($application, $selectionStages);
-        $stageIndex = $flow->search(fn (array $step): bool => $step['key'] === $currentStage);
-        $stageIndex = $stageIndex === false ? 0 : $stageIndex;
-        $isClosedWithoutAward = in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'withdrawn'], true);
-        $isComplete = in_array($status, ['disbursed', 'renewed'], true);
-        $steps = $flow
-            ->map(function (array $step, int $index) use ($stageIndex, $isClosedWithoutAward, $isComplete): array {
-                return [
-                    ...$step,
-                    'state' => match (true) {
-                        $isComplete => 'complete',
-                        $isClosedWithoutAward && $index > $stageIndex => 'skipped',
-                        $isClosedWithoutAward && $index === $stageIndex => 'stopped',
-                        $index < $stageIndex => 'complete',
-                        $index === $stageIndex => 'current',
-                        default => 'upcoming',
-                    },
-                ];
-            })
+        $steps = collect($workflow['steps'])
+            ->map(fn (array $step): array => [
+                'key' => $step['key'],
+                'label' => $step['label'],
+                'description' => $step['description'],
+                'state' => match ($step['status']) {
+                    'passed' => 'complete',
+                    'not_passed' => 'stopped',
+                    'current' => 'current',
+                    'skipped' => 'skipped',
+                    default => 'upcoming',
+                },
+                'result' => $step['result'],
+            ])
             ->values()
             ->all();
-        $completedSteps = collect($steps)->where('state', 'complete')->count();
-        $currentStageLabel = collect($steps)->firstWhere('key', $currentStage)['label'] ?? 'Submitted';
 
         return [
             'current' => $status,
             'label' => $this->statusLabel($status),
-            'current_stage' => $currentStage,
-            'current_stage_label' => $currentStageLabel,
-            'configured_stages' => $selectionStages,
-            'completed_steps' => $completedSteps,
-            'total_steps' => count($steps),
-            'percent' => (int) round(($completedSteps / max(count($steps), 1)) * 100),
+            'application_state' => $workflow['application_state'],
+            'application_state_label' => $workflow['application_state_label'],
+            'current_stage' => $workflow['current_stage'],
+            'current_stage_label' => $workflow['current_stage_label'],
+            'configured_stages' => collect($workflow['steps'])->pluck('key')->all(),
+            'completed_steps' => $workflow['completed_steps'],
+            'total_steps' => $workflow['total_steps'],
+            'percent' => $workflow['percent'],
             'tone' => $this->statusTone($status),
-            'next_action' => $this->statusNextAction($status, $selectionStages),
+            'next_action' => $workflow['next_action']['label'],
             'steps' => $steps,
         ];
     }
@@ -703,32 +658,24 @@ class DecisionSupportService
 
     private function recommendedNextAction(ScholarshipApplication $application, array $score, array $missingUploads, array $missingAccepted): string
     {
-        if ($application->status === 'distribution_scheduled') {
-            return 'Prepare the reward for the scheduled distribution date and keep instructions current.';
+        $workflow = app(ApplicationWorkflowService::class)->payload($application);
+
+        if ($workflow['is_closed']) {
+            return 'No stage action is required. Review the recorded result if follow-up is needed.';
         }
 
-        if (in_array($application->status, ['awarded', 'disbursed', 'renewed'], true)) {
-            return 'Keep outcome details updated for renewal or reporting.';
+        if ($application->correction_status === 'submitted') {
+            return 'Review the applicant correction before continuing the current stage.';
         }
 
-        if (in_array($application->status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'withdrawn'], true)) {
-            return 'No action is required unless the provider reopens the application.';
-        }
-
-        if ($application->status === 'exam_qualified') {
-            return 'Provider should schedule the scholarship exam or share exam instructions.';
-        }
-
-        if ($application->status === 'exam_scheduled') {
-            return 'Wait for the applicant to complete the scheduled scholarship exam.';
-        }
-
-        if ($application->status === 'exam_taken') {
-            return 'Provider should record whether the applicant passed or failed the exam.';
-        }
-
-        if ($application->status === 'exam_passed') {
-            return 'Provider can continue the applicant to an interview or complete portal pre-screening.';
+        if ($workflow['current_stage'] !== 'screening') {
+            return match ($workflow['current_stage']) {
+                'formal_application' => 'Confirm whether the applicant completed the provider formal application step.',
+                'exam' => 'Record Passed or Not passed after the provider-managed exam.',
+                'interview' => 'Record Passed or Not passed after the provider-managed interview.',
+                'decision' => 'Record Selected, Waitlisted, or Not selected as the final outcome.',
+                default => 'Review the current application stage.',
+            };
         }
 
         if ($missingUploads !== []) {
@@ -744,10 +691,10 @@ class DecisionSupportService
         }
 
         if ((int) ($score['score'] ?? 0) >= 80) {
-            return 'Provider can prioritize this application for qualification or approval review.';
+            return 'Review the rubric and record whether the applicant passes pre-screening.';
         }
 
-        return 'Continue reviewing eligibility, documents, and provider notes.';
+        return 'Review eligibility, required files, and rubric criteria before recording the pre-screening result.';
     }
 
     private function statusTone(string $status): string

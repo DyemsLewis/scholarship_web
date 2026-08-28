@@ -6,6 +6,7 @@ use App\Models\ApplicationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Services\ApplicationWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -24,14 +25,14 @@ class ProviderBulkApplicationApprovalTest extends TestCase
     public function test_provider_can_bulk_approve_ready_applicants_for_a_configured_exam(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);
-        $scholarship = $this->program($provider, ['screening', 'exam', 'distribution']);
+        $scholarship = $this->program($provider, ['screening', 'exam', 'formal_application', 'decision']);
         $first = $this->application($scholarship, 'submitted');
         $second = $this->application($scholarship, 'under_review');
 
         $this->actingAs($provider)
             ->patchJson("/provider/scholarships/{$scholarship->id}/applications/bulk-advance", [
                 'application_ids' => [$first->id, $second->id],
-                'target_stage' => 'exam',
+                'target_stage' => 'pass_prescreening',
             ])->assertOk()
             ->assertJsonPath('updated_count', 2);
 
@@ -40,26 +41,30 @@ class ProviderBulkApplicationApprovalTest extends TestCase
         $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $first->applicant_id,
             'type' => 'application_status',
-            'title' => 'Qualified for exam',
+            'title' => 'Pre-screening passed',
         ]);
         $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $second->applicant_id,
             'type' => 'application_status',
-            'title' => 'Qualified for exam',
+            'title' => 'Pre-screening passed',
         ]);
     }
 
-    public function test_distribution_bulk_approval_accepts_only_already_approved_applicants(): void
+    public function test_bulk_selection_accepts_only_applicants_at_the_final_decision_stage(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);
-        $scholarship = $this->program($provider, ['screening', 'distribution']);
-        $approved = $this->application($scholarship, 'approved');
+        $scholarship = $this->program($provider, ['screening', 'formal_application', 'decision']);
+        $approved = $this->application($scholarship, 'under_review');
         $underReview = $this->application($scholarship, 'under_review');
+        $workflow = app(ApplicationWorkflowService::class);
+        $approved = $workflow->start($approved);
+        $approved = $workflow->recordStageResult($approved, 'screening', 'passed', $provider);
+        $approved = $workflow->recordStageResult($approved, 'formal_application', 'passed', $provider);
 
         $this->actingAs($provider)
             ->patchJson("/provider/scholarships/{$scholarship->id}/applications/bulk-advance", [
                 'application_ids' => [$approved->id, $underReview->id],
-                'target_stage' => 'distribution',
+                'target_stage' => 'selected',
             ])->assertUnprocessable()
             ->assertJsonValidationErrors('application_ids');
 
@@ -69,7 +74,7 @@ class ProviderBulkApplicationApprovalTest extends TestCase
         $this->actingAs($provider)
             ->patchJson("/provider/scholarships/{$scholarship->id}/applications/bulk-advance", [
                 'application_ids' => [$approved->id],
-                'target_stage' => 'distribution',
+                'target_stage' => 'selected',
             ])->assertOk()
             ->assertJsonPath('updated_count', 1);
 
@@ -80,8 +85,8 @@ class ProviderBulkApplicationApprovalTest extends TestCase
     {
         $provider = User::factory()->create(['role' => 'provider']);
         $otherProvider = User::factory()->create(['role' => 'provider']);
-        $scholarship = $this->program($provider, ['screening', 'exam', 'distribution'], 'School ID');
-        $otherProgram = $this->program($otherProvider, ['screening', 'exam', 'distribution']);
+        $scholarship = $this->program($provider, ['screening', 'exam', 'formal_application', 'decision'], 'School ID');
+        $otherProgram = $this->program($otherProvider, ['screening', 'exam', 'formal_application', 'decision']);
         $pendingDocumentApplication = $this->application($scholarship, 'submitted', ['School ID']);
         $foreignApplication = $this->application($otherProgram, 'submitted');
         ApplicationDocument::create([
@@ -99,14 +104,14 @@ class ProviderBulkApplicationApprovalTest extends TestCase
         $this->actingAs($provider)
             ->patchJson("/provider/scholarships/{$scholarship->id}/applications/bulk-advance", [
                 'application_ids' => [$pendingDocumentApplication->id],
-                'target_stage' => 'exam',
+                'target_stage' => 'pass_prescreening',
             ])->assertUnprocessable()
             ->assertJsonValidationErrors('application_ids');
 
         $this->actingAs($provider)
             ->patchJson("/provider/scholarships/{$scholarship->id}/applications/bulk-advance", [
                 'application_ids' => [$foreignApplication->id],
-                'target_stage' => 'exam',
+                'target_stage' => 'pass_prescreening',
             ])->assertUnprocessable()
             ->assertJsonValidationErrors('application_ids');
 

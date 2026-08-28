@@ -19,7 +19,13 @@ const canManageProfile = computed(() => Boolean(
 
 const recentPrograms = computed(() => scholarships.value.slice(0, 3));
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
-const providerProfileNeedsCompletion = computed(() => !String(user.value?.provider_address ?? '').trim());
+const providerProfileNeedsCompletion = computed(() => [
+    user.value?.provider_name,
+    user.value?.provider_type,
+    user.value?.provider_address,
+    user.value?.provider_contact_email,
+    user.value?.provider_contact_number,
+].some((value) => !String(value ?? '').trim()));
 const verificationActionHref = computed(() => {
     if (user.value?.can_post_scholarships || providerProfileNeedsCompletion.value) {
         return '/provider/profile';
@@ -51,7 +57,7 @@ const verificationPrompt = computed(() => {
     if (providerProfileNeedsCompletion.value) {
         return {
             title: 'Complete your provider profile',
-            description: 'Add the office address and review the organization contacts before submitting proof for admin verification.',
+            description: 'Add the organization name, type, office address, and public contacts before submitting proof for admin verification.',
             action: 'Complete profile',
         };
     }

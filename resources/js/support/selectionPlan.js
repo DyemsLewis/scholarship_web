@@ -6,6 +6,12 @@ export const selectionStageDefinitions = [
         detail: 'Eligibility and file review',
     },
     {
+        value: 'formal_application',
+        label: 'Formal application',
+        icon: 'fa-solid fa-file-signature',
+        detail: 'Continue directly with the provider',
+    },
+    {
         value: 'exam',
         label: 'Exam',
         icon: 'fa-solid fa-clipboard-question',
@@ -18,15 +24,15 @@ export const selectionStageDefinitions = [
         detail: 'Provider conversation',
     },
     {
-        value: 'distribution',
-        label: 'Award release',
-        icon: 'fa-solid fa-hand-holding-dollar',
-        detail: 'Optional release or onboarding after the final decision',
+        value: 'decision',
+        label: 'Final decision',
+        icon: 'fa-solid fa-award',
+        detail: 'Selected, waitlisted, or not selected',
     },
 ];
 
 export function programEventForStage(scholarship, stage) {
-    if (stage === 'screening') {
+    if (!['exam', 'interview'].includes(stage)) {
         return null;
     }
 
@@ -38,16 +44,24 @@ export function programEventForStage(scholarship, stage) {
 }
 
 export function selectionPlanFor(scholarship) {
-    const selectedStages = Array.isArray(scholarship?.selection_stages)
+    const rawStages = Array.isArray(scholarship?.selection_stages)
         ? scholarship.selection_stages
-        : ['screening'];
+        : [];
+    const selectedStages = rawStages
+        .map((stage) => stage === 'distribution' ? 'decision' : stage)
+        .filter((stage, index, stages) => selectionStageDefinitions.some((definition) => definition.value === stage)
+            && stages.indexOf(stage) === index);
 
-    return selectionStageDefinitions
-        .filter((stage) => selectedStages.includes(stage.value))
-        .map((stage) => ({
-            ...stage,
-            event: programEventForStage(scholarship, stage.value),
-        }));
+    const middleStages = selectedStages.filter((stage) => !['screening', 'decision'].includes(stage));
+
+    if (!middleStages.includes('formal_application')) {
+        middleStages.push('formal_application');
+    }
+
+    return ['screening', ...middleStages, 'decision']
+        .map((stageValue) => selectionStageDefinitions.find((stage) => stage.value === stageValue))
+        .filter(Boolean)
+        .map((stage) => ({ ...stage, event: programEventForStage(scholarship, stage.value) }));
 }
 
 export function progressStepIcon(step) {

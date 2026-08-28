@@ -185,14 +185,6 @@ class DemoReadinessWorkflowTest extends TestCase
                 ->assertOk());
 
         $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$applicationId}/status", [
-                'status' => 'under_review',
-                'review_notes' => 'Application entered provider review.',
-            ])
-            ->assertOk()
-            ->assertJsonPath('application.status', 'under_review');
-
-        $this->actingAs($provider)
             ->patchJson("/provider/applications/{$applicationId}/decision", [
                 'decision' => 'approve',
                 'review_notes' => 'The applicant meets the published criteria.',
@@ -204,7 +196,23 @@ class DemoReadinessWorkflowTest extends TestCase
                 ],
             ])
             ->assertOk()
-            ->assertJsonPath('application.status', 'approved');
+            ->assertJsonPath('application.workflow.current_stage', 'formal_application');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$applicationId}/stages/formal_application/result", [
+                'result' => 'passed',
+                'notes' => 'The applicant completed the provider formal application.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.workflow.current_stage', 'decision');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$applicationId}/final-outcome", [
+                'outcome' => 'selected',
+                'notes' => 'The applicant was selected after the provider review.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.workflow.final_outcome', 'selected');
 
         $this->assertDatabaseHas('provider_profiles', [
             'user_id' => $provider->id,
@@ -216,7 +224,9 @@ class DemoReadinessWorkflowTest extends TestCase
         ]);
         $this->assertDatabaseHas('scholarship_applications', [
             'id' => $applicationId,
-            'status' => 'approved',
+            'status' => 'awarded',
+            'application_state' => 'closed',
+            'final_outcome' => 'selected',
         ]);
         $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $applicant->id,

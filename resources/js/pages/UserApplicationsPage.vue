@@ -137,15 +137,7 @@ const selectedEligibilityCriteria = computed(() => {
     ];
 });
 const readyApplicationCount = computed(() => applications.value.filter((application) => Number(application.document_readiness?.accepted_percent ?? application.document_readiness?.uploaded_percent ?? 0) >= 100).length);
-const activeApplicationCount = computed(() => applications.value.filter((application) => ![
-    'withdrawn',
-    'rejected',
-    'not_awarded',
-    'disbursed',
-    'renewed',
-    'exam_failed',
-    'interview_failed',
-].includes(application.status ?? 'submitted')).length);
+const activeApplicationCount = computed(() => applications.value.filter((application) => !application.workflow?.is_closed).length);
 const upcomingScheduleCount = computed(() => applications.value.reduce(
     (total, application) => total + applicationSchedules(application)
         .filter((schedule) => schedule.status === 'scheduled')
@@ -153,45 +145,23 @@ const upcomingScheduleCount = computed(() => applications.value.reduce(
     0,
 ));
 const applicationQueue = computed(() => [...applications.value].sort((first, second) => {
-    const firstNeedsConfirmation = Number(scheduleNeedsAcknowledgment(first));
-    const secondNeedsConfirmation = Number(scheduleNeedsAcknowledgment(second));
+    const firstNeedsCorrection = Number(first.correction_status === 'requested');
+    const secondNeedsCorrection = Number(second.correction_status === 'requested');
 
-    if (firstNeedsConfirmation !== secondNeedsConfirmation) {
-        return secondNeedsConfirmation - firstNeedsConfirmation;
+    if (firstNeedsCorrection !== secondNeedsCorrection) {
+        return secondNeedsCorrection - firstNeedsCorrection;
     }
 
-    const firstActiveSchedule = primarySchedule(first)?.status === 'scheduled';
-    const secondActiveSchedule = primarySchedule(second)?.status === 'scheduled';
+    const firstActiveSchedule = Number(Boolean(primarySchedule(first)?.status === 'scheduled'));
+    const secondActiveSchedule = Number(Boolean(primarySchedule(second)?.status === 'scheduled'));
 
     if (firstActiveSchedule !== secondActiveSchedule) {
-        return Number(secondActiveSchedule) - Number(firstActiveSchedule);
+        return secondActiveSchedule - firstActiveSchedule;
     }
 
-    const statusRank = {
-        exam_passed: 9,
-        exam_taken: 8,
-        exam_scheduled: 7,
-        interview: 7,
-        shortlisted: 6,
-        exam_qualified: 6,
-        under_review: 5,
-        qualified: 4,
-        submitted: 3,
-        approved: 2,
-        waitlisted: 2,
-        awarded: 1,
-        distribution_scheduled: 2,
-        disbursed: 1,
-        renewed: 1,
-        exam_failed: 0,
-        interview_failed: 0,
-        rejected: 0,
-        not_awarded: 0,
-        withdrawn: 0,
-    };
-
-    const firstRank = statusRank[first.status ?? 'submitted'] ?? 0;
-    const secondRank = statusRank[second.status ?? 'submitted'] ?? 0;
+    const stageRank = { screening: 5, formal_application: 4, exam: 3, interview: 2, decision: 1, complete: 0 };
+    const firstRank = first.workflow?.is_closed ? -1 : (stageRank[first.workflow?.current_stage] ?? 0);
+    const secondRank = second.workflow?.is_closed ? -1 : (stageRank[second.workflow?.current_stage] ?? 0);
 
     return secondRank - firstRank;
 }));
@@ -332,6 +302,18 @@ function statusLabel(status) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function applicationStatusLabel(application) {
+    return application?.workflow?.final_outcome_label
+        ?? application?.workflow?.current_stage_label
+        ?? statusLabel(application?.status);
+}
+
+function applicationNextAction(application) {
+    return application?.workflow?.next_action?.label
+        ?? application?.status_progress?.next_action
+        ?? 'Open the application for the latest update.';
+}
+
 function statusClass(status) {
     if (['approved', 'awarded', 'disbursed', 'renewed', 'exam_passed'].includes(status)) {
         return 'bg-emerald-100 text-emerald-800';
@@ -352,53 +334,24 @@ function applicationSchedules(application) {
     return Array.isArray(application?.schedules) ? application.schedules : [];
 }
 
-function scheduleRequiresAcknowledgment(schedule) {
-    return schedule?.requires_applicant_acknowledgment !== false;
-}
-
-function scheduleNeedsAcknowledgmentValue(schedule) {
-    return Boolean(
-        schedule?.status === 'scheduled'
-        && scheduleRequiresAcknowledgment(schedule)
-        && !schedule.applicant_acknowledged,
-    );
-}
-
 function primarySchedule(application) {
     const schedules = applicationSchedules(application);
-    const unacknowledged = schedules.find(
-        (schedule) => scheduleNeedsAcknowledgmentValue(schedule),
-    );
     const active = schedules.find((schedule) => schedule.status === 'scheduled');
 
-    return unacknowledged ?? active ?? schedules[schedules.length - 1] ?? null;
-}
-
-function scheduleNeedsAcknowledgment(application) {
-    const schedule = primarySchedule(application);
-
-    return scheduleNeedsAcknowledgmentValue(schedule);
-}
-
-function hasDistributionSchedule(application) {
-    return applicationSchedules(application).some((schedule) => schedule.type === 'distribution');
+    return active ?? schedules[schedules.length - 1] ?? null;
 }
 
 function scheduleTypeLabel(type) {
     return {
-        screening: 'Application screening',
         exam: 'Scholarship exam',
         interview: 'Interview',
-        distribution: 'Award distribution',
     }[type] ?? labelFromKey(type);
 }
 
 function scheduleTypeIcon(type) {
     return {
-        screening: 'fa-solid fa-list-check',
         exam: 'fa-solid fa-clipboard-check',
         interview: 'fa-solid fa-comments',
-        distribution: 'fa-solid fa-hand-holding-heart',
     }[type] ?? 'fa-solid fa-calendar-day';
 }
 
@@ -489,9 +442,10 @@ function applicationModeDescription(value) {
 function selectionStageDescription(stage) {
     return {
         screening: 'The provider checks your profile, eligibility, and submitted files.',
+        formal_application: 'Follow the provider instructions and prepare any originals it requests.',
         exam: 'Applicants who pass the review receive the exam schedule and instructions.',
         interview: 'Applicants who reach this stage receive the interview schedule and instructions.',
-        distribution: 'Selected recipients receive the benefit release details from the provider.',
+        decision: 'The provider records whether you are selected, waitlisted, or not selected.',
     }[stage?.value] ?? stage?.detail ?? 'The provider will share instructions if you reach this stage.';
 }
 
@@ -1228,12 +1182,7 @@ watch(selectedScholarship, (scholarship) => {
                             <article
                                 v-for="application in applicationQueue"
                                 :key="application.id"
-                                :class="[
-                                    'overflow-hidden rounded-lg border border-l-4 bg-white shadow-sm',
-                                    scheduleNeedsAcknowledgment(application)
-                                        ? 'border-amber-200 border-l-amber-500'
-                                        : 'border-slate-200 border-l-slate-900',
-                                ]"
+                                class="overflow-hidden rounded-lg border border-l-4 border-slate-200 border-l-slate-900 bg-white shadow-sm"
                             >
                                 <div class="p-4">
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1257,14 +1206,8 @@ watch(selectedScholarship, (scholarship) => {
                                         </div>
                                         <div class="flex flex-wrap gap-2 sm:justify-end">
                                             <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
-                                                {{ statusLabel(application.status) }}
+                                                {{ applicationStatusLabel(application) }}
                                             </span>
-                                        <span
-                                            v-if="application.distribution_scheduled_for && !hasDistributionSchedule(application)"
-                                            class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase text-slate-700"
-                                        >
-                                            Distribution {{ application.distribution_scheduled_for }}
-                                        </span>
                                         <span
                                             v-if="application.correction_status === 'requested'"
                                             class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
@@ -1282,7 +1225,7 @@ watch(selectedScholarship, (scholarship) => {
 
                                     <div class="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
                                         <span class="rounded-md bg-slate-100 px-2.5 py-1">
-                                            Stage: {{ application.status_progress?.label || statusLabel(application.status) }}
+                                            Stage: {{ application.workflow?.current_stage_label || application.status_progress?.label || statusLabel(application.status) }}
                                         </span>
                                         <span :class="['rounded-md px-2.5 py-1', recommendationClass(application.dss_recommendation)]">
                                             Suitability {{ application.dss_score ?? 0 }}%
@@ -1314,6 +1257,11 @@ watch(selectedScholarship, (scholarship) => {
                                         </div>
                                     </div>
 
+                                    <div class="mt-3 flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                                        <i class="fa-solid fa-arrow-right mt-1 text-xs text-amber-700" aria-hidden="true"></i>
+                                        <span><strong>Next:</strong> {{ applicationNextAction(application) }}</span>
+                                    </div>
+
                                     <details v-if="application.status_progress?.steps?.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
                                         <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-xs font-bold text-slate-700">
                                             <span class="flex items-center gap-2">
@@ -1321,7 +1269,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 View application flow
                                             </span>
                                             <span class="flex min-w-0 items-center gap-2 text-slate-500">
-                                                <span class="hidden truncate font-semibold sm:block">{{ application.status_progress.next_action }}</span>
+                                                <span class="hidden truncate font-semibold sm:block">{{ applicationNextAction(application) }}</span>
                                                 <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
                                             </span>
                                         </summary>

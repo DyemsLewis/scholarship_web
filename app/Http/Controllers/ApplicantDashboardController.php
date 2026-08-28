@@ -16,6 +16,7 @@ use App\Models\StudentDocument;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\ApplicantDocumentLibraryService;
+use App\Services\ApplicationWorkflowService;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
@@ -40,6 +41,7 @@ class ApplicantDashboardController extends Controller
     public function __construct(
         private readonly ScholarshipEligibilityService $eligibilityService,
         private readonly ApplicantDocumentLibraryService $documentLibraryService,
+        private readonly ApplicationWorkflowService $workflowService,
     ) {}
 
     public function index(Request $request): View|RedirectResponse
@@ -1033,6 +1035,7 @@ class ApplicantDashboardController extends Controller
                     $optionalDocuments,
                     $copiedDocumentPaths,
                 );
+                $application = $this->workflowService->start($application);
                 app(DecisionSupportService::class)->syncApplication($application, 'web_application_submitted');
                 app(ScholarshipEventService::class)->syncApplication($application->fresh());
 
@@ -1319,54 +1322,20 @@ class ApplicantDashboardController extends Controller
         $validated = $request->validate([
             'reason' => ['required', 'string', 'min:5', 'max:1000'],
         ]);
-        $closedStatuses = [
-            'withdrawn',
-            'rejected',
-            'not_awarded',
-            'exam_failed',
-            'interview_failed',
-            'awarded',
-            'disbursed',
-            'renewed',
-        ];
+        $workflow = $this->workflowService->payload($application);
         $previousStatus = $application->status;
 
-        if (in_array($previousStatus, $closedStatuses, true)) {
+        if ($workflow['is_closed']) {
             throw ValidationException::withMessages([
                 'reason' => 'This application can no longer be withdrawn online. Contact the provider if you need help.',
             ]);
         }
 
-        DB::transaction(function () use ($application, $request, $validated, $previousStatus): void {
-            $currentStatus = ScholarshipApplication::query()
-                ->whereKey($application->id)
-                ->lockForUpdate()
-                ->value('status');
-
-            if ($currentStatus !== $previousStatus) {
-                throw ValidationException::withMessages([
-                    'reason' => 'This application changed recently. Refresh the page before withdrawing it.',
-                ]);
-            }
-
-            $application->update([
-                'status' => 'withdrawn',
-                'withdrawal_reason' => $validated['reason'],
-                'withdrawn_by' => $request->user()->id,
-                'withdrawn_at' => now(),
-                'waitlist_position' => null,
-            ]);
-
-            ApplicationStatusHistory::create([
-                'scholarship_application_id' => $application->id,
-                'changed_by' => $request->user()->id,
-                'from_status' => $previousStatus,
-                'to_status' => 'withdrawn',
-                'decision_reason' => 'applicant_withdrawal',
-                'review_notes' => $validated['reason'],
-                'changed_at' => now(),
-            ]);
-        });
+        $application = $this->workflowService->withdraw(
+            $application,
+            $request->user(),
+            $validated['reason'],
+        );
 
         $application->loadMissing('scholarship');
         PortalNotification::create([
@@ -1428,7 +1397,9 @@ class ApplicantDashboardController extends Controller
             'correction_response' => $validated['response'],
             'correction_responded_at' => now(),
             'correction_resolved_at' => null,
+            'application_state' => 'needs_correction',
         ]);
+        $application = $this->workflowService->captureSubmissionSnapshot($application);
         $application->loadMissing('scholarship');
 
         PortalNotification::create([
@@ -1736,6 +1707,7 @@ class ApplicantDashboardController extends Controller
 
     private function applicationPayload(ScholarshipApplication $application): array
     {
+        $workflow = $this->workflowService->payload($application);
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
         $rubricReview = ReviewRubric::result(
@@ -1755,6 +1727,11 @@ class ApplicantDashboardController extends Controller
             'id' => $application->id,
             'detail_url' => route('dashboard.applications.show', $application),
             'status' => $application->status,
+            'application_state' => $workflow['application_state'],
+            'workflow_stage' => $workflow['current_stage'],
+            'final_outcome' => $workflow['final_outcome'],
+            'workflow' => $workflow,
+            'submission_version' => (int) data_get($application->submission_snapshot, 'version', 1),
             'document_checklist' => $application->document_checklist ?? [],
             'optional_document_checklist' => $application->optional_document_checklist
                 ?? $this->eligibilityService->optionalDocumentRequirements($application->scholarship),
@@ -1774,16 +1751,7 @@ class ApplicantDashboardController extends Controller
             'withdrawn_at' => $application->withdrawn_at?->format('M d, Y h:i A'),
             'waitlist_position' => $application->waitlist_position,
             'waitlisted_at' => $application->waitlisted_at?->format('M d, Y h:i A'),
-            'can_withdraw' => ! in_array($application->status, [
-                'withdrawn',
-                'rejected',
-                'not_awarded',
-                'exam_failed',
-                'interview_failed',
-                'awarded',
-                'disbursed',
-                'renewed',
-            ], true),
+            'can_withdraw' => ! $workflow['is_closed'],
             'decision_reason' => $application->decision_reason,
             'awarded_amount' => $application->awarded_amount,
             'display_award_amount' => $application->awarded_amount ?? $application->scholarship?->award_amount,
@@ -1844,13 +1812,13 @@ class ApplicantDashboardController extends Controller
 
     private function formalApplicationHandoffPayload(ScholarshipApplication $application): ?array
     {
-        if (! in_array($application->status, [
-            'approved',
-            'awarded',
-            'distribution_scheduled',
-            'disbursed',
-            'renewed',
-        ], true)) {
+        $workflow = $this->workflowService->payload($application);
+        $formalApplicationStatus = data_get(
+            collect($workflow['steps'])->firstWhere('key', 'formal_application'),
+            'status',
+        );
+
+        if (! in_array($formalApplicationStatus, ['current', 'passed'], true)) {
             return null;
         }
 

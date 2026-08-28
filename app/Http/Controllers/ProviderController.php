@@ -17,6 +17,7 @@ use App\Models\ScholarshipFunnelEvent;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\DecisionSupportService;
+use App\Services\ApplicationWorkflowService;
 use App\Services\ScholarshipBenefitService as SB;
 use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
@@ -44,6 +45,8 @@ use Throwable;
 
 class ProviderController extends Controller
 {
+    public function __construct(private readonly ApplicationWorkflowService $workflowService) {}
+
     private const PROVIDER_TEAM_ROLES = [
         'manager' => 'Manager',
         'program_coordinator' => 'Program coordinator',
@@ -474,16 +477,32 @@ class ProviderController extends Controller
         $user = $request->user();
         $providerOwner = $user->providerOrganizationOwner();
         $canManageOrganization = $user->hasPortalPermission('manage_profile');
-        $rules = [
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
-            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
-            'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
-        ];
+        $profileSection = (string) $request->input('profile_section', 'all');
 
-        if ($canManageOrganization) {
+        $request->validate([
+            'profile_section' => ['nullable', Rule::in(['all', 'organization', 'representative'])],
+        ]);
+
+        $editingRepresentative = in_array($profileSection, ['all', 'representative'], true);
+        $editingOrganization = $canManageOrganization
+            && in_array($profileSection, ['all', 'organization'], true);
+
+        abort_if($profileSection === 'organization' && ! $canManageOrganization, 403);
+
+        $rules = ['profile_section' => ['nullable', Rule::in(['all', 'organization', 'representative'])]];
+
+        if ($editingRepresentative) {
+            $rules += [
+                'first_name' => ['required', 'string', 'max:255'],
+                'last_name' => ['required', 'string', 'max:255'],
+                'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+                'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+                'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
+                'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
+            ];
+        }
+
+        if ($editingOrganization) {
             $rules += [
                 'provider_name' => ['required', 'string', 'max:255'],
                 'provider_type' => ['nullable', Rule::in(['school', 'foundation', 'government', 'company', 'non_profit', 'other'])],
@@ -497,11 +516,17 @@ class ProviderController extends Controller
 
         $validated = $request->validate($rules);
 
-        $middleInitial = strtoupper($validated['middle_initial']);
-        $emailChanged = strcasecmp($user->email, $validated['email']) !== 0;
+        $representativeProfile = $editingRepresentative ? [
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'middle_initial' => strtoupper($validated['middle_initial']),
+            'contact_number' => $validated['contact_number'],
+        ] : [];
+        $emailChanged = $editingRepresentative
+            && strcasecmp($user->email, $validated['email']) !== 0;
         $profile = $providerOwner->providerProfile;
 
-        $organizationProfile = $canManageOrganization ? [
+        $organizationProfile = $editingOrganization ? [
             'provider_name' => $validated['provider_name'],
             'provider_type' => $validated['provider_type'] ?? null,
             'provider_website' => $validated['provider_website'] ?? null,
@@ -513,13 +538,13 @@ class ProviderController extends Controller
             'provider_contact_number' => $validated['provider_contact_number']
                 ?? $profile?->provider_contact_number
                 ?? $profile?->contact_number
-                ?? $validated['contact_number'],
+                ?? ($validated['contact_number'] ?? null),
             'verification_status' => $profile?->verification_status ?? 'pending',
             'verification_notes' => $profile?->verification_notes,
             'verified_by' => $profile?->verified_by,
             'verified_at' => $profile?->verified_at,
         ] : [];
-        $organizationChanged = $canManageOrganization
+        $organizationChanged = $editingOrganization
             && $profile?->verification_status === 'approved'
             && collect([
                 'provider_name',
@@ -544,35 +569,35 @@ class ProviderController extends Controller
             $user,
             $providerOwner,
             $validated,
-            $middleInitial,
+            $representativeProfile,
             $organizationProfile,
             $profile,
-            $canManageOrganization,
+            $editingRepresentative,
+            $editingOrganization,
             $emailChanged,
             $organizationChanged,
         ): void {
-            $user->fill([
-                'email' => $validated['email'],
-                'username' => $validated['username'],
-            ]);
+            if ($editingRepresentative) {
+                $user->fill([
+                    'email' => $validated['email'],
+                    'username' => $validated['username'],
+                ]);
 
-            if ($emailChanged) {
-                $user->email_verified_at = null;
+                if ($emailChanged) {
+                    $user->email_verified_at = null;
+                }
+
+                $user->save();
             }
-
-            $user->save();
 
             $user->providerProfile()->updateOrCreate([
                 'user_id' => $user->id,
             ], [
-                'first_name' => $validated['first_name'],
-                'last_name' => $validated['last_name'],
-                'middle_initial' => $middleInitial,
-                'contact_number' => $validated['contact_number'],
+                ...$representativeProfile,
                 ...$organizationProfile,
             ]);
 
-            if ($canManageOrganization && ! $providerOwner->is($user)) {
+            if ($editingOrganization && ! $providerOwner->is($user)) {
                 $providerOwner->providerProfile()->updateOrCreate([
                     'user_id' => $providerOwner->id,
                 ], [
@@ -639,9 +664,9 @@ class ProviderController extends Controller
         ActivityLog::record(
             $user,
             'provider_profile_updated',
-            "{$providerOwner->providerProfile?->provider_name} updated their provider profile.",
+            ($providerOwner->providerProfile?->provider_name ?: $user->name ?: 'Provider').' updated profile details.',
             $request,
-            ['provider_id' => $providerOwner->id, 'updated_by' => $user->id],
+            ['provider_id' => $providerOwner->id, 'updated_by' => $user->id, 'profile_section' => $profileSection],
         );
 
         return response()->json([
@@ -649,7 +674,11 @@ class ProviderController extends Controller
                 ? 'Provider profile updated and returned for admin verification.'
                 : ($emailChanged
                     ? 'Profile updated. Verify your new email address before publishing programs.'
-                    : 'Provider profile updated successfully.'),
+                    : ($profileSection === 'organization'
+                        ? 'Provider details updated successfully.'
+                        : ($profileSection === 'representative'
+                            ? 'Representative details updated successfully.'
+                            : 'Provider profile updated successfully.'))),
             'user' => $this->providerStaffPayload($user->fresh(['providerProfile'])),
             'email_changed' => $emailChanged,
             'verification_reset' => $organizationChanged,
@@ -1132,8 +1161,7 @@ class ProviderController extends Controller
             'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
             'online_url' => [
                 Rule::requiredIf(
-                    $request->input('type') !== 'distribution'
-                    && in_array($request->input('mode'), ['online', 'hybrid'], true)
+                    in_array($request->input('mode'), ['online', 'hybrid'], true)
                 ),
                 'nullable',
                 'url:http,https',
@@ -1188,17 +1216,10 @@ class ProviderController extends Controller
             ]);
         }
 
-        $participantCount = ApplicationSchedule::query()
-            ->where('type', $event->type)
-            ->where('status', 'scheduled')
-            ->whereHas('application', fn ($query) => $query->where('scholarship_id', $scholarship->id))
+        $participantCount = ScholarshipApplication::query()
+            ->where('scholarship_id', $scholarship->id)
+            ->where('workflow_stage', $event->type)
             ->count();
-
-        if ($participantCount === 0) {
-            throw ValidationException::withMessages([
-                'event' => 'No applicants are assigned to this activity yet. Approve applicants for this stage before marking it complete.',
-            ]);
-        }
 
         $event->update([
             'status' => 'completed',
@@ -1219,7 +1240,7 @@ class ProviderController extends Controller
         );
 
         return response()->json([
-            'message' => ucfirst(ScholarshipSelectionPlan::label($event->type)).' marked complete. Participant results can now be recorded.',
+            'message' => ucfirst(ScholarshipSelectionPlan::label($event->type)).' schedule archived. Applicant results are recorded independently.',
             'event' => ScholarshipEventPayload::make($event->fresh()),
             'participant_count' => $participantCount,
         ]);
@@ -1233,20 +1254,12 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
         abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
         abort_unless($event->scholarship_id === $scholarship->id, 404);
+        abort_unless(ScholarshipSelectionPlan::isSchedulable($event->type), 404);
 
-        if ($event->status !== 'completed') {
-            throw ValidationException::withMessages([
-                'event' => 'Mark the program event complete before recording participant results.',
-            ]);
-        }
-
-        $attendanceValues = $event->type === 'distribution'
-            ? ['received', 'not_required']
-            : ['passed', 'failed'];
         $validated = $request->validate([
             'application_ids' => ['required', 'array', 'min:1', 'max:500'],
             'application_ids.*' => ['required', 'integer', 'distinct'],
-            'attendance_status' => ['required', Rule::in($attendanceValues)],
+            'attendance_status' => ['required', Rule::in(['passed', 'failed'])],
             'attendance_notes' => ['nullable', 'string', 'max:1500'],
         ]);
         $applicationIds = collect($validated['application_ids'])
@@ -1265,35 +1278,10 @@ class ProviderController extends Controller
             ]);
         }
 
-        $missingSchedule = $applications->first(fn (ScholarshipApplication $application) => ! $application->schedules->firstWhere('type', $event->type));
-
-        if ($missingSchedule) {
-            throw ValidationException::withMessages([
-                'application_ids' => 'One or more selected applicants have not reached this program stage.',
-            ]);
-        }
-
-        $closedSchedule = $applications->first(function (ScholarshipApplication $application) use ($event): bool {
-            $schedule = $application->schedules->firstWhere('type', $event->type);
-
-            return $schedule->status !== 'scheduled' || ($schedule->attendance_status ?? 'pending') !== 'pending';
-        });
-
-        if ($closedSchedule) {
-            throw ValidationException::withMessages([
-                'application_ids' => 'One or more selected participant records are already completed. Select only applicants with a pending result.',
-            ]);
-        }
-
         $invalidStageApplication = $applications->first(function (ScholarshipApplication $application) use ($event): bool {
-            $expectedStatus = match ($event->type) {
-                'exam' => 'exam_scheduled',
-                'interview' => 'interview',
-                'distribution' => 'distribution_scheduled',
-                default => null,
-            };
+            $workflow = $this->workflowService->payload($application);
 
-            return $expectedStatus === null || $application->status !== $expectedStatus;
+            return $workflow['current_stage'] !== $event->type || $workflow['is_closed'];
         });
 
         if ($invalidStageApplication) {
@@ -1302,106 +1290,51 @@ class ProviderController extends Controller
             ]);
         }
 
-        $statusChangedIds = [];
-        $scheduleStatus = $event->type === 'distribution' && $validated['attendance_status'] === 'not_required'
-            ? 'cancelled'
-            : 'completed';
+        $result = $validated['attendance_status'] === 'passed' ? 'passed' : 'not_passed';
+        $updatedApplications = collect();
 
-        DB::transaction(function () use (
-            $applications,
-            $event,
-            $request,
-            $scheduleStatus,
-            $validated,
-            &$statusChangedIds,
-        ): void {
+        DB::transaction(function () use ($applications, $event, $request, $validated, $result, $updatedApplications): void {
             foreach ($applications as $application) {
                 $schedule = $application->schedules->firstWhere('type', $event->type);
-                $nextStatus = $this->applicationStatusForEventResult(
+
+                if ($schedule) {
+                    $schedule->update([
+                        'status' => 'completed',
+                        'attendance_status' => $validated['attendance_status'],
+                        'attendance_notes' => $validated['attendance_notes'] ?? null,
+                        'completed_at' => now(),
+                        'updated_by' => $request->user()->id,
+                    ]);
+                }
+
+                $updatedApplications->push($this->workflowService->recordStageResult(
                     $application,
                     $event->type,
-                    $validated['attendance_status'],
-                );
-                $decisionReason = $this->decisionReasonForEventResult(
-                    $event->type,
-                    $validated['attendance_status'],
-                    $nextStatus,
-                );
-
-                if ($nextStatus && $application->status !== $nextStatus) {
-                    $this->ensureApplicationDocumentsReadyForStatus($application, $nextStatus);
-                    $this->ensureScholarshipAwardSlotAvailable($application, $application->status, $nextStatus);
-                }
-
-                $schedule->update([
-                    'status' => $scheduleStatus,
-                    'attendance_status' => $validated['attendance_status'],
-                    'attendance_notes' => $validated['attendance_notes'] ?? null,
-                    'completed_at' => $scheduleStatus === 'completed' ? now() : null,
-                    'cancelled_at' => $scheduleStatus === 'cancelled' ? now() : null,
-                    'updated_by' => $request->user()->id,
-                ]);
-
-                if (! $nextStatus || $application->status === $nextStatus) {
-                    continue;
-                }
-
-                $fromStatus = $application->status;
-                $application->update([
-                    'status' => $nextStatus,
-                    'decision_reason' => $decisionReason,
-                    'review_notes' => $validated['attendance_notes']
-                        ?? $this->defaultReviewNoteForEventResult($event->type, $validated['attendance_status']),
-                    'outcome_at' => $nextStatus === 'disbursed' ? now() : $application->outcome_at,
-                    'reviewed_by' => $request->user()->id,
-                    'reviewed_at' => now(),
-                ]);
-
-                ApplicationStatusHistory::create([
-                    'scholarship_application_id' => $application->id,
-                    'changed_by' => $request->user()->id,
-                    'from_status' => $fromStatus,
-                    'to_status' => $nextStatus,
-                    'decision_reason' => $decisionReason,
-                    'review_notes' => $validated['attendance_notes']
-                        ?? $this->defaultReviewNoteForEventResult($event->type, $validated['attendance_status']),
-                    'changed_at' => now(),
-                ]);
-                $statusChangedIds[] = $application->id;
+                    $result,
+                    $request->user(),
+                    $validated['attendance_notes'] ?? null,
+                ));
             }
         });
 
-        foreach ($applications as $application) {
-            $freshApplication = $application->fresh()->load(['applicant', 'scholarship']);
-
-            if (in_array($application->id, $statusChangedIds, true)) {
-                app(ScholarshipEventService::class)->syncApplication($freshApplication);
-                $freshApplication = $application->fresh()->load(['applicant', 'scholarship']);
-            }
+        foreach ($updatedApplications as $freshApplication) {
+            $freshApplication->loadMissing(['applicant', 'scholarship']);
+            app(ScholarshipEventService::class)->syncApplication($freshApplication);
+            $nextWorkflow = $this->workflowService->payload($freshApplication);
+            $notification = $this->workflowStageNotification(
+                $freshApplication,
+                $event->type,
+                $result,
+                $nextWorkflow['current_stage_label'],
+            );
 
             PortalNotification::create([
-                'user_id' => $application->applicant_id,
-                'type' => $event->type === 'distribution' ? 'application_schedule' : 'application_status',
-                'title' => $this->eventResultNotificationTitle($event->type, $validated['attendance_status']),
-                'message' => $this->eventResultNotificationMessage(
-                    $freshApplication,
-                    $event->type,
-                    $validated['attendance_status'],
-                ),
-                'action_url' => route('dashboard.applications.show', $application, false),
+                'user_id' => $freshApplication->applicant_id,
+                'type' => 'application_status',
+                'title' => $notification['title'],
+                'message' => $notification['message'],
+                'action_url' => route('dashboard.applications.show', $freshApplication, false),
             ]);
-
-            if (in_array($application->id, $statusChangedIds, true)) {
-                ScholarshipFunnelEvent::record(
-                    $freshApplication->applicant,
-                    "application_status_{$freshApplication->status}",
-                    $freshApplication->scholarship,
-                    $freshApplication,
-                    'provider',
-                    ['scholarship_event_id' => $event->id, 'schedule_type' => $event->type],
-                );
-            }
-
             app(DecisionSupportService::class)->syncApplication($freshApplication, 'provider_bulk_schedule_tracking_updated');
         }
 
@@ -1414,7 +1347,7 @@ class ProviderController extends Controller
                 'scholarship_id' => $scholarship->id,
                 'scholarship_event_id' => $event->id,
                 'schedule_type' => $event->type,
-                'attendance_status' => $validated['attendance_status'],
+                'result' => $result,
                 'application_ids' => $applicationIds->all(),
             ],
         );
@@ -1422,6 +1355,7 @@ class ProviderController extends Controller
         return response()->json([
             'message' => "Updated {$applications->count()} applicant record(s).",
             'updated_count' => $applications->count(),
+            'result' => $result,
             'attendance_status' => $validated['attendance_status'],
         ]);
     }
@@ -1444,80 +1378,194 @@ class ProviderController extends Controller
             'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
         ]);
 
-        $this->requireCompleteApplicationRubric($application, $validated['rubric_scores'] ?? null);
+        $workflow = $this->workflowService->payload($application);
+        $stage = $workflow['current_stage'];
 
-        $managedResultStage = match ($application->status) {
-            'exam_scheduled' => 'exam',
-            'interview' => 'interview',
-            default => null,
-        };
-        $pendingManagedResult = $managedResultStage
-            ? $application->schedules()
-                ->where('type', $managedResultStage)
-                ->where('status', 'scheduled')
-                ->where('attendance_status', 'pending')
-                ->exists()
-            : false;
-
-        if ($pendingManagedResult) {
+        if (! in_array($stage, ['screening', 'formal_application', 'exam', 'interview'], true)) {
             throw ValidationException::withMessages([
-                'decision' => 'Complete the shared activity, then record Passed or Failed once from Program Results.',
+                'decision' => $stage === 'decision'
+                    ? 'Record Selected, Waitlisted, or Not selected as the final outcome.'
+                    : 'This application no longer needs a stage decision.',
             ]);
         }
 
-        $selectionStages = ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages);
-        $nextStatus = $validated['decision'] === 'approve'
-            ? ScholarshipSelectionPlan::nextApprovalStatus($application->status, $selectionStages)
-            : ScholarshipSelectionPlan::rejectionStatus($application->status);
+        $request->merge([
+            'result' => $validated['decision'] === 'approve' ? 'passed' : 'not_passed',
+            'notes' => $validated['review_notes'] ?? null,
+        ]);
 
-        if ($nextStatus === null) {
-            throw ValidationException::withMessages([
-                'decision' => 'This stage must be completed or tracked before another applicant decision can be recorded.',
-            ]);
+        return $this->recordApplicationStageResult($request, $application, $stage);
+    }
+
+    public function recordApplicationStageResult(
+        Request $request,
+        ScholarshipApplication $application,
+        string $stage,
+    ): JsonResponse {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless(in_array($stage, ['screening', 'formal_application', 'exam', 'interview'], true), 404);
+
+        $validated = $request->validate([
+            'result' => ['required', Rule::in(ApplicationWorkflowService::RESULTS)],
+            'decision_reason' => [
+                Rule::requiredIf($request->input('result') === 'not_passed'),
+                'nullable',
+                'string',
+                Rule::in(ApplicationDecisionReason::acceptedValues()),
+            ],
+            'notes' => ['nullable', 'string', 'max:1500'],
+            'review_notes' => ['nullable', 'string', 'max:1500'],
+            'rubric_scores' => ['sometimes', 'array'],
+            'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
+        ]);
+        $notes = $validated['notes'] ?? $validated['review_notes'] ?? null;
+
+        if ($stage === 'screening') {
+            $rubric = $this->requireCompleteApplicationRubric($application, $validated['rubric_scores'] ?? null);
+
+            if ($validated['result'] === 'passed') {
+                $this->ensureApplicationDocumentsReadyForStatus($application, 'approved');
+            }
+
+            if ($rubric !== null) {
+                $application->update([
+                    'rubric_scores' => $rubric['scores'],
+                    'rubric_total_score' => $rubric['total_score'],
+                    'rubric_scored_by' => $request->user()->id,
+                    'rubric_scored_at' => now(),
+                ]);
+            }
         }
 
-        if ($validated['decision'] === 'approve') {
-            $this->ensureStageParticipationReadyForApproval($application);
-        }
-
-        $decisionReason = $validated['decision_reason'] ?? match ($nextStatus) {
-            'exam_qualified' => 'for_exam',
-            'interview' => 'for_interview',
-            'approved' => 'qualified_for_formal_application',
-            default => null,
-        };
-
-        $decisionUpdate = [
-            'status' => $nextStatus,
-            'decision_reason' => $decisionReason,
-            'review_notes' => $validated['review_notes'] ?? $application->review_notes,
-        ];
-
-        if (array_key_exists('rubric_scores', $validated)) {
-            $decisionUpdate['rubric_scores'] = $validated['rubric_scores'];
-        }
-
-        $request->merge($decisionUpdate);
-        $request->attributes->set('provider_decision_validated', true);
-
-        $this->updateApplicationStatus($request, $application);
-
-        $freshApplication = $application->fresh()->load([
+        $previousStage = $this->workflowService->payload($application)['current_stage'];
+        $updated = $this->workflowService->recordStageResult(
+            $application,
+            $stage,
+            $validated['result'],
+            $request->user(),
+            $notes,
+            $validated['decision_reason'] ?? null,
+        );
+        app(ScholarshipEventService::class)->syncApplication($updated);
+        $updated = $updated->fresh()->load([
             'applicant.studentProfile',
             'documents.reviewer',
             'schedules',
+            'stageProgresses',
             'statusHistories.actor',
-            'scholarship',
+            'scholarship.events',
         ]);
+        $workflow = $this->workflowService->payload($updated);
+        $notification = $this->workflowStageNotification(
+            $updated,
+            $previousStage,
+            $validated['result'],
+            $workflow['current_stage_label'],
+        );
+
+        PortalNotification::create([
+            'user_id' => $updated->applicant_id,
+            'type' => 'application_status',
+            'title' => $notification['title'],
+            'message' => $notification['message'],
+            'action_url' => route('dashboard.applications.show', $updated, false),
+        ]);
+        ActivityLog::record(
+            $request->user(),
+            'application_stage_result_recorded',
+            "{$request->user()->name} recorded {$validated['result']} for {$stage} on application #{$updated->id}.",
+            $request,
+            ['application_id' => $updated->id, 'stage' => $stage, 'result' => $validated['result']],
+        );
+        ScholarshipFunnelEvent::record(
+            $updated->applicant,
+            "application_stage_{$stage}_{$validated['result']}",
+            $updated->scholarship,
+            $updated,
+            'provider',
+            [
+                'stage' => $stage,
+                'result' => $validated['result'],
+                'decision_reason' => $validated['decision_reason'] ?? null,
+                'canonical_decision_reason' => ApplicationDecisionReason::canonical($validated['decision_reason'] ?? null),
+                'reviewed_by' => $request->user()->id,
+                'rubric_total_score' => $updated->rubric_total_score,
+            ],
+        );
+        app(DecisionSupportService::class)->syncApplication($updated, 'provider_stage_result');
 
         return response()->json([
-            'message' => $validated['decision'] === 'approve'
-                ? ($nextStatus === 'approved'
-                    ? 'Applicant qualified for the provider formal application process.'
-                    : 'Applicant advanced to the next pre-screening stage.')
-                : 'Applicant marked as not qualified for the next stage.',
-            'application' => $this->applicationPayload($freshApplication, true),
-            'review_navigation' => $this->reviewNavigationPayload($freshApplication),
+            'message' => $notification['title'].'.',
+            'application' => $this->applicationPayload($updated, true),
+            'review_navigation' => $this->reviewNavigationPayload($updated),
+        ]);
+    }
+
+    public function recordApplicationFinalOutcome(
+        Request $request,
+        ScholarshipApplication $application,
+    ): JsonResponse {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+
+        $validated = $request->validate([
+            'outcome' => ['required', Rule::in(ApplicationWorkflowService::FINAL_OUTCOMES)],
+            'decision_reason' => [
+                Rule::requiredIf($request->input('outcome') === 'not_selected'),
+                'nullable',
+                'string',
+                Rule::in(ApplicationDecisionReason::acceptedValues()),
+            ],
+            'notes' => ['nullable', 'string', 'max:2000'],
+            'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
+        ]);
+
+        if ($validated['outcome'] === 'selected') {
+            $this->ensureScholarshipAwardSlotAvailable($application, $application->status, 'awarded', 'outcome');
+        }
+
+        $updated = $this->workflowService->recordFinalOutcome(
+            $application,
+            $validated['outcome'],
+            $request->user(),
+            $validated['notes'] ?? null,
+            $validated['decision_reason'] ?? null,
+        );
+
+        if (array_key_exists('awarded_amount', $validated)) {
+            $updated->update(['awarded_amount' => $validated['awarded_amount']]);
+        }
+
+        $updated = $updated->fresh()->load([
+            'applicant.studentProfile',
+            'documents.reviewer',
+            'schedules',
+            'stageProgresses',
+            'statusHistories.actor',
+            'scholarship.events',
+        ]);
+        $outcomeLabel = $this->workflowService->payload($updated)['final_outcome_label'];
+        PortalNotification::create([
+            'user_id' => $updated->applicant_id,
+            'type' => 'application_outcome',
+            'title' => "Application outcome: {$outcomeLabel}",
+            'message' => "The provider recorded {$outcomeLabel} as the final outcome for {$updated->scholarship?->title}. Open the application to review the details.",
+            'action_url' => route('dashboard.applications.show', $updated, false),
+        ]);
+        ActivityLog::record(
+            $request->user(),
+            'application_final_outcome_recorded',
+            "{$request->user()->name} recorded {$validated['outcome']} for application #{$updated->id}.",
+            $request,
+            ['application_id' => $updated->id, 'outcome' => $validated['outcome']],
+        );
+        app(DecisionSupportService::class)->syncApplication($updated, 'provider_final_outcome');
+
+        return response()->json([
+            'message' => "Final outcome recorded as {$outcomeLabel}.",
+            'application' => $this->applicationPayload($updated, true),
+            'review_navigation' => $this->reviewNavigationPayload($updated),
         ]);
     }
 
@@ -1529,7 +1577,11 @@ class ProviderController extends Controller
         $validated = $request->validate([
             'application_ids' => ['required', 'array', 'min:1', 'max:100'],
             'application_ids.*' => ['required', 'integer', 'distinct'],
-            'target_stage' => ['required', Rule::in(['exam', 'distribution'])],
+            'target_stage' => ['required', Rule::in([
+                'pass_prescreening',
+                'pass_stage',
+                'selected',
+            ])],
         ]);
         $applicationIds = collect($validated['application_ids'])->map(fn ($id) => (int) $id)->values();
         $applications = ScholarshipApplication::query()
@@ -1547,45 +1599,77 @@ class ProviderController extends Controller
 
         $targetStage = $validated['target_stage'];
         $invalidApplications = $applications
-            ->reject(fn (ScholarshipApplication $application) => in_array(
-                $targetStage,
-                $this->bulkAdvanceTargets($application),
-                true,
-            ));
+            ->reject(function (ScholarshipApplication $application) use ($targetStage): bool {
+                return in_array($targetStage, $this->bulkAdvanceTargets($application), true);
+            });
 
         if ($invalidApplications->isNotEmpty()) {
             $applicantNames = $invalidApplications
                 ->take(4)
                 ->map(fn (ScholarshipApplication $application) => $application->applicant?->name ?: "Application #{$application->id}")
                 ->implode(', ');
-            $message = $targetStage === 'distribution'
-                ? 'Only applicants qualified through portal pre-screening can be recorded as award recipients.'
-                : 'Only applications with accepted required documents that are ready for the configured exam can be selected.';
+            $message = match ($targetStage) {
+                'selected' => 'Only applicants at the final decision stage can be selected.',
+                'pass_stage' => 'Only applicants at an active provider stage can be advanced.',
+                default => 'Only pre-screening applications with accepted required files can be advanced.',
+            };
 
             throw ValidationException::withMessages([
                 'application_ids' => "{$message} Review: {$applicantNames}.",
             ]);
         }
 
-        $targetStatus = $targetStage === 'exam' ? 'exam_qualified' : 'awarded';
-        $decisionReason = $targetStage === 'exam' ? 'for_exam' : 'approved_for_award';
-
-        DB::transaction(function () use ($applications, $request, $targetStatus, $decisionReason): void {
+        DB::transaction(function () use ($applications, $request, $scholarship, $targetStage): void {
             foreach ($applications as $application) {
-                $statusRequest = clone $request;
-                $statusRequest->replace([
-                    'status' => $targetStatus,
-                    'decision_reason' => $decisionReason,
-                ]);
+                $workflow = $this->workflowService->payload($application);
+                $stage = $workflow['current_stage'];
 
-                $this->updateApplicationStatus($statusRequest, $application);
+                if ($targetStage === 'selected') {
+                    $this->ensureScholarshipAwardSlotAvailable($application, $application->status, 'awarded', 'application_ids');
+                    $updated = $this->workflowService->recordFinalOutcome(
+                        $application,
+                        'selected',
+                        $request->user(),
+                        'Selected through the provider bulk decision list.',
+                    );
+                    $title = 'Application outcome: Selected';
+                    $message = "The provider selected you for {$scholarship->title}. Open the application to review the result.";
+                } else {
+                    $updated = $this->workflowService->recordStageResult(
+                        $application,
+                        $stage,
+                        'passed',
+                        $request->user(),
+                        'Passed through the provider bulk review list.',
+                    );
+                    $nextWorkflow = $this->workflowService->payload($updated);
+                    $notification = $this->workflowStageNotification(
+                        $updated,
+                        $stage,
+                        'passed',
+                        $nextWorkflow['current_stage_label'],
+                    );
+                    $title = $notification['title'];
+                    $message = $notification['message'];
+                }
+
+                app(ScholarshipEventService::class)->syncApplication($updated);
+
+                PortalNotification::create([
+                    'user_id' => $updated->applicant_id,
+                    'type' => $targetStage === 'selected' ? 'application_outcome' : 'application_status',
+                    'title' => $title,
+                    'message' => $message,
+                    'action_url' => route('dashboard.applications.show', $updated, false),
+                ]);
+                app(DecisionSupportService::class)->syncApplication($updated, 'provider_bulk_stage_result');
             }
         });
 
         ActivityLog::record(
             $request->user(),
             'applications_bulk_advanced',
-            "{$request->user()->name} bulk approved {$applications->count()} application(s) for {$targetStage}.",
+            "{$request->user()->name} completed {$targetStage} for {$applications->count()} application(s).",
             $request,
             [
                 'scholarship_id' => $scholarship->id,
@@ -1594,10 +1678,14 @@ class ProviderController extends Controller
             ],
         );
 
+        $message = match ($targetStage) {
+            'selected' => "Recorded {$applications->count()} selected recipient(s).",
+            'pass_stage' => "Advanced {$applications->count()} applicant(s) to the next configured stage.",
+            default => "Passed pre-screening for {$applications->count()} applicant(s).",
+        };
+
         return response()->json([
-            'message' => $targetStage === 'exam'
-                ? "Approved {$applications->count()} applicant(s) for the exam stage."
-                : "Recorded {$applications->count()} formal scholarship award recipient(s).",
+            'message' => $message,
             'updated_count' => $applications->count(),
             'application_ids' => $applicationIds,
         ]);
@@ -1674,7 +1762,7 @@ class ProviderController extends Controller
         abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
 
         $validated = $request->validate([
-            'type' => ['required', Rule::in(['exam', 'interview', 'distribution'])],
+            'type' => ['required', Rule::in(ScholarshipSelectionPlan::SCHEDULABLE_STAGES)],
             'title' => ['nullable', 'string', 'max:255'],
             'scheduled_at' => ['required', 'date', 'after_or_equal:now'],
             'mode' => ['required', Rule::in(['onsite', 'online', 'hybrid', 'provider_managed'])],
@@ -1689,15 +1777,13 @@ class ProviderController extends Controller
             'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
             'online_url' => [
                 Rule::requiredIf(
-                    $request->input('type') !== 'distribution'
-                    && in_array($request->input('mode'), ['online', 'hybrid'], true)
+                    in_array($request->input('mode'), ['online', 'hybrid'], true)
                 ),
                 'nullable',
                 'url:http,https',
                 'max:2000',
             ],
             'instructions' => ['required', 'string', 'max:3000'],
-            'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
         ]);
 
         $application->loadMissing(['scholarship.events', 'applicant']);
@@ -1716,20 +1802,18 @@ class ProviderController extends Controller
             'online_url' => $validated['online_url'] ?? null,
             'instructions' => $validated['instructions'],
             'status' => 'scheduled',
-            'attendance_status' => 'pending',
+            'attendance_status' => 'not_required',
             'attendance_notes' => null,
             'completed_at' => null,
             'cancelled_at' => null,
             'updated_by' => $request->user()->id,
         ];
 
-        [$schedule, $announcementChanged, $previousStatus, $nextStatus] = DB::transaction(function () use (
+        [$schedule, $announcementChanged] = DB::transaction(function () use (
             $application,
             $request,
             $validated,
             $scheduleData,
-            $scheduledAt,
-            $eventLabel,
         ): array {
             $schedule = $application->schedules()->where('type', $validated['type'])->first();
 
@@ -1756,64 +1840,8 @@ class ProviderController extends Controller
                 'status',
             ]);
 
-            if ($validated['type'] === 'distribution'
-                && array_key_exists('awarded_amount', $validated)
-                && $this->comparableScholarshipValue($application->awarded_amount)
-                    !== $this->comparableScholarshipValue($validated['awarded_amount'])) {
-                $announcementChanged = true;
-            }
-
-            if ($announcementChanged && $schedule->applicant_acknowledged_at !== null) {
-                $schedule->forceFill(['applicant_acknowledged_at' => null])->saveQuietly();
-            }
-
-            $previousStatus = $application->status;
-            $nextStatus = $this->scheduleApplicationStatus($validated['type']);
-            $applicationUpdates = [
-                'status' => $nextStatus,
-                'decision_reason' => $this->scheduleDecisionReason($validated['type']),
-                'reviewed_by' => $request->user()->id,
-                'reviewed_at' => now(),
-            ];
-
-            if ($validated['type'] === 'distribution') {
-                $applicationUpdates += [
-                    'distribution_scheduled_for' => $scheduledAt->toDateString(),
-                    'distribution_instructions' => $validated['instructions'],
-                ];
-
-                if (array_key_exists('awarded_amount', $validated)) {
-                    $applicationUpdates['awarded_amount'] = $validated['awarded_amount'];
-                }
-            }
-
-            $application->update($applicationUpdates);
-
-            if ($previousStatus !== $nextStatus) {
-                ApplicationStatusHistory::create([
-                    'scholarship_application_id' => $application->id,
-                    'changed_by' => $request->user()->id,
-                    'from_status' => $previousStatus,
-                    'to_status' => $nextStatus,
-                    'decision_reason' => $this->scheduleDecisionReason($validated['type']),
-                    'review_notes' => "{$eventLabel} announced for {$scheduledAt->format('M d, Y h:i A')}.",
-                    'changed_at' => now(),
-                ]);
-            }
-
-            return [$schedule, $announcementChanged, $previousStatus, $nextStatus];
+            return [$schedule, $announcementChanged];
         });
-
-        if ($previousStatus !== $nextStatus) {
-            ScholarshipFunnelEvent::record(
-                $application->applicant,
-                "application_status_{$nextStatus}",
-                $application->scholarship,
-                $application,
-                'provider',
-                ['schedule_id' => $schedule->id, 'schedule_type' => $schedule->type],
-            );
-        }
 
         ActivityLog::record(
             $request->user(),
@@ -1869,7 +1897,7 @@ class ProviderController extends Controller
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['scheduled', 'completed', 'cancelled'])],
-            'attendance_status' => ['required', Rule::in(['pending', 'attended', 'absent', 'excused', 'received', 'not_required'])],
+            'attendance_status' => ['nullable', Rule::in(['pending', 'not_required'])],
             'attendance_notes' => ['nullable', 'string', 'max:1500'],
         ]);
 
@@ -1879,85 +1907,16 @@ class ProviderController extends Controller
             ]);
         }
 
-        if ($validated['status'] === 'scheduled' && $validated['attendance_status'] !== 'pending') {
-            throw ValidationException::withMessages([
-                'attendance_status' => 'Attendance stays pending until the activity is completed or cancelled.',
-            ]);
-        }
-
-        if ($validated['status'] === 'completed'
-            && $schedule->type !== 'distribution'
-            && ! in_array($validated['attendance_status'], ['attended', 'absent', 'excused'], true)) {
-            throw ValidationException::withMessages([
-                'attendance_status' => 'Choose attended, absent, or excused when completing this activity.',
-            ]);
-        }
-
-        if ($validated['status'] === 'cancelled'
-            && ! in_array($validated['attendance_status'], ['pending', 'excused', 'not_required'], true)) {
-            throw ValidationException::withMessages([
-                'attendance_status' => 'A cancelled activity cannot be marked attended or received.',
-            ]);
-        }
-
-        if ($schedule->type === 'distribution'
-            && $validated['status'] === 'completed'
-            && $validated['attendance_status'] !== 'received') {
-            throw ValidationException::withMessages([
-                'attendance_status' => 'Mark the reward as received before completing distribution.',
-            ]);
-        }
-
-        $previousApplicationStatus = $application->status;
         $previousScheduleStatus = $schedule->status;
-        $previousAttendance = $schedule->attendance_status;
-
-        DB::transaction(function () use ($application, $request, $schedule, $validated): void {
-            $schedule->update([
-                'status' => $validated['status'],
-                'attendance_status' => $validated['attendance_status'],
-                'attendance_notes' => $validated['attendance_notes'] ?? null,
-                'completed_at' => $validated['status'] === 'completed' ? now() : null,
-                'cancelled_at' => $validated['status'] === 'cancelled' ? now() : null,
-                'updated_by' => $request->user()->id,
-            ]);
-
-            $nextStatus = null;
-
-            if ($validated['status'] === 'completed'
-                && $schedule->type === 'exam'
-                && $validated['attendance_status'] === 'attended') {
-                $nextStatus = 'exam_taken';
-            }
-
-            if ($validated['status'] === 'completed' && $schedule->type === 'distribution') {
-                $nextStatus = 'disbursed';
-            }
-
-            if ($nextStatus && $application->status !== $nextStatus) {
-                $fromStatus = $application->status;
-                $application->update([
-                    'status' => $nextStatus,
-                    'decision_reason' => $nextStatus === 'disbursed' ? 'award_released' : 'exam_completed',
-                    'outcome_at' => $nextStatus === 'disbursed' ? now() : $application->outcome_at,
-                    'reviewed_by' => $request->user()->id,
-                    'reviewed_at' => now(),
-                ]);
-
-                ApplicationStatusHistory::create([
-                    'scholarship_application_id' => $application->id,
-                    'changed_by' => $request->user()->id,
-                    'from_status' => $fromStatus,
-                    'to_status' => $nextStatus,
-                    'decision_reason' => $nextStatus === 'disbursed' ? 'award_released' : 'exam_completed',
-                    'review_notes' => "{$this->scheduleTypeLabel($schedule->type)} attendance and completion recorded.",
-                    'changed_at' => now(),
-                ]);
-            }
-        });
-
+        $schedule->update([
+            'status' => $validated['status'],
+            'attendance_status' => 'not_required',
+            'attendance_notes' => $validated['attendance_notes'] ?? null,
+            'completed_at' => $validated['status'] === 'completed' ? now() : null,
+            'cancelled_at' => $validated['status'] === 'cancelled' ? now() : null,
+            'updated_by' => $request->user()->id,
+        ]);
         $trackingChanged = $previousScheduleStatus !== $schedule->status
-            || $previousAttendance !== $schedule->attendance_status
             || $schedule->wasChanged('attendance_notes');
 
         ActivityLog::record(
@@ -1969,7 +1928,7 @@ class ProviderController extends Controller
                 'application_id' => $application->id,
                 'schedule_id' => $schedule->id,
                 'status' => $schedule->status,
-                'attendance_status' => $schedule->attendance_status,
+                'application_stage_unchanged' => true,
             ],
         );
 
@@ -1977,8 +1936,8 @@ class ProviderController extends Controller
             PortalNotification::create([
                 'user_id' => $application->applicant_id,
                 'type' => 'application_schedule',
-                'title' => $this->scheduleTypeLabel($schedule->type).' record updated',
-                'message' => "The provider updated your {$this->scheduleTypeLabel($schedule->type)} record to {$schedule->status} with participation marked {$schedule->attendance_status}.",
+                'title' => $this->scheduleTypeLabel($schedule->type).' schedule updated',
+                'message' => "The provider updated your {$this->scheduleTypeLabel($schedule->type)} schedule to {$schedule->status}. Open the application to review the details.",
                 'action_url' => route('dashboard.applications.show', $application, false),
             ]);
         }
@@ -1991,21 +1950,10 @@ class ProviderController extends Controller
             'scholarship',
         ]);
 
-        if ($previousApplicationStatus !== $freshApplication->status) {
-            ScholarshipFunnelEvent::record(
-                $freshApplication->applicant,
-                "application_status_{$freshApplication->status}",
-                $freshApplication->scholarship,
-                $freshApplication,
-                'provider',
-                ['schedule_id' => $schedule->id, 'schedule_type' => $schedule->type],
-            );
-        }
-
         app(DecisionSupportService::class)->syncApplication($freshApplication, 'provider_schedule_tracking_updated');
 
         return response()->json([
-            'message' => 'Schedule tracking updated.',
+            'message' => 'Schedule record updated. The applicant stage was not changed.',
             'schedule' => ApplicationSchedulePayload::make($schedule->fresh()),
             'application' => $this->applicationPayload($freshApplication, true),
         ]);
@@ -2056,16 +2004,9 @@ class ProviderController extends Controller
             'action' => ['required', Rule::in(['request', 'resolve'])],
             'message' => [Rule::requiredIf($request->input('action') === 'request'), 'nullable', 'string', 'min:5', 'max:1500'],
         ]);
+        $workflow = $this->workflowService->payload($application);
 
-        if (in_array($application->status, [
-            'withdrawn',
-            'rejected',
-            'not_awarded',
-            'exam_failed',
-            'interview_failed',
-            'disbursed',
-            'renewed',
-        ], true)) {
+        if ($workflow['is_closed']) {
             throw ValidationException::withMessages([
                 'action' => 'A correction cannot be requested after this application has been closed.',
             ]);
@@ -2086,10 +2027,16 @@ class ProviderController extends Controller
                 'correction_requested_at' => now(),
                 'correction_responded_at' => null,
                 'correction_resolved_at' => null,
+                'application_state' => 'needs_correction',
             ]
             : [
                 'correction_status' => 'resolved',
                 'correction_resolved_at' => now(),
+                'application_state' => match ($workflow['current_stage']) {
+                    'screening' => 'under_review',
+                    'decision' => 'awaiting_decision',
+                    default => 'in_provider_process',
+                },
             ]);
 
         $application->loadMissing(['applicant', 'scholarship']);
@@ -2137,36 +2084,68 @@ class ProviderController extends Controller
             'note' => ['nullable', 'string', 'max:1500'],
         ]);
 
-        $targetStatus = match ($validated['action']) {
-            'waitlist' => 'waitlisted',
-            'promote' => 'awarded',
-            'restore' => 'approved',
-        };
+        $workflow = $this->workflowService->payload($application);
 
-        if ($validated['action'] === 'waitlist' && $application->status !== 'approved') {
+        if ($validated['action'] === 'waitlist' && $workflow['current_stage'] !== 'decision') {
             throw ValidationException::withMessages([
-                'action' => 'Only applicants who passed portal pre-screening can be placed on the waitlist.',
+                'action' => 'Complete the configured provider stages before placing an applicant on the waitlist.',
             ]);
         }
 
-        if (in_array($validated['action'], ['promote', 'restore'], true) && $application->status !== 'waitlisted') {
+        if (in_array($validated['action'], ['promote', 'restore'], true) && $workflow['final_outcome'] !== 'waitlisted') {
             throw ValidationException::withMessages([
                 'action' => 'Only a waitlisted applicant can use this action.',
             ]);
         }
 
-        $request->merge([
-            'status' => $targetStatus,
-            'decision_reason' => $validated['action'] === 'promote'
-                ? 'approved_for_award'
-                : ($validated['action'] === 'waitlist' ? 'funds_limited' : 'qualified_for_formal_application'),
-            'review_notes' => ($validated['note'] ?? null) ?: $application->review_notes,
-            'outcome_notes' => $validated['action'] === 'promote'
-                ? (($validated['note'] ?? null) ?: 'Promoted from the alternate recipient waitlist.')
-                : $application->outcome_notes,
+        if ($validated['action'] === 'restore') {
+            $application->stageProgresses()->where('stage_key', 'decision')->update([
+                'status' => 'current',
+                'result' => null,
+                'completed_at' => null,
+                'decided_at' => null,
+                'decided_by' => null,
+            ]);
+            $application->update([
+                'status' => 'approved',
+                'application_state' => 'awaiting_decision',
+                'workflow_stage' => 'decision',
+                'final_outcome' => null,
+                'decision_reason' => null,
+                'review_notes' => $validated['note'] ?? $application->review_notes,
+                'waitlist_position' => null,
+                'waitlisted_at' => null,
+            ]);
+            $updated = $application->fresh();
+            $message = 'Applicant returned to final decision review.';
+        } else {
+            if ($validated['action'] === 'promote') {
+                $this->ensureScholarshipAwardSlotAvailable($application, $application->status, 'awarded', 'action');
+            }
+
+            $updated = $this->workflowService->recordFinalOutcome(
+                $application,
+                $validated['action'] === 'promote' ? 'selected' : 'waitlisted',
+                $request->user(),
+                $validated['note'] ?? null,
+            );
+            $message = $validated['action'] === 'promote'
+                ? 'Waitlisted applicant marked as selected.'
+                : 'Applicant added to the waitlist.';
+        }
+
+        PortalNotification::create([
+            'user_id' => $updated->applicant_id,
+            'type' => 'application_outcome',
+            'title' => 'Application outcome updated',
+            'message' => $message,
+            'action_url' => route('dashboard.applications.show', $updated, false),
         ]);
 
-        return $this->updateApplicationStatus($request, $application);
+        return response()->json([
+            'message' => $message,
+            'application' => $this->applicationPayload($updated->fresh(), true),
+        ]);
     }
 
     public function updateApplicationStatus(Request $request, ScholarshipApplication $application): JsonResponse
@@ -2215,13 +2194,24 @@ class ProviderController extends Controller
             'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
         ]);
 
+        $workflow = $this->workflowService->payload($application);
+        $application->refresh();
         $previousStatus = $application->status;
-        $isOutcomeStatus = in_array($validated['status'], $outcomeStatuses, true);
+        $isPostSelectionUpdate = $workflow['final_outcome'] === 'selected'
+            && match ($previousStatus) {
+                'awarded' => $validated['status'] === 'distribution_scheduled',
+                'distribution_scheduled' => $validated['status'] === 'disbursed',
+                'disbursed' => $validated['status'] === 'renewed',
+                default => false,
+            };
 
-        if ($previousStatus !== $validated['status']) {
-            $this->ensureApplicationStatusTransition($application, $validated['status']);
-            $this->ensureApplicationDocumentsReadyForStatus($application, $validated['status']);
+        if ($previousStatus !== $validated['status'] && ! $isPostSelectionUpdate) {
+            throw ValidationException::withMessages([
+                'status' => 'Use the current stage result or final outcome action so configured stages cannot be skipped.',
+            ]);
         }
+
+        $isOutcomeStatus = in_array($validated['status'], $outcomeStatuses, true);
 
         $requiredRubricResult = $request->attributes->get('provider_decision_validated', false)
             || array_key_exists('rubric_scores', $validated)
@@ -2413,6 +2403,7 @@ class ProviderController extends Controller
         ScholarshipApplication $application,
         string $previousStatus,
         string $nextStatus,
+        string $errorKey = 'status',
     ): void {
         if (! in_array($nextStatus, self::AWARD_SLOT_STATUSES, true)
             || in_array($previousStatus, self::AWARD_SLOT_STATUSES, true)) {
@@ -2436,7 +2427,7 @@ class ProviderController extends Controller
 
         if ($occupiedSlots >= $scholarship->slots_available) {
             throw ValidationException::withMessages([
-                'status' => 'All available award slots have already been filled. Increase the program slots or review an existing award before recording another recipient.',
+                $errorKey => 'All available award slots have already been filled. Increase the program slots or review an existing award before recording another recipient.',
             ]);
         }
     }
@@ -3352,8 +3343,8 @@ class ProviderController extends Controller
         $events = json_decode((string) ($validated['program_events'] ?? '[]'), true);
         $events = is_array($events) ? $events : [];
         $eventData = validator(['program_events' => $events], [
-            'program_events' => ['array', 'max:3'],
-            'program_events.*.type' => ['required', 'string', 'distinct', Rule::in(['exam', 'interview', 'distribution'])],
+            'program_events' => ['array', 'max:2'],
+            'program_events.*.type' => ['required', 'string', 'distinct', Rule::in(ScholarshipSelectionPlan::SCHEDULABLE_STAGES)],
             'program_events.*.title' => ['nullable', 'string', 'max:255'],
             'program_events.*.scheduled_at' => ['required', 'date'],
             'program_events.*.mode' => ['required', Rule::in(['onsite', 'online', 'hybrid', 'provider_managed'])],
@@ -3383,11 +3374,7 @@ class ProviderController extends Controller
                 ]);
             }
 
-            if (
-                $event['type'] !== 'distribution'
-                && in_array($event['mode'], ['online', 'hybrid'], true)
-                && blank($event['online_url'] ?? null)
-            ) {
+            if (in_array($event['mode'], ['online', 'hybrid'], true) && blank($event['online_url'] ?? null)) {
                 throw ValidationException::withMessages([
                     "program_events.{$index}.online_url" => 'Add the online meeting or assessment link.',
                 ]);
@@ -3409,7 +3396,9 @@ class ProviderController extends Controller
 
         $previousType = null;
 
-        foreach (['exam', 'interview', 'distribution'] as $eventType) {
+        foreach (collect($selectionStages)->filter(
+            fn (string $stage): bool => ScholarshipSelectionPlan::isSchedulable($stage),
+        ) as $eventType) {
             if (! isset($eventDates[$eventType])) {
                 continue;
             }
@@ -3614,8 +3603,15 @@ class ProviderController extends Controller
                 continue;
             }
 
-            if ($this->comparableScholarshipValue($scholarship->getAttribute($field))
-                !== $this->comparableScholarshipValue($validated[$field])) {
+            $currentValue = $field === 'selection_stages'
+                ? ScholarshipSelectionPlan::normalize($scholarship->selection_stages)
+                : $scholarship->getAttribute($field);
+            $nextValue = $field === 'selection_stages'
+                ? ScholarshipSelectionPlan::normalize($validated[$field])
+                : $validated[$field];
+
+            if ($this->comparableScholarshipValue($currentValue)
+                !== $this->comparableScholarshipValue($nextValue)) {
                 return true;
             }
         }
@@ -3731,6 +3727,7 @@ class ProviderController extends Controller
 
     private function applicationPayload(ScholarshipApplication $application, bool $includeApplicantProfile = false): array
     {
+        $workflow = $this->workflowService->payload($application);
         $readiness = $this->documentReadiness($application);
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
@@ -3751,6 +3748,12 @@ class ProviderController extends Controller
             'id' => $application->id,
             'detail_url' => route('provider.applications.show', $application),
             'status' => $application->status,
+            'application_state' => $workflow['application_state'],
+            'workflow_stage' => $workflow['current_stage'],
+            'final_outcome' => $workflow['final_outcome'],
+            'workflow' => $workflow,
+            'submission_version' => (int) data_get($application->submission_snapshot, 'version', 1),
+            'submitted_profile' => data_get($application->submission_snapshot, 'current.applicant'),
             'document_checklist' => $application->document_checklist ?? [],
             'optional_document_checklist' => $application->optional_document_checklist
                 ?? app(ScholarshipEligibilityService::class)->optionalDocumentRequirements($application->scholarship),
@@ -3902,25 +3905,27 @@ class ProviderController extends Controller
 
     private function bulkAdvanceTargets(ScholarshipApplication $application, ?array $readiness = null): array
     {
+        if (in_array($application->correction_status, ['requested', 'submitted'], true)) {
+            return [];
+        }
+
         $readiness ??= $this->documentReadiness($application);
 
         if (! ($readiness['ready'] ?? false)) {
             return [];
         }
 
-        $selectionStages = ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages);
-        $targets = [];
+        $workflow = $this->workflowService->payload($application);
 
-        if (in_array('exam', $selectionStages, true)
-            && ScholarshipSelectionPlan::nextApprovalStatus($application->status, $selectionStages) === 'exam_qualified') {
-            $targets[] = 'exam';
+        if ($workflow['current_stage'] === 'screening') {
+            return ['pass_prescreening'];
         }
 
-        if ($application->status === 'approved' && in_array('distribution', $selectionStages, true)) {
-            $targets[] = 'distribution';
+        if (in_array($workflow['current_stage'], ['formal_application', 'exam', 'interview'], true)) {
+            return ['pass_stage'];
         }
 
-        return $targets;
+        return $workflow['current_stage'] === 'decision' ? ['selected'] : [];
     }
 
     private function scholarshipPayload(Scholarship $scholarship): array
@@ -4383,23 +4388,13 @@ class ProviderController extends Controller
 
     private function ensureScheduleCanBePublished(ScholarshipApplication $application, string $type): void
     {
-        $allowedStatuses = match ($type) {
-            'exam' => ['qualified', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled'],
-            'interview' => ['under_review', 'qualified', 'shortlisted', 'interview'],
-            'distribution' => ['awarded', 'distribution_scheduled'],
-            default => [],
-        };
+        $workflow = $this->workflowService->payload($application);
 
-        if (! in_array($application->status, $allowedStatuses, true)) {
+        if (! ScholarshipSelectionPlan::isSchedulable($type) || $workflow['current_stage'] !== $type) {
             throw ValidationException::withMessages([
-                'type' => match ($type) {
-                    'distribution' => 'Record the applicant as an award recipient before announcing distribution.',
-                    'exam' => 'Qualify or shortlist the applicant before announcing an exam.',
-                    default => 'Start or qualify the application review before announcing an interview.',
-                },
+                'type' => 'This applicant is not currently at that scheduled stage.',
             ]);
         }
-
     }
 
     private function ensureStageParticipationReadyForApproval(ScholarshipApplication $application): void
@@ -4529,6 +4524,41 @@ class ProviderController extends Controller
         return $application->status === 'interview'
             ? "You passed the scholarship exam for {$programTitle}. Your application will proceed to the interview stage."
             : "You passed the scholarship {$eventType} for {$programTitle}. Your application has advanced to the next stage.";
+    }
+
+    private function workflowStageNotification(
+        ScholarshipApplication $application,
+        string $stage,
+        string $result,
+        string $nextStageLabel,
+    ): array {
+        $programTitle = $application->scholarship?->title ?: 'this scholarship';
+        $stageLabel = match ($stage) {
+            'screening' => 'pre-screening',
+            'formal_application' => 'formal application',
+            'exam' => 'exam',
+            'interview' => 'interview',
+            default => 'application stage',
+        };
+
+        if ($result === 'not_passed') {
+            $reasonLabel = filled($application->decision_reason)
+                ? Str::headline($application->decision_reason)
+                : 'Provider decision';
+            $reviewNote = filled($application->review_notes)
+                ? ' '.$application->review_notes
+                : '';
+
+            return [
+                'title' => ucfirst($stageLabel).' not passed',
+                'message' => "Your application for {$programTitle} did not pass the {$stageLabel}. Reason: {$reasonLabel}.{$reviewNote}",
+            ];
+        }
+
+        return [
+            'title' => $stage === 'screening' ? 'Pre-screening passed' : ucfirst($stageLabel).' passed',
+            'message' => "You passed the {$stageLabel} for {$programTitle}. Your next step is {$nextStageLabel}.",
+        ];
     }
 
     private function scheduleTypeLabel(string $type): string

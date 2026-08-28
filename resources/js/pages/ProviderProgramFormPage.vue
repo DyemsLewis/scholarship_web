@@ -190,9 +190,16 @@ const selectionStageOptions = [
         required: true,
     },
     {
+        value: 'formal_application',
+        label: 'Formal application',
+        description: 'The applicant follows your official instructions, submits provider-specific forms, or presents originals.',
+        icon: 'fa-solid fa-file-signature',
+        required: true,
+    },
+    {
         value: 'exam',
         label: 'Exam',
-        description: 'Qualified applicants complete a provider-managed exam after passing pre-screening.',
+        description: 'Applicants complete an exam managed and graded by your organization.',
         icon: 'fa-solid fa-clipboard-question',
         required: false,
     },
@@ -204,15 +211,14 @@ const selectionStageOptions = [
         required: false,
     },
     {
-        value: 'distribution',
-        label: 'Award release',
-        description: 'Optionally publish release or onboarding details after final recipients are selected.',
-        icon: 'fa-solid fa-hand-holding-dollar',
-        required: false,
+        value: 'decision',
+        label: 'Final decision',
+        description: 'Record selected, waitlisted, or not selected after all configured stages.',
+        icon: 'fa-solid fa-award',
+        required: true,
     },
 ];
-const reviewStageOptions = selectionStageOptions.filter((stage) => stage.value !== 'distribution');
-const awardReleaseStage = selectionStageOptions.find((stage) => stage.value === 'distribution');
+const configurableStageOptions = selectionStageOptions.filter((stage) => ['formal_application', 'exam', 'interview'].includes(stage.value));
 const scholarshipForm = ref(emptyScholarshipForm());
 const gradeScaleOptions = [
     {
@@ -1093,7 +1099,7 @@ function emptyScholarshipForm() {
         minimumGradeScale: '',
         slotsAvailable: '',
         applicationMode: 'online',
-        selectionStages: ['screening'],
+        selectionStages: ['screening', 'formal_application', 'decision'],
         examDurationMinutes: '',
         examPassingScore: '',
         renewalPolicy: '',
@@ -1150,17 +1156,50 @@ function parseSelections(value, validOptions) {
 function toggleSelectionStage(stage) {
     const option = selectionStageOptions.find((item) => item.value === stage);
 
-    if (option?.required || selectionPlanLocked.value) {
+    if (option?.required || selectionPlanLocked.value || !['exam', 'interview'].includes(stage)) {
         return;
     }
 
     const selected = scholarshipForm.value.selectionStages.includes(stage)
         ? scholarshipForm.value.selectionStages.filter((item) => item !== stage)
-        : [...scholarshipForm.value.selectionStages, stage];
+        : [
+            ...scholarshipForm.value.selectionStages.filter((item) => item !== 'decision'),
+            stage,
+            'decision',
+        ];
 
-    scholarshipForm.value.selectionStages = selectionStageOptions
-        .map((optionItem) => optionItem.value)
-        .filter((optionValue) => selected.includes(optionValue) || optionValue === 'screening');
+    scholarshipForm.value.selectionStages = normalizeSelectionStages(selected);
+}
+
+function normalizeSelectionStages(stages) {
+    const allowedMiddle = ['formal_application', 'exam', 'interview'];
+    const middle = (Array.isArray(stages) ? stages : [])
+        .map((stage) => stage === 'distribution' ? 'decision' : stage)
+        .filter((stage, index, values) => allowedMiddle.includes(stage) && values.indexOf(stage) === index);
+
+    if (!middle.includes('formal_application')) {
+        middle.unshift('formal_application');
+    }
+
+    return ['screening', ...middle, 'decision'];
+}
+
+function moveSelectionStage(stage, direction) {
+    if (selectionPlanLocked.value) {
+        return;
+    }
+
+    const stages = normalizeSelectionStages(scholarshipForm.value.selectionStages);
+    const middle = stages.filter((item) => !['screening', 'decision'].includes(item));
+    const currentIndex = middle.indexOf(stage);
+    const nextIndex = currentIndex + direction;
+
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= middle.length) {
+        return;
+    }
+
+    [middle[currentIndex], middle[nextIndex]] = [middle[nextIndex], middle[currentIndex]];
+    scholarshipForm.value.selectionStages = ['screening', ...middle, 'decision'];
 }
 
 function selectAllOptions(field, options) {
@@ -1493,9 +1532,7 @@ function fillScholarshipForm(scholarship) {
         minimumGradeScale: scholarship.minimum_grade_scale ?? inferGradeScale(scholarship.minimum_gwa),
         slotsAvailable: scholarship.slots_available ?? '',
         applicationMode: scholarship.application_mode === 'hybrid' ? 'onsite' : (scholarship.application_mode ?? ''),
-        selectionStages: selectionStageOptions
-            .map((option) => option.value)
-            .filter((value) => (scholarship.selection_stages ?? ['screening']).includes(value)),
+        selectionStages: normalizeSelectionStages(scholarship.selection_stages),
         examDurationMinutes: scholarship.exam_duration_minutes ?? '',
         examPassingScore: scholarship.exam_passing_score ?? '',
         renewalPolicy: scholarship.renewal_policy ?? '',
@@ -2465,62 +2502,67 @@ onBeforeUnmount(() => {
                                         </span>
                                     </div>
 
-                                    <div class="mt-4 grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                                        <button
-                                            v-for="stage in reviewStageOptions"
-                                            :key="stage.value"
-                                            type="button"
-                                            :aria-pressed="scholarshipForm.selectionStages.includes(stage.value)"
-                                            :disabled="stage.required || selectionPlanLocked"
-                                            :class="[
-                                                'flex h-full flex-col rounded-md border p-3 text-left transition',
-                                                scholarshipForm.selectionStages.includes(stage.value)
-                                                    ? 'border-slate-900 bg-white shadow-sm'
-                                                    : 'border-dashed border-slate-300 bg-slate-50 text-slate-600 hover:border-slate-400 hover:bg-white',
-                                                stage.required || selectionPlanLocked ? 'cursor-default' : 'cursor-pointer',
-                                                selectionPlanLocked ? 'opacity-70' : '',
-                                            ]"
-                                            @click="toggleSelectionStage(stage.value)"
-                                        >
-                                            <span class="flex w-full items-center justify-between gap-3">
-                                                <span :class="['grid h-9 w-9 place-items-center rounded-md', scholarshipForm.selectionStages.includes(stage.value) ? 'bg-slate-950 text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200']">
-                                                    <i :class="stage.icon" aria-hidden="true"></i>
+                                    <div class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                        <div class="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                                            <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-950 text-xs font-bold text-white">1</span>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-sm font-bold text-slate-950">Pre-screening review</p>
+                                                <p class="text-xs text-slate-500">Eligibility, profile, rubric, and required files</p>
+                                            </div>
+                                            <span class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Always first</span>
+                                        </div>
+
+                                        <div class="divide-y divide-slate-200">
+                                            <div
+                                                v-for="(stageValue, index) in scholarshipForm.selectionStages.filter((stage) => !['screening', 'decision'].includes(stage))"
+                                                :key="stageValue"
+                                                class="flex items-start gap-3 px-4 py-3"
+                                            >
+                                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-100 text-xs font-bold text-amber-800">{{ index + 2 }}</span>
+                                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
+                                                    <i :class="selectionStageOptions.find((stage) => stage.value === stageValue)?.icon" aria-hidden="true"></i>
                                                 </span>
-                                                <span :class="['text-[10px] font-bold uppercase', scholarshipForm.selectionStages.includes(stage.value) ? 'text-emerald-700' : 'text-slate-400']">
-                                                    {{ selectionPlanLocked ? 'Protected' : (stage.required ? 'Always included' : (scholarshipForm.selectionStages.includes(stage.value) ? 'Included' : 'Add stage')) }}
-                                                </span>
-                                            </span>
-                                            <span class="mt-3 block font-bold text-slate-950">{{ stage.label }}</span>
-                                            <span class="mt-1 block text-xs leading-5 text-slate-500">{{ stage.description }}</span>
-                                        </button>
+                                                <div class="min-w-0 flex-1">
+                                                    <p class="text-sm font-bold text-slate-950">{{ selectionStageOptions.find((stage) => stage.value === stageValue)?.label }}</p>
+                                                    <p class="mt-0.5 text-xs leading-5 text-slate-500">{{ selectionStageOptions.find((stage) => stage.value === stageValue)?.description }}</p>
+                                                </div>
+                                                <div v-if="!selectionPlanLocked" class="flex shrink-0 items-center gap-1">
+                                                    <button type="button" class="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30" :disabled="index === 0" title="Move earlier" @click="moveSelectionStage(stageValue, -1)">
+                                                        <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+                                                    </button>
+                                                    <button type="button" class="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30" :disabled="index === scholarshipForm.selectionStages.filter((stage) => !['screening', 'decision'].includes(stage)).length - 1" title="Move later" @click="moveSelectionStage(stageValue, 1)">
+                                                        <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
+                                                    </button>
+                                                    <button v-if="['exam', 'interview'].includes(stageValue)" type="button" class="grid h-8 w-8 place-items-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50" title="Remove stage" @click="toggleSelectionStage(stageValue)">
+                                                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex items-center gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
+                                            <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-950 text-xs font-bold text-white">{{ scholarshipForm.selectionStages.length }}</span>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-sm font-bold text-slate-950">Final decision</p>
+                                                <p class="text-xs text-slate-500">Selected, waitlisted, or not selected</p>
+                                            </div>
+                                            <span class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Always last</span>
+                                        </div>
                                     </div>
 
-                                    <div v-if="awardReleaseStage" class="mt-4 border-t border-slate-200 pt-4">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">After the final decision</p>
+                                    <div v-if="!selectionPlanLocked" class="mt-3 flex flex-wrap items-center gap-2">
+                                        <span class="text-xs font-semibold text-slate-500">Add an optional stage:</span>
                                         <button
+                                            v-for="stage in configurableStageOptions.filter((item) => !item.required && !scholarshipForm.selectionStages.includes(item.value))"
+                                            :key="stage.value"
                                             type="button"
-                                            :aria-pressed="scholarshipForm.selectionStages.includes(awardReleaseStage.value)"
-                                            :disabled="selectionPlanLocked"
-                                            :class="[
-                                                'mt-2 flex w-full items-start gap-3 rounded-md border p-3 text-left transition sm:items-center',
-                                                scholarshipForm.selectionStages.includes(awardReleaseStage.value)
-                                                    ? 'border-slate-900 bg-white shadow-sm'
-                                                    : 'border-dashed border-slate-300 bg-slate-50 hover:border-slate-400 hover:bg-white',
-                                                selectionPlanLocked ? 'cursor-default opacity-70' : 'cursor-pointer',
-                                            ]"
-                                            @click="toggleSelectionStage(awardReleaseStage.value)"
+                                            class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                            @click="toggleSelectionStage(stage.value)"
                                         >
-                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', scholarshipForm.selectionStages.includes(awardReleaseStage.value) ? 'bg-slate-950 text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200']">
-                                                <i :class="awardReleaseStage.icon" aria-hidden="true"></i>
-                                            </span>
-                                            <span class="min-w-0 flex-1">
-                                                <span class="block text-sm font-bold text-slate-950">{{ awardReleaseStage.label }}</span>
-                                                <span class="mt-1 block text-xs leading-5 text-slate-500">{{ awardReleaseStage.description }}</span>
-                                            </span>
-                                            <span :class="['shrink-0 text-[10px] font-bold uppercase', scholarshipForm.selectionStages.includes(awardReleaseStage.value) ? 'text-emerald-700' : 'text-slate-400']">
-                                                {{ selectionPlanLocked ? 'Protected' : (scholarshipForm.selectionStages.includes(awardReleaseStage.value) ? 'Included' : 'Optional') }}
-                                            </span>
+                                            <i :class="stage.icon" aria-hidden="true"></i>
+                                            Add {{ stage.label }}
                                         </button>
+                                        <span v-if="configurableStageOptions.filter((item) => !item.required && !scholarshipForm.selectionStages.includes(item.value)).length === 0" class="text-xs text-slate-400">All optional stages are included.</span>
                                     </div>
                                 </div>
 
@@ -2585,7 +2627,7 @@ onBeforeUnmount(() => {
                                         <div>
                                             <p class="text-sm font-bold">Add dates only when applicants reach the stage</p>
                                             <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-300">
-                                                Pre-screening does not need a schedule. Publish one shared exam, interview, or award-release schedule later from the Program Workspace; qualified applicants will be notified automatically.
+                                                Pre-screening and formal application do not need a portal schedule. Publish a shared exam or interview schedule later; only applicants currently at that stage will receive it.
                                             </p>
                                         </div>
                                     </div>

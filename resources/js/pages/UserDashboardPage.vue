@@ -36,16 +36,7 @@ const scheduledActivities = computed(() => applications.value
     .flatMap((application) => applicationSchedules(application)
         .filter((schedule) => schedule.status === 'scheduled')
         .map((schedule) => ({ application, schedule })))
-    .sort((first, second) => {
-        const firstNeedsConfirmation = Number(scheduleNeedsAcknowledgment(first.schedule));
-        const secondNeedsConfirmation = Number(scheduleNeedsAcknowledgment(second.schedule));
-
-        if (firstNeedsConfirmation !== secondNeedsConfirmation) {
-            return secondNeedsConfirmation - firstNeedsConfirmation;
-        }
-
-        return scheduleTimestamp(first.schedule) - scheduleTimestamp(second.schedule);
-    }));
+    .sort((first, second) => scheduleTimestamp(first.schedule) - scheduleTimestamp(second.schedule)));
 
 const nextScheduledActivity = computed(() => scheduledActivities.value[0] ?? null);
 const activeApplication = computed(() => nextScheduledActivity.value?.application
@@ -71,7 +62,6 @@ const priorityAction = computed(() => {
         const { application, schedule } = entry;
         const scholarshipTitle = application.scholarship?.title || 'Scholarship application';
         const providerName = application.scholarship?.provider?.name || 'Scholarship provider';
-        const requiresAttention = scheduleNeedsAcknowledgment(schedule);
         const meta = [
             { icon: 'fa-regular fa-calendar', label: schedule.scheduled_label || 'Date pending' },
             { icon: 'fa-solid fa-location-dot', label: scheduleModeLabel(schedule.mode) },
@@ -81,29 +71,16 @@ const priorityAction = computed(() => {
             meta.push({ icon: 'fa-solid fa-building', label: schedule.venue });
         }
 
-        if (schedule.type === 'distribution') {
-            meta.push({
-                icon: 'fa-solid fa-peso-sign',
-                label: formatAwardAmount(application.display_award_amount
-                    ?? application.awarded_amount
-                    ?? application.scholarship?.award_amount),
-            });
-        }
-
         return {
             key: `schedule-${schedule.id}`,
             eyebrow: scheduleTypeLabel(schedule.type),
             title: schedule.title,
             detail: `${scholarshipTitle} from ${providerName}.`,
-            prompt: requiresAttention
-                ? 'Read the instructions and confirm that you saw the schedule.'
-                : (scheduleRequiresAcknowledgment(schedule)
-                    ? 'Your confirmation is recorded. Keep the schedule details available.'
-                    : 'This update was sent through the portal and email. Keep the schedule details available.'),
+            prompt: 'Review the date, location, and provider instructions before the activity.',
             href: application.detail_url || `/dashboard/applications/${application.id}`,
-            button: requiresAttention ? 'Review and confirm' : 'View schedule',
+            button: 'View schedule',
             icon: scheduleTypeIcon(schedule.type),
-            requiresAttention,
+            requiresAttention: true,
             meta,
         };
     }
@@ -161,7 +138,7 @@ const priorityAction = computed(() => {
             icon: 'fa-solid fa-file-circle-check',
             requiresAttention: false,
             meta: [
-                { icon: 'fa-solid fa-list-check', label: statusLabel(application.status) },
+                { icon: 'fa-solid fa-list-check', label: applicationStatusLabel(application) },
             ],
         };
     }
@@ -225,11 +202,11 @@ const reminders = computed(() => {
     const currentScheduleId = nextScheduledActivity.value?.schedule.id;
 
     scheduledActivities.value
-        .filter((entry) => scheduleNeedsAcknowledgment(entry.schedule) && entry.schedule.id !== currentScheduleId)
+        .filter((entry) => entry.schedule.id !== currentScheduleId)
         .slice(0, 2)
         .forEach((entry) => items.push({
             key: `schedule-${entry.schedule.id}`,
-            title: `${scheduleTypeLabel(entry.schedule.type)} needs confirmation`,
+            title: `${scheduleTypeLabel(entry.schedule.type)} scheduled`,
             detail: entry.schedule.scheduled_label || 'Open the application for details.',
             href: entry.application.detail_url || `/dashboard/applications/${entry.application.id}`,
             icon: scheduleTypeIcon(entry.schedule.type),
@@ -292,78 +269,51 @@ function applicationSchedules(application) {
     return Array.isArray(application?.schedules) ? application.schedules : [];
 }
 
-function scheduleRequiresAcknowledgment(schedule) {
-    return schedule?.requires_applicant_acknowledgment !== false;
-}
-
-function scheduleNeedsAcknowledgment(schedule) {
-    return Boolean(
-        schedule?.status === 'scheduled'
-        && scheduleRequiresAcknowledgment(schedule)
-        && !schedule.applicant_acknowledged,
-    );
-}
-
 function activeSchedule(application) {
-    const schedules = applicationSchedules(application);
-    const unacknowledged = schedules.find(
-        (schedule) => scheduleNeedsAcknowledgment(schedule),
-    );
-
-    return unacknowledged ?? schedules.find((schedule) => schedule.status === 'scheduled') ?? null;
+    return applicationSchedules(application)
+        .filter((schedule) => schedule.status === 'scheduled')
+        .sort((first, second) => scheduleTimestamp(first) - scheduleTimestamp(second))[0] ?? null;
 }
 
 function isClosedApplication(application) {
-    return ['rejected', 'not_awarded', 'disbursed', 'renewed', 'exam_failed', 'interview_failed'].includes(application?.status);
+    return Boolean(application?.workflow?.is_closed)
+        || ['rejected', 'not_awarded', 'awarded', 'withdrawn', 'exam_failed', 'interview_failed'].includes(application?.status);
 }
 
 function applicationPriority(application) {
     const schedule = activeSchedule(application);
 
-    if (scheduleNeedsAcknowledgment(schedule)) {
-        return 100;
-    }
-
     if (schedule) {
         return 90;
     }
 
-    const ranks = {
-        exam_passed: 80,
-        exam_taken: 75,
-        exam_qualified: 70,
-        interview: 68,
-        shortlisted: 65,
-        qualified: 60,
-        under_review: 55,
-        submitted: 50,
-        approved: 45,
-        awarded: 40,
-        distribution_scheduled: 38,
-        disbursed: 20,
-        renewed: 15,
-        exam_failed: 10,
-        interview_failed: 10,
-        rejected: 5,
-        not_awarded: 5,
+    const stageRanks = {
+        screening: 70,
+        formal_application: 65,
+        exam: 60,
+        interview: 55,
+        decision: 50,
+        complete: 10,
     };
 
-    return ranks[application?.status] ?? 0;
+    return stageRanks[application?.workflow?.current_stage] ?? 0;
 }
 
 function applicationNextAction(application) {
     const schedule = activeSchedule(application);
 
     if (schedule) {
-        return scheduleNeedsAcknowledgment(schedule)
-            ? `Review and confirm the ${scheduleTypeLabel(schedule.type).toLowerCase()} schedule.`
-            : `Follow the ${scheduleTypeLabel(schedule.type).toLowerCase()} instructions for ${schedule.scheduled_label}.`;
+        return `Follow the ${scheduleTypeLabel(schedule.type).toLowerCase()} instructions for ${schedule.scheduled_label}.`;
     }
 
     const missingDocuments = application?.document_readiness?.missing?.length ?? 0;
 
     if (missingDocuments > 0) {
         return `${missingDocuments} required ${missingDocuments === 1 ? 'document is' : 'documents are'} still missing.`;
+    }
+
+    if (application?.workflow?.next_action?.label) {
+        return application.workflow.next_action.label;
     }
 
     if (application?.status_progress?.next_action) {
@@ -381,8 +331,8 @@ function applicationNextAction(application) {
         exam_taken: 'Wait for the provider to record the exam result.',
         exam_passed: 'You passed the exam. Wait for the provider to finish pre-screening.',
         approved: 'You passed pre-screening. Review how to continue the formal application.',
-        awarded: 'Your award is recorded. Wait for distribution details.',
-        distribution_scheduled: 'Review the distribution schedule and instructions.',
+        awarded: 'You were selected. Review the provider result and follow-up instructions.',
+        distribution_scheduled: 'You were selected. Review the provider result and follow-up instructions.',
         disbursed: 'The provider recorded the scholarship reward as distributed.',
         renewed: 'Your scholarship support was renewed.',
         rejected: 'You did not qualify in pre-screening. Review the provider note.',
@@ -390,6 +340,12 @@ function applicationNextAction(application) {
         exam_failed: 'Review the provider note for the exam result.',
         interview_failed: 'Review the provider note for the interview result.',
     }[application?.status] ?? 'Open the application for the latest provider update.';
+}
+
+function applicationStatusLabel(application) {
+    return application?.workflow?.final_outcome_label
+        ?? application?.workflow?.current_stage_label
+        ?? statusLabel(application?.status);
 }
 
 function statusLabel(status) {
@@ -402,7 +358,7 @@ function statusLabel(status) {
         exam_passed: 'Passed exam',
         exam_failed: 'Failed exam',
         interview_failed: 'Failed interview',
-        distribution_scheduled: 'Distribution scheduled',
+        distribution_scheduled: 'Selected',
         disbursed: 'Distributed',
     };
 
@@ -439,19 +395,15 @@ function scheduleTimestamp(schedule) {
 
 function scheduleTypeLabel(type) {
     return {
-        screening: 'Application screening',
         exam: 'Scholarship exam',
         interview: 'Interview',
-        distribution: 'Award distribution',
     }[type] ?? 'Scheduled activity';
 }
 
 function scheduleTypeIcon(type) {
     return {
-        screening: 'fa-solid fa-list-check',
         exam: 'fa-solid fa-clipboard-check',
         interview: 'fa-solid fa-comments',
-        distribution: 'fa-solid fa-hand-holding-heart',
     }[type] ?? 'fa-solid fa-calendar-day';
 }
 
@@ -462,17 +414,6 @@ function scheduleModeLabel(mode) {
         hybrid: 'On-site and online',
         provider_managed: 'Provider-managed',
     }[mode] ?? 'Provider-managed';
-}
-
-function formatAwardAmount(value) {
-    if (value === null || value === undefined || value === '') {
-        return 'Amount not listed';
-    }
-
-    return new Intl.NumberFormat('en-PH', {
-        style: 'currency',
-        currency: 'PHP',
-    }).format(Number(value));
 }
 
 function deadlineDays(value) {
@@ -640,7 +581,7 @@ onMounted(loadDashboard);
                                                             </p>
                                                         </div>
                                                         <span :class="['w-fit rounded-md px-2 py-1 text-[10px] font-bold uppercase', statusClass(application.status)]">
-                                                            {{ statusLabel(application.status) }}
+                                                            {{ applicationStatusLabel(application) }}
                                                         </span>
                                                     </div>
                                                     <p class="mt-2 text-sm leading-5 text-slate-600">
@@ -652,12 +593,7 @@ onMounted(loadDashboard);
 
                                         <div
                                             v-if="activeSchedule(application)"
-                                            :class="[
-                                                'mt-3 flex flex-col gap-2 rounded-md border px-3 py-2.5 text-xs sm:flex-row sm:items-center sm:justify-between',
-                                                scheduleNeedsAcknowledgment(activeSchedule(application))
-                                                    ? 'border-amber-200 bg-amber-50 text-amber-900'
-                                                    : 'border-slate-200 bg-white text-slate-700',
-                                            ]"
+                                            class="mt-3 flex flex-col gap-2 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700 sm:flex-row sm:items-center sm:justify-between"
                                         >
                                             <div class="flex min-w-0 items-center gap-2">
                                                 <i :class="scheduleTypeIcon(activeSchedule(application).type)" aria-hidden="true"></i>
@@ -665,11 +601,7 @@ onMounted(loadDashboard);
                                                     {{ scheduleTypeLabel(activeSchedule(application).type) }}: {{ activeSchedule(application).scheduled_label }}
                                                 </span>
                                             </div>
-                                            <span class="shrink-0 font-bold">
-                                                {{ scheduleNeedsAcknowledgment(activeSchedule(application))
-                                                    ? 'Confirmation needed'
-                                                    : (scheduleRequiresAcknowledgment(activeSchedule(application)) ? 'Confirmed' : 'Notification sent') }}
-                                            </span>
+                                            <span class="shrink-0 font-bold">View details</span>
                                         </div>
 
                                         <div class="mt-3 flex flex-col gap-3 border-t border-slate-200 pt-3 sm:flex-row sm:items-center">

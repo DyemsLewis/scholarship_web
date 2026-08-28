@@ -76,9 +76,9 @@ class ProgramCatalogSeedTest extends TestCase
         $this->assertSame('provider_review', $schoolEssentialsProgram->application_mode);
         $this->assertSame('85.00', $stemProgram->minimum_gwa);
         $this->assertSame('STEM', $stemProgram->eligible_courses);
-        $this->assertSame(['screening', 'interview'], $collegeProgram->selection_stages);
-        $this->assertSame(['screening'], $schoolEssentialsProgram->selection_stages);
-        $this->assertSame(['screening', 'exam', 'interview'], $stemProgram->selection_stages);
+        $this->assertSame(['screening', 'formal_application', 'interview', 'decision'], $collegeProgram->selection_stages);
+        $this->assertSame(['screening', 'formal_application', 'decision'], $schoolEssentialsProgram->selection_stages);
+        $this->assertSame(['screening', 'formal_application', 'exam', 'interview', 'decision'], $stemProgram->selection_stages);
         $this->assertTrue($programs->every(fn (Scholarship $program): bool => $program->benefits()->exists()));
         $this->assertNull($schoolEssentialsProgram->award_amount);
         $this->assertSame(

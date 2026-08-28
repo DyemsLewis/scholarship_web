@@ -12,6 +12,11 @@ class ScholarshipApplication extends Model
         'scholarship_id',
         'applicant_id',
         'status',
+        'workflow_version',
+        'application_state',
+        'workflow_stage',
+        'final_outcome',
+        'submission_snapshot',
         'document_checklist',
         'optional_document_checklist',
         'eligibility_score',
@@ -67,6 +72,8 @@ class ScholarshipApplication extends Model
         return [
             'document_checklist' => 'array',
             'optional_document_checklist' => 'array',
+            'workflow_version' => 'integer',
+            'submission_snapshot' => 'array',
             'eligibility_score' => 'decimal:2',
             'eligibility_breakdown' => 'array',
             'review_rubric_snapshot' => 'array',
@@ -142,5 +149,10 @@ class ScholarshipApplication extends Model
     public function schedules(): HasMany
     {
         return $this->hasMany(ApplicationSchedule::class);
+    }
+
+    public function stageProgresses(): HasMany
+    {
+        return $this->hasMany(ApplicationStageProgress::class)->orderBy('position');
     }
 }

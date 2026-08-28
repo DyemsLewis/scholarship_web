@@ -13,7 +13,10 @@ const isSaving = ref(false);
 const errorMessage = ref('');
 const validationErrors = ref({});
 const user = ref(null);
-const activeProfileSection = ref(window.location.hash === '#verification-documents' ? 'verification' : 'details');
+const activeProfileSection = ref({
+    '#representative-account': 'representative',
+    '#verification-documents': 'verification',
+}[window.location.hash] ?? 'details');
 const verificationDocuments = ref([]);
 const verificationDocumentType = ref('organization_registration');
 const verificationDocumentFile = ref(null);
@@ -89,6 +92,13 @@ const verificationDocumentCount = computed(() => (
         : Number(user.value?.verification_documents_count ?? 0)
 ));
 const hasVerificationDocument = computed(() => verificationDocumentCount.value > 0);
+const providerProfileComplete = computed(() => [
+    user.value?.provider_name,
+    user.value?.provider_type,
+    user.value?.provider_address,
+    user.value?.provider_contact_email,
+    user.value?.provider_contact_number,
+].every((value) => String(value ?? '').trim()));
 const verificationGuidance = computed(() => {
     if (user.value?.can_post_scholarships) {
         return {
@@ -111,6 +121,14 @@ const verificationGuidance = computed(() => {
             title: 'Verification is managed by authorized staff',
             description: 'Ask the provider owner or a team member with organization profile access to manage verification proof.',
             className: 'border-slate-200 bg-slate-50 text-slate-800',
+        };
+    }
+
+    if (!providerProfileComplete.value) {
+        return {
+            title: 'Complete the provider profile first',
+            description: 'Add the organization name, type, office address, and public contacts before uploading verification proof.',
+            className: 'border-amber-200 bg-amber-50 text-amber-900',
         };
     }
 
@@ -145,7 +163,7 @@ function applyUser(payload) {
     form.email = payload?.email ?? '';
     form.username = payload?.username ?? '';
     form.contact_number = payload?.contact_number ?? '';
-    form.provider_name = payload?.provider_name ?? payload?.name ?? '';
+    form.provider_name = payload?.provider_name ?? '';
     form.provider_type = payload?.provider_type ?? '';
     form.provider_website = payload?.provider_website ?? '';
     form.provider_address = payload?.provider_address ?? '';
@@ -197,7 +215,10 @@ function selectProfileSection(section) {
     activeProfileSection.value = section;
 
     const url = new URL(window.location.href);
-    url.hash = section === 'verification' ? 'verification-documents' : '';
+    url.hash = {
+        representative: 'representative-account',
+        verification: 'verification-documents',
+    }[section] ?? '';
     window.history.replaceState(window.history.state, '', url);
 }
 
@@ -289,13 +310,34 @@ async function deleteVerificationDocument(document) {
     }
 }
 
-async function saveProviderProfile() {
+async function saveProviderProfile(section) {
     isSaving.value = true;
     errorMessage.value = '';
     validationErrors.value = {};
 
+    const payload = section === 'organization'
+        ? {
+            profile_section: 'organization',
+            provider_name: form.provider_name,
+            provider_type: form.provider_type,
+            provider_website: form.provider_website,
+            provider_address: form.provider_address,
+            provider_description: form.provider_description,
+            provider_contact_email: form.provider_contact_email,
+            provider_contact_number: form.provider_contact_number,
+        }
+        : {
+            profile_section: 'representative',
+            first_name: form.first_name,
+            last_name: form.last_name,
+            middle_initial: form.middle_initial,
+            email: form.email,
+            username: form.username,
+            contact_number: form.contact_number,
+        };
+
     try {
-        const response = await window.axios.patch('/provider/profile', { ...form });
+        const response = await window.axios.patch('/provider/profile', payload);
 
         applyUser(response.data.user);
 
@@ -401,7 +443,7 @@ onMounted(loadProviderProfile);
                         </div>
                     </section>
 
-                    <nav class="grid gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2" aria-label="Organization profile sections">
+                    <nav class="grid gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-3" aria-label="Provider profile sections">
                         <button
                             type="button"
                             :aria-current="activeProfileSection === 'details' ? 'page' : undefined"
@@ -417,8 +459,27 @@ onMounted(loadProviderProfile);
                                 <i class="fa-solid fa-building" aria-hidden="true"></i>
                             </span>
                             <span>
-                                <span class="block text-sm font-bold">Organization details</span>
-                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'details' ? 'text-slate-300' : 'text-slate-500']">Public contacts and private account details</span>
+                                <span class="block text-sm font-bold">Provider details</span>
+                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'details' ? 'text-slate-300' : 'text-slate-500']">Organization identity and public contacts</span>
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            :aria-current="activeProfileSection === 'representative' ? 'page' : undefined"
+                            :class="[
+                                'flex items-center gap-3 rounded-md px-4 py-3 text-left transition',
+                                activeProfileSection === 'representative'
+                                    ? 'bg-slate-950 text-white'
+                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                            ]"
+                            @click="selectProfileSection('representative')"
+                        >
+                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', activeProfileSection === 'representative' ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">
+                                <i class="fa-solid fa-user-tie" aria-hidden="true"></i>
+                            </span>
+                            <span>
+                                <span class="block text-sm font-bold">Representative account</span>
+                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'representative' ? 'text-slate-300' : 'text-slate-500']">Private login and contact details</span>
                             </span>
                         </button>
                         <button
@@ -498,13 +559,13 @@ onMounted(loadProviderProfile);
                         </div>
 
                         <TermsAgreement
-                            v-if="canManageProfile"
+                            v-if="canManageProfile && providerProfileComplete"
                             v-model="verificationDocumentTermsAccepted"
                             class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3"
                             context="providerDocument"
                         />
 
-                        <div v-if="canManageProfile" class="mt-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
+                        <div v-if="canManageProfile && providerProfileComplete" class="mt-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
                             <label>
                                 <span :class="labelClass">Document type</span>
                                 <select v-model="verificationDocumentType" :class="inputClass">
@@ -533,6 +594,13 @@ onMounted(loadProviderProfile);
                                 @click="uploadVerificationDocument"
                             >
                                 {{ isUploadingDocument ? 'Uploading...' : !verificationDocumentTermsAccepted ? 'Accept terms first' : 'Upload proof' }}
+                            </button>
+                        </div>
+
+                        <div v-else-if="canManageProfile" class="mt-4 flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <p class="text-sm leading-6 text-slate-600">Finish the organization details before submitting proof for administrator review.</p>
+                            <button type="button" class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="selectProfileSection('details')">
+                                Complete profile
                             </button>
                         </div>
 
@@ -581,13 +649,13 @@ onMounted(loadProviderProfile);
                         </div>
                     </section>
 
-                    <form v-show="activeProfileSection === 'details'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" @submit.prevent="saveProviderProfile">
+                    <form v-show="activeProfileSection === 'details'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" @submit.prevent="saveProviderProfile('organization')">
                         <div class="flex items-center gap-3 p-5 sm:p-6">
                             <span class="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800">
                                 <i class="fa-solid fa-building" aria-hidden="true"></i>
                             </span>
                             <div>
-                                <p class="font-bold text-slate-950">Profile details</p>
+                                <p class="font-bold text-slate-950">Provider details</p>
                                 <p class="mt-0.5 text-sm text-slate-500">Information shown to applicants and used to contact your organization.</p>
                             </div>
                         </div>
@@ -603,12 +671,12 @@ onMounted(loadProviderProfile);
                                 <div class="grid gap-4 md:grid-cols-2">
                                 <label>
                                     <span :class="labelClass">Provider name</span>
-                                    <input v-model="form.provider_name" type="text" placeholder="Provider" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
+                                    <input v-model="form.provider_name" type="text" required placeholder="Organization name" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
                                     <span v-if="fieldError('provider_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_name') }}</span>
                                 </label>
                                 <label>
                                     <span :class="labelClass">Provider type</span>
-                                    <select v-model="form.provider_type" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
+                                    <select v-model="form.provider_type" required :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
                                         <option v-for="option in providerTypeOptions" :key="option.value" :value="option.value">
                                             {{ option.label }}
                                         </option>
@@ -622,7 +690,7 @@ onMounted(loadProviderProfile);
                                 </label>
                                 <label>
                                     <span :class="labelClass">Address</span>
-                                    <input v-model="form.provider_address" type="text" placeholder="Office address" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
+                                    <input v-model="form.provider_address" type="text" required placeholder="Office address" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
                                     <span v-if="fieldError('provider_address')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_address') }}</span>
                                 </label>
                             </div>
@@ -639,31 +707,42 @@ onMounted(loadProviderProfile);
                                 <span v-if="fieldError('provider_description')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_description') }}</span>
                             </label>
 
-                            <div class="mt-4 rounded-md border border-amber-200 bg-amber-50/70 p-4">
-                                <div class="flex items-start gap-3">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
-                                        <i class="fa-solid fa-headset" aria-hidden="true"></i>
-                                    </span>
-                                    <div>
-                                        <p class="text-sm font-bold text-slate-950">Applicant contact</p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-600">Shown on scholarship listings and used as the default contact when you create a program.</p>
-                                    </div>
-                                </div>
-                                <div class="mt-4 grid gap-4 md:grid-cols-2">
-                                    <label>
-                                        <span :class="labelClass">Public email</span>
-                                        <input v-model="form.provider_contact_email" type="email" autocomplete="organization-email" required placeholder="scholarships@example.org" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
-                                        <span v-if="fieldError('provider_contact_email')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_email') }}</span>
-                                    </label>
-                                    <label>
-                                        <span :class="labelClass">Public phone</span>
-                                        <input v-model="form.provider_contact_number" type="tel" inputmode="tel" autocomplete="organization-tel" required maxlength="20" placeholder="0917 000 0000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
-                                        <span v-if="fieldError('provider_contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_number') }}</span>
-                                    </label>
-                                </div>
+                            <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                <label>
+                                    <span :class="labelClass">Provider email</span>
+                                    <input v-model="form.provider_contact_email" type="email" autocomplete="organization-email" required placeholder="scholarships@example.org" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
+                                    <span v-if="fieldError('provider_contact_email')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_email') }}</span>
+                                </label>
+                                <label>
+                                    <span :class="labelClass">Provider phone</span>
+                                    <input v-model="form.provider_contact_number" type="tel" inputmode="tel" autocomplete="organization-tel" required maxlength="20" placeholder="0917 000 0000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
+                                    <span v-if="fieldError('provider_contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_number') }}</span>
+                                </label>
                             </div>
                             </div>
                         </section>
+
+                        <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                            <p class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
+                                <i :class="['fa-solid fa-circle text-[8px]', providerProfileComplete ? 'text-emerald-500' : 'text-amber-500']" aria-hidden="true"></i>
+                                {{ providerProfileComplete ? 'Provider details are complete.' : 'Complete the required provider details before verification.' }}
+                            </p>
+                            <button type="submit" :disabled="isSaving || !canManageProfile" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
+                                {{ isSaving ? 'Saving...' : 'Save provider details' }}
+                            </button>
+                        </div>
+                    </form>
+
+                    <form v-show="activeProfileSection === 'representative'" id="representative-account" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" @submit.prevent="saveProviderProfile('representative')">
+                        <div class="flex items-center gap-3 p-5 sm:p-6">
+                            <span class="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                <i class="fa-solid fa-user-tie" aria-hidden="true"></i>
+                            </span>
+                            <div>
+                                <p class="font-bold text-slate-950">Representative account</p>
+                                <p class="mt-0.5 text-sm text-slate-500">Private login and contact details for the person managing this provider account.</p>
+                            </div>
+                        </div>
 
                         <section class="grid gap-5 border-t border-slate-200 p-5 sm:p-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
                             <div>
@@ -674,17 +753,17 @@ onMounted(loadProviderProfile);
                                 <div class="grid gap-4 md:grid-cols-[1fr_5rem_1fr]">
                                 <label>
                                     <span :class="labelClass">First name</span>
-                                    <input v-model="form.first_name" type="text" placeholder="First name" :class="inputClass">
+                                    <input v-model="form.first_name" type="text" required placeholder="First name" :class="inputClass">
                                     <span v-if="fieldError('first_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('first_name') }}</span>
                                 </label>
                                 <label>
                                     <span :class="labelClass">M.I.</span>
-                                    <input v-model="form.middle_initial" maxlength="1" type="text" placeholder="P" :class="inputClass">
+                                    <input v-model="form.middle_initial" maxlength="1" type="text" required placeholder="P" :class="inputClass">
                                     <span v-if="fieldError('middle_initial')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('middle_initial') }}</span>
                                 </label>
                                 <label>
                                     <span :class="labelClass">Last name</span>
-                                    <input v-model="form.last_name" type="text" placeholder="Last name" :class="inputClass">
+                                    <input v-model="form.last_name" type="text" required placeholder="Last name" :class="inputClass">
                                     <span v-if="fieldError('last_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('last_name') }}</span>
                                 </label>
                             </div>
@@ -692,17 +771,17 @@ onMounted(loadProviderProfile);
                             <div class="mt-4 grid gap-4 md:grid-cols-2">
                                 <label>
                                     <span :class="labelClass">Login email</span>
-                                    <input v-model="form.email" type="email" placeholder="provider@example.com" :class="inputClass">
+                                    <input v-model="form.email" type="email" required placeholder="provider@example.com" :class="inputClass">
                                     <span v-if="fieldError('email')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('email') }}</span>
                                 </label>
                                 <label>
                                     <span :class="labelClass">Username</span>
-                                    <input v-model="form.username" type="text" placeholder="provider" :class="inputClass">
+                                    <input v-model="form.username" type="text" required placeholder="provider" :class="inputClass">
                                     <span v-if="fieldError('username')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('username') }}</span>
                                 </label>
                                 <label>
                                     <span :class="labelClass">Representative phone</span>
-                                    <input v-model="form.contact_number" type="tel" inputmode="tel" maxlength="20" placeholder="0917 000 0000" :class="inputClass">
+                                    <input v-model="form.contact_number" type="tel" inputmode="tel" required maxlength="20" placeholder="0917 000 0000" :class="inputClass">
                                     <span v-if="fieldError('contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('contact_number') }}</span>
                                 </label>
                             </div>
@@ -715,11 +794,11 @@ onMounted(loadProviderProfile);
 
                         <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                             <p class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
-                                <i :class="['fa-solid fa-circle text-[8px]', user?.can_post_scholarships ? 'text-emerald-500' : 'text-amber-500']" aria-hidden="true"></i>
-                                {{ user?.can_post_scholarships ? 'Publishing access is active.' : 'Publishing unlocks after provider verification.' }}
+                                <i class="fa-solid fa-lock text-slate-400" aria-hidden="true"></i>
+                                Representative details remain separate from applicant-facing provider contacts.
                             </p>
                             <button type="submit" :disabled="isSaving" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
-                                {{ isSaving ? 'Saving...' : 'Save profile' }}
+                                {{ isSaving ? 'Saving...' : 'Save representative details' }}
                             </button>
                         </div>
                     </form>

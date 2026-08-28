@@ -141,6 +141,11 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->seedScholarships($tulayAral, $bukasKinabukasan);
+
+        if (app()->environment('local')) {
+            $this->call(DemoCompletedApplicationSeeder::class);
+        }
+
         $this->call(DemoProviderServiceSeeder::class);
     }
 
@@ -172,7 +177,7 @@ class DatabaseSeeder extends Seeder
         $common = [
             'review_rubric' => ReviewRubric::DEFAULT,
             'application_mode' => 'online',
-            'selection_stages' => ['screening'],
+            'selection_stages' => ['screening', 'formal_application', 'decision'],
             'program_cycle' => $programCycle,
             'application_opens_at' => now()->startOfDay()->toDateString(),
             'deadline' => $deadline->toDateString(),
@@ -257,7 +262,7 @@ class DatabaseSeeder extends Seeder
                 'data' => [
                     ...$common,
                     'application_mode' => 'onsite',
-                    'selection_stages' => ['screening', 'interview'],
+                    'selection_stages' => ['screening', 'formal_application', 'interview', 'decision'],
                     'image_path' => '/images/programs/tulay-aral-logo.png',
                     'category' => 'Community grant',
                     'description' => 'A college-entry support package that combines a PHP 15,000 one-time cash grant with transition mentoring for enrollment, books, school materials, and first-year preparation.',
@@ -399,7 +404,7 @@ class DatabaseSeeder extends Seeder
                     ...$common,
                     'application_mode' => 'onsite',
                     'image_path' => '/images/programs/bukas-kinabukasan-logo.png',
-                    'selection_stages' => ['screening', 'exam', 'interview'],
+                    'selection_stages' => ['screening', 'formal_application', 'exam', 'interview', 'decision'],
                     'exam_duration_minutes' => 60,
                     'exam_passing_score' => 75,
                     'category' => 'STEM scholarship',

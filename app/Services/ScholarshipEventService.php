@@ -3,15 +3,15 @@
 namespace App\Services;
 
 use App\Models\ApplicationSchedule;
-use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipEvent;
-use App\Models\ScholarshipFunnelEvent;
 use App\Support\ScholarshipSelectionPlan;
 
 class ScholarshipEventService
 {
+    public function __construct(private readonly ApplicationWorkflowService $workflowService) {}
+
     public function syncEligibleApplications(ScholarshipEvent $event): int
     {
         if ($event->status !== 'scheduled' || ! ScholarshipSelectionPlan::isSchedulable($event->type)) {
@@ -35,11 +35,6 @@ class ScholarshipEventService
         return $application->scholarship->events
             ->where('status', 'scheduled')
             ->filter(fn (ScholarshipEvent $event) => ScholarshipSelectionPlan::isSchedulable($event->type))
-            ->filter(fn (ScholarshipEvent $event) => in_array(
-                $event->type,
-                ScholarshipSelectionPlan::normalize($application->scholarship->selection_stages),
-                true,
-            ))
             ->filter(fn (ScholarshipEvent $event) => $this->syncEventToApplication($event, $application) !== null)
             ->count();
     }
@@ -52,9 +47,10 @@ class ScholarshipEventService
             return null;
         }
 
+        $application = $this->workflowService->initialize($application);
         $application->loadMissing(['schedules', 'applicant', 'scholarship']);
         $schedule = $application->schedules->firstWhere('type', $event->type);
-        $isAtStage = in_array($application->status, ScholarshipSelectionPlan::stageStatuses($event->type), true);
+        $isAtStage = $application->workflow_stage === $event->type;
 
         if (! $isAtStage || ($schedule && $schedule->status !== 'scheduled')) {
             return null;
@@ -70,6 +66,7 @@ class ScholarshipEventService
             'longitude' => $event->longitude,
             'online_url' => $event->online_url,
             'instructions' => $event->instructions,
+            'attendance_status' => 'not_required',
             'updated_by' => $event->updated_by ?? $event->created_by,
         ];
 
@@ -78,7 +75,6 @@ class ScholarshipEventService
             $announcementChanged = $schedule->isDirty(array_keys($announcementData));
 
             if ($announcementChanged) {
-                $schedule->applicant_acknowledged_at = null;
                 $schedule->save();
             }
         } else {
@@ -86,49 +82,11 @@ class ScholarshipEventService
                 ...$announcementData,
                 'type' => $event->type,
                 'status' => 'scheduled',
-                'attendance_status' => 'pending',
+                'attendance_status' => 'not_required',
                 'created_by' => $event->created_by,
             ]);
             $application->schedules->push($schedule);
             $announcementChanged = true;
-        }
-
-        $previousStatus = $application->status;
-        $nextStatus = $isAtStage ? ScholarshipSelectionPlan::scheduledStatus($event->type) : $previousStatus;
-
-        if ($nextStatus !== $previousStatus) {
-            $updates = [
-                'status' => $nextStatus,
-                'decision_reason' => ScholarshipSelectionPlan::decisionReason($event->type),
-                'reviewed_by' => $event->updated_by ?? $event->created_by,
-                'reviewed_at' => now(),
-            ];
-
-            if ($event->type === 'distribution') {
-                $updates['distribution_scheduled_for'] = $event->scheduled_at?->toDateString();
-                $updates['distribution_instructions'] = $event->instructions;
-            }
-
-            $application->update($updates);
-
-            ApplicationStatusHistory::create([
-                'scholarship_application_id' => $application->id,
-                'changed_by' => $event->updated_by ?? $event->created_by,
-                'from_status' => $previousStatus,
-                'to_status' => $nextStatus,
-                'decision_reason' => ScholarshipSelectionPlan::decisionReason($event->type),
-                'review_notes' => ucfirst(ScholarshipSelectionPlan::label($event->type)).' schedule applied from the program plan.',
-                'changed_at' => now(),
-            ]);
-
-            ScholarshipFunnelEvent::record(
-                $application->applicant,
-                "application_status_{$nextStatus}",
-                $application->scholarship,
-                $application,
-                'provider',
-                ['scholarship_event_id' => $event->id, 'schedule_type' => $event->type],
-            );
         }
 
         if ($announcementChanged) {

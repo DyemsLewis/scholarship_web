@@ -10,6 +10,52 @@ class ProviderContactDetailsTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_provider_and_representative_details_can_be_updated_independently(): void
+    {
+        $provider = User::factory()->create([
+            'role' => 'provider',
+            'email' => 'owner@example.test',
+            'username' => 'provider-owner',
+        ]);
+        $profile = $provider->providerProfile;
+        $originalRepresentativeName = $profile->first_name;
+
+        $this->actingAs($provider)
+            ->patchJson('/provider/profile', [
+                'profile_section' => 'organization',
+                'provider_name' => 'Separate Provider Foundation',
+                'provider_type' => 'foundation',
+                'provider_website' => 'https://separate-provider.example.test',
+                'provider_address' => 'Pasig City, Metro Manila',
+                'provider_description' => 'Provider-facing organization details.',
+                'provider_contact_email' => 'scholarships@separate-provider.example.test',
+                'provider_contact_number' => '09175550111',
+            ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Provider profile updated and returned for admin verification.');
+
+        $this->assertSame('owner@example.test', $provider->fresh()->email);
+        $this->assertSame($originalRepresentativeName, $profile->fresh()->first_name);
+
+        $this->actingAs($provider->fresh())
+            ->patchJson('/provider/profile', [
+                'profile_section' => 'representative',
+                'first_name' => 'Updated',
+                'last_name' => 'Representative',
+                'middle_initial' => 'R',
+                'email' => 'owner@example.test',
+                'username' => 'updated-provider-owner',
+                'contact_number' => '09175550222',
+            ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Representative details updated successfully.');
+
+        $updatedProfile = $profile->fresh();
+        $this->assertSame('Updated', $updatedProfile->first_name);
+        $this->assertSame('Separate Provider Foundation', $updatedProfile->provider_name);
+        $this->assertSame('scholarships@separate-provider.example.test', $updatedProfile->provider_contact_email);
+    }
+
     public function test_provider_contacts_are_separate_from_the_representative_account_and_prefill_programs(): void
     {
         $provider = User::factory()->create([

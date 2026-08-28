@@ -22,7 +22,7 @@ class ProviderReviewRubricTest extends TestCase
         $response = $this->actingAs($provider)->patchJson(
             "/provider/applications/{$application->id}/status",
             [
-                'status' => 'under_review',
+                'status' => 'submitted',
                 'rubric_scores' => [
                     'eligibility_fit' => 80,
                     'academic_merit' => 90,
@@ -39,8 +39,8 @@ class ProviderReviewRubricTest extends TestCase
 
         $this->assertSame('84.50', $application->fresh()->rubric_total_score);
         $this->assertSame($provider->id, $application->fresh()->rubric_scored_by);
-        $this->assertDatabaseCount('portal_notifications', 1);
-        $this->assertDatabaseCount('application_status_histories', 1);
+        $this->assertDatabaseCount('portal_notifications', 0);
+        $this->assertDatabaseCount('application_status_histories', 0);
     }
 
     public function test_provider_cannot_score_a_criterion_outside_the_application_snapshot(): void
@@ -50,7 +50,7 @@ class ProviderReviewRubricTest extends TestCase
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/status", [
-                'status' => 'under_review',
+                'status' => 'submitted',
                 'rubric_scores' => ['unlisted_criterion' => 95],
             ])
             ->assertUnprocessable()

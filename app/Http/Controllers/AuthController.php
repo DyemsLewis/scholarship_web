@@ -20,7 +20,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -29,7 +28,7 @@ class AuthController extends Controller
     public function register(Request $request): JsonResponse
     {
         $request->merge(['email' => strtolower(trim((string) $request->input('email')))]);
-        $validated = $request->validate($this->registrationRules($request));
+        $validated = $request->validate($this->registrationRules());
         $email = strtolower(trim($validated['email']));
         $username = trim($validated['username']);
 
@@ -169,16 +168,7 @@ class AuthController extends Controller
             ];
 
             if ($user->isProvider()) {
-                $user->providerProfile()->create([
-                    ...$profile,
-                    'provider_name' => $profileData['provider_name'],
-                    'provider_type' => $profileData['provider_type'],
-                    'provider_website' => $profileData['provider_website'] ?? null,
-                    'provider_address' => null,
-                    'provider_description' => $profileData['provider_description'] ?? null,
-                    'provider_contact_email' => strtolower(trim((string) ($profileData['provider_contact_email'] ?? $pending->email))),
-                    'provider_contact_number' => $profileData['provider_contact_number'] ?? $profileData['number'],
-                ]);
+                $user->providerProfile()->create($profile);
             } else {
                 $user->studentProfile()->create($profile);
             }
@@ -513,9 +503,9 @@ class AuthController extends Controller
         return app()->isLocal() || app()->runningUnitTests();
     }
 
-    private function registrationRules(Request $request): array
+    private function registrationRules(): array
     {
-        $rules = [
+        return [
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
@@ -525,27 +515,6 @@ class AuthController extends Controller
             'role' => ['required', 'string', 'in:applicant,provider'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'terms_accepted' => ['accepted'],
-        ];
-
-        if ($request->input('role') !== 'provider') {
-            return $rules;
-        }
-
-        return [
-            ...$rules,
-            'provider_name' => ['required', 'string', 'max:255'],
-            'provider_type' => ['required', 'string', Rule::in([
-                'school',
-                'foundation',
-                'government',
-                'company',
-                'non_profit',
-                'other',
-            ])],
-            'provider_website' => ['nullable', 'url', 'max:255'],
-            'provider_description' => ['nullable', 'string', 'max:1000'],
-            'provider_contact_email' => ['nullable', 'email', 'max:255'],
-            'provider_contact_number' => ['nullable', 'string', 'max:30', new PhoneNumber],
         ];
     }
 

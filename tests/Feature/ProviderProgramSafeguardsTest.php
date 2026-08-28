@@ -6,6 +6,7 @@ use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipEvent;
 use App\Models\User;
+use App\Services\ApplicationWorkflowService;
 use App\Services\ScholarshipEventService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -165,16 +166,16 @@ class ProviderProgramSafeguardsTest extends TestCase
             'provider_id' => $provider->id,
             'title' => 'Schedule Clearing Draft',
             'description' => 'A draft with a schedule that will be cleared.',
-            'selection_stages' => ['screening', 'distribution'],
+            'selection_stages' => ['screening', 'exam', 'formal_application', 'decision'],
             'status' => 'draft',
         ]);
         $event = ScholarshipEvent::create([
             'scholarship_id' => $scholarship->id,
-            'type' => 'distribution',
-            'title' => 'Initial distribution schedule',
+            'type' => 'exam',
+            'title' => 'Initial exam schedule',
             'scheduled_at' => now()->addWeek(),
             'mode' => 'provider_managed',
-            'instructions' => 'Wait for the provider announcement.',
+            'instructions' => 'Wait for the provider exam announcement.',
             'status' => 'scheduled',
             'created_by' => $provider->id,
         ]);
@@ -183,7 +184,7 @@ class ProviderProgramSafeguardsTest extends TestCase
             ->putJson("/provider/scholarships/{$scholarship->id}", [
                 'title' => $scholarship->title,
                 'description' => $scholarship->description,
-                'selection_stages' => json_encode(['distribution']),
+                'selection_stages' => json_encode(['exam', 'formal_application']),
                 'program_events' => json_encode([]),
                 'status' => 'draft',
             ])
@@ -200,24 +201,27 @@ class ProviderProgramSafeguardsTest extends TestCase
         $provider = $this->verifiedProvider();
         $scholarship = Scholarship::create([
             'provider_id' => $provider->id,
-            'title' => 'Active Distribution Schedule',
-            'description' => 'A program whose release schedule has already reached an applicant.',
-            'selection_stages' => ['screening', 'distribution'],
+            'title' => 'Active Exam Schedule',
+            'description' => 'A program whose exam schedule has already reached an applicant.',
+            'selection_stages' => ['screening', 'exam', 'formal_application', 'decision'],
             'status' => 'draft',
         ]);
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
-            'status' => 'awarded',
+            'status' => 'submitted',
             'submitted_at' => now(),
         ]);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start($application);
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $provider);
         $event = ScholarshipEvent::create([
             'scholarship_id' => $scholarship->id,
-            'type' => 'distribution',
-            'title' => 'Benefit release',
+            'type' => 'exam',
+            'title' => 'Scholarship exam',
             'scheduled_at' => now()->addWeek(),
             'mode' => 'provider_managed',
-            'instructions' => 'Review the release instructions.',
+            'instructions' => 'Review the exam instructions.',
             'status' => 'scheduled',
             'created_by' => $provider->id,
         ]);
@@ -228,7 +232,7 @@ class ProviderProgramSafeguardsTest extends TestCase
             ->putJson("/provider/scholarships/{$scholarship->id}", [
                 'title' => $scholarship->title,
                 'description' => $scholarship->description,
-                'selection_stages' => json_encode(['distribution']),
+                'selection_stages' => json_encode(['exam', 'formal_application']),
                 'program_events' => json_encode([]),
                 'status' => 'draft',
             ])
@@ -238,7 +242,7 @@ class ProviderProgramSafeguardsTest extends TestCase
         $this->assertDatabaseHas('scholarship_events', ['id' => $event->id]);
         $this->assertDatabaseHas('application_schedules', [
             'scholarship_application_id' => $application->id,
-            'type' => 'distribution',
+            'type' => 'exam',
             'status' => 'scheduled',
         ]);
     }
@@ -248,24 +252,27 @@ class ProviderProgramSafeguardsTest extends TestCase
         $provider = $this->verifiedProvider();
         $scholarship = Scholarship::create([
             'provider_id' => $provider->id,
-            'title' => 'New Intake Distribution',
-            'description' => 'A program with an earlier release event already completed.',
-            'selection_stages' => ['screening', 'distribution'],
+            'title' => 'New Intake Exam',
+            'description' => 'A program with an earlier exam event already completed.',
+            'selection_stages' => ['screening', 'exam', 'formal_application', 'decision'],
             'status' => 'draft',
         ]);
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
-            'status' => 'awarded',
+            'status' => 'submitted',
             'submitted_at' => now(),
         ]);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start($application);
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $provider);
         $event = ScholarshipEvent::create([
             'scholarship_id' => $scholarship->id,
-            'type' => 'distribution',
-            'title' => 'Earlier benefit release',
+            'type' => 'exam',
+            'title' => 'Earlier exam',
             'scheduled_at' => now()->subWeek()->startOfHour(),
             'mode' => 'provider_managed',
-            'instructions' => 'Earlier release instructions.',
+            'instructions' => 'Earlier exam instructions.',
             'status' => 'completed',
             'created_by' => $provider->id,
         ]);
@@ -274,9 +281,9 @@ class ProviderProgramSafeguardsTest extends TestCase
             ->putJson("/provider/scholarships/{$scholarship->id}", [
                 'title' => $scholarship->title,
                 'description' => $scholarship->description,
-                'selection_stages' => json_encode(['distribution']),
+                'selection_stages' => json_encode(['exam', 'formal_application']),
                 'program_events' => json_encode([[
-                    'type' => 'distribution',
+                    'type' => 'exam',
                     'title' => $event->title,
                     'scheduled_at' => $event->scheduled_at->format('Y-m-d H:i:s'),
                     'mode' => $event->mode,
@@ -287,29 +294,29 @@ class ProviderProgramSafeguardsTest extends TestCase
             ->assertOk();
 
         $this->assertSame('completed', $event->fresh()->status);
-        $this->assertSame('awarded', $application->fresh()->status);
+        $this->assertSame('exam_qualified', $application->fresh()->status);
         $this->assertDatabaseMissing('application_schedules', [
             'scholarship_application_id' => $application->id,
-            'type' => 'distribution',
+            'type' => 'exam',
         ]);
 
         $this->actingAs($provider)
             ->postJson("/provider/scholarships/{$scholarship->id}/events", [
-                'type' => 'distribution',
-                'title' => 'New benefit release',
+                'type' => 'exam',
+                'title' => 'New exam schedule',
                 'scheduled_at' => now()->addWeek()->format('Y-m-d H:i:s'),
                 'mode' => 'provider_managed',
-                'instructions' => 'Review the new release instructions.',
+                'instructions' => 'Review the new exam instructions.',
             ])
             ->assertOk()
             ->assertJsonPath('event.status', 'scheduled')
             ->assertJsonPath('audience_count', 1);
 
-        $this->assertSame('distribution_scheduled', $application->fresh()->status);
+        $this->assertSame('exam_qualified', $application->fresh()->status);
         $this->assertDatabaseHas('application_schedules', [
             'scholarship_application_id' => $application->id,
-            'type' => 'distribution',
-            'title' => 'New benefit release',
+            'type' => 'exam',
+            'title' => 'New exam schedule',
         ]);
     }
 
@@ -348,6 +355,7 @@ class ProviderProgramSafeguardsTest extends TestCase
             'provider_id' => $provider->id,
             'title' => 'Single Slot Scholarship',
             'description' => 'Only one applicant can receive a final award.',
+            'selection_stages' => ['screening', 'formal_application', 'decision'],
             'slots_available' => 1,
             'status' => 'published',
         ]);
@@ -364,34 +372,27 @@ class ProviderProgramSafeguardsTest extends TestCase
             'submitted_at' => now(),
         ]);
 
-        $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$firstApplication->id}/status", [
-                'status' => 'approved',
-                'decision_reason' => 'qualified_for_formal_application',
-            ])
-            ->assertOk();
+        $workflow = app(ApplicationWorkflowService::class);
+        foreach ([$firstApplication, $secondApplication] as $candidate) {
+            $candidate = $workflow->start($candidate);
+            $candidate = $workflow->recordStageResult($candidate, 'screening', 'passed', $provider);
+            $workflow->recordStageResult($candidate, 'formal_application', 'passed', $provider);
+        }
 
         $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$secondApplication->id}/status", [
-                'status' => 'approved',
-                'decision_reason' => 'qualified_for_formal_application',
-            ])
-            ->assertOk();
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$firstApplication->id}/status", [
-                'status' => 'awarded',
+            ->patchJson("/provider/applications/{$firstApplication->id}/final-outcome", [
+                'outcome' => 'selected',
                 'decision_reason' => 'approved_for_award',
             ])
             ->assertOk();
 
         $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$secondApplication->id}/status", [
-                'status' => 'awarded',
+            ->patchJson("/provider/applications/{$secondApplication->id}/final-outcome", [
+                'outcome' => 'selected',
                 'decision_reason' => 'approved_for_award',
             ])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors('status');
+            ->assertJsonValidationErrors('outcome');
 
         $this->assertSame('approved', $secondApplication->fresh()->status);
     }

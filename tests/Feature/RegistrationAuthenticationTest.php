@@ -73,8 +73,18 @@ class RegistrationAuthenticationTest extends TestCase
         $this->assertSame('provider', $user->role);
         $this->assertTrue($user->hasVerifiedEmail());
         $this->assertNotNull($user->providerProfile);
-        $this->assertSame('Demo Scholarship Foundation', $user->providerProfile->provider_name);
+        $this->assertSame('Demo', $user->providerProfile->first_name);
+        $this->assertSame('Provider', $user->providerProfile->last_name);
+        $this->assertNull($user->providerProfile->provider_name);
+        $this->assertNull($user->providerProfile->provider_type);
         $this->assertNull($user->providerProfile->provider_address);
+        $this->assertNull($user->providerProfile->provider_contact_email);
+        $this->assertNull($user->providerProfile->provider_contact_number);
+
+        $this->postJson('/login', [
+            'email' => $user->email,
+            'password' => 'password123',
+        ])->assertOk()->assertJsonPath('redirect', '/provider');
     }
 
     public function test_incorrect_code_does_not_create_an_account(): void
@@ -183,10 +193,6 @@ class RegistrationAuthenticationTest extends TestCase
             'username' => 'new_provider',
             'number' => '09179876543',
             'role' => 'provider',
-            'provider_name' => 'Demo Scholarship Foundation',
-            'provider_type' => 'foundation',
-            'provider_website' => 'https://example.test',
-            'provider_description' => 'A provider account used to verify registration behavior.',
             'password' => 'password123',
             'password_confirmation' => 'password123',
             'terms_accepted' => true,

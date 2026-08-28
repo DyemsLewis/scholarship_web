@@ -4,11 +4,11 @@ namespace App\Support;
 
 class ScholarshipSelectionPlan
 {
-    public const STAGES = ['screening', 'exam', 'interview', 'distribution'];
+    public const STAGES = ['screening', 'formal_application', 'exam', 'interview', 'decision'];
 
-    public const SCHEDULABLE_STAGES = ['exam', 'interview', 'distribution'];
+    public const SCHEDULABLE_STAGES = ['exam', 'interview'];
 
-    public const DEFAULT = ['screening'];
+    public const DEFAULT = ['screening', 'formal_application', 'decision'];
 
     public static function normalize(mixed $stages): array
     {
@@ -19,37 +19,61 @@ class ScholarshipSelectionPlan
 
         $selected = collect(is_array($stages) ? $stages : [])
             ->map(fn (mixed $stage) => strtolower(trim((string) $stage)))
+            ->map(fn (string $stage) => $stage === 'distribution' ? 'decision' : $stage)
             ->filter(fn (string $stage) => in_array($stage, self::STAGES, true))
             ->unique()
-            ->all();
+            ->values();
 
-        return collect(self::STAGES)
-            ->filter(fn (string $stage) => in_array($stage, $selected, true) || in_array($stage, self::DEFAULT, true))
+        if ($selected->isEmpty()) {
+            return self::DEFAULT;
+        }
+
+        $middle = $selected
+            ->reject(fn (string $stage): bool => in_array($stage, ['screening', 'decision'], true))
+            ->values();
+
+        // Older plans did not contain the provider handoff. Appending it keeps their old stage order stable.
+        if (! $middle->contains('formal_application')) {
+            $middle->push('formal_application');
+        }
+
+        return ['screening', ...$middle->all(), 'decision'];
+    }
+
+    public static function providerStages(mixed $stages): array
+    {
+        return collect(self::normalize($stages))
+            ->reject(fn (string $stage): bool => in_array($stage, ['screening', 'decision'], true))
             ->values()
             ->all();
+    }
+
+    public static function nextStage(string $currentStage, mixed $stages): ?string
+    {
+        $stages = self::normalize($stages);
+        $index = array_search($currentStage, $stages, true);
+
+        return $index === false ? null : ($stages[$index + 1] ?? null);
     }
 
     public static function nextApprovalStatus(string $currentStatus, mixed $stages): ?string
     {
         $stages = self::normalize($stages);
 
-        if (in_array($currentStatus, ['submitted', 'under_review', 'qualified', 'shortlisted'], true)) {
-            if (in_array('exam', $stages, true)) {
-                return 'exam_qualified';
-            }
+        $currentStage = match (true) {
+            in_array($currentStatus, ['submitted', 'under_review', 'qualified', 'shortlisted'], true) => 'screening',
+            in_array($currentStatus, ['exam_taken', 'exam_passed'], true) => 'exam',
+            $currentStatus === 'interview' => 'interview',
+            default => null,
+        };
+        $nextStage = $currentStage ? self::nextStage($currentStage, $stages) : null;
 
-            return in_array('interview', $stages, true) ? 'interview' : 'approved';
-        }
-
-        if (in_array($currentStatus, ['exam_taken', 'exam_passed'], true)) {
-            return in_array('interview', $stages, true) ? 'interview' : 'approved';
-        }
-
-        if ($currentStatus === 'interview') {
-            return 'approved';
-        }
-
-        return null;
+        return match ($nextStage) {
+            'exam' => 'exam_qualified',
+            'interview' => 'interview',
+            'formal_application', 'decision' => 'approved',
+            default => null,
+        };
     }
 
     public static function isSchedulable(string $stage): bool
@@ -80,7 +104,8 @@ class ScholarshipSelectionPlan
             'screening' => ['submitted', 'under_review'],
             'exam' => ['exam_qualified', 'exam_scheduled'],
             'interview' => ['interview'],
-            'distribution' => ['awarded', 'distribution_scheduled'],
+            'formal_application' => ['approved'],
+            'decision' => ['approved', 'waitlisted'],
             default => [],
         };
     }
@@ -91,7 +116,6 @@ class ScholarshipSelectionPlan
             'screening' => 'under_review',
             'exam' => 'exam_scheduled',
             'interview' => 'interview',
-            'distribution' => 'distribution_scheduled',
             default => 'under_review',
         };
     }
@@ -102,7 +126,6 @@ class ScholarshipSelectionPlan
             'screening' => 'under_review',
             'exam' => 'exam_scheduled',
             'interview' => 'for_interview',
-            'distribution' => 'distribution_scheduled',
             default => 'other',
         };
     }
@@ -111,9 +134,10 @@ class ScholarshipSelectionPlan
     {
         return match ($type) {
             'screening' => 'screening',
+            'formal_application' => 'formal application',
             'exam' => 'exam',
             'interview' => 'interview',
-            'distribution' => 'award release',
+            'decision' => 'final decision',
             default => 'activity',
         };
     }

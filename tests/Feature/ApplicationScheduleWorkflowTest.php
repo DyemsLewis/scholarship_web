@@ -3,13 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\ApplicationSchedule;
-use App\Models\MobileApiToken;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipEvent;
 use App\Models\User;
-use App\Services\ScholarshipEventService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -23,319 +21,104 @@ class ApplicationScheduleWorkflowTest extends TestCase
         parent::setUp();
 
         Mail::fake();
-        $this->seed();
     }
 
-    public function test_provider_can_announce_interview_without_applicant_acknowledgment(): void
+    public function test_schedule_is_informational_and_does_not_change_the_application_stage(): void
     {
-        $provider = User::query()->where('email', 'tulayaral@scholarship.test')->firstOrFail();
-        $applicant = User::query()->where('email', 'student@scholarship.test')->firstOrFail();
-        $scholarship = Scholarship::query()->where('provider_id', $provider->id)->firstOrFail();
-        $application = ScholarshipApplication::create([
-            'scholarship_id' => $scholarship->id,
-            'applicant_id' => $applicant->id,
-            'status' => 'qualified',
-            'submitted_at' => now(),
-        ]);
-        $scheduledAt = now()->addDays(2)->setTime(9, 30);
+        [$provider, $applicant, $application] = $this->applicationAt('exam');
 
-        $this->actingAs($provider)
+        $response = $this->actingAs($provider)
             ->postJson("/provider/applications/{$application->id}/schedules", [
-                'type' => 'interview',
-                'title' => 'Applicant interview',
-                'scheduled_at' => $scheduledAt->format('Y-m-d H:i:s'),
+                'type' => 'exam',
+                'title' => 'Qualifying exam',
+                'scheduled_at' => now()->addDay()->format('Y-m-d H:i:s'),
                 'mode' => 'onsite',
-                'venue' => 'Tulay Aral Community Desk',
-                'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
-                'latitude' => 14.6255,
-                'longitude' => 121.1245,
+                'venue' => 'Provider office',
                 'instructions' => 'Bring a school ID and arrive 15 minutes early.',
             ])
             ->assertOk()
-            ->assertJsonPath('application.status', 'interview')
-            ->assertJsonPath('application.schedules.0.type', 'interview')
-            ->assertJsonPath('application.schedules.0.requires_applicant_acknowledgment', false)
-            ->assertJsonPath('application.schedules.0.applicant_acknowledged', false);
+            ->assertJsonPath('application.workflow.current_stage', 'exam')
+            ->assertJsonPath('schedule.attendance_status', 'not_required')
+            ->assertJsonPath('schedule.requires_applicant_acknowledgment', false);
 
-        $schedule = ApplicationSchedule::query()->firstOrFail();
+        $scheduleId = $response->json('schedule.id');
 
-        $this->actingAs($applicant)
-            ->getJson('/dashboard/data')
-            ->assertOk()
-            ->assertJsonPath('applications.0.schedules.0.id', $schedule->id)
-            ->assertJsonPath('applications.0.schedules.0.requires_applicant_acknowledgment', false)
-            ->assertJsonPath('applications.0.schedules.0.applicant_acknowledged', false);
-
-        $this->actingAs($applicant)
-            ->getJson('/dashboard/applications/data')
-            ->assertOk()
-            ->assertJsonPath('applications.0.schedules.0.title', 'Applicant interview');
-
+        $this->assertSame('exam_qualified', $application->fresh()->status);
         $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $applicant->id,
             'type' => 'application_schedule',
         ]);
 
         $this->actingAs($applicant)
-            ->patchJson("/dashboard/applications/{$application->id}/schedules/{$schedule->id}/acknowledge")
-            ->assertUnprocessable()
-            ->assertJsonPath(
-                'message',
-                'Schedules are delivered through portal and email notifications and do not require applicant acknowledgment.',
-            );
+            ->patchJson("/dashboard/applications/{$application->id}/schedules/{$scheduleId}/acknowledge")
+            ->assertUnprocessable();
 
-        $this->assertNull($schedule->fresh()->applicant_acknowledged_at);
+        $this->assertNull(ApplicationSchedule::findOrFail($scheduleId)->applicant_acknowledged_at);
         $this->assertFalse(PortalNotification::query()
             ->where('user_id', $provider->id)
             ->where('type', 'schedule_acknowledged')
             ->exists());
     }
 
-    public function test_exam_completion_tracks_attendance_and_advances_the_application(): void
+    public function test_provider_records_a_stage_result_without_attendance_or_schedule_completion(): void
     {
-        $provider = User::query()->where('email', 'bukasfoundation@scholarship.test')->firstOrFail();
-        $applicant = User::query()->where('email', 'student@scholarship.test')->firstOrFail();
-        $scholarship = Scholarship::query()
-            ->where('provider_id', $provider->id)
-            ->where('title', 'Bukas Kinabukasan STEM Pathways Grant')
-            ->firstOrFail();
-        $application = ScholarshipApplication::create([
-            'scholarship_id' => $scholarship->id,
-            'applicant_id' => $applicant->id,
-            'status' => 'exam_qualified',
-            'submitted_at' => now(),
-        ]);
+        [$provider, , $application] = $this->applicationAt('interview');
 
         $this->actingAs($provider)
-            ->postJson("/provider/applications/{$application->id}/schedules", [
+            ->patchJson("/provider/applications/{$application->id}/stages/interview/result", [
+                'result' => 'passed',
+                'notes' => 'The provider confirmed the interview result.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.workflow.current_stage', 'formal_application');
+
+        $this->assertDatabaseHas('application_stage_progresses', [
+            'scholarship_application_id' => $application->id,
+            'stage_key' => 'interview',
+            'status' => 'passed',
+        ]);
+    }
+
+    public function test_shared_schedule_reaches_only_applicants_currently_at_that_stage(): void
+    {
+        [$provider, $applicant, $application, $scholarship] = $this->applicationAt('exam');
+        [, , $formalApplication] = $this->applicationAt('formal_application', $provider, $scholarship);
+
+        $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/events", [
                 'type' => 'exam',
-                'title' => 'STEM qualifying activity',
-                'scheduled_at' => now()->addDay()->format('Y-m-d H:i:s'),
-                'mode' => 'onsite',
-                'venue' => 'Bukas Kinabukasan Learning Hub',
-                'instructions' => 'Bring a school ID and pencil.',
-            ])
-            ->assertOk()
-            ->assertJsonPath('application.status', 'exam_scheduled');
-
-        $schedule = ApplicationSchedule::query()->firstOrFail();
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$application->id}/schedules/{$schedule->id}", [
-                'status' => 'scheduled',
-                'attendance_status' => 'attended',
-            ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('attendance_status');
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$application->id}/schedules/{$schedule->id}", [
-                'status' => 'completed',
-                'attendance_status' => 'attended',
-                'attendance_notes' => 'Applicant completed the activity.',
-            ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('status');
-
-        $schedule->update(['scheduled_at' => now()->subMinute()]);
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$application->id}/schedules/{$schedule->id}", [
-                'status' => 'completed',
-                'attendance_status' => 'attended',
-                'attendance_notes' => 'Applicant completed the activity.',
-            ])
-            ->assertOk()
-            ->assertJsonPath('application.status', 'exam_taken')
-            ->assertJsonPath('schedule.attendance_status', 'attended');
-
-        $this->assertDatabaseHas('scholarship_applications', [
-            'id' => $application->id,
-            'status' => 'exam_taken',
-        ]);
-    }
-
-    public function test_distribution_announcement_requires_approval_and_records_release(): void
-    {
-        $provider = User::query()->where('email', 'tulayaral@scholarship.test')->firstOrFail();
-        $otherProvider = User::query()->where('email', 'bukasfoundation@scholarship.test')->firstOrFail();
-        $applicant = User::query()->where('email', 'student@scholarship.test')->firstOrFail();
-        $scholarship = Scholarship::query()->where('provider_id', $provider->id)->firstOrFail();
-        $application = ScholarshipApplication::create([
-            'scholarship_id' => $scholarship->id,
-            'applicant_id' => $applicant->id,
-            'status' => 'under_review',
-            'submitted_at' => now(),
-        ]);
-        $payload = [
-            'type' => 'distribution',
-            'title' => 'Grant release',
-            'scheduled_at' => now()->addDay()->format('Y-m-d H:i:s'),
-            'mode' => 'onsite',
-            'venue' => 'Tulay Aral Community Desk',
-            'instructions' => 'Bring a school ID and signed acknowledgment receipt.',
-            'awarded_amount' => 10000,
-        ];
-
-        $this->actingAs($provider)
-            ->postJson("/provider/applications/{$application->id}/schedules", $payload)
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('type');
-
-        $application->update(['status' => 'awarded']);
-
-        $this->actingAs($provider)
-            ->postJson("/provider/applications/{$application->id}/schedules", $payload)
-            ->assertOk()
-            ->assertJsonPath('application.status', 'distribution_scheduled')
-            ->assertJsonPath('application.awarded_amount', '10000.00')
-            ->assertJsonPath('schedule.requires_applicant_acknowledgment', false);
-
-        $schedule = ApplicationSchedule::query()->firstOrFail();
-
-        $this->actingAs($applicant)
-            ->patchJson("/dashboard/applications/{$application->id}/schedules/{$schedule->id}/acknowledge")
-            ->assertUnprocessable()
-            ->assertJsonPath(
-                'message',
-                'Schedules are delivered through portal and email notifications and do not require applicant acknowledgment.',
-            );
-
-        $this->assertNull($schedule->fresh()->applicant_acknowledged_at);
-
-        $payload['awarded_amount'] = 12000;
-
-        $this->actingAs($provider)
-            ->postJson("/provider/applications/{$application->id}/schedules", $payload)
-            ->assertOk()
-            ->assertJsonPath('application.awarded_amount', '12000.00')
-            ->assertJsonPath('schedule.requires_applicant_acknowledgment', false)
-            ->assertJsonPath('schedule.applicant_acknowledged', false);
-
-        $this->actingAs($otherProvider)
-            ->patchJson("/provider/applications/{$application->id}/schedules/{$schedule->id}", [
-                'status' => 'cancelled',
-                'attendance_status' => 'pending',
-            ])
-            ->assertForbidden();
-
-        $schedule->update(['scheduled_at' => now()->subMinute()]);
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$application->id}/schedules/{$schedule->id}", [
-                'status' => 'completed',
-                'attendance_status' => 'received',
-                'attendance_notes' => 'Grant released and receipt confirmed.',
-            ])
-            ->assertOk()
-            ->assertJsonPath('application.status', 'disbursed');
-
-        $this->assertDatabaseHas('application_schedules', [
-            'id' => $schedule->id,
-            'status' => 'completed',
-            'attendance_status' => 'received',
-        ]);
-    }
-
-    public function test_online_distribution_schedule_does_not_require_an_access_link(): void
-    {
-        $provider = User::query()->where('email', 'tulayaral@scholarship.test')->firstOrFail();
-        $applicant = User::query()->where('email', 'student@scholarship.test')->firstOrFail();
-        $scholarship = Scholarship::query()->where('provider_id', $provider->id)->firstOrFail();
-        $application = ScholarshipApplication::create([
-            'scholarship_id' => $scholarship->id,
-            'applicant_id' => $applicant->id,
-            'status' => 'awarded',
-            'submitted_at' => now(),
-        ]);
-
-        $this->actingAs($provider)
-            ->postJson("/provider/applications/{$application->id}/schedules", [
-                'type' => 'distribution',
-                'title' => 'Remote benefit release',
-                'scheduled_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                'title' => 'Shared qualifying exam',
+                'scheduled_at' => now()->addDays(2)->format('Y-m-d H:i:s'),
                 'mode' => 'online',
-                'instructions' => 'Check your registered email for secure transfer instructions.',
-                'awarded_amount' => 10000,
+                'online_url' => 'https://example.test/exam-room',
+                'instructions' => 'Open the link at the scheduled time.',
             ])
             ->assertOk()
-            ->assertJsonPath('schedule.mode', 'online')
-            ->assertJsonPath('schedule.online_url', null);
+            ->assertJsonPath('audience_count', 1);
 
         $this->assertDatabaseHas('application_schedules', [
             'scholarship_application_id' => $application->id,
-            'type' => 'distribution',
-            'mode' => 'online',
-            'online_url' => null,
+            'type' => 'exam',
+            'attendance_status' => 'not_required',
         ]);
-    }
-
-    public function test_mobile_app_receives_an_active_schedule_without_acknowledgment(): void
-    {
-        $provider = User::query()->where('email', 'tulayaral@scholarship.test')->firstOrFail();
-        $applicant = User::query()->where('email', 'student@scholarship.test')->firstOrFail();
-        $scholarship = Scholarship::query()->where('provider_id', $provider->id)->firstOrFail();
-        $application = ScholarshipApplication::create([
-            'scholarship_id' => $scholarship->id,
-            'applicant_id' => $applicant->id,
-            'status' => 'qualified',
-            'submitted_at' => now(),
+        $this->assertDatabaseMissing('application_schedules', [
+            'scholarship_application_id' => $formalApplication->id,
+            'type' => 'exam',
         ]);
-
-        $this->actingAs($provider)
-            ->postJson("/provider/applications/{$application->id}/schedules", [
-                'type' => 'interview',
-                'title' => 'Mobile applicant interview',
-                'scheduled_at' => now()->addDays(2)->format('Y-m-d H:i:s'),
-                'mode' => 'online',
-                'online_url' => 'https://meet.example.test/interview',
-                'instructions' => 'Join ten minutes before the interview.',
-            ])
-            ->assertOk();
-
-        $schedule = ApplicationSchedule::query()->firstOrFail();
-        $plainToken = 'application-schedule-mobile-token';
-
-        MobileApiToken::create([
+        $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $applicant->id,
-            'name' => 'mobile_app',
-            'token_hash' => hash('sha256', $plainToken),
-            'last_used_at' => now(),
-            'expires_at' => now()->addDay(),
+            'type' => 'application_schedule',
         ]);
-
-        $this->withToken($plainToken)
-            ->getJson('/api/mobile/profile')
-            ->assertOk()
-            ->assertJsonPath('applications.0.schedules.0.id', $schedule->id)
-            ->assertJsonPath('applications.0.schedules.0.requires_applicant_acknowledgment', false)
-            ->assertJsonPath('applications.0.schedules.0.applicant_acknowledged', false);
-
-        $this->withToken($plainToken)
-            ->patchJson("/api/mobile/applications/{$application->id}/schedules/{$schedule->id}/acknowledge")
-            ->assertUnprocessable()
-            ->assertJsonPath(
-                'message',
-                'Schedules are delivered through portal and email notifications and do not require applicant acknowledgment.',
-            );
-
-        $this->assertNull($schedule->fresh()->applicant_acknowledged_at);
     }
 
-    public function test_program_event_cannot_be_closed_without_assigned_participants(): void
+    public function test_program_schedule_can_be_archived_without_gating_applicant_results(): void
     {
-        $provider = User::factory()->create(['role' => 'provider']);
-        $scholarship = Scholarship::create([
-            'provider_id' => $provider->id,
-            'title' => 'Empty Exam Schedule',
-            'description' => 'An exam that does not have approved participants yet.',
-            'selection_stages' => ['screening', 'exam', 'distribution'],
-            'status' => 'published',
-        ]);
+        $provider = $this->provider();
+        $scholarship = $this->scholarship($provider);
         $event = ScholarshipEvent::create([
             'scholarship_id' => $scholarship->id,
             'type' => 'exam',
-            'title' => 'Qualifying exam',
+            'title' => 'Archived exam schedule',
             'scheduled_at' => now()->subHour(),
             'mode' => 'onsite',
             'venue' => 'Provider office',
@@ -343,229 +126,89 @@ class ApplicationScheduleWorkflowTest extends TestCase
             'status' => 'scheduled',
             'created_by' => $provider->id,
         ]);
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/complete")
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('event');
-
-        $this->assertSame('scheduled', $event->fresh()->status);
-    }
-
-    public function test_interview_approval_requires_completed_attendance(): void
-    {
-        $provider = User::factory()->create(['role' => 'provider']);
-        $applicant = User::factory()->create(['role' => 'applicant']);
-        $scholarship = Scholarship::create([
-            'provider_id' => $provider->id,
-            'title' => 'Interview Attendance Scholarship',
-            'description' => 'Tests the interview decision sequence.',
-            'selection_stages' => ['screening', 'interview', 'distribution'],
-            'status' => 'published',
-        ]);
-        $application = ScholarshipApplication::create([
-            'scholarship_id' => $scholarship->id,
-            'applicant_id' => $applicant->id,
-            'status' => 'interview',
-            'submitted_at' => now(),
-        ]);
-        $schedule = $application->schedules()->create([
-            'type' => 'interview',
-            'title' => 'Applicant interview',
-            'scheduled_at' => now()->subHour(),
-            'mode' => 'onsite',
-            'venue' => 'Provider office',
-            'instructions' => 'Bring a school ID.',
-            'status' => 'scheduled',
-            'attendance_status' => 'pending',
-            'created_by' => $provider->id,
-        ]);
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$application->id}/decision", [
-                'decision' => 'approve',
-                'review_notes' => 'Interview review completed.',
-            ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('decision');
-
-        $schedule->update([
-            'status' => 'completed',
-            'attendance_status' => 'attended',
-            'completed_at' => now(),
-        ]);
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/applications/{$application->id}/decision", [
-                'decision' => 'approve',
-                'review_notes' => 'Applicant passed the interview review.',
-            ])
-            ->assertOk()
-            ->assertJsonPath('application.status', 'approved');
-    }
-
-    public function test_provider_can_complete_one_program_event_and_record_results_in_bulk(): void
-    {
-        $provider = User::factory()->create(['role' => 'provider']);
-        $otherProvider = User::factory()->create(['role' => 'provider']);
-        $applicants = User::factory()->count(3)->create();
-        $scholarship = Scholarship::create([
-            'provider_id' => $provider->id,
-            'title' => 'Bulk Result Scholarship',
-            'description' => 'Tests scalable provider result tracking.',
-            'selection_stages' => ['screening', 'exam', 'distribution'],
-            'status' => 'published',
-        ]);
-        $applications = $applicants->map(fn (User $applicant) => ScholarshipApplication::create([
-            'scholarship_id' => $scholarship->id,
-            'applicant_id' => $applicant->id,
-            'status' => 'exam_qualified',
-            'submitted_at' => now(),
-        ]));
-        $event = ScholarshipEvent::create([
-            'scholarship_id' => $scholarship->id,
-            'type' => 'exam',
-            'title' => 'Qualifying exam',
-            'scheduled_at' => now()->subHour(),
-            'mode' => 'onsite',
-            'venue' => 'Provider office',
-            'instructions' => 'Bring a school ID.',
-            'status' => 'scheduled',
-            'created_by' => $provider->id,
-            'updated_by' => $provider->id,
-        ]);
-
-        app(ScholarshipEventService::class)->syncEligibleApplications($event);
-
-        $this->actingAs($otherProvider)
-            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/complete")
-            ->assertForbidden();
 
         $this->actingAs($provider)
             ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/complete")
             ->assertOk()
             ->assertJsonPath('event.status', 'completed')
-            ->assertJsonPath('participant_count', 3);
-
-        $selectedIds = $applications->take(2)->pluck('id')->all();
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/attendance", [
-                'application_ids' => $selectedIds,
-                'attendance_status' => 'passed',
-                'attendance_notes' => 'Applicants passed the qualifying exam.',
-            ])
-            ->assertOk()
-            ->assertJsonPath('updated_count', 2);
-
-        foreach ($selectedIds as $applicationId) {
-            $this->assertDatabaseHas('scholarship_applications', [
-                'id' => $applicationId,
-                'status' => 'approved',
-            ]);
-            $this->assertDatabaseHas('application_schedules', [
-                'scholarship_application_id' => $applicationId,
-                'type' => 'exam',
-                'status' => 'completed',
-                'attendance_status' => 'passed',
-            ]);
-        }
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/attendance", [
-                'application_ids' => [$selectedIds[0]],
-                'attendance_status' => 'passed',
-            ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('application_ids');
-
-        $unselectedApplication = $applications->last();
-        $this->assertDatabaseHas('application_schedules', [
-            'scholarship_application_id' => $unselectedApplication->id,
-            'type' => 'exam',
-            'status' => 'scheduled',
-            'attendance_status' => 'pending',
-        ]);
-        $this->assertDatabaseHas('scholarship_applications', [
-            'id' => $unselectedApplication->id,
-            'status' => 'exam_scheduled',
-        ]);
-
-        $this->actingAs($provider)
-            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/attendance", [
-                'application_ids' => [$unselectedApplication->id],
-                'attendance_status' => 'failed',
-            ])
-            ->assertOk();
-
-        $this->assertDatabaseHas('scholarship_applications', [
-            'id' => $unselectedApplication->id,
-            'status' => 'exam_failed',
-        ]);
-        $this->assertDatabaseHas('application_schedules', [
-            'scholarship_application_id' => $unselectedApplication->id,
-            'attendance_status' => 'failed',
-        ]);
+            ->assertJsonPath('participant_count', 0);
     }
 
-    public function test_passed_interview_result_approves_the_application_without_an_attendance_step(): void
+    public function test_only_exam_and_interview_can_be_published_as_schedules(): void
     {
-        $provider = User::factory()->create(['role' => 'provider']);
-        $applicant = User::factory()->create();
-        $scholarship = Scholarship::create([
-            'provider_id' => $provider->id,
-            'title' => 'Interview Result Scholarship',
-            'description' => 'Tests the consolidated interview result.',
-            'selection_stages' => ['screening', 'interview', 'distribution'],
-            'status' => 'published',
-        ]);
+        [$provider, , $application, $scholarship] = $this->applicationAt('exam');
+
+        $this->actingAs($provider)
+            ->postJson("/provider/applications/{$application->id}/schedules", [
+                'type' => 'distribution',
+                'title' => 'Award release',
+                'scheduled_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                'mode' => 'onsite',
+                'venue' => 'Provider office',
+                'instructions' => 'Bring a valid ID.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('type');
+
+        $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/events", [
+                'type' => 'exam',
+                'title' => 'Online exam',
+                'scheduled_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                'mode' => 'online',
+                'instructions' => 'Join at the scheduled time.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('online_url');
+    }
+
+    private function applicationAt(
+        string $stage,
+        ?User $provider = null,
+        ?Scholarship $scholarship = null,
+    ): array {
+        $provider ??= $this->provider();
+        $scholarship ??= $this->scholarship($provider);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $status = match ($stage) {
+            'exam' => 'exam_qualified',
+            'interview' => 'interview',
+            'formal_application', 'decision' => 'approved',
+            default => 'under_review',
+        };
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,
             'applicant_id' => $applicant->id,
-            'status' => 'interview',
+            'status' => $status,
             'submitted_at' => now(),
         ]);
-        $event = ScholarshipEvent::create([
-            'scholarship_id' => $scholarship->id,
-            'type' => 'interview',
-            'title' => 'Final interview',
-            'scheduled_at' => now()->subHour(),
-            'mode' => 'onsite',
-            'venue' => 'Provider office',
-            'instructions' => 'Bring a school ID.',
-            'status' => 'completed',
-            'created_by' => $provider->id,
-            'updated_by' => $provider->id,
-        ]);
-        $application->schedules()->create([
-            'type' => 'interview',
-            'title' => 'Final interview',
-            'scheduled_at' => now()->subHour(),
-            'mode' => 'onsite',
-            'venue' => 'Provider office',
-            'instructions' => 'Bring a school ID.',
-            'status' => 'scheduled',
-            'attendance_status' => 'pending',
-            'created_by' => $provider->id,
+
+        if ($stage === 'decision') {
+            $application->forceFill(['workflow_stage' => 'decision'])->save();
+        }
+
+        return [$provider, $applicant, $application, $scholarship];
+    }
+
+    private function provider(): User
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update([
+            'verification_status' => 'approved',
+            'verified_at' => now(),
         ]);
 
-        $this->actingAs($provider)
-            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/attendance", [
-                'application_ids' => [$application->id],
-                'attendance_status' => 'passed',
-                'attendance_notes' => 'Applicant passed the interview.',
-            ])
-            ->assertOk();
+        return $provider;
+    }
 
-        $this->assertDatabaseHas('scholarship_applications', [
-            'id' => $application->id,
-            'status' => 'approved',
-        ]);
-        $this->assertDatabaseHas('application_schedules', [
-            'scholarship_application_id' => $application->id,
-            'type' => 'interview',
-            'status' => 'completed',
-            'attendance_status' => 'passed',
+    private function scholarship(User $provider): Scholarship
+    {
+        return Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => fake()->unique()->sentence(4),
+            'description' => 'Program used to verify informational schedules.',
+            'selection_stages' => ['screening', 'exam', 'interview', 'formal_application', 'decision'],
+            'status' => 'published',
         ]);
     }
 }

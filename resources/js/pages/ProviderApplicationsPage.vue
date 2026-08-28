@@ -13,28 +13,6 @@ const initialScholarshipTitle = appElement?.dataset.scholarshipTitle ?? '';
 const requestedWorkspaceSection = pageSearchParams.get('workspace');
 const requestedQueueFilter = pageSearchParams.get('filter');
 const queueFilterValues = ['pending_review', 'document_issues', 'active_stages', 'formal_application', 'decided', 'all'];
-const pendingReviewStatuses = ['submitted', 'under_review'];
-const activeStageStatuses = [
-    'qualified',
-    'shortlisted',
-    'interview',
-    'exam_qualified',
-    'exam_scheduled',
-    'exam_taken',
-    'exam_passed',
-    'distribution_scheduled',
-];
-const formalApplicationStatuses = ['approved', 'waitlisted'];
-const decidedStatuses = [
-    'awarded',
-    'not_awarded',
-    'disbursed',
-    'renewed',
-    'rejected',
-    'exam_failed',
-    'interview_failed',
-    'withdrawn',
-];
 const isLoading = ref(true);
 const errorMessage = ref('');
 const applications = ref([]);
@@ -51,7 +29,7 @@ const applicationSearch = ref('');
 const applicationPage = ref(1);
 const selectedApplicationPreview = ref(null);
 const applicationsPerPage = 10;
-const activeWorkspaceSection = ref(['applications', 'schedule', 'results'].includes(requestedWorkspaceSection)
+const activeWorkspaceSection = ref(['applications', 'schedule'].includes(requestedWorkspaceSection)
     ? requestedWorkspaceSection
     : 'applications');
 const programEvents = ref([]);
@@ -59,21 +37,11 @@ const scheduleEditorType = ref('');
 const scheduleSaving = ref(false);
 const scheduleError = ref('');
 const scheduleForm = ref(emptyScheduleForm());
-const attendanceEventType = ref('');
-const attendanceSearch = ref('');
-const attendancePage = ref(1);
-const selectedAttendanceIds = ref([]);
-const bulkAttendanceStatus = ref('');
-const bulkAttendanceNotes = ref('');
-const attendanceSaving = ref(false);
-const completingEventId = ref(null);
-const attendanceError = ref('');
 const selectedBulkApplicationIds = ref([]);
-const bulkAdvanceTarget = ref('exam');
+const bulkAdvanceTarget = ref('pass_prescreening');
 const bulkAdvancing = ref(false);
 const bulkAdvanceError = ref('');
 const showBulkActions = ref(false);
-const attendancePerPage = 25;
 const {
     confirmation,
     requestConfirmation,
@@ -87,7 +55,6 @@ const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffs
 const scheduleTypeCatalog = [
     { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question', help: 'Provider-managed exam schedule' },
     { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments', help: 'Shared interview instructions' },
-    { value: 'distribution', label: 'Award release', icon: 'fa-solid fa-hand-holding-dollar', help: 'Release or recipient onboarding details' },
 ];
 const scheduleModeOptions = [
     { value: 'onsite', label: 'On-site' },
@@ -95,12 +62,6 @@ const scheduleModeOptions = [
     { value: 'hybrid', label: 'Hybrid' },
     { value: 'provider_managed', label: 'Provider managed' },
 ];
-const scheduleWaitingStatuses = {
-    exam: ['exam_qualified'],
-    interview: ['interview'],
-    distribution: ['awarded'],
-};
-
 const selectedScholarshipId = computed(() => selectedScholarshipContext.value?.id || initialScholarshipId);
 const hasProgramContext = computed(() => Boolean(selectedScholarshipId.value));
 const configuredScheduleTypes = computed(() => {
@@ -109,117 +70,28 @@ const configuredScheduleTypes = computed(() => {
     return scheduleTypeCatalog.filter((type) => configured.includes(type.value));
 });
 const availableBulkAdvanceTargets = computed(() => {
-    const stages = selectedScholarshipContext.value?.selection_stages ?? ['screening'];
-    const targets = [];
+    const catalog = [
+        { value: 'pass_prescreening', label: 'Pass pre-screening' },
+        { value: 'pass_stage', label: 'Pass current stage' },
+        { value: 'selected', label: 'Mark as selected' },
+    ];
 
-    if (stages.includes('exam')) {
-        targets.push({ value: 'exam', label: 'Approve for exam' });
-    }
-
-    if (stages.includes('distribution')) {
-        targets.push({ value: 'distribution', label: 'Record award recipients' });
-    }
-
-    return targets;
+    return catalog.filter((target) => applications.value.some((application) => (
+        (application.bulk_advance_targets ?? []).includes(target.value)
+    )));
 });
-const attendanceEvents = computed(() => configuredScheduleTypes.value
-    .map((type) => programEvents.value.find((event) => event.type === type.value))
-    .filter(Boolean));
-const activeAttendanceEvent = computed(() => attendanceEvents.value.find((event) => event.type === attendanceEventType.value)
-    ?? attendanceEvents.value[0]
-    ?? null);
-const attendanceParticipants = computed(() => {
-    const event = activeAttendanceEvent.value;
-
-    if (!event) {
-        return [];
-    }
-
-    return applications.value
-        .map((application) => ({
-            application,
-            schedule: applicationSchedule(application, event.type),
-        }))
-        .filter((record) => record.schedule);
-});
-const applicantsWaitingForActiveSchedule = computed(() => {
-    const event = activeAttendanceEvent.value;
-
-    if (!event) {
-        return [];
-    }
-
-    return applications.value.filter((application) => (
-        (scheduleWaitingStatuses[event.type] ?? []).includes(application.status)
-        && !applicationSchedule(application, event.type)
-    ));
-});
-const filteredAttendanceParticipants = computed(() => {
-    const query = attendanceSearch.value.trim().toLowerCase();
-
-    if (!query) {
-        return attendanceParticipants.value;
-    }
-
-    return attendanceParticipants.value.filter(({ application }) => [
-        application.applicant?.name,
-        application.applicant?.email,
-    ].filter(Boolean).join(' ').toLowerCase().includes(query));
-});
-const totalAttendancePages = computed(() => Math.max(1, Math.ceil(filteredAttendanceParticipants.value.length / attendancePerPage)));
-const visibleAttendanceParticipants = computed(() => {
-    const start = (attendancePage.value - 1) * attendancePerPage;
-
-    return filteredAttendanceParticipants.value.slice(start, start + attendancePerPage);
-});
-const attendanceRange = computed(() => {
-    if (filteredAttendanceParticipants.value.length === 0) {
-        return '0 applicants';
-    }
-
-    const start = (attendancePage.value - 1) * attendancePerPage + 1;
-    const end = Math.min(attendancePage.value * attendancePerPage, filteredAttendanceParticipants.value.length);
-
-    return `${start}-${end} of ${filteredAttendanceParticipants.value.length}`;
-});
-const selectableVisibleAttendanceParticipants = computed(() => visibleAttendanceParticipants.value.filter(({ schedule }) => (
-    schedule.status === 'scheduled' && (schedule.attendance_status ?? 'pending') === 'pending'
-)));
-const allVisibleAttendanceSelected = computed(() => selectableVisibleAttendanceParticipants.value.length > 0
-    && selectableVisibleAttendanceParticipants.value.every(({ application }) => selectedAttendanceIds.value.includes(application.id)));
-const attendanceSummary = computed(() => attendanceParticipants.value.reduce((summary, { schedule }) => {
-    const status = schedule.attendance_status ?? 'pending';
-
-    summary[status] = (summary[status] ?? 0) + 1;
-
-    return summary;
-}, {}));
 const pendingReviewCount = computed(() => applications.value.filter((application) => (
-    ['submitted', 'under_review'].includes(application.status ?? 'submitted')
+    workflowStage(application) === 'screening' && !workflowClosed(application)
 )).length);
 const waitingScheduleTypes = computed(() => {
     return configuredScheduleTypes.value.filter((type) => (
         scheduleEvent(type.value)?.status !== 'scheduled'
         && applications.value.some((application) => (
-            (scheduleWaitingStatuses[type.value] ?? []).includes(application.status)
+            workflowStage(application) === type.value
             && !applicationSchedule(application, type.value)
         ))
     ));
 });
-const dueProgramEvents = computed(() => attendanceEvents.value.filter((event) => (
-    event.status === 'scheduled' && canCompleteEvent(event)
-)));
-const pendingProgramResults = computed(() => attendanceEvents.value.reduce((count, event) => {
-    if (event.status !== 'completed') {
-        return count;
-    }
-
-    return count + applications.value.filter((application) => {
-        const schedule = applicationSchedule(application, event.type);
-
-        return schedule && (schedule.attendance_status ?? 'pending') === 'pending';
-    }).length;
-}, 0));
 const workspaceTabs = computed(() => [
     {
         key: 'applications',
@@ -232,12 +104,6 @@ const workspaceTabs = computed(() => [
         label: 'Schedule',
         meta: `${programEvents.value.length} set`,
         attention: waitingScheduleTypes.value.length > 0,
-    },
-    {
-        key: 'results',
-        label: 'Results',
-        meta: pendingProgramResults.value > 0 ? `${pendingProgramResults.value} pending` : `${attendanceEvents.value.length} activities`,
-        attention: dueProgramEvents.value.length > 0 || pendingProgramResults.value > 0,
     },
 ]);
 const workspaceTasks = computed(() => {
@@ -266,35 +132,10 @@ const workspaceTasks = computed(() => {
         });
     }
 
-    if (dueProgramEvents.value.length > 0) {
-        tasks.push({
-            section: 'results',
-            title: `${dueProgramEvents.value.length} activit${dueProgramEvents.value.length === 1 ? 'y is' : 'ies are'} ready to close`,
-            description: 'Mark the shared activity complete before recording participant results.',
-            action: 'Update results',
-        });
-    } else if (pendingProgramResults.value > 0) {
-        tasks.push({
-            section: 'results',
-            title: `${pendingProgramResults.value} participant result${pendingProgramResults.value === 1 ? '' : 's'} still pending`,
-            description: 'Update several applicants together instead of opening each application.',
-            action: 'Update results',
-        });
-    }
-
     return tasks;
 });
 const primaryWorkspaceTask = computed(() => workspaceTasks.value[0] ?? null);
 const remainingWorkspaceTaskCount = computed(() => Math.max(workspaceTasks.value.length - 1, 0));
-const bulkAttendanceOptions = computed(() => activeAttendanceEvent.value?.type === 'distribution'
-    ? [
-        { value: 'received', label: 'Received' },
-        { value: 'not_required', label: 'Not required' },
-    ]
-    : [
-        { value: 'passed', label: 'Passed' },
-        { value: 'failed', label: 'Failed' },
-    ]);
 const exportApplicationsUrl = computed(() => {
     if (!hasProgramContext.value) {
         return '/provider/export/applications';
@@ -313,7 +154,7 @@ const reviewFilterOptions = computed(() => [
     {
         value: 'pending_review',
         label: 'Needs review',
-        count: applications.value.filter((application) => pendingReviewStatuses.includes(application.status ?? 'submitted')).length,
+        count: applications.value.filter((application) => workflowStage(application) === 'screening' && !workflowClosed(application)).length,
     },
     {
         value: 'document_issues',
@@ -323,24 +164,24 @@ const reviewFilterOptions = computed(() => [
     {
         value: 'active_stages',
         label: 'Active stages',
-        count: applications.value.filter((application) => activeStageStatuses.includes(application.status)).length,
+        count: applications.value.filter((application) => ['exam', 'interview'].includes(workflowStage(application)) && !workflowClosed(application)).length,
     },
     {
         value: 'formal_application',
         label: 'Formal application',
-        count: applications.value.filter((application) => formalApplicationStatuses.includes(application.status)).length,
+        count: applications.value.filter((application) => ['formal_application', 'decision'].includes(workflowStage(application)) && !workflowClosed(application)).length,
     },
     {
         value: 'decided',
         label: 'Decisions',
-        count: applications.value.filter((application) => decidedStatuses.includes(application.status)).length,
+        count: applications.value.filter((application) => workflowClosed(application) || Boolean(application.workflow?.final_outcome)).length,
     },
     { value: 'all', label: 'All applicants', count: applications.value.length },
 ]);
 const emptyQueueMessage = computed(() => ({
     pending_review: 'No applicants currently need an initial review.',
     document_issues: 'No applicants currently have missing or unresolved document issues.',
-    active_stages: 'No applicants are currently in an exam, interview, or distribution stage.',
+    active_stages: 'No applicants are currently in an exam or interview stage.',
     formal_application: 'No applicants are currently completing the provider formal application process.',
     decided: 'No applicant decisions have been recorded yet.',
     all: 'No applicants match this search.',
@@ -359,7 +200,7 @@ const rankedApplications = computed(() => {
         }
 
         if (selectedQueueFilter.value === 'pending_review') {
-            return pendingReviewStatuses.includes(application.status ?? 'submitted');
+            return workflowStage(application) === 'screening' && !workflowClosed(application);
         }
 
         if (selectedQueueFilter.value === 'document_issues') {
@@ -367,15 +208,15 @@ const rankedApplications = computed(() => {
         }
 
         if (selectedQueueFilter.value === 'active_stages') {
-            return activeStageStatuses.includes(application.status);
+            return ['exam', 'interview'].includes(workflowStage(application)) && !workflowClosed(application);
         }
 
         if (selectedQueueFilter.value === 'formal_application') {
-            return formalApplicationStatuses.includes(application.status);
+            return ['formal_application', 'decision'].includes(workflowStage(application)) && !workflowClosed(application);
         }
 
         if (selectedQueueFilter.value === 'decided') {
-            return decidedStatuses.includes(application.status);
+            return workflowClosed(application) || Boolean(application.workflow?.final_outcome);
         }
 
         return true;
@@ -447,6 +288,32 @@ function statusLabel(status) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function workflowStage(application) {
+    return application?.workflow?.current_stage ?? 'screening';
+}
+
+function workflowClosed(application) {
+    return Boolean(application?.workflow?.is_closed);
+}
+
+function applicationQueueLabel(application) {
+    return application?.workflow?.final_outcome_label
+        ?? application?.workflow?.current_stage_label
+        ?? statusLabel(application?.status);
+}
+
+function applicationActionLabel(application) {
+    if (workflowClosed(application)) {
+        return 'View result';
+    }
+
+    if (workflowStage(application) === 'decision') {
+        return 'Record outcome';
+    }
+
+    return 'Review stage';
+}
+
 function canBulkAdvance(application) {
     return (application.bulk_advance_targets ?? []).includes(bulkAdvanceTarget.value);
 }
@@ -467,13 +334,11 @@ async function applyBulkAdvance() {
         return;
     }
 
-    const isDistribution = bulkAdvanceTarget.value === 'distribution';
+    const target = availableBulkAdvanceTargets.value.find((option) => option.value === bulkAdvanceTarget.value);
     const confirmed = await requestConfirmation({
-        title: isDistribution ? 'Record selected applicants as award recipients?' : 'Approve selected applicants for the exam?',
-        message: isDistribution
-            ? `${selectedBulkApplicationIds.value.length} applicants who passed portal pre-screening will be recorded as award recipients after your formal selection process.`
-            : `${selectedBulkApplicationIds.value.length} selected applicants will advance to the configured exam stage.`,
-        confirmLabel: isDistribution ? 'Record award recipients' : 'Approve for exam',
+        title: `${target?.label ?? 'Apply bulk result'}?`,
+        message: `${selectedBulkApplicationIds.value.length} selected applicant(s) will move according to their current configured workflow stage.`,
+        confirmLabel: target?.label ?? 'Apply result',
     });
 
     if (!confirmed) {
@@ -610,10 +475,6 @@ function reviewPriorityScore(application) {
         score += 10;
     }
 
-    if (status === 'awarded' && !application.distribution_scheduled_for) {
-        score += 18;
-    }
-
     if (!application.review_notes && ['submitted', 'under_review'].includes(status)) {
         score += 5;
     }
@@ -636,7 +497,6 @@ function closeApplicationPreview() {
 function selectWorkspaceSection(section) {
     activeWorkspaceSection.value = section;
     scheduleError.value = '';
-    attendanceError.value = '';
 
     const url = new URL(window.location.href);
     url.searchParams.set('workspace', section);
@@ -650,11 +510,6 @@ function toggleBulkActions() {
         selectedBulkApplicationIds.value = [];
         bulkAdvanceError.value = '';
     }
-}
-
-function openNextSchedule(type) {
-    selectWorkspaceSection('schedule');
-    openScheduleEditor(type);
 }
 
 function emptyScheduleForm(type = '') {
@@ -690,109 +545,6 @@ function eventStatusClass(status) {
         : 'bg-amber-100 text-amber-800';
 }
 
-function attendanceStatusClass(status) {
-    if (['passed', 'received'].includes(status)) {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'failed') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (status === 'not_required') {
-        return 'bg-slate-200 text-slate-700';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
-function canCompleteEvent(event) {
-    return event?.scheduled_at && new Date(event.scheduled_at).getTime() <= Date.now();
-}
-
-function toggleVisibleAttendance() {
-    const visibleIds = selectableVisibleAttendanceParticipants.value.map(({ application }) => application.id);
-
-    if (allVisibleAttendanceSelected.value) {
-        selectedAttendanceIds.value = selectedAttendanceIds.value.filter((id) => !visibleIds.includes(id));
-        return;
-    }
-
-    selectedAttendanceIds.value = [...new Set([...selectedAttendanceIds.value, ...visibleIds])];
-}
-
-async function completeProgramEvent(event) {
-    const eventLabel = scheduleTypeLabel(event.type).toLowerCase();
-
-    if (!await requestConfirmation({
-        title: `Mark this ${eventLabel} complete?`,
-        message: 'This unlocks participant results for the shared activity. Confirm only after the activity has ended.',
-        confirmLabel: 'Mark complete',
-    })) {
-        return;
-    }
-
-    completingEventId.value = event.id;
-    attendanceError.value = '';
-
-    try {
-        await window.axios.patch(`/provider/scholarships/${selectedScholarshipId.value}/events/${event.id}/complete`);
-        await loadProviderData(false);
-    } catch (error) {
-        attendanceError.value = error.response?.data?.errors?.event?.[0]
-            ?? error.response?.data?.message
-            ?? 'Unable to complete this event.';
-    } finally {
-        completingEventId.value = null;
-    }
-}
-
-async function applyBulkAttendance() {
-    if (!bulkAttendanceStatus.value || selectedAttendanceIds.value.length === 0) {
-        attendanceError.value = 'Select applicants and choose a result.';
-        return;
-    }
-
-    const resultLabel = bulkAttendanceOptions.value
-        .find((option) => option.value === bulkAttendanceStatus.value)?.label
-        ?.toLowerCase() ?? 'selected result';
-    const eventLabel = scheduleTypeLabel(activeAttendanceEvent.value?.type).toLowerCase();
-
-    if (!await requestConfirmation({
-        title: `Apply “${resultLabel}” to ${selectedAttendanceIds.value.length} applicant${selectedAttendanceIds.value.length === 1 ? '' : 's'}?`,
-        message: `The selected applicants will receive this ${eventLabel} result and any next-stage status update that applies.`,
-        confirmLabel: 'Apply results',
-    })) {
-        return;
-    }
-
-    attendanceSaving.value = true;
-    attendanceError.value = '';
-
-    try {
-        await window.axios.patch(
-            `/provider/scholarships/${selectedScholarshipId.value}/events/${activeAttendanceEvent.value.id}/attendance`,
-            {
-                application_ids: selectedAttendanceIds.value,
-                attendance_status: bulkAttendanceStatus.value,
-                attendance_notes: bulkAttendanceNotes.value || null,
-            },
-        );
-        selectedAttendanceIds.value = [];
-        bulkAttendanceStatus.value = '';
-        bulkAttendanceNotes.value = '';
-        await loadProviderData(false);
-    } catch (error) {
-        const validationErrors = error.response?.data?.errors ?? {};
-
-        attendanceError.value = Object.values(validationErrors).flat()[0]
-            ?? error.response?.data?.message
-            ?? 'Unable to update participant results.';
-    } finally {
-        attendanceSaving.value = false;
-    }
-}
-
 function defaultScheduleDetails(type) {
     const scholarship = selectedScholarshipContext.value ?? {};
 
@@ -804,10 +556,8 @@ function defaultScheduleDetails(type) {
         latitude: scholarship.latitude ?? '',
         longitude: scholarship.longitude ?? '',
         instructions: {
-            screening: 'Keep your profile and submitted requirements complete while the provider reviews your application.',
             exam: 'Review the provider exam instructions and arrive or sign in at least 15 minutes before the scheduled time.',
             interview: 'Bring a valid school ID and be ready to discuss your application and scholarship goals.',
-            distribution: 'Bring a valid school ID and any release documents required by the provider.',
         }[type] ?? '',
     };
 }
@@ -902,12 +652,9 @@ async function loadProviderData(showLoading = true) {
         programEvents.value = response.data.program_events ?? [];
 
         if (!availableBulkAdvanceTargets.value.some((target) => target.value === bulkAdvanceTarget.value)) {
-            bulkAdvanceTarget.value = availableBulkAdvanceTargets.value[0]?.value ?? 'distribution';
+            bulkAdvanceTarget.value = availableBulkAdvanceTargets.value[0]?.value ?? 'pass_prescreening';
         }
 
-        if (!programEvents.value.some((event) => event.type === attendanceEventType.value)) {
-            attendanceEventType.value = programEvents.value[0]?.type ?? '';
-        }
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider applications.';
     } finally {
@@ -957,19 +704,6 @@ watch(bulkAdvanceTarget, () => {
 watch(totalApplicationPages, (totalPages) => {
     if (applicationPage.value > totalPages) {
         applicationPage.value = totalPages;
-    }
-});
-
-watch([attendanceEventType, attendanceSearch], () => {
-    attendancePage.value = 1;
-    selectedAttendanceIds.value = [];
-    bulkAttendanceStatus.value = '';
-    attendanceError.value = '';
-});
-
-watch(totalAttendancePages, (totalPages) => {
-    if (attendancePage.value > totalPages) {
-        attendancePage.value = totalPages;
     }
 });
 
@@ -1117,7 +851,7 @@ onMounted(loadProviderData);
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program Schedule</p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">Schedule applicant activities</h3>
                                 <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Publish confirmed exam, interview, or award-release details after applicants reach that stage. Pre-screening stays in application review and does not need a schedule.
+                                    Publish confirmed exam or interview details after applicants reach that stage. Pre-screening and final decisions stay in applicant review.
                                 </p>
                             </div>
                             <a :href="`/provider/programs/${selectedScholarshipId}/edit`" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
@@ -1209,10 +943,9 @@ onMounted(loadProviderData);
                             <div v-if="['online', 'hybrid'].includes(scheduleForm.mode)" class="mt-4">
                                 <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
                                     Online link
-                                    <span class="ml-1 text-[10px] text-slate-400">{{ scheduleForm.type === 'distribution' ? 'Optional' : 'Required' }}</span>
+                                    <span class="ml-1 text-[10px] text-slate-400">Required</span>
                                 </label>
-                                <input v-model="scheduleForm.onlineUrl" type="url" maxlength="2000" placeholder="https://..." :required="scheduleForm.type !== 'distribution'" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
-                                <p v-if="scheduleForm.type === 'distribution'" class="mt-2 text-xs leading-5 text-slate-500">Use this only for a release portal or online briefing. Put transfer or release steps in the instructions.</p>
+                                <input v-model="scheduleForm.onlineUrl" type="url" maxlength="2000" placeholder="https://..." required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
                             </div>
 
                             <div class="mt-4">
@@ -1226,200 +959,6 @@ onMounted(loadProviderData);
                                 </button>
                             </div>
                         </form>
-                    </section>
-
-                    <section v-if="hasProgramContext && activeWorkspaceSection === 'results'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Activity results</p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">Complete the activity, then update participants</h3>
-                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                    After the scheduled activity happens, mark it complete once. Participant updates will then become available below.
-                                </p>
-                            </div>
-                            <span v-if="activeAttendanceEvent" class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
-                                {{ attendanceParticipants.length }} participants
-                            </span>
-                        </div>
-
-                        <div v-if="attendanceEvents.length === 0" class="p-5">
-                            <div class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5">
-                                <p class="text-sm font-bold text-slate-900">No activity is scheduled yet</p>
-                                <p class="mt-1 text-sm text-slate-500">Publish an exam, interview, or award-release schedule above to manage its participants here.</p>
-                            </div>
-                        </div>
-
-                        <template v-else>
-                            <div class="flex gap-2 overflow-x-auto border-b border-slate-200 px-5 py-3">
-                                <button
-                                    v-for="event in attendanceEvents"
-                                    :key="event.id"
-                                    type="button"
-                                    :class="[
-                                        'shrink-0 rounded-md border px-3 py-2 text-sm font-bold transition',
-                                        activeAttendanceEvent?.id === event.id
-                                            ? 'border-slate-900 bg-slate-900 text-white'
-                                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50',
-                                    ]"
-                                    @click="attendanceEventType = event.type"
-                                >
-                                    {{ scheduleTypeLabel(event.type) }}
-                                </button>
-                            </div>
-
-                            <div v-if="activeAttendanceEvent" class="p-5">
-                                <div class="flex flex-col gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
-                                    <div class="min-w-0">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <h4 class="font-bold text-slate-950">{{ activeAttendanceEvent.title }}</h4>
-                                            <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', eventStatusClass(activeAttendanceEvent.status)]">
-                                                {{ statusLabel(activeAttendanceEvent.status) }}
-                                            </span>
-                                        </div>
-                                        <p class="mt-1 text-sm text-slate-600">{{ activeAttendanceEvent.scheduled_label }}</p>
-                                        <p v-if="activeAttendanceEvent.status !== 'completed' && !canCompleteEvent(activeAttendanceEvent)" class="mt-1 text-xs font-semibold text-amber-700">
-                                            This activity can be completed after its scheduled time.
-                                        </p>
-                                    </div>
-                                    <button
-                                        v-if="activeAttendanceEvent.status !== 'completed'"
-                                        type="button"
-                                        :disabled="completingEventId === activeAttendanceEvent.id || !canCompleteEvent(activeAttendanceEvent)"
-                                        class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                        @click="completeProgramEvent(activeAttendanceEvent)"
-                                    >
-                                        {{ completingEventId === activeAttendanceEvent.id ? 'Updating...' : 'Mark activity complete' }}
-                                    </button>
-                                </div>
-
-                                <p v-if="attendanceError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">
-                                    {{ attendanceError }}
-                                </p>
-
-                                <div
-                                    v-if="applicantsWaitingForActiveSchedule.length"
-                                    class="mt-4 flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between"
-                                >
-                                    <div>
-                                        <p class="text-sm font-bold text-amber-950">
-                                            {{ applicantsWaitingForActiveSchedule.length }} applicant{{ applicantsWaitingForActiveSchedule.length === 1 ? '' : 's' }} waiting for a new {{ scheduleTypeLabel(activeAttendanceEvent.type).toLowerCase() }} schedule
-                                        </p>
-                                        <p class="mt-1 text-xs leading-5 text-amber-800">
-                                            {{ activeAttendanceEvent.status === 'completed'
-                                                ? 'They reached this stage after the current activity closed, so they are not part of the participant table below.'
-                                            : 'They are not assigned to the current activity yet. Review and republish the shared schedule before recording results.' }}
-                                        </p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        class="shrink-0 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                        @click="openNextSchedule(activeAttendanceEvent.type)"
-                                    >
-                                        Set new schedule
-                                    </button>
-                                </div>
-
-                                <div v-if="activeAttendanceEvent.status === 'completed'" class="mt-5">
-                                    <div class="flex flex-wrap gap-2 text-xs font-bold">
-                                        <span class="rounded-md bg-amber-100 px-2.5 py-1 text-amber-800">{{ attendanceSummary.pending ?? 0 }} pending</span>
-                                        <template v-if="activeAttendanceEvent.type === 'distribution'">
-                                            <span class="rounded-md bg-emerald-100 px-2.5 py-1 text-emerald-800">{{ attendanceSummary.received ?? 0 }} received</span>
-                                            <span class="rounded-md bg-slate-200 px-2.5 py-1 text-slate-700">{{ attendanceSummary.not_required ?? 0 }} not required</span>
-                                        </template>
-                                        <template v-else>
-                                            <span class="rounded-md bg-emerald-100 px-2.5 py-1 text-emerald-800">{{ attendanceSummary.passed ?? 0 }} passed</span>
-                                            <span class="rounded-md bg-rose-100 px-2.5 py-1 text-rose-800">{{ attendanceSummary.failed ?? 0 }} failed</span>
-                                        </template>
-                                    </div>
-
-                                    <div class="mt-4 grid gap-3 lg:grid-cols-[minmax(13rem,1fr)_13rem_minmax(13rem,1fr)_auto]">
-                                        <label class="relative block">
-                                            <span class="sr-only">Search participants</span>
-                                            <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
-                                            <input v-model="attendanceSearch" type="search" placeholder="Search applicant" class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-slate-600">
-                                        </label>
-                                        <select v-model="bulkAttendanceStatus" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
-                                            <option value="">{{ activeAttendanceEvent.type === 'distribution' ? 'Choose release result' : 'Choose pass or fail' }}</option>
-                                            <option v-for="option in bulkAttendanceOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                        </select>
-                                        <input v-model="bulkAttendanceNotes" type="text" maxlength="1500" placeholder="Optional note for selected applicants" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
-                                        <button
-                                            type="button"
-                                            :disabled="attendanceSaving || selectedAttendanceIds.length === 0 || !bulkAttendanceStatus"
-                                            class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                            @click="applyBulkAttendance"
-                                        >
-                                            {{ attendanceSaving ? 'Applying...' : `Apply to ${selectedAttendanceIds.length}` }}
-                                        </button>
-                                    </div>
-
-                                    <div v-if="attendanceParticipants.length === 0" class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
-                                        No applicants are assigned to this activity yet.
-                                    </div>
-
-                                    <div v-else-if="filteredAttendanceParticipants.length === 0" class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
-                                        No applicants match this search.
-                                    </div>
-
-                                    <div v-else class="mt-4 overflow-hidden rounded-lg border border-slate-200">
-                                        <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_9rem_6rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 sm:grid">
-                                            <button type="button" class="text-left" @click="toggleVisibleAttendance">
-                                                <i :class="allVisibleAttendanceSelected ? 'fa-solid fa-square-check text-slate-900' : 'fa-regular fa-square text-slate-400'" aria-hidden="true"></i>
-                                                <span class="sr-only">Select displayed applicants</span>
-                                            </button>
-                                            <span>Applicant</span>
-                                            <span>Result</span>
-                                            <span>Action</span>
-                                        </div>
-
-                                        <div
-                                            v-for="record in visibleAttendanceParticipants"
-                                            :key="record.application.id"
-                                            :class="[
-                                                'grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_9rem_6rem]',
-                                                record.schedule.status === 'scheduled' && (record.schedule.attendance_status ?? 'pending') === 'pending'
-                                                    ? 'hover:bg-slate-50'
-                                                    : 'bg-slate-50/70',
-                                            ]"
-                                        >
-                                            <input
-                                                v-model="selectedAttendanceIds"
-                                                type="checkbox"
-                                                :value="record.application.id"
-                                                :disabled="record.schedule.status !== 'scheduled' || (record.schedule.attendance_status ?? 'pending') !== 'pending'"
-                                                class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
-                                            >
-                                            <span class="min-w-0">
-                                                <span class="block truncate text-sm font-bold text-slate-900">{{ record.application.applicant?.name || 'Applicant' }}</span>
-                                                <span class="block truncate text-xs text-slate-500">{{ record.application.applicant?.email }}</span>
-                                            </span>
-                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', attendanceStatusClass(record.schedule.attendance_status)]">
-                                                {{ statusLabel(record.schedule.attendance_status || 'pending') }}
-                                            </span>
-                                            <a
-                                                :href="`${record.application.detail_url}?section=applicant`"
-                                                class="col-start-2 inline-flex w-fit items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 sm:col-start-auto"
-                                            >
-                                                Review
-                                                <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
-                                            </a>
-                                        </div>
-                                    </div>
-
-                                    <div v-if="filteredAttendanceParticipants.length > attendancePerPage" class="mt-4 flex flex-wrap items-center justify-between gap-3">
-                                        <p class="text-xs font-semibold text-slate-500">{{ attendanceRange }}</p>
-                                        <div class="flex gap-2">
-                                            <button type="button" :disabled="attendancePage === 1" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" @click="attendancePage -= 1">Previous</button>
-                                            <button type="button" :disabled="attendancePage === totalAttendancePages" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" @click="attendancePage += 1">Next</button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-                                    Participant updates become available after the shared activity is marked complete.
-                                </div>
-                            </div>
-                        </template>
                     </section>
 
                     <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -1507,9 +1046,7 @@ onMounted(loadProviderData);
                                         </select>
                                     </label>
                                     <p class="text-xs leading-5 text-slate-500">
-                                        {{ bulkAdvanceTarget === 'distribution'
-                                            ? 'Only applicants qualified for your formal application are selectable.'
-                                            : 'Only applicants with accepted required files who can enter the exam are selectable.' }}
+                                        Only applicants ready for this exact workflow action are selectable.
                                     </p>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-2">
@@ -1518,7 +1055,7 @@ onMounted(loadProviderData);
                                     </button>
                                     <span class="text-xs font-bold text-slate-500">{{ selectedBulkApplicationIds.length }} selected</span>
                                     <button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="selectedBulkApplicationIds.length === 0 || bulkAdvancing" @click="applyBulkAdvance">
-                                        {{ bulkAdvancing ? 'Saving...' : (bulkAdvanceTarget === 'distribution' ? 'Record recipients' : 'Approve selected') }}
+                                        {{ bulkAdvancing ? 'Saving...' : 'Apply to selected' }}
                                     </button>
                                 </div>
                             </div>
@@ -1568,7 +1105,7 @@ onMounted(loadProviderData);
                                             aria-label="Verified academic record"
                                         ></i>
                                         <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', statusClass(application.status)]">
-                                            {{ statusLabel(application.status) }}
+                                            {{ applicationQueueLabel(application) }}
                                         </span>
                                     </div>
                                     <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
@@ -1609,7 +1146,7 @@ onMounted(loadProviderData);
                                         class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
                                         @click="openApplicationPreview(application)"
                                     >
-                                        {{ application.status === 'approved' ? 'Record outcome' : application.status === 'waitlisted' ? 'Manage alternate' : decidedStatuses.includes(application.status) ? 'View' : 'Review' }}
+                                        {{ applicationActionLabel(application) }}
                                     </button>
                                 </div>
                             </article>

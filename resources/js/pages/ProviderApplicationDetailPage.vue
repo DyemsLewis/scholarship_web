@@ -6,9 +6,8 @@ import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
-import { decisionReasonOptions, negativeDecisionStatuses } from '../support/applicationDecisionReasons';
+import { decisionReasonOptions } from '../support/applicationDecisionReasons';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 
@@ -54,10 +53,8 @@ const secondaryDetailSections = [
     { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
 ];
 const scheduleTypeCatalog = [
-    { value: 'screening', label: 'Screening', icon: 'fa-solid fa-list-check' },
     { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question' },
     { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments' },
-    { value: 'distribution', label: 'Distribution', icon: 'fa-solid fa-hand-holding-dollar' },
 ];
 const scheduleModeOptions = [
     { value: 'onsite', label: 'On-site' },
@@ -65,35 +62,14 @@ const scheduleModeOptions = [
     { value: 'hybrid', label: 'Hybrid' },
     { value: 'provider_managed', label: 'Provider managed' },
 ];
-const reviewActionCatalog = {
-    approve: {
-        key: 'approve',
-        status: 'approved',
-        label: 'Qualify applicant',
-        description: 'Allow the applicant to continue with your formal application process.',
-        confirmLabel: 'Mark as qualified',
-        reason: 'qualified_for_formal_application',
-        note: 'Applicant qualified after portal pre-screening.',
-        icon: 'fa-solid fa-circle-check',
-    },
-    reject: {
-        key: 'reject',
-        status: 'rejected',
-        label: 'Reject application',
-        description: 'End the application and provide a clear reason.',
-        confirmLabel: 'Reject application',
-        reason: '',
-        note: 'Application was not selected after provider review.',
-        icon: 'fa-solid fa-ban',
-        tone: 'danger',
-    },
-};
 const negativeDecisionReasonOptions = decisionReasonOptions.filter((option) => [
     '',
     'missing_documents',
     'academic_requirement_not_met',
     'outside_eligibility',
+    'formal_application_not_completed',
     'failed_exam',
+    'failed_interview',
     'funds_limited',
     'not_selected',
     'other',
@@ -155,60 +131,18 @@ const rubricDraftSummary = computed(() => {
 });
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
-const pendingManagedStageResult = computed(() => {
-    const stageType = {
-        exam_scheduled: 'exam',
-        interview: 'interview',
-    }[application.value?.status];
-
-    if (!stageType) {
-        return null;
-    }
-
-    return schedules.value.find((schedule) => (
-        schedule.type === stageType
-        && schedule.status === 'scheduled'
-        && (schedule.attendance_status ?? 'pending') === 'pending'
-    )) ?? null;
-});
+const workflow = computed(() => application.value?.workflow ?? {});
+const currentWorkflowStage = computed(() => workflow.value.current_stage ?? 'screening');
 const programWorkspaceAction = computed(() => {
-    const pendingResult = schedules.value.find((schedule) => (
-        schedule.status === 'completed' && (schedule.attendance_status ?? 'pending') === 'pending'
-    ));
-
-    if (pendingResult) {
-        return {
-            section: 'results',
-            title: `${scheduleTypeLabel(pendingResult.type)} result still pending`,
-            description: 'Record this applicant together with the other participants in the Program Workspace.',
-        };
-    }
-
-    const dueActivity = schedules.value.find((schedule) => (
-        schedule.status === 'scheduled'
-        && schedule.scheduled_at
-        && new Date(schedule.scheduled_at).getTime() <= Date.now()
-    ));
-
-    if (dueActivity) {
-        return {
-            section: 'results',
-            title: `${scheduleTypeLabel(dueActivity.type)} activity is ready to close`,
-            description: 'Complete the shared activity and update participant results in the Program Workspace.',
-        };
-    }
-
-    const waitingType = {
-        exam_qualified: 'exam',
-        interview: 'interview',
-        awarded: 'distribution',
-    }[application.value?.status];
+    const waitingType = ['exam', 'interview'].includes(currentWorkflowStage.value)
+        ? currentWorkflowStage.value
+        : null;
 
     if (waitingType && !schedules.value.some((schedule) => schedule.type === waitingType)) {
         return {
             section: 'schedule',
             title: `${scheduleTypeLabel(waitingType)} schedule needs to be published`,
-            description: 'This applicant has reached the stage. Publish the shared details once for all eligible applicants.',
+            description: 'Publish the shared date and instructions once for applicants who reached this stage.',
         };
     }
 
@@ -250,66 +184,12 @@ const nextPrimarySection = computed(() => (
         ? primaryDetailSections[activePrimarySectionIndex.value + 1]
         : null
 ));
-const selectionStages = computed(() => application.value?.scholarship?.selection_stages ?? ['screening']);
-const nextApprovalStatus = computed(() => {
-    const currentStatus = application.value?.status;
-
-    if (['submitted', 'under_review', 'qualified', 'shortlisted'].includes(currentStatus)) {
-        if (selectionStages.value.includes('exam')) {
-            return 'exam_qualified';
-        }
-
-        return selectionStages.value.includes('interview') ? 'interview' : 'approved';
-    }
-
-    if (['exam_taken', 'exam_passed'].includes(currentStatus)) {
-        return selectionStages.value.includes('interview') ? 'interview' : 'approved';
-    }
-
-    return currentStatus === 'interview' ? 'approved' : null;
-});
 const documentReviewComplete = computed(() => {
     const readiness = application.value?.document_readiness;
     const required = Number(readiness?.required ?? 0);
     const accepted = Number(readiness?.accepted ?? 0);
 
     return required === 0 || accepted >= required;
-});
-const approvalParticipationBlock = computed(() => {
-    const stageType = {
-        exam_taken: 'exam',
-        exam_passed: 'exam',
-        interview: 'interview',
-    }[application.value?.status];
-
-    if (!stageType) {
-        return null;
-    }
-
-    const schedule = schedules.value.find((item) => item.type === stageType);
-
-    if (schedule?.status === 'completed' && schedule.attendance_status === 'attended') {
-        return null;
-    }
-
-    if (!schedule) {
-        return {
-            section: 'schedule',
-            message: `Publish the shared ${scheduleTypeLabel(stageType).toLowerCase()} schedule before approving the next stage.`,
-        };
-    }
-
-    if (schedule.status !== 'completed') {
-        return {
-            section: 'schedule',
-            message: `Close the ${scheduleTypeLabel(stageType).toLowerCase()} activity and record attendance before approving the next stage.`,
-        };
-    }
-
-    return {
-        section: 'schedule',
-        message: `This applicant is marked ${labelFromKey(schedule.attendance_status || 'pending').toLowerCase()}. Only an attended applicant can be approved for the next stage.`,
-    };
 });
 const documentReviewBlockMessage = computed(() => {
     const readiness = application.value?.document_readiness;
@@ -326,154 +206,106 @@ const documentReviewBlockMessage = computed(() => {
 
     return `${accepted} of ${required} required files accepted. Review the remaining files before approving.`;
 });
-const nextRejectionStatus = computed(() => (
-    ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed'].includes(application.value?.status)
-        ? 'exam_failed'
-        : (application.value?.status === 'interview'
-            ? 'interview_failed'
-            : (['submitted', 'under_review', 'qualified', 'shortlisted'].includes(application.value?.status) ? 'rejected' : null))
-));
 const suggestedReviewActions = computed(() => {
-    if (pendingManagedStageResult.value) {
+    if (workflow.value.is_closed || ['withdrawn', 'complete'].includes(currentWorkflowStage.value)) {
         return [];
     }
 
-    if (application.value?.status === 'approved') {
+    if (currentWorkflowStage.value === 'decision') {
         return [
             {
-                key: 'record_award',
-                decision: 'outcome',
-                directStatus: true,
-                status: 'awarded',
+                key: 'selected',
+                kind: 'final',
+                outcome: 'selected',
+                status: 'selected',
                 reason: 'approved_for_award',
-                note: 'Selected by the provider after completing the formal application process.',
-                label: 'Award scholarship',
-                description: 'Confirm that this applicant was selected after your organization completed its formal process.',
-                confirmLabel: 'Confirm award',
+                note: 'Selected after completing the provider process.',
+                label: 'Selected',
+                description: 'Confirm this applicant as a scholarship recipient.',
+                confirmLabel: 'Confirm selection',
                 icon: 'fa-solid fa-award',
                 tone: 'success',
             },
             {
-                key: 'add_to_waitlist',
-                decision: 'outcome',
-                directStatus: true,
+                key: 'waitlisted',
+                kind: 'final',
+                outcome: 'waitlisted',
                 status: 'waitlisted',
                 reason: 'funds_limited',
-                note: 'Applicant remains eligible and was placed on the alternate recipient waitlist.',
-                label: 'Add to waitlist',
-                description: 'Keep this eligible applicant as an alternate if an award slot becomes available.',
-                confirmLabel: 'Add to waitlist',
+                note: 'Kept as an alternate recipient if a slot becomes available.',
+                label: 'Waitlisted',
+                description: 'Keep this qualified applicant as an alternate recipient.',
+                confirmLabel: 'Confirm waitlist',
                 icon: 'fa-solid fa-list-ol',
-                tone: 'default',
             },
             {
-                key: 'record_not_selected',
-                decision: 'outcome',
-                directStatus: true,
-                status: 'not_awarded',
-                reason: 'not_selected',
-                note: 'The applicant was not selected after the provider formal application process.',
+                key: 'not_selected',
+                kind: 'final',
+                outcome: 'not_selected',
+                status: 'not_selected',
+                reason: '',
+                note: 'The applicant was not selected after the provider process.',
                 label: 'Not selected',
-                description: 'Close the application without an award and provide the applicant with a clear reason.',
+                description: 'Close the application and provide a clear reason.',
                 confirmLabel: 'Confirm not selected',
                 icon: 'fa-solid fa-circle-xmark',
                 tone: 'danger',
+                requiresReason: true,
             },
         ];
     }
 
-    if (application.value?.status === 'waitlisted') {
-        return [
-            {
-                key: 'promote_alternate',
-                decision: 'outcome',
-                directStatus: true,
-                status: 'awarded',
-                reason: 'approved_for_award',
-                note: 'Promoted from the alternate recipient waitlist after a slot became available.',
-                label: 'Promote alternate',
-                description: 'Use the available award slot for this waitlisted applicant.',
-                confirmLabel: 'Promote recipient',
-                icon: 'fa-solid fa-arrow-up-right-dots',
-                tone: 'success',
-            },
-            {
-                key: 'remove_from_waitlist',
-                decision: 'outcome',
-                directStatus: true,
-                status: 'approved',
-                reason: 'qualified_for_formal_application',
-                note: 'Removed from the alternate list and returned to qualified status.',
-                label: 'Remove from waitlist',
-                description: 'Return this applicant to the qualified formal-application stage.',
-                confirmLabel: 'Remove from waitlist',
-                icon: 'fa-solid fa-rotate-left',
-                tone: 'default',
-            },
-        ];
-    }
+    const stageLabel = workflow.value.current_stage_label ?? 'Current stage';
+    const isScreening = currentWorkflowStage.value === 'screening';
+    const passCopy = {
+        screening: ['Pass pre-screening', 'The applicant meets the portal criteria and can continue.', 'Confirm pre-screening result'],
+        formal_application: ['Formal application passed', 'The provider confirms the applicant completed this stage.', 'Confirm formal application'],
+        exam: ['Passed exam', 'Record the provider-managed exam result.', 'Confirm exam result'],
+        interview: ['Passed interview', 'Record the provider-managed interview result.', 'Confirm interview result'],
+    }[currentWorkflowStage.value] ?? [`Passed ${stageLabel}`, 'Move the applicant to the next configured stage.', 'Confirm result'];
+    const failCopy = {
+        screening: ['Not qualified', 'End the application and explain which criterion was not met.'],
+        formal_application: ['Formal application not completed', 'Close the application with a clear provider note.'],
+        exam: ['Did not pass exam', 'Record the provider-managed exam result.'],
+        interview: ['Did not pass interview', 'Record the provider-managed interview result.'],
+    }[currentWorkflowStage.value] ?? [`Did not pass ${stageLabel}`, 'Close this application stage with a clear reason.'];
 
-    const actions = [];
-
-    if (nextApprovalStatus.value) {
-        const nextLabel = statusLabel(nextApprovalStatus.value);
-        actions.push({
-            ...reviewActionCatalog.approve,
-            key: 'approve_next_stage',
-            decision: 'approve',
-            status: nextApprovalStatus.value,
-            reason: {
-                exam_qualified: 'for_exam',
-                interview: 'for_interview',
-                approved: 'qualified_for_formal_application',
-            }[nextApprovalStatus.value] ?? '',
-            note: nextApprovalStatus.value === 'approved'
-                ? 'Applicant qualified after eligibility, document, and provider pre-screening.'
-                : `Applicant approved to proceed to ${nextLabel.toLowerCase()}.`,
-            label: nextApprovalStatus.value === 'approved' ? 'Qualify applicant' : `Approve for ${nextLabel.replace(/^Qualified for /, '')}`,
-            description: nextApprovalStatus.value === 'approved'
-                ? (approvalParticipationBlock.value?.message || 'Confirm that the applicant passed portal pre-screening and may formally apply with your organization.')
-                : `Move this applicant to the configured ${nextLabel.toLowerCase()} stage.`,
-            confirmLabel: nextApprovalStatus.value === 'approved' ? 'Mark as qualified' : `Approve for ${nextLabel.toLowerCase()}`,
-            blocked: !documentReviewComplete.value || Boolean(approvalParticipationBlock.value),
-            blockedSection: !documentReviewComplete.value ? 'documents' : approvalParticipationBlock.value?.section,
-            blockedMessage: !documentReviewComplete.value ? documentReviewBlockMessage.value : approvalParticipationBlock.value?.message,
-        });
-    }
-
-    if (nextRejectionStatus.value) {
-        const failedStageAction = {
-            exam_failed: {
-                label: 'Failed exam',
-                description: 'Record that the applicant did not pass the scholarship exam.',
-                confirmLabel: 'Record failed exam',
-                reason: 'failed_exam',
-                note: 'Applicant did not pass the scholarship exam.',
-            },
-            interview_failed: {
-                label: 'Failed interview',
-                description: 'Record that the applicant did not pass the scholarship interview.',
-                confirmLabel: 'Record failed interview',
-                reason: 'failed_interview',
-                note: 'Applicant did not pass the scholarship interview.',
-            },
-        }[nextRejectionStatus.value] ?? {};
-
-        actions.push({
-            ...reviewActionCatalog.reject,
-            ...failedStageAction,
-            key: 'reject_applicant',
-            decision: 'reject',
-            status: nextRejectionStatus.value,
-        });
-    }
-
-    return actions;
+    return [
+        {
+            key: 'passed',
+            kind: 'stage',
+            result: 'passed',
+            status: 'passed',
+            reason: '',
+            note: `${stageLabel} passed.`,
+            label: passCopy[0],
+            description: passCopy[1],
+            confirmLabel: passCopy[2],
+            icon: 'fa-solid fa-circle-check',
+            tone: 'success',
+            blocked: isScreening && !documentReviewComplete.value,
+            blockedSection: 'documents',
+            blockedMessage: documentReviewBlockMessage.value,
+        },
+        {
+            key: 'not_passed',
+            kind: 'stage',
+            result: 'not_passed',
+            status: 'not_passed',
+            reason: '',
+            note: `${stageLabel} was not passed.`,
+            label: failCopy[0],
+            description: failCopy[1],
+            confirmLabel: 'Confirm not passed',
+            icon: 'fa-solid fa-circle-xmark',
+            tone: 'danger',
+            requiresReason: true,
+        },
+    ];
 });
 const selectedReviewAction = computed(() => (
     suggestedReviewActions.value.find((action) => action.key === selectedReviewActionKey.value) ?? null
 ));
-const reviewStatusChanged = computed(() => reviewForm.value.status !== application.value?.status);
 const reviewSubmitLabel = computed(() => {
     if (updatingId.value === application.value?.id) {
         return 'Saving...';
@@ -483,45 +315,32 @@ const reviewSubmitLabel = computed(() => {
         return selectedReviewAction.value.confirmLabel;
     }
 
-    if (reviewStatusChanged.value) {
-        return `Save as ${statusLabel(reviewForm.value.status)}`;
-    }
-
     return 'Save notes and scores';
 });
-const completedStageMessage = computed(() => ({
-    exam_qualified: 'The applicant is waiting for the shared exam schedule. You may still reject the application if screening needs to be closed.',
-    exam_scheduled: 'Complete the shared exam, then record Passed or Failed once in Program Results.',
-    interview: 'Complete the shared interview, then record Passed or Failed once in Program Results.',
-    approved: 'The applicant passed portal pre-screening and can now follow your formal application instructions.',
-    waitlisted: 'This qualified applicant is on the alternate recipient list. Promote them when an award slot becomes available.',
-    withdrawn: 'The applicant withdrew this application. The record remains available for reference and no further decision is needed.',
-    awarded: 'The award is confirmed. Publish distribution details once from the program applicant page.',
-    not_awarded: 'The provider formal application process is complete and the applicant was not selected.',
-    distribution_scheduled: 'Distribution is scheduled. Use Schedule only to record this applicant\'s release result.',
-    disbursed: 'The scholarship release is complete for this applicant.',
-}[application.value?.status] ?? 'No applicant decision is needed at this stage. You can still save review notes and rubric scores.'));
+const completedStageMessage = computed(() => workflow.value.final_outcome_label
+    ? `Final outcome: ${workflow.value.final_outcome_label}. No further decision is required.`
+    : 'This application has no pending provider action.');
 const decisionPanelTitle = computed(() => {
-    if (application.value?.status === 'withdrawn') {
+    if (workflow.value.application_state === 'withdrawn') {
         return 'Application withdrawn';
     }
 
-    if (['approved', 'waitlisted'].includes(application.value?.status)) {
-        return 'Record the formal application outcome';
+    if (currentWorkflowStage.value === 'decision') {
+        return 'Record the final outcome';
     }
 
-    return 'Record the pre-screening decision';
+    return `Record the ${String(workflow.value.current_stage_label ?? 'current stage').toLowerCase()} result`;
 });
 const decisionPanelDescription = computed(() => {
-    if (application.value?.status === 'withdrawn') {
+    if (workflow.value.application_state === 'withdrawn') {
         return 'Keep the withdrawal reason for your records. This application no longer needs review.';
     }
 
-    if (['approved', 'waitlisted'].includes(application.value?.status)) {
-        return 'After your organization finishes its formal process, record the final recipient outcome.';
+    if (currentWorkflowStage.value === 'decision') {
+        return 'Choose Selected, Waitlisted, or Not selected after all configured stages are complete.';
     }
 
-    return 'Decide whether the applicant may continue to your organization’s formal application process.';
+    return 'Use one result to move the applicant forward or close the application at this stage.';
 });
 const canRequestCorrection = computed(() => application.value
     && ![
@@ -887,61 +706,21 @@ function isSelectedReviewAction(action) {
     return selectedReviewActionKey.value === action.key;
 }
 
-function statusConfirmation(status) {
+function statusConfirmation(action) {
     const applicantName = application.value?.applicant?.name || 'This applicant';
-    const confirmations = {
-        exam_qualified: {
-            title: 'Qualify applicant for the exam?',
-            message: `${applicantName} will see the provider-managed exam details and receive a status notification.`,
-            confirmLabel: 'Qualify for exam',
-        },
-        interview: {
-            title: 'Approve applicant for interview?',
-            message: `${applicantName} will move to the interview stage and receive the shared schedule when it is available.`,
-            confirmLabel: 'Approve for interview',
-        },
-        exam_failed: {
-            title: 'Record a failed exam result?',
-            message: `${applicantName} will receive this negative decision and its reason.`,
-            confirmLabel: 'Record failure',
-            tone: 'danger',
-        },
-        interview_failed: {
-            title: 'Record a failed interview result?',
-            message: `${applicantName} will receive this negative decision and its reason.`,
-            confirmLabel: 'Record failure',
-            tone: 'danger',
-        },
-        approved: {
-            title: 'Mark this applicant as qualified?',
-            message: `${applicantName} will receive the documents and instructions needed to continue the formal application with your organization. This is not a final scholarship award.`,
-            confirmLabel: 'Mark as qualified',
-        },
-        waitlisted: {
-            title: 'Add this applicant to the waitlist?',
-            message: `${applicantName} will be notified that they remain eligible as an alternate recipient.` ,
-            confirmLabel: 'Add to waitlist',
-        },
-        awarded: {
-            title: 'Confirm this scholarship award?',
-            message: `${applicantName} will be notified that your organization selected them after the formal application process.`,
-            confirmLabel: 'Confirm award',
-        },
-        not_awarded: {
-            title: 'Mark this applicant as not selected?',
-            message: `${applicantName} will receive the final outcome, selected reason, and provider note.`,
-            confirmLabel: 'Confirm not selected',
-            tone: 'danger',
-        },
-        rejected: {
-            title: 'Mark this applicant as not qualified?',
-            message: `${applicantName} will receive the pre-screening result, reason, and provider note.`,
-            confirmLabel: 'Mark as not qualified',
-            tone: 'danger',
-        },
-    };
 
-    return confirmations[status] ?? null;
+    if (!action) {
+        return null;
+    }
+
+    return {
+        title: `${action.confirmLabel}?`,
+        message: action.kind === 'final'
+            ? `${applicantName} will receive this final outcome and your note.`
+            : `${applicantName} will receive this stage result and the application will update automatically.`,
+        confirmLabel: action.confirmLabel,
+        tone: action.tone === 'danger' ? 'danger' : 'default',
+    };
 }
 
 async function loadApplication() {
@@ -1035,7 +814,7 @@ async function updateStatus() {
         return;
     }
 
-    if (rubricReview.value.criteria?.length && !rubricDraftSummary.value.isComplete) {
+    if (currentWorkflowStage.value === 'screening' && rubricReview.value.criteria?.length && !rubricDraftSummary.value.isComplete) {
         activeSection.value = 'decision';
         errorMessage.value = 'Score every provider review criterion before saving the review.';
         return;
@@ -1047,13 +826,13 @@ async function updateStatus() {
         return;
     }
 
-    if (negativeDecisionStatuses.includes(reviewForm.value.status) && !reviewForm.value.decisionReason) {
+    if (selectedReviewAction.value?.requiresReason && !reviewForm.value.decisionReason) {
         errorMessage.value = 'Select a decision reason before saving a negative decision.';
         return;
     }
 
-    if (reviewForm.value.status !== application.value.status) {
-        const confirmationOptions = statusConfirmation(reviewForm.value.status);
+    if (selectedReviewAction.value) {
+        const confirmationOptions = statusConfirmation(selectedReviewAction.value);
 
         if (confirmationOptions && !await requestConfirmation(confirmationOptions)) {
             return;
@@ -1071,31 +850,39 @@ async function updateStatus() {
         const completedRubricScores = Object.fromEntries(
             Object.entries(rubricScores.value).filter(([, score]) => score !== '' && score !== null),
         );
-        const response = selectedReviewAction.value?.decision && !selectedReviewAction.value?.directStatus
-            ? await window.axios.patch(`/provider/applications/${application.value.id}/decision`, {
-                decision: selectedReviewAction.value.decision,
+        let response;
+
+        if (selectedReviewAction.value?.kind === 'stage') {
+            response = await window.axios.patch(`/provider/applications/${application.value.id}/stages/${currentWorkflowStage.value}/result`, {
+                result: selectedReviewAction.value.result,
                 decision_reason: reviewForm.value.decisionReason || null,
-                review_notes: reviewForm.value.reviewNotes,
+                notes: reviewForm.value.reviewNotes,
                 rubric_scores: completedRubricScores,
-            })
-            : await window.axios.patch(`/provider/applications/${application.value.id}/status`, {
-                status: selectedReviewAction.value?.directStatus ? reviewForm.value.status : application.value.status,
-                decision_reason: selectedReviewAction.value?.directStatus
-                    ? (reviewForm.value.decisionReason || null)
-                    : application.value.decision_reason,
+            });
+        } else if (selectedReviewAction.value?.kind === 'final') {
+            response = await window.axios.patch(`/provider/applications/${application.value.id}/final-outcome`, {
+                outcome: selectedReviewAction.value.outcome,
+                decision_reason: reviewForm.value.decisionReason || null,
+                notes: reviewForm.value.reviewNotes,
+            });
+        } else {
+            response = await window.axios.patch(`/provider/applications/${application.value.id}/status`, {
+                status: application.value.status,
+                decision_reason: application.value.decision_reason,
                 review_notes: reviewForm.value.reviewNotes,
                 rubric_scores: completedRubricScores,
             });
+        }
 
         applyApplication(response.data.application);
 
-        if (completedReviewAction?.decision) {
+        if (completedReviewAction) {
             postDecisionSummary.value = {
                 actionLabel: completedReviewAction.label,
                 message: response.data.message || 'The applicant decision was saved.',
                 remainingCount: Number(response.data.review_navigation?.remaining_count ?? 0),
                 listUrl: response.data.review_navigation?.list_url
-                    || `/provider/applications?scholarship_id=${application.value?.scholarship?.id ?? ''}&filter=${completedReviewAction.directStatus ? 'formal_application' : 'pending_review'}`,
+                    || `/provider/applications?scholarship_id=${application.value?.scholarship?.id ?? ''}&filter=pending_review`,
                 nextApplication: response.data.review_navigation?.next_application ?? null,
             };
         }
@@ -1192,7 +979,7 @@ onMounted(loadApplication);
                         </div>
                         <div v-if="application" class="flex flex-wrap items-center gap-2">
                             <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(application.status)]">
-                                {{ statusLabel(application.status) }}
+                                {{ workflow.application_state_label || statusLabel(application.status) }}
                             </span>
                             <button
                                 v-if="activeSection !== 'decision'"
@@ -1391,7 +1178,7 @@ onMounted(loadApplication);
                                     <div class="shrink-0 sm:text-right">
                                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Current stage</p>
                                         <span :class="['mt-1 inline-flex rounded-md px-2.5 py-1.5 text-xs font-bold uppercase', statusClass(application.status)]">
-                                            {{ statusLabel(application.status) }}
+                                            {{ workflow.current_stage_label || statusLabel(application.status) }}
                                         </span>
                                     </div>
                                 </div>
@@ -1515,7 +1302,7 @@ onMounted(loadApplication);
                                         </button>
                                     </div>
                                     <button
-                                        v-if="nextApprovalStatus && !documentReviewComplete"
+                                        v-if="currentWorkflowStage === 'screening' && !documentReviewComplete"
                                         type="button"
                                         class="mt-3 flex w-full items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-950 transition hover:bg-amber-100"
                                         @click="activeSection = 'documents'"
@@ -1524,18 +1311,6 @@ onMounted(loadApplication);
                                         <span>
                                             <strong class="block">Document review must be completed first</strong>
                                             <span class="mt-0.5 block text-xs leading-5 text-amber-800">{{ documentReviewBlockMessage }} Open the Documents tab to continue.</span>
-                                        </span>
-                                    </button>
-                                    <button
-                                        v-if="nextApprovalStatus && documentReviewComplete && approvalParticipationBlock"
-                                        type="button"
-                                        class="mt-3 flex w-full items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-950 transition hover:bg-amber-100"
-                                        @click="activeSection = approvalParticipationBlock.section"
-                                    >
-                                        <i class="fa-solid fa-calendar-check mt-0.5 text-amber-700" aria-hidden="true"></i>
-                                        <span>
-                                            <strong class="block">Participation must be recorded first</strong>
-                                            <span class="mt-0.5 block text-xs leading-5 text-amber-800">{{ approvalParticipationBlock.message }} Open the Schedule tab to continue.</span>
                                         </span>
                                     </button>
                                     <div v-if="suggestedReviewActions.length" class="mt-3 grid gap-3 md:grid-cols-2">
@@ -1586,7 +1361,7 @@ onMounted(loadApplication);
                                 </div>
 
                                 <div class="mt-5 grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2">
-                                    <div v-if="negativeDecisionStatuses.includes(reviewForm.status)">
+                                    <div v-if="selectedReviewAction?.requiresReason">
                                         <label :class="labelClass">
                                             Why was this decision made? <span class="text-rose-600">*</span>
                                         </label>
@@ -1926,9 +1701,9 @@ onMounted(loadApplication);
                                     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                                         <div>
                                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant schedule</p>
-                                            <h3 class="mt-2 text-xl font-bold text-slate-950">Attendance and results</h3>
+                                            <h3 class="mt-2 text-xl font-bold text-slate-950">Published stage details</h3>
                                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                            Shared dates and participant results are managed from the Program Workspace. Record Passed or Failed once after the activity is complete.
+                                                Exam and interview dates are published once from the Program Workspace. Record the applicant result from the Decision tab when it is available.
                                             </p>
                                         </div>
                                         <a :href="`/provider/programs/${application.scholarship.id}/applications?workspace=schedule`" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
@@ -1960,19 +1735,6 @@ onMounted(loadApplication);
                                         </summary>
 
                                         <div class="grid gap-3 border-t border-slate-200 p-3 text-sm lg:grid-cols-2">
-                                            <div v-if="schedule.type === 'distribution'" class="rounded-md bg-emerald-50 px-3 py-2.5 ring-1 ring-emerald-200 lg:col-span-2">
-                                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-emerald-800">Benefit package</p>
-                                                <ScholarshipBenefitsPanel
-                                                    v-if="application.scholarship?.benefits?.length || application.awarded_amount != null"
-                                                    class="mt-2"
-                                                    :benefits="application.scholarship?.benefits"
-                                                    :cash-amount="application.awarded_amount"
-                                                    compact
-                                                />
-                                                <p v-else class="mt-1 text-sm text-emerald-800">
-                                                    {{ application.scholarship?.benefit_summary || 'Benefit details have not been listed yet.' }}
-                                                </p>
-                                            </div>
                                             <div v-if="schedule.venue || schedule.location_address" class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
                                                 <p class="font-bold text-slate-800">{{ schedule.venue || 'Activity site' }}</p>
                                                 <p v-if="schedule.location_address" class="mt-1 leading-5 text-slate-600">{{ schedule.location_address }}</p>
@@ -1993,33 +1755,13 @@ onMounted(loadApplication);
                                                 height="10rem"
                                             />
 
-                                            <div class="rounded-md bg-sky-50 px-3 py-2.5 text-xs font-bold text-sky-800 ring-1 ring-sky-200 lg:col-span-2">
-                                                Applicant notified through the portal and email.
-                                            </div>
-                                        </div>
-
-                                        <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-                                            <div>
-                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                    {{ schedule.type === 'distribution' ? 'Release status' : 'Result status' }}
-                                                </p>
-                                                <p class="mt-1 text-sm text-slate-600">
-                                                    {{ labelFromKey(schedule.attendance_status || 'pending') }}. Results are updated from the Program Workspace.
-                                                </p>
-                                            </div>
-                                            <a
-                                                :href="`/provider/programs/${application.scholarship?.id}/applications?workspace=results`"
-                                                class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                                            >
-                                                Open results list
-                                            </a>
                                         </div>
                                     </details>
                                 </div>
 
                                 <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
                                     <p class="text-sm font-bold text-slate-800">No schedule announced yet</p>
-                                    <p class="mt-1 text-sm text-slate-500">Publish the shared stage from this program's applicant page.</p>
+                                    <p class="mt-1 text-sm text-slate-500">Publish an exam or interview schedule from this program's applicant page when needed.</p>
                                     <a
                                         :href="`/provider/programs/${application.scholarship?.id}/applications?workspace=schedule`"
                                         class="mt-4 inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
