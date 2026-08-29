@@ -180,6 +180,10 @@ Route::middleware(['auth', 'provider'])
             ->whereNumber('application')
             ->middleware(['permission:review_applications', 'provider.approved'])
             ->name('applications.profile-photo.view');
+        Route::patch('/applications/{application}/profile-verification', [ProviderController::class, 'verifyApplicantProfile'])
+            ->whereNumber('application')
+            ->middleware(['permission:review_applications', 'provider.approved'])
+            ->name('applications.profile-verification');
         Route::post('/applications/{application}/schedules', [ProviderController::class, 'upsertApplicationSchedule'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.schedules.upsert');
         Route::patch('/applications/{application}/schedules/{schedule}', [ProviderController::class, 'updateApplicationScheduleTracking'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.schedules.tracking');
         Route::patch('/applications/{application}/decision', [ProviderController::class, 'decideApplication'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.decision');

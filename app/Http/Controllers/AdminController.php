@@ -390,10 +390,15 @@ class AdminController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
         abort_unless($applicant->isApplicant(), 404);
 
-        $applicant->loadMissing(['studentProfile', 'applicantVerificationDocuments']);
+        $applicant->loadMissing([
+            'studentProfile.verifier.adminProfile',
+            'studentProfile.verifier.providerProfile',
+            'studentProfile.verifier.parentAccount.providerProfile',
+            'applicantVerificationDocuments',
+        ]);
 
         return response()->json([
-            'applicant' => $this->applicantReviewPayload($applicant),
+            'applicant' => $this->applicantReviewPayload($applicant, true),
         ]);
     }
 
@@ -415,7 +420,12 @@ class AdminController extends Controller
             ->latest()
             ->get(['id', 'email', 'username', 'role', 'created_at']);
         $applicants = User::query()
-            ->with(['studentProfile', 'applicantVerificationDocuments'])
+            ->with([
+                'studentProfile.verifier.adminProfile',
+                'studentProfile.verifier.providerProfile',
+                'studentProfile.verifier.parentAccount.providerProfile',
+                'applicantVerificationDocuments',
+            ])
             ->where('role', 'applicant')
             ->latest()
             ->get(['id', 'email', 'username', 'role', 'created_at']);
@@ -622,9 +632,19 @@ class AdminController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
         abort_unless($applicant->isApplicant(), 404);
 
+        $applicant->loadMissing(['studentProfile', 'applicantVerificationDocuments']);
+        $previousStatus = $applicant->applicantAcademicVerificationStatus();
+        $requestedStatus = $request->input('verification_status');
+        $isReopening = $previousStatus === 'approved' && $requestedStatus === 'pending';
+
         $validated = $request->validate([
             'verification_status' => ['required', Rule::in(['pending', 'approved', 'rejected'])],
-            'verification_notes' => [Rule::requiredIf($request->input('verification_status') === 'rejected'), 'nullable', 'string', 'max:1500'],
+            'verification_notes' => [
+                Rule::requiredIf($requestedStatus === 'rejected' || $isReopening),
+                'nullable',
+                'string',
+                'max:1500',
+            ],
         ]);
 
         if ($validated['verification_status'] === 'approved' && ! $applicant->applicantVerificationDocuments()
@@ -640,7 +660,7 @@ class AdminController extends Controller
             'rejected' => 'rejected',
             default => 'submitted',
         };
-        $notes = $validated['verification_status'] === 'rejected'
+        $notes = in_array($validated['verification_status'], ['pending', 'rejected'], true)
             && filled($validated['verification_notes'] ?? null)
             ? trim($validated['verification_notes'])
             : null;
@@ -668,13 +688,20 @@ class AdminController extends Controller
             $request,
             [
                 'applicant_id' => $applicant->id,
+                'previous_status' => $previousStatus,
                 'verification_status' => $validated['verification_status'],
+                'verification_notes' => $notes,
+                'verification_source' => 'admin',
             ],
         );
 
-        $message = "Your academic record verification is now {$validated['verification_status']}.";
+        $message = match ($validated['verification_status']) {
+            'approved' => 'Your academic record has been verified by the platform review team.',
+            'rejected' => 'Your academic record needs to be replaced before it can be verified.',
+            default => 'Your academic verification was reopened for platform review.',
+        };
 
-        if ($validated['verification_status'] === 'rejected' && $notes) {
+        if ($notes) {
             $message .= " Review note: {$notes}";
         }
 
@@ -686,15 +713,22 @@ class AdminController extends Controller
             'action_url' => '/dashboard/profile',
         ]);
 
+        $freshApplicant = $applicant->fresh([
+            'studentProfile.verifier.adminProfile',
+            'studentProfile.verifier.providerProfile',
+            'studentProfile.verifier.parentAccount.providerProfile',
+            'applicantVerificationDocuments',
+        ]);
+
         return response()->json([
             'message' => 'Applicant academic verification updated.',
-            'user' => $applicant->fresh(['studentProfile'])->publicPayload(),
-            'verification_documents' => $applicant->applicantVerificationDocuments()
+            'user' => $freshApplicant->publicPayload(),
+            'verification_documents' => $freshApplicant->applicantVerificationDocuments
                 ->whereIn('document_type', ['academic_record', 'school_record'])
-                ->latest('uploaded_at')
-                ->get()
+                ->sortByDesc('uploaded_at')
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
                 ->values(),
+            'applicant' => $this->applicantReviewPayload($freshApplicant, true),
         ]);
     }
 
@@ -1492,7 +1526,7 @@ class AdminController extends Controller
         ];
     }
 
-    private function applicantReviewPayload(User $applicant): array
+    private function applicantReviewPayload(User $applicant, bool $includeOversightHistory = false): array
     {
         return [
             ...$applicant->publicPayload(),
@@ -1501,8 +1535,117 @@ class AdminController extends Controller
                 ->sortByDesc('uploaded_at')
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
                 ->values(),
+            'verification_oversight' => $this->applicantVerificationOversightPayload($applicant, $includeOversightHistory),
             'created_at' => $applicant->created_at?->format('M d, Y'),
         ];
+    }
+
+    private function applicantVerificationOversightPayload(User $applicant, bool $includeHistory = false): array
+    {
+        $profile = $applicant->studentProfile;
+        $verifier = $profile?->verifier;
+        $status = $applicant->applicantAcademicVerificationStatus();
+        $source = match (true) {
+            $verifier?->isProvider() => 'provider',
+            $verifier?->isAdmin() => 'admin',
+            $status === 'approved' => 'legacy',
+            default => 'unassigned',
+        };
+        $providerOrganization = null;
+
+        if ($source === 'provider' && $verifier) {
+            $providerOwner = $verifier->providerOrganizationOwner();
+            $providerOrganization = $providerOwner->providerProfile?->provider_name ?: $providerOwner->name;
+        }
+
+        $oversight = [
+            'status' => $status,
+            'source' => $source,
+            'source_label' => match ($source) {
+                'provider' => 'Provider review',
+                'admin' => 'Admin review',
+                'legacy' => 'Earlier record',
+                default => 'Awaiting review',
+            },
+            'reviewer_name' => $verifier?->name,
+            'provider_organization' => $providerOrganization,
+            'verified_at' => $profile?->verified_at?->format('M d, Y h:i A'),
+            'review_note' => $profile?->verification_notes,
+            'can_reopen' => $status === 'approved',
+            'context' => null,
+            'history' => [],
+        ];
+
+        if (! $includeHistory) {
+            return $oversight;
+        }
+
+        $logs = ActivityLog::query()
+            ->whereIn('action', [
+                'applicant_profile_verified_by_provider',
+                'applicant_profile_verification_updated',
+            ])
+            ->where('metadata->applicant_id', $applicant->id)
+            ->latest('id')
+            ->get();
+        $providerLog = $logs->firstWhere('action', 'applicant_profile_verified_by_provider');
+
+        if ($providerLog) {
+            $applicationId = (int) data_get($providerLog->metadata, 'application_id');
+            $application = $applicationId > 0
+                ? ScholarshipApplication::query()
+                    ->with('scholarship.provider.providerProfile')
+                    ->whereKey($applicationId)
+                    ->where('applicant_id', $applicant->id)
+                    ->first()
+                : null;
+
+            if ($application?->scholarship) {
+                $oversight['context'] = [
+                    'application_id' => $application->id,
+                    'program_id' => $application->scholarship_id,
+                    'program_title' => $application->scholarship->title,
+                    'provider_name' => $application->scholarship->provider?->provider_name
+                        ?: $application->scholarship->provider?->name,
+                    'is_current' => $source === 'provider',
+                    'program_review_url' => route('admin.scholarships.review.show', $application->scholarship_id),
+                ];
+            }
+        }
+
+        $oversight['history'] = $logs
+            ->map(function (ActivityLog $log): array {
+                $metadata = $log->metadata ?? [];
+                $status = $log->action === 'applicant_profile_verified_by_provider'
+                    ? 'approved'
+                    : (data_get($metadata, 'verification_status') ?: 'pending');
+                $source = $log->actor_role === 'provider' ? 'provider' : 'admin';
+                $title = match (true) {
+                    $log->action === 'applicant_profile_verified_by_provider' => 'Verified by provider',
+                    $status === 'approved' => 'Verified by admin',
+                    $status === 'rejected' => 'Replacement requested',
+                    default => 'Verification reopened',
+                };
+
+                return [
+                    'id' => $log->id,
+                    'action' => $log->action,
+                    'title' => $title,
+                    'description' => $log->description,
+                    'source' => $source,
+                    'source_label' => $source === 'provider' ? 'Provider review' : 'Admin review',
+                    'actor_name' => $log->actor_name,
+                    'previous_status' => data_get($metadata, 'previous_status'),
+                    'status' => $status,
+                    'reason' => data_get($metadata, 'verification_notes'),
+                    'application_id' => data_get($metadata, 'application_id'),
+                    'program_id' => data_get($metadata, 'scholarship_id'),
+                    'created_at' => $log->created_at?->format('M d, Y h:i A'),
+                ];
+            })
+            ->values();
+
+        return $oversight;
     }
 
     private function verificationDocumentPayload(ProviderVerificationDocument $document): array

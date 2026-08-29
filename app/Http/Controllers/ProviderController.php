@@ -1137,6 +1137,7 @@ class ProviderController extends Controller
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
             'application' => $this->applicationPayload($application, true),
+            'application_navigation' => $this->applicationSiblingNavigationPayload($application),
         ]);
     }
 
@@ -1993,6 +1994,89 @@ class ProviderController extends Controller
                 'X-Content-Type-Options' => 'nosniff',
             ],
         );
+    }
+
+    public function verifyApplicantProfile(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+
+        $applicant = $application->applicant;
+        abort_unless($applicant?->isApplicant(), 404);
+
+        $verificationStatus = $applicant->applicantAcademicVerificationStatus();
+
+        if ($verificationStatus === 'approved') {
+            return response()->json([
+                'message' => 'The applicant academic record is already verified.',
+                'application' => $this->freshApplicationPayload($application),
+            ]);
+        }
+
+        if ($verificationStatus === 'rejected') {
+            throw ValidationException::withMessages([
+                'verification' => 'The applicant must replace the rejected academic record before it can be verified.',
+            ]);
+        }
+
+        if ($verificationStatus === 'pending' && filled($applicant->studentProfile?->verification_notes)) {
+            throw ValidationException::withMessages([
+                'verification' => 'An administrator reopened this verification. Wait for a replacement academic record or an admin decision before verifying it again.',
+            ]);
+        }
+
+        if (! $applicant->applicantVerificationDocuments()
+            ->where('document_type', 'academic_record')
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'verification' => 'The applicant must upload an academic record before it can be verified.',
+            ]);
+        }
+
+        DB::transaction(function () use ($applicant, $request): void {
+            $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
+                'verification_status' => 'approved',
+                'verification_notes' => null,
+                'verified_by' => $request->user()->id,
+                'verified_at' => now(),
+            ]);
+
+            $applicant->applicantVerificationDocuments()
+                ->whereIn('document_type', ['academic_record', 'school_record'])
+                ->update([
+                    'status' => 'approved',
+                    'review_notes' => null,
+                ]);
+        });
+
+        $providerOwner = $request->user()->providerOrganizationOwner()->loadMissing('providerProfile');
+        $providerName = $providerOwner->providerProfile?->provider_name ?: $request->user()->name;
+
+        ActivityLog::record(
+            $request->user(),
+            'applicant_profile_verified_by_provider',
+            "{$request->user()->name} verified applicant {$applicant->name}'s academic record for {$application->scholarship?->title}.",
+            $request,
+            [
+                'applicant_id' => $applicant->id,
+                'application_id' => $application->id,
+                'scholarship_id' => $application->scholarship_id,
+                'provider_id' => $request->user()->providerOrganizationId(),
+            ],
+        );
+
+        PortalNotification::create([
+            'user_id' => $applicant->id,
+            'type' => 'applicant_profile_verification',
+            'title' => 'Academic record verified',
+            'message' => "{$providerName} verified your academic record while reviewing your application for {$application->scholarship?->title}.",
+            'action_url' => '/dashboard/profile',
+        ]);
+
+        return response()->json([
+            'message' => 'Applicant academic record verified. Application approval remains a separate review decision.',
+            'application' => $this->freshApplicationPayload($application),
+        ]);
     }
 
     public function handleApplicationCorrection(Request $request, ScholarshipApplication $application): JsonResponse
@@ -3826,6 +3910,18 @@ class ProviderController extends Controller
         ];
     }
 
+    private function freshApplicationPayload(ScholarshipApplication $application): array
+    {
+        return $this->applicationPayload($application->fresh()->load([
+            'applicant.studentProfile',
+            'applicant.applicantVerificationDocuments',
+            'documents.reviewer',
+            'assignedReviewer.providerProfile',
+            'statusHistories.actor',
+            'scholarship',
+        ]), true);
+    }
+
     private function applicantPayload(ScholarshipApplication $application, bool $includeProfileDetails): array
     {
         $applicant = $application->applicant;
@@ -4097,6 +4193,30 @@ class ProviderController extends Controller
                 'applicant_name' => $nextApplication->applicant?->name ?: "Application #{$nextApplication->id}",
                 'url' => route('provider.applications.show', $nextApplication, false),
             ] : null,
+        ];
+    }
+
+    private function applicationSiblingNavigationPayload(ScholarshipApplication $application): array
+    {
+        $applications = ScholarshipApplication::query()
+            ->with('applicant')
+            ->where('scholarship_id', $application->scholarship_id)
+            ->latest('submitted_at')
+            ->latest('id')
+            ->get();
+        $position = $applications->search(fn (ScholarshipApplication $item) => $item->is($application));
+        $position = $position === false ? 0 : $position;
+        $navigationItem = static fn (?ScholarshipApplication $item): ?array => $item ? [
+            'id' => $item->id,
+            'applicant_name' => $item->applicant?->name ?: "Application #{$item->id}",
+            'url' => route('provider.applications.show', $item, false),
+        ] : null;
+
+        return [
+            'position' => $applications->isEmpty() ? 0 : $position + 1,
+            'total' => $applications->count(),
+            'previous_application' => $navigationItem($applications->get($position - 1)),
+            'next_application' => $navigationItem($applications->get($position + 1)),
         ];
     }
 

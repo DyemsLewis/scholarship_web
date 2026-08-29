@@ -93,6 +93,7 @@ class DecisionSupportService
         $score ??= $this->scoreApplication($application);
         $eligibility = $application->eligibility_breakdown ?? $this->currentEligibilitySnapshot($application) ?? [];
         $eligibilityCriteria = collect($eligibility['criteria'] ?? []);
+        $comparison = $this->eligibilityComparisonSummary($eligibilityCriteria);
         $requirements = app(ScholarshipEligibilityService::class)
             ->applicationDocumentRequirements($application);
         $uploadedDocuments = $application->documents->pluck('document_name')->all();
@@ -138,8 +139,12 @@ class DecisionSupportService
         }
 
         return [
-            'headline' => $this->explanationHeadline($score['recommendation'] ?? 'needs_review', $application->status),
+            'headline' => $comparison['state'] === 'provisional'
+                ? 'Suitability score is provisional.'
+                : $this->explanationHeadline($score['recommendation'] ?? 'needs_review', $application->status),
             'summary' => $score['summary'] ?? 'DSS reviewed the current application data.',
+            'comparison' => $comparison,
+            'score_interpretation' => $comparison['interpretation'],
             'strengths' => $strengths
                 ->filter()
                 ->unique()
@@ -153,6 +158,58 @@ class DecisionSupportService
                 ->values()
                 ->all(),
             'next_action' => $this->recommendedNextAction($application, $score, $missingUploads->all(), $missingAccepted->all()),
+        ];
+    }
+
+    private function eligibilityComparisonSummary(iterable $criteria): array
+    {
+        $criteria = collect($criteria);
+        $met = $criteria->where('status', 'pass')->count();
+        $notMet = $criteria->where('status', 'fail')->count();
+        $missing = $criteria->where('status', 'missing')->count();
+        $manualReview = $criteria
+            ->filter(fn (array $criterion): bool => ($criterion['status'] ?? null) === 'info'
+                && ($criterion['comparison_mode'] ?? null) === 'manual_review')
+            ->count();
+        $notApplicable = $criteria
+            ->filter(fn (array $criterion): bool => ($criterion['status'] ?? null) === 'info'
+                && ($criterion['comparison_mode'] ?? null) !== 'manual_review')
+            ->count();
+        $applicable = $met + $notMet + $missing;
+        $comparable = $met + $notMet;
+        $completeness = $applicable === 0
+            ? 100
+            : (int) round(($comparable / $applicable) * 100);
+
+        if ($missing > 0) {
+            $state = 'provisional';
+            $label = 'Missing information';
+            $interpretation = "{$missing} applicable ".str('criterion')->plural($missing).' cannot be compared because profile data is missing or uses an incompatible grading scale. Treat the score as provisional and confirm these items before deciding.';
+        } elseif ($manualReview > 0) {
+            $state = 'manual_review';
+            $label = 'Manual review needed';
+            $interpretation = "{$manualReview} ".str('criterion')->plural($manualReview).' requires evidence review and is excluded from the automatic eligibility percentage.';
+        } elseif ($applicable === 0) {
+            $state = 'open_criteria';
+            $label = 'Open criteria';
+            $interpretation = 'The program has no restrictive structured criteria. A high score means no listed mismatch; it is not an applicant ranking or selection decision.';
+        } else {
+            $state = 'complete';
+            $label = 'Comparison complete';
+            $interpretation = 'All applicable structured criteria have enough profile data for comparison. Confirm the values against uploaded proof before deciding.';
+        }
+
+        return [
+            'state' => $state,
+            'label' => $label,
+            'completeness' => $completeness,
+            'met' => $met,
+            'not_met' => $notMet,
+            'missing' => $missing,
+            'manual_review' => $manualReview,
+            'not_applicable' => $notApplicable,
+            'applicable' => $applicable,
+            'interpretation' => $interpretation,
         ];
     }
 

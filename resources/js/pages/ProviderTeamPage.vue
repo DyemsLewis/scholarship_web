@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
+import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
@@ -106,6 +107,8 @@ onMounted(loadTeam);
                         </a>
                     </div>
                 </header>
+
+                <ProviderSectionNav section="organization" />
 
                 <div v-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">
                     {{ errorMessage }}

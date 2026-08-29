@@ -66,6 +66,10 @@ function isActive(link) {
         return currentPath === link.href;
     }
 
+    if (link.activePaths?.some((path) => currentPath === path || currentPath.startsWith(`${path}/`))) {
+        return true;
+    }
+
     return currentPath === link.href || currentPath.startsWith(`${link.href}/`);
 }
 
@@ -90,7 +94,7 @@ async function requestLogout() {
     <aside class="relative overflow-visible border-r border-slate-800 bg-slate-950 text-white lg:sticky lg:top-0 lg:h-screen">
         <div class="absolute inset-x-0 top-0 h-px bg-amber-300/70"></div>
 
-        <div class="relative flex min-h-72 flex-col px-5 py-6 lg:h-full">
+        <div class="relative flex min-h-72 flex-col px-5 py-6 lg:h-full lg:min-h-0">
             <a :href="homeHref" class="flex items-center gap-3">
                 <div class="flex h-10 w-10 items-center justify-center rounded-md bg-amber-300 text-sm font-black text-slate-950">
                     <i :class="icon"></i>
@@ -105,7 +109,7 @@ async function requestLogout() {
                 </div>
             </a>
 
-            <nav class="mt-8 grid gap-5 lg:overflow-y-auto" aria-label="Portal navigation">
+            <nav class="mt-8 grid content-start gap-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto" aria-label="Portal navigation">
                 <section v-for="group in navGroups" :key="group.label || 'main'">
                     <p v-if="group.label" class="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">
                         {{ group.label }}
@@ -135,16 +139,12 @@ async function requestLogout() {
                 </section>
             </nav>
 
-            <div class="mt-6">
+            <div class="mt-5 shrink-0 border-t border-white/10 pt-4">
                 <NotificationBell align="left" mode="sidebar" centered />
-            </div>
-
-            <EmailVerificationReminder class="mt-4" mode="dark" />
-
-            <div class="mt-6 border-t border-white/10 pt-4 lg:mt-auto">
+                <EmailVerificationReminder class="mt-3" mode="dark" />
                 <button
                     type="button"
-                    class="w-full rounded-md border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300 transition hover:border-amber-300/40 hover:bg-white/5 hover:text-white"
+                    class="mt-3 w-full rounded-md border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300 transition hover:border-amber-300/40 hover:bg-white/5 hover:text-white"
                     @click="requestLogout"
                 >
                     <i class="fa-solid fa-right-from-bracket mr-2"></i>

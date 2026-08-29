@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
+import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
@@ -12,7 +13,10 @@ const initialScholarshipId = appElement?.dataset.scholarshipId ?? pageSearchPara
 const initialScholarshipTitle = appElement?.dataset.scholarshipTitle ?? '';
 const requestedWorkspaceSection = pageSearchParams.get('workspace');
 const requestedQueueFilter = pageSearchParams.get('filter');
+const requestedQueueSort = pageSearchParams.get('sort');
+const requestedApplicationPage = Number(pageSearchParams.get('page'));
 const queueFilterValues = ['pending_review', 'document_issues', 'active_stages', 'formal_application', 'decided', 'all'];
+const queueSortValues = ['priority', 'dss', 'documents', 'oldest'];
 const isLoading = ref(true);
 const errorMessage = ref('');
 const applications = ref([]);
@@ -24,9 +28,9 @@ const selectedScholarshipContext = ref(initialScholarshipId ? {
     title: initialScholarshipTitle,
 } : null);
 const selectedQueueFilter = ref(queueFilterValues.includes(requestedQueueFilter) ? requestedQueueFilter : 'pending_review');
-const selectedQueueSort = ref('priority');
-const applicationSearch = ref('');
-const applicationPage = ref(1);
+const selectedQueueSort = ref(queueSortValues.includes(requestedQueueSort) ? requestedQueueSort : 'priority');
+const applicationSearch = ref(pageSearchParams.get('search') ?? '');
+const applicationPage = ref(Number.isInteger(requestedApplicationPage) && requestedApplicationPage > 0 ? requestedApplicationPage : 1);
 const selectedApplicationPreview = ref(null);
 const applicationsPerPage = 10;
 const activeWorkspaceSection = ref(['applications', 'schedule'].includes(requestedWorkspaceSection)
@@ -64,6 +68,10 @@ const scheduleModeOptions = [
 ];
 const selectedScholarshipId = computed(() => selectedScholarshipContext.value?.id || initialScholarshipId);
 const hasProgramContext = computed(() => Boolean(selectedScholarshipId.value));
+const canManagePrograms = computed(() => Boolean(
+    window.portalUser?.has_full_access
+        || window.portalUser?.permissions?.includes('manage_programs'),
+));
 const configuredScheduleTypes = computed(() => {
     const configured = selectedScholarshipContext.value?.selection_stages ?? ['screening'];
 
@@ -92,20 +100,6 @@ const waitingScheduleTypes = computed(() => {
         ))
     ));
 });
-const workspaceTabs = computed(() => [
-    {
-        key: 'applications',
-        label: 'Review',
-        meta: pendingReviewCount.value > 0 ? `${pendingReviewCount.value} to review` : `${applications.value.length} total`,
-        attention: pendingReviewCount.value > 0,
-    },
-    {
-        key: 'schedule',
-        label: 'Schedule',
-        meta: `${programEvents.value.length} set`,
-        attention: waitingScheduleTypes.value.length > 0,
-    },
-]);
 const workspaceTasks = computed(() => {
     const tasks = [];
 
@@ -494,6 +488,15 @@ function closeApplicationPreview() {
     selectedApplicationPreview.value = null;
 }
 
+function applicationDetailUrl(application) {
+    const detailUrl = application.detail_url || `/provider/applications/${application.id}`;
+    const url = new URL(detailUrl, window.location.origin);
+
+    url.searchParams.set('return_to', `${window.location.pathname}${window.location.search}`);
+
+    return `${url.pathname}${url.search}${url.hash}`;
+}
+
 function selectWorkspaceSection(section) {
     activeWorkspaceSection.value = section;
     scheduleError.value = '';
@@ -689,10 +692,24 @@ watch([selectedQueueFilter, selectedQueueSort, applicationSearch], () => {
     applicationPage.value = 1;
 });
 
-watch(selectedQueueFilter, (filter) => {
+watch([selectedQueueFilter, selectedQueueSort, applicationSearch, applicationPage], ([filter, sort, search, page]) => {
     const url = new URL(window.location.href);
 
     url.searchParams.set('filter', filter);
+    url.searchParams.set('sort', sort);
+
+    if (search.trim()) {
+        url.searchParams.set('search', search.trim());
+    } else {
+        url.searchParams.delete('search');
+    }
+
+    if (page > 1) {
+        url.searchParams.set('page', String(page));
+    } else {
+        url.searchParams.delete('page');
+    }
+
     window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
 });
 
@@ -724,6 +741,16 @@ onMounted(loadProviderData);
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
+                <nav v-if="hasProgramContext" class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
+                    <a href="/provider/programs" class="font-bold text-slate-600 transition hover:text-slate-950">Programs</a>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
+                    <a :href="`/provider/programs/${selectedScholarshipId}`" class="max-w-72 truncate font-bold text-slate-600 transition hover:text-slate-950">
+                        {{ selectedScholarshipContext?.title || 'Program workspace' }}
+                    </a>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
+                    <span class="font-semibold text-slate-950">{{ activeWorkspaceSection === 'schedule' ? 'Schedule' : 'Applicants' }}</span>
+                </nav>
+
                 <header class="provider-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -737,22 +764,15 @@ onMounted(loadProviderData);
                                 {{ pageDescription }}
                             </p>
                         </div>
-                        <div v-if="hasProgramContext" class="flex flex-wrap gap-2">
-                            <a
-                                :href="`/provider/programs/${selectedScholarshipId}/edit`"
-                                class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                            >
-                                Edit program
-                            </a>
-                            <a
-                                href="/provider/programs"
-                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                            >
-                                Back to programs
-                            </a>
-                        </div>
                     </div>
                 </header>
+
+                <ProviderProgramNav
+                    v-if="hasProgramContext"
+                    :program-id="selectedScholarshipId"
+                    :active="activeWorkspaceSection === 'schedule' ? 'schedule' : 'applicants'"
+                    :can-manage="canManagePrograms"
+                />
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading applicants...
@@ -795,27 +815,6 @@ onMounted(loadProviderData);
                             </div>
                         </div>
 
-                        <nav class="flex gap-1 overflow-x-auto border-t border-slate-200 bg-slate-50 p-2" aria-label="Program workspace sections">
-                            <button
-                                v-for="tab in workspaceTabs"
-                                :key="tab.key"
-                                type="button"
-                                :aria-current="activeWorkspaceSection === tab.key ? 'page' : undefined"
-                                :class="[
-                                    'inline-flex min-w-fit flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-bold transition',
-                                    activeWorkspaceSection === tab.key
-                                        ? 'bg-slate-950 text-white shadow-sm'
-                                        : 'text-slate-600 hover:bg-white hover:text-slate-950',
-                                ]"
-                                @click="selectWorkspaceSection(tab.key)"
-                            >
-                                <span>{{ tab.label }}</span>
-                                <span :class="activeWorkspaceSection === tab.key ? 'text-slate-300' : 'text-slate-400'" class="text-xs font-semibold">
-                                    {{ tab.meta }}
-                                </span>
-                                <span v-if="tab.attention" class="h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-label="Needs attention"></span>
-                            </button>
-                        </nav>
                     </section>
 
                     <section
@@ -1251,7 +1250,7 @@ onMounted(loadProviderData);
                                     </span>
                                 </div>
                                 <p class="mt-2 text-[11px] leading-4 text-slate-500">
-                                    Compares the applicant profile with this program's criteria. It guides review but does not decide approval.
+                                    {{ selectedApplicationPreview.dss_explanation?.score_interpretation || 'Compares the applicant profile with this program criteria. It guides review but does not decide approval.' }}
                                 </p>
                             </article>
 
@@ -1311,7 +1310,7 @@ onMounted(loadProviderData);
                                 Close
                             </button>
                             <a
-                                :href="selectedApplicationPreview.detail_url || `/provider/applications/${selectedApplicationPreview.id}`"
+                                :href="applicationDetailUrl(selectedApplicationPreview)"
                                 class="rounded-md bg-slate-950 px-3 py-2 text-center text-xs font-bold text-white transition hover:bg-slate-800"
                             >
                                 Continue review

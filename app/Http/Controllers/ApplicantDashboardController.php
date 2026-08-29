@@ -227,6 +227,30 @@ class ApplicantDashboardController extends Controller
             'stats' => $this->statsPayload($request),
             'scholarships' => $scholarships,
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
+            'action_alerts' => PortalNotification::query()
+                ->where('user_id', $request->user()->id)
+                ->whereNull('read_at')
+                ->whereIn('type', [
+                    'program_announcement',
+                    'application_correction',
+                    'document_review',
+                    'application_status',
+                    'application_outcome',
+                    'application_schedule',
+                    'applicant_profile_verification',
+                ])
+                ->latest()
+                ->limit(6)
+                ->get()
+                ->map(fn (PortalNotification $notification): array => [
+                    'id' => $notification->id,
+                    'type' => $notification->type,
+                    'title' => $notification->title,
+                    'message' => $notification->message,
+                    'action_url' => $notification->action_url,
+                    'created_at' => $notification->created_at?->format('M d, Y h:i A'),
+                ])
+                ->values(),
             'next_steps' => [
                 'Review available scholarship programs.',
                 'Prepare documents listed in each scholarship requirement.',

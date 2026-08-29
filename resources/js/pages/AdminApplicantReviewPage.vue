@@ -18,6 +18,7 @@ const requestedSection = new URLSearchParams(window.location.search).get('sectio
 const reviewSections = [
     { key: 'profile', label: 'Academic profile' },
     { key: 'proof', label: 'Profile proof' },
+    { key: 'oversight', label: 'Oversight' },
     { key: 'decision', label: 'Decision' },
 ];
 const activeReviewSection = ref(reviewSections.some((section) => section.key === requestedSection) ? requestedSection : 'profile');
@@ -137,6 +138,14 @@ function applicantActionOptions(currentApplicant) {
         });
     }
 
+    if (status === 'approved') {
+        actions.push({
+            status: 'pending',
+            label: 'Reopen verification',
+            className: 'border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100',
+        });
+    }
+
     if (status !== 'rejected') {
         actions.push({
             status: 'rejected',
@@ -179,9 +188,12 @@ async function updateApplicant(verificationStatus) {
     }
 
     const verificationNote = reviewNote.value.trim();
+    const isReopening = applicantReviewStatus(applicant.value) === 'approved' && verificationStatus === 'pending';
 
-    if (verificationStatus === 'rejected' && !verificationNote) {
-        decisionError.value = 'Add a reason so the applicant knows what must be corrected or replaced.';
+    if ((verificationStatus === 'rejected' || isReopening) && !verificationNote) {
+        decisionError.value = isReopening
+            ? 'Add an oversight reason before reopening this verification.'
+            : 'Add a reason so the applicant knows what must be corrected or replaced.';
         return;
     }
 
@@ -193,7 +205,7 @@ async function updateApplicant(verificationStatus) {
             verification_status: verificationStatus,
             verification_notes: verificationNote,
         });
-        const updatedApplicant = {
+        const updatedApplicant = response.data.applicant ?? {
             ...applicant.value,
             ...response.data.user,
             verification_documents: response.data.verification_documents ?? [],
@@ -269,7 +281,7 @@ onMounted(loadApplicant);
 
                 <div v-else class="mt-6 space-y-5">
                         <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                            <nav class="grid gap-1 p-2 sm:grid-cols-3" aria-label="Academic verification steps">
+                            <nav class="grid gap-1 p-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="Academic verification steps">
                                 <button
                                     v-for="(section, index) in reviewSections"
                                     :key="section.key"
@@ -289,6 +301,7 @@ onMounted(loadApplicant);
                                         <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
                                             <template v-if="section.key === 'profile'">Saved learning details</template>
                                             <template v-else-if="section.key === 'proof'">{{ academicVerificationDocument(applicant) ? 'Academic record submitted' : 'No academic record' }}</template>
+                                            <template v-else-if="section.key === 'oversight'">{{ applicant.verification_oversight?.source_label || 'Awaiting review' }}</template>
                                             <template v-else>{{ applicantReviewStatusLabel(applicant) }}</template>
                                         </span>
                                     </span>
@@ -428,10 +441,111 @@ onMounted(loadApplicant);
                             </p>
                         </article>
 
+                        <article v-if="activeReviewSection === 'oversight'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="flex items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-white">
+                                        <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+                                    </span>
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 3 - Verification oversight</p>
+                                        <h3 class="mt-1 text-xl font-bold text-slate-950">Decision source and audit trail</h3>
+                                        <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                                            See who checked the academic record and the application context used. Profile verification does not approve a scholarship application.
+                                        </p>
+                                    </div>
+                                </div>
+                                <span :class="['w-fit shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(applicantReviewStatus(applicant))]">
+                                    {{ applicantReviewStatusLabel(applicant) }}
+                                </span>
+                            </div>
+
+                            <dl class="grid border-b border-slate-200 bg-slate-50 sm:grid-cols-3">
+                                <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
+                                    <dt class="text-xs font-semibold text-slate-500">Review source</dt>
+                                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ applicant.verification_oversight?.source_label || 'Awaiting review' }}</dd>
+                                </div>
+                                <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
+                                    <dt class="text-xs font-semibold text-slate-500">Reviewed by</dt>
+                                    <dd class="mt-1 text-sm font-bold text-slate-950">
+                                        {{ applicant.verification_oversight?.provider_organization || applicant.verification_oversight?.reviewer_name || 'No reviewer assigned' }}
+                                    </dd>
+                                    <p v-if="applicant.verification_oversight?.provider_organization && applicant.verification_oversight?.reviewer_name" class="mt-1 text-xs text-slate-500">
+                                        Account: {{ applicant.verification_oversight.reviewer_name }}
+                                    </p>
+                                </div>
+                                <div class="p-4">
+                                    <dt class="text-xs font-semibold text-slate-500">Verified at</dt>
+                                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ applicant.verification_oversight?.verified_at || 'Not verified yet' }}</dd>
+                                </div>
+                            </dl>
+
+                            <div class="space-y-5 p-5">
+                                <section v-if="applicant.verification_oversight?.context" class="rounded-md border border-slate-200 bg-slate-50 p-4">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="min-w-0">
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
+                                                {{ applicant.verification_oversight.context.is_current ? 'Provider verification context' : 'Previous provider context' }}
+                                            </p>
+                                            <h4 class="mt-1 truncate text-sm font-bold text-slate-950">{{ applicant.verification_oversight.context.program_title }}</h4>
+                                            <p class="mt-1 text-xs text-slate-500">
+                                                {{ applicant.verification_oversight.context.provider_name || 'Provider' }} &middot; Application #{{ applicant.verification_oversight.context.application_id }}
+                                            </p>
+                                        </div>
+                                        <a
+                                            :href="applicant.verification_oversight.context.program_review_url"
+                                            class="inline-flex shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                        >
+                                            View program
+                                        </a>
+                                    </div>
+                                </section>
+
+                                <section>
+                                    <div class="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Decision history</p>
+                                            <h4 class="mt-1 text-base font-bold text-slate-950">Verification activity</h4>
+                                        </div>
+                                        <span class="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
+                                            {{ applicant.verification_oversight?.history?.length || 0 }} record{{ applicant.verification_oversight?.history?.length === 1 ? '' : 's' }}
+                                        </span>
+                                    </div>
+
+                                    <div v-if="applicant.verification_oversight?.history?.length" class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
+                                        <div v-for="entry in applicant.verification_oversight.history" :key="entry.id" class="flex gap-3 p-4">
+                                            <span :class="['mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full', entry.status === 'approved' ? 'bg-emerald-500' : entry.status === 'rejected' ? 'bg-rose-500' : 'bg-amber-500']"></span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                                    <p class="text-sm font-bold text-slate-950">{{ entry.title }}</p>
+                                                    <p class="text-xs text-slate-500">{{ entry.created_at }}</p>
+                                                </div>
+                                                <p class="mt-1 text-xs leading-5 text-slate-600">{{ entry.actor_name || 'Portal reviewer' }} &middot; {{ entry.source_label }}</p>
+                                                <p v-if="entry.reason" class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">Reason: {{ entry.reason }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p v-else class="mt-3 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                                        No verification decisions have been recorded yet.
+                                    </p>
+                                </section>
+
+                                <section v-if="applicant.verification_oversight?.can_reopen" class="flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <p class="text-sm font-bold text-amber-950">Admin oversight control</p>
+                                        <p class="mt-1 text-xs leading-5 text-amber-800">Reopen only when the proof or recorded result needs another check. A reason is required and will be visible in the audit trail.</p>
+                                    </div>
+                                    <button type="button" class="shrink-0 rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="selectReviewSection('decision')">
+                                        Review decision
+                                    </button>
+                                </section>
+                            </div>
+                        </article>
+
                     <section v-if="activeReviewSection === 'decision'" id="verification-decision" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 3 - Final decision</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 4 - Admin decision</p>
                                 <h3 class="mt-1 text-xl font-bold text-slate-950">Academic verification decision</h3>
                             </div>
                             <span :class="['shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(applicantReviewStatus(applicant))]">
@@ -439,7 +553,7 @@ onMounted(loadApplicant);
                             </span>
                         </div>
                         <p class="mt-2 text-sm leading-6 text-slate-600">
-                            Confirm that the submitted record supports the academic information saved in the applicant profile.
+                            Confirm the submitted record, request a replacement, or reopen an existing verification when oversight finds an issue.
                         </p>
 
                         <div v-if="academicVerificationDocument(applicant)" class="w-full">
@@ -449,7 +563,7 @@ onMounted(loadApplicant);
                             </div>
 
                             <label class="mt-5 block text-xs font-bold text-slate-700">
-                                Review note <span class="font-normal text-slate-500">(required when not verifying)</span>
+                                Review note <span class="font-normal text-slate-500">(required for reopening or replacement)</span>
                             </label>
                             <textarea
                                 v-model="reviewNote"

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
+import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 
 const accountId = window.location.pathname.match(/\/provider\/team\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
@@ -176,6 +177,8 @@ onMounted(loadAccount);
                         </a>
                     </div>
                 </header>
+
+                <ProviderSectionNav section="organization" />
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">Loading account...</div>
 

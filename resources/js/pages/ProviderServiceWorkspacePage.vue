@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
+import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { formatFileSize } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
@@ -241,6 +242,8 @@ onMounted(loadWorkspace);
                         </span>
                     </div>
                 </header>
+
+                <ProviderSectionNav section="support" />
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">Loading service workspace...</div>
                 <div v-else-if="errorMessage || !purchase" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>

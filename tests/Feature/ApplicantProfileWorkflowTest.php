@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -111,6 +112,39 @@ class ApplicantProfileWorkflowTest extends TestCase
         $this->assertTrue(collect($scholarships)->every(
             fn (array $scholarship): bool => $scholarship['eligibility_match']['is_eligible'] === true,
         ));
+    }
+
+    public function test_dashboard_returns_only_unread_action_alerts(): void
+    {
+        $applicant = User::factory()->create();
+        $actionAlert = PortalNotification::create([
+            'user_id' => $applicant->id,
+            'type' => 'program_announcement',
+            'title' => 'Program update',
+            'message' => 'The provider shared a new instruction.',
+            'action_url' => '/dashboard/applications/1',
+        ]);
+        PortalNotification::create([
+            'user_id' => $applicant->id,
+            'type' => 'application_status',
+            'title' => 'Old update',
+            'message' => 'This update was already read.',
+            'read_at' => now(),
+        ]);
+        PortalNotification::create([
+            'user_id' => $applicant->id,
+            'type' => 'profile_reminder',
+            'title' => 'Profile reminder',
+            'message' => 'This is handled by dashboard readiness instead.',
+        ]);
+
+        $this->actingAs($applicant)
+            ->getJson('/dashboard/data')
+            ->assertOk()
+            ->assertJsonCount(1, 'action_alerts')
+            ->assertJsonPath('action_alerts.0.id', $actionAlert->id)
+            ->assertJsonPath('action_alerts.0.type', 'program_announcement')
+            ->assertJsonPath('action_alerts.0.action_url', '/dashboard/applications/1');
     }
 
     public function test_scholarship_finder_includes_eligible_and_ineligible_published_programs(): void

@@ -44,6 +44,27 @@ class ProviderApplicationDecisionNavigationTest extends TestCase
             ->assertJsonPath('review_navigation.list_url', "/provider/applications?scholarship_id={$program->id}");
     }
 
+    public function test_application_detail_returns_neighboring_records_only_from_the_same_program(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($provider, 'Primary program');
+        $otherProgram = $this->program($provider, 'Other program');
+        $older = $this->application($program, 'submitted', now()->subMinutes(3));
+        $current = $this->application($program, 'submitted', now()->subMinutes(2));
+        $newer = $this->application($program, 'submitted', now()->subMinute());
+        $this->application($otherProgram, 'submitted', now());
+
+        $this->actingAs($provider)
+            ->getJson("/provider/applications/{$current->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application_navigation.position', 2)
+            ->assertJsonPath('application_navigation.total', 3)
+            ->assertJsonPath('application_navigation.previous_application.id', $newer->id)
+            ->assertJsonPath('application_navigation.previous_application.url', "/provider/applications/{$newer->id}")
+            ->assertJsonPath('application_navigation.next_application.id', $older->id)
+            ->assertJsonPath('application_navigation.next_application.url', "/provider/applications/{$older->id}");
+    }
+
     private function program(User $provider, string $title): Scholarship
     {
         return Scholarship::create([

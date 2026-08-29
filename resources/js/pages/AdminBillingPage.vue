@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
+import AdminSectionNav from '../components/AdminSectionNav.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 
 const isLoading = ref(true);
@@ -117,6 +118,8 @@ onMounted(() => {
                         </button>
                     </div>
                 </header>
+
+                <AdminSectionNav section="operations" />
 
                 <div v-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">
                     {{ errorMessage }}

@@ -1,8 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
+import AdminSectionNav from '../components/AdminSectionNav.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
+import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 
 const isAdmin = window.location.pathname.startsWith('/admin');
@@ -176,6 +178,9 @@ onMounted(() => loadReports());
                         </button>
                     </div>
                 </header>
+
+                <AdminSectionNav v-if="isAdmin" section="operations" />
+                <ProviderSectionNav v-else section="support" />
 
                 <section class="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                     <div>

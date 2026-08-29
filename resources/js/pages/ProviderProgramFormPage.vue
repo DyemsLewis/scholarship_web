@@ -4,6 +4,7 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProgramBenefitsEditor from '../components/ProgramBenefitsEditor.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
+import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
@@ -2032,6 +2033,8 @@ onBeforeUnmount(() => {
                         Back to programs
                     </a>
                 </header>
+
+                <ProviderProgramNav v-if="isEditMode" :program-id="scholarshipId" active="settings" can-manage />
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading scholarship form...

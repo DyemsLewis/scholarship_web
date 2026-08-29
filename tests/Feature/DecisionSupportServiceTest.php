@@ -75,6 +75,46 @@ class DecisionSupportServiceTest extends TestCase
         $this->assertSame(100, $eligibility['score']);
     }
 
+    public function test_explanation_marks_missing_profile_data_as_provisional(): void
+    {
+        [$application, $applicant] = $this->application([
+            'eligible_courses' => 'STEM',
+            'eligible_locations' => 'NCR',
+        ]);
+        $applicant->studentProfile()->update([
+            'course_or_strand' => null,
+        ]);
+        $application = $application->fresh(['applicant.studentProfile', 'documents', 'scholarship']);
+        $service = app(DecisionSupportService::class);
+        $score = $service->scoreApplication($application);
+        $explanation = $service->explainApplication($application, $score);
+
+        $this->assertSame('provisional', $explanation['comparison']['state']);
+        $this->assertSame(1, $explanation['comparison']['missing']);
+        $this->assertLessThan(100, $explanation['comparison']['completeness']);
+        $this->assertSame('Suitability score is provisional.', $explanation['headline']);
+        $this->assertStringContainsString('Treat the score as provisional', $explanation['score_interpretation']);
+    }
+
+    public function test_explanation_clarifies_scores_for_open_criteria(): void
+    {
+        [$application] = $this->application([
+            'eligible_education_levels' => 'Any',
+            'eligible_courses' => 'Any course',
+            'eligible_school_types' => 'Open to all',
+            'eligible_year_levels' => 'Any',
+            'eligible_locations' => 'Nationwide',
+            'income_requirement' => 'No income requirement',
+        ]);
+        $service = app(DecisionSupportService::class);
+        $score = $service->scoreApplication($application);
+        $explanation = $service->explainApplication($application, $score);
+
+        $this->assertSame('open_criteria', $explanation['comparison']['state']);
+        $this->assertSame(0, $explanation['comparison']['applicable']);
+        $this->assertStringContainsString('not an applicant ranking', $explanation['score_interpretation']);
+    }
+
     private function application(array $scholarshipAttributes = []): array
     {
         $applicant = User::factory()->create();

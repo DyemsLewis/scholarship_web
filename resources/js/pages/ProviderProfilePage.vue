@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
+import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
@@ -386,6 +387,8 @@ onMounted(loadProviderProfile);
                         Update public organization details or manage the proof used for provider verification.
                     </p>
                 </header>
+
+                <ProviderSectionNav section="organization" />
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading provider profile...

@@ -497,9 +497,9 @@ onMounted(loadReviewData);
                         <div>
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant Review</p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">Review applicant proof</h3>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">Applicant verification oversight</h3>
                                 <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                    Compare each applicant profile with the proof submitted for verification.
+                                    Review new academic proof and monitor decisions already completed by admins or scholarship providers.
                                 </p>
                             </div>
 
@@ -554,13 +554,22 @@ onMounted(loadReviewData);
                                     <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
                                         {{ applicant.email }} &middot; {{ applicant.school || 'School not provided' }} &middot; {{ applicant.verification_documents?.length ? 'Academic record submitted' : 'No academic record' }}
                                     </p>
+                                    <p v-if="applicantReviewStatus(applicant) === 'approved'" class="mt-1 line-clamp-1 text-xs font-semibold text-slate-600">
+                                        {{ applicant.verification_oversight?.source_label || 'Earlier record' }}
+                                        <template v-if="applicant.verification_oversight?.provider_organization || applicant.verification_oversight?.reviewer_name">
+                                            &middot; {{ applicant.verification_oversight.provider_organization || applicant.verification_oversight.reviewer_name }}
+                                        </template>
+                                        <template v-if="applicant.verification_oversight?.verified_at">
+                                            &middot; {{ applicant.verification_oversight.verified_at }}
+                                        </template>
+                                    </p>
                                 </div>
 
                                 <a
                                     :href="applicantReviewUrl(applicant)"
                                     class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
                                 >
-                                    Review
+                                    Open record
                                 </a>
                             </article>
                         </div>

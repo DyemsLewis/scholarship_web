@@ -2,33 +2,53 @@
 import { computed } from 'vue';
 import RoleSidebar from './RoleSidebar.vue';
 
-defineProps({
+const props = defineProps({
     active: {
         type: String,
         default: 'dashboard',
     },
 });
 
+const hasPermission = (permission) => Boolean(
+    window.portalUser?.has_full_access
+        || window.portalUser?.permissions?.includes(permission),
+);
+const operationsHref = hasPermission('manage_reports')
+    ? '/admin/reports'
+    : hasPermission('manage_billing')
+        ? '/admin/billing'
+        : '/admin/logs';
+const activeKey = computed(() => {
+    if (['reports', 'billing', 'logs'].includes(props.active)) {
+        return 'operations';
+    }
+
+    return props.active === 'users' ? 'accounts' : props.active;
+});
 const navLinks = [
-    { section: 'Workspace', key: 'dashboard', href: '/admin', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
-    { section: 'Workspace', key: 'reviews', href: '/admin/reviews', label: 'Reviews', icon: 'fa-solid fa-clipboard-check', permission: 'manage_reviews' },
-    { section: 'Workspace', key: 'reports', href: '/admin/reports', label: 'Reported Issues', icon: 'fa-solid fa-circle-exclamation', permission: 'manage_reports' },
-    { section: 'Administration', key: 'users', href: '/admin/manage-users', label: 'Manage Users', icon: 'fa-solid fa-users-gear', permission: 'manage_accounts' },
-    { section: 'Administration', key: 'billing', href: '/admin/billing', label: 'Service Requests', icon: 'fa-solid fa-headset', permission: 'manage_billing' },
-    { section: 'Administration', key: 'logs', href: '/admin/logs', label: 'Activity Logs', icon: 'fa-solid fa-clock-rotate-left', permission: 'view_logs' },
-    { section: 'Account', key: 'profile', href: '/admin/profile', label: 'Profile', icon: 'fa-solid fa-id-badge' },
+    { key: 'dashboard', href: '/admin', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
+    { key: 'reviews', href: '/admin/reviews', label: 'Reviews', icon: 'fa-solid fa-clipboard-check', permission: 'manage_reviews' },
+    { key: 'accounts', href: '/admin/manage-users', label: 'Accounts', icon: 'fa-solid fa-users-gear', permission: 'manage_accounts' },
+    {
+        key: 'operations',
+        href: operationsHref,
+        label: 'Operations',
+        icon: 'fa-solid fa-list-check',
+        anyPermission: ['manage_reports', 'manage_billing', 'view_logs'],
+        activePaths: ['/admin/reports', '/admin/billing', '/admin/logs'],
+    },
+    { key: 'profile', href: '/admin/profile', label: 'Profile', icon: 'fa-solid fa-id-badge' },
 ];
 
 const visibleNavLinks = computed(() => navLinks.filter((link) => (
-    !link.permission
-        || window.portalUser?.has_full_access
-        || window.portalUser?.permissions?.includes(link.permission)
+    (!link.permission || hasPermission(link.permission))
+        && (!link.anyPermission || link.anyPermission.some(hasPermission))
 )));
 </script>
 
 <template>
     <RoleSidebar
-        :active="active"
+        :active="activeKey"
         title="Admin"
         subtitle="Control Desk"
         icon="fa-solid fa-shield-halved"

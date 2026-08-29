@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
+import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { labelFromKey } from '../support/display';
@@ -141,6 +142,11 @@ async function loadProgram() {
     } finally {
         isLoading.value = false;
     }
+
+    if (scholarship.value && window.location.hash) {
+        await nextTick();
+        document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: 'start' });
+    }
 }
 
 async function duplicateProgram() {
@@ -210,10 +216,13 @@ onMounted(loadProgram);
 
         <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <div class="mx-auto max-w-7xl">
-                <a href="/provider/programs" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
-                    <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-                    Programs
-                </a>
+                <nav class="flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
+                    <a href="/provider/programs" class="font-bold text-slate-600 transition hover:text-slate-950">Programs</a>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
+                    <span class="truncate font-semibold text-slate-950">{{ scholarship?.title || 'Program workspace' }}</span>
+                </nav>
+
+                <ProviderProgramNav :program-id="scholarshipId" :can-manage="canManagePrograms" />
 
                 <div v-if="isLoading" class="mt-5 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading program workspace...
@@ -330,7 +339,7 @@ onMounted(loadProgram);
                         </div>
                     </section>
 
-                    <section class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section id="announcements" class="mt-5 scroll-mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                             <div>
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program communication</p>

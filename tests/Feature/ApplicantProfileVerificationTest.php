@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\ApplicantVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
@@ -440,6 +441,199 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->actingAs($provider)
             ->get(route('provider.applications.profile-proofs.view', [$otherApplication, $proof]))
             ->assertForbidden();
+    }
+
+    public function test_provider_can_verify_a_pending_academic_record_through_an_owned_application(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->updateOrCreate(['user_id' => $provider->id], [
+            'provider_name' => 'Tulay Aral Community Foundation',
+            'verification_status' => 'approved',
+        ]);
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
+            'verification_status' => 'pending',
+        ]);
+        $proof = ApplicantVerificationDocument::create([
+            'applicant_id' => $applicant->id,
+            'uploaded_by' => $applicant->id,
+            'document_type' => 'academic_record',
+            'original_name' => 'latest-grades.pdf',
+            'path' => "applicant-verification/{$applicant->id}/latest-grades.pdf",
+            'mime_type' => 'application/pdf',
+            'size' => 1024,
+            'status' => 'submitted',
+            'uploaded_at' => now(),
+        ]);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Provider Verified Scholarship',
+            'category' => 'Academic merit',
+            'description' => 'Tests provider verification through an owned application.',
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($otherProvider)
+            ->patchJson("/provider/applications/{$application->id}/profile-verification")
+            ->assertForbidden();
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/profile-verification")
+            ->assertOk()
+            ->assertJsonPath('application.applicant.profile_verification_status', 'approved');
+
+        $this->assertDatabaseHas('student_profiles', [
+            'user_id' => $applicant->id,
+            'verification_status' => 'approved',
+            'verified_by' => $provider->id,
+        ]);
+        $this->assertDatabaseHas('applicant_verification_documents', [
+            'id' => $proof->id,
+            'status' => 'approved',
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $applicant->id,
+            'type' => 'applicant_profile_verification',
+            'title' => 'Academic record verified',
+        ]);
+
+        $this->actingAs($admin)
+            ->getJson("/admin/applicants/{$applicant->id}/review/data")
+            ->assertOk()
+            ->assertJsonPath('applicant.verification_oversight.source', 'provider')
+            ->assertJsonPath('applicant.verification_oversight.source_label', 'Provider review')
+            ->assertJsonPath('applicant.verification_oversight.provider_organization', 'Tulay Aral Community Foundation')
+            ->assertJsonPath('applicant.verification_oversight.context.application_id', $application->id)
+            ->assertJsonPath('applicant.verification_oversight.context.program_title', 'Provider Verified Scholarship')
+            ->assertJsonPath('applicant.verification_oversight.context.is_current', true)
+            ->assertJsonPath('applicant.verification_oversight.history.0.action', 'applicant_profile_verified_by_provider')
+            ->assertJsonPath('applicant.verification_oversight.history.0.title', 'Verified by provider');
+
+        $this->actingAs($admin)
+            ->getJson('/admin/reviews/data')
+            ->assertOk()
+            ->assertJsonPath('applicants.0.verification_oversight.source', 'provider')
+            ->assertJsonPath('applicants.0.verification_oversight.provider_organization', 'Tulay Aral Community Foundation');
+    }
+
+    public function test_admin_can_reopen_provider_verification_with_a_reason_and_provider_cannot_override_it(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
+            'verification_status' => 'pending',
+        ]);
+        $proof = ApplicantVerificationDocument::create([
+            'applicant_id' => $applicant->id,
+            'uploaded_by' => $applicant->id,
+            'document_type' => 'academic_record',
+            'original_name' => 'latest-grades.pdf',
+            'path' => "applicant-verification/{$applicant->id}/latest-grades.pdf",
+            'mime_type' => 'application/pdf',
+            'size' => 1024,
+            'status' => 'submitted',
+            'uploaded_at' => now(),
+        ]);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Oversight Test Scholarship',
+            'category' => 'Academic merit',
+            'description' => 'Tests the admin oversight handoff after provider verification.',
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/profile-verification")
+            ->assertOk();
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+                'verification_status' => 'pending',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('verification_notes');
+
+        $reason = 'The saved average does not clearly match the submitted report card.';
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+                'verification_status' => 'pending',
+                'verification_notes' => $reason,
+            ])
+            ->assertOk()
+            ->assertJsonPath('applicant.applicant_verification_status', 'pending')
+            ->assertJsonPath('applicant.verification_oversight.source', 'unassigned')
+            ->assertJsonPath('applicant.verification_oversight.review_note', $reason)
+            ->assertJsonPath('applicant.verification_oversight.context.is_current', false)
+            ->assertJsonPath('applicant.verification_oversight.history.0.title', 'Verification reopened')
+            ->assertJsonPath('applicant.verification_oversight.history.0.reason', $reason)
+            ->assertJsonPath('applicant.verification_oversight.history.1.title', 'Verified by provider');
+
+        $profile = $applicant->studentProfile()->firstOrFail();
+        $this->assertSame('pending', $profile->verification_status);
+        $this->assertSame($reason, $profile->verification_notes);
+        $this->assertNull($profile->verified_by);
+        $this->assertNull($profile->verified_at);
+        $this->assertDatabaseHas('applicant_verification_documents', [
+            'id' => $proof->id,
+            'status' => 'submitted',
+            'review_notes' => $reason,
+        ]);
+
+        $reopenLog = ActivityLog::query()
+            ->where('action', 'applicant_profile_verification_updated')
+            ->latest('id')
+            ->firstOrFail();
+        $this->assertSame('approved', $reopenLog->metadata['previous_status']);
+        $this->assertSame('pending', $reopenLog->metadata['verification_status']);
+        $this->assertSame($reason, $reopenLog->metadata['verification_notes']);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/profile-verification")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('verification');
+    }
+
+    public function test_provider_cannot_verify_an_applicant_without_an_academic_record(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Academic Proof Required Scholarship',
+            'category' => 'Academic merit',
+            'description' => 'Tests the provider academic proof safeguard.',
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/profile-verification")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('verification');
     }
 
     public function test_admin_cannot_verify_applicant_without_a_submitted_proof(): void

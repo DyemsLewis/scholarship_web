@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
+import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { showPortalToast } from '../support/portalToast';
 
@@ -318,6 +319,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                     </div>
                 </header>
 
+                <ProviderSectionNav section="support" />
+
                 <div v-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">
                     {{ errorMessage }}
                 </div>
@@ -466,7 +469,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
     </main>
 
     <div v-if="selectedPlan" class="fixed inset-0 z-[90] grid place-items-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="service-checkout-title" @click.self="closePurchase">
-        <section class="flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+        <section class="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
             <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
                 <div class="flex min-w-0 items-start gap-3">
                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-amber-300">

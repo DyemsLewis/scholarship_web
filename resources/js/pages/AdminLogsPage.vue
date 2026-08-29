@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
+import AdminSectionNav from '../components/AdminSectionNav.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 
 const isLoading = ref(true);
@@ -129,6 +130,8 @@ onMounted(() => loadLogs());
                         </button>
                     </div>
                 </header>
+
+                <AdminSectionNav section="operations" />
 
                 <section class="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                     <div>
