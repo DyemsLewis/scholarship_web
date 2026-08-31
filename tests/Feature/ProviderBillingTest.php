@@ -75,8 +75,6 @@ class ProviderBillingTest extends TestCase
         $response = $this->actingAs($provider)->postJson('/provider/billing/checkout', [
             'plan_code' => 'assisted_setup',
             'accept_terms' => true,
-            'request_summary' => 'We need help checking the setup of our first scholarship program.',
-            'requested_outcome' => 'A reviewed program that is ready for publication.',
         ])->assertCreated()
             ->assertJsonPath('checkout_url', 'https://checkout.paymongo.com/cs_test_checkout')
             ->assertJsonPath('purchase.status', 'pending');
@@ -89,7 +87,8 @@ class ProviderBillingTest extends TestCase
         $this->assertSame('cs_test_checkout', $purchase->checkout_session_id);
         $this->assertNotNull($purchase->service_terms_accepted_at);
         $this->assertSame('ready', $purchase->fulfillment_status);
-        $this->assertSame('We need help checking the setup of our first scholarship program.', $purchase->request_summary);
+        $this->assertNull($purchase->request_summary);
+        $this->assertNull($purchase->requested_outcome);
         $this->assertCount(3, $purchase->milestones);
 
         Http::assertSent(function (ClientRequest $request) use ($purchase): bool {
@@ -110,8 +109,6 @@ class ProviderBillingTest extends TestCase
         $this->actingAs($provider)->postJson('/provider/billing/checkout', [
             'plan_code' => 'assisted_setup',
             'accept_terms' => false,
-            'request_summary' => 'We need help checking the setup of our first scholarship program.',
-            'requested_outcome' => 'A reviewed program that is ready for publication.',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors('accept_terms');
 

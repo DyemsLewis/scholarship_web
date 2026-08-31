@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import ApplicantReportModal from './ApplicantReportModal.vue';
 import ConfirmationDialog from './ConfirmationDialog.vue';
 import EmailVerificationReminder from './EmailVerificationReminder.vue';
@@ -9,6 +9,7 @@ import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 const currentPath = window.location.pathname.replace(/\/$/, '') || '/dashboard';
 const isMenuOpen = ref(false);
 const isReportModalOpen = ref(false);
+const reportCategory = ref('');
 const {
     confirmation,
     requestConfirmation,
@@ -36,10 +37,23 @@ function closeMenu() {
     isMenuOpen.value = false;
 }
 
-function openReportModal() {
+function openReportModal(category = '') {
     closeMenu();
+    reportCategory.value = category;
     isReportModalOpen.value = true;
 }
+
+function openRequestedReport(event) {
+    openReportModal(event.detail?.category === 'privacy' ? 'privacy' : '');
+}
+
+onMounted(() => {
+    window.addEventListener('portal:open-report', openRequestedReport);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('portal:open-report', openRequestedReport);
+});
 
 async function requestLogout() {
     closeMenu();
@@ -209,5 +223,5 @@ async function requestLogout() {
         @cancel="cancelConfirmation"
     />
 
-    <ApplicantReportModal v-model="isReportModalOpen" />
+    <ApplicantReportModal v-model="isReportModalOpen" :initial-category="reportCategory" />
 </template>

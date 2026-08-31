@@ -29,6 +29,12 @@ const contextCopy = computed(() => ({
         text: 'Files and profile details here are available only to you, authorized administrators, and the provider team managing this program.',
     },
 })[props.context]);
+
+function requestPrivacyHelp() {
+    window.dispatchEvent(new CustomEvent('portal:open-report', {
+        detail: { category: 'privacy' },
+    }));
+}
 </script>
 
 <template>
@@ -45,13 +51,22 @@ const contextCopy = computed(() => ({
                 <p class="mt-1 text-xs leading-5 text-slate-600">{{ contextCopy.text }}</p>
             </div>
         </div>
-        <button
-            type="button"
-            class="shrink-0 text-left text-xs font-bold text-slate-700 underline decoration-amber-400 underline-offset-4 hover:text-slate-950 sm:text-right"
-            @click="showPrivacyNotice = true"
-        >
-            Privacy details
-        </button>
+        <div class="flex shrink-0 flex-wrap gap-x-3 gap-y-2 text-xs font-bold sm:justify-end">
+            <button
+                type="button"
+                class="text-left text-slate-700 underline decoration-amber-400 underline-offset-4 hover:text-slate-950 sm:text-right"
+                @click="showPrivacyNotice = true"
+            >
+                Privacy details
+            </button>
+            <button
+                type="button"
+                class="text-left text-slate-700 underline decoration-amber-400 underline-offset-4 hover:text-slate-950 sm:text-right"
+                @click="requestPrivacyHelp"
+            >
+                Request privacy help
+            </button>
+        </div>
 
         <TermsModal v-model="showPrivacyNotice" context="privacy" />
     </section>

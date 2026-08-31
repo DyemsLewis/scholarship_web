@@ -15,8 +15,6 @@ const purchases = ref([]);
 const selectedPlan = ref(null);
 const acceptsTerms = ref(false);
 const syncingReference = ref('');
-const requestSummary = ref('');
-const requestedOutcome = ref('');
 
 function money(amount, currency = 'PHP') {
     return new Intl.NumberFormat('en-PH', {
@@ -153,8 +151,6 @@ function openPurchase(plan) {
 
     selectedPlan.value = plan;
     acceptsTerms.value = false;
-    requestSummary.value = '';
-    requestedOutcome.value = '';
 }
 
 function closePurchase() {
@@ -164,8 +160,6 @@ function closePurchase() {
 
     selectedPlan.value = null;
     acceptsTerms.value = false;
-    requestSummary.value = '';
-    requestedOutcome.value = '';
 }
 
 async function startCheckout() {
@@ -179,8 +173,6 @@ async function startCheckout() {
         const response = await window.axios.post('/provider/billing/checkout', {
             plan_code: selectedPlan.value.code,
             accept_terms: acceptsTerms.value,
-            request_summary: requestSummary.value.trim(),
-            requested_outcome: requestedOutcome.value.trim(),
         }, {
             portalToast: false,
         });
@@ -509,19 +501,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                     </ul>
                 </section>
 
-                <section class="mt-5 rounded-md border border-slate-200 p-4">
-                    <p class="text-xs font-bold uppercase text-slate-500">Service brief</p>
-                    <p class="mt-1 text-xs leading-5 text-slate-500">This gives support staff enough context to begin after payment is confirmed.</p>
-                    <label class="mt-4 block text-sm font-bold text-slate-700">
-                        Situation or challenge
-                        <textarea v-model="requestSummary" rows="3" maxlength="2000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal leading-6 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100" placeholder="Briefly explain what your team is trying to set up or improve."></textarea>
-                    </label>
-                    <label class="mt-4 block text-sm font-bold text-slate-700">
-                        Expected result
-                        <textarea v-model="requestedOutcome" rows="2" maxlength="1200" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal leading-6 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100" placeholder="What should platform support deliver or help your team complete?"></textarea>
-                    </label>
-                </section>
-
                 <section class="mt-4 rounded-md bg-slate-950 p-4 text-white">
                     <p class="text-[10px] font-bold uppercase text-amber-300">What happens after payment</p>
                     <div class="mt-3 grid gap-3 sm:grid-cols-3">
@@ -531,11 +510,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                         </div>
                         <div>
                             <span class="grid h-6 w-6 place-items-center rounded bg-white/10 text-[10px] font-bold">2</span>
-                            <p class="mt-2 text-xs font-bold">Request queued</p>
+                            <p class="mt-2 text-xs font-bold">Choose a meeting time</p>
                         </div>
                         <div>
                             <span class="grid h-6 w-6 place-items-center rounded bg-white/10 text-[10px] font-bold">3</span>
-                            <p class="mt-2 text-xs font-bold">Progress updated here</p>
+                            <p class="mt-2 text-xs font-bold">Track support updates</p>
                         </div>
                     </div>
                 </section>
@@ -554,7 +533,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 
                 <div class="mt-6 grid gap-3 sm:grid-cols-2">
                     <button type="button" class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="closePurchase">Cancel</button>
-                    <button type="button" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!acceptsTerms || requestSummary.trim().length < 20 || requestedOutcome.trim().length < 10 || isOpeningCheckout" @click="startCheckout">
+                    <button type="button" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!acceptsTerms || isOpeningCheckout" @click="startCheckout">
                         {{ isOpeningCheckout ? 'Opening checkout...' : 'Continue to PayMongo' }}
                     </button>
                 </div>

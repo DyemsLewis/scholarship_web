@@ -415,8 +415,6 @@ class BillingController extends Controller
         $validated = $request->validate([
             'plan_code' => ['required', 'string', Rule::in(array_keys($plans))],
             'accept_terms' => ['accepted'],
-            'request_summary' => ['required', 'string', 'min:20', 'max:2000'],
-            'requested_outcome' => ['required', 'string', 'min:10', 'max:1200'],
         ]);
         $plan = $plans[$validated['plan_code']];
         $actor = $request->user();
@@ -433,9 +431,10 @@ class BillingController extends Controller
             'fulfillment_status' => 'ready',
             'reference_number' => $this->uniqueReferenceNumber(),
             'service_terms_accepted_at' => now(),
-            'request_summary' => trim($validated['request_summary']),
-            'requested_outcome' => trim($validated['requested_outcome']),
+            'request_summary' => null,
+            'requested_outcome' => null,
             'priority' => 'normal',
+            'fulfillment_notes' => 'Payment confirmed. Schedule a meeting to discuss the service details with platform support.',
             'milestones' => $this->defaultMilestones($plan),
         ]);
 

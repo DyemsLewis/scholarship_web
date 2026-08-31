@@ -6,6 +6,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    initialCategory: {
+        type: String,
+        default: '',
+    },
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -31,9 +35,9 @@ const destinationMessage = computed(() => (
             : 'This report will go to platform administrators.'
 ));
 
-function resetForm() {
+function resetForm(category = '') {
     form.value = {
-        category: '',
+        category,
         scholarshipId: '',
         subject: '',
         description: '',
@@ -94,11 +98,18 @@ watch(() => props.modelValue, (isOpen) => {
     document.body.classList.toggle('overflow-hidden', isOpen);
 
     if (isOpen) {
+        resetForm(props.initialCategory);
         loadOptions();
     } else {
         resetForm();
     }
 }, { immediate: true });
+
+watch(() => props.initialCategory, (category) => {
+    if (props.modelValue) {
+        form.value.category = category;
+    }
+});
 
 watch(() => form.value.category, (category) => {
     if (category !== 'program') {
