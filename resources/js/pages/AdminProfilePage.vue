@@ -81,11 +81,11 @@ onMounted(loadProfile);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="admin-shell">
         <AdminSidebar active="profile" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="admin-page">
+            <div class="admin-container">
                 <header class="admin-hero">
                     <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                         Admin Profile
@@ -102,7 +102,7 @@ onMounted(loadProfile);
                     Loading admin profile...
                 </div>
 
-                <div v-else class="mt-6 space-y-6">
+                <div v-else class="admin-content-stack">
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
@@ -149,7 +149,7 @@ onMounted(loadProfile);
                         </div>
                     </section>
 
-                    <form class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" @submit.prevent="saveProfile">
+                    <form class="admin-panel overflow-hidden" @submit.prevent="saveProfile">
                         <div class="flex items-center gap-3 p-5 sm:p-6">
                             <span class="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800">
                                 <i class="fa-solid fa-user-gear" aria-hidden="true"></i>

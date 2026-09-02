@@ -16,8 +16,8 @@ use App\Models\ScholarshipEvent;
 use App\Models\ScholarshipFunnelEvent;
 use App\Models\User;
 use App\Rules\PhoneNumber;
-use App\Services\DecisionSupportService;
 use App\Services\ApplicationWorkflowService;
+use App\Services\DecisionSupportService;
 use App\Services\ScholarshipBenefitService as SB;
 use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
@@ -31,6 +31,7 @@ use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -839,7 +840,10 @@ class ProviderController extends Controller
         );
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
-        return Storage::disk('local')->download($document->path, $document->original_name);
+        return Storage::disk('local')->download($document->path, $document->original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function viewVerificationDocument(Request $request, ProviderVerificationDocument $document)
@@ -1023,38 +1027,75 @@ class ProviderController extends Controller
     {
         abort_unless($request->user()?->isProvider(), 403);
 
+        $validated = $request->validate([
+            'filter' => ['sometimes', Rule::in(['pending_review', 'document_issues', 'active_stages', 'formal_application', 'decided', 'all'])],
+            'sort' => ['sometimes', Rule::in(['priority', 'dss', 'documents', 'oldest'])],
+            'search' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:5', 'max:50'],
+        ]);
+
         $providerId = $request->user()->providerOrganizationId();
         $selectedScholarship = $this->requestedProviderScholarship($request);
+        $filter = $validated['filter'] ?? 'pending_review';
+        $sort = $validated['sort'] ?? 'priority';
+        $search = trim((string) ($validated['search'] ?? ''));
+        $perPage = (int) ($validated['per_page'] ?? 10);
         $scholarships = Scholarship::query()
             ->where('provider_id', $providerId)
             ->withCount($this->providerProgramCountRelations())
+            ->withAvg('applications as average_match_score', 'eligibility_score')
+            ->withAvg('applications as average_dss_score', 'dss_score')
             ->latest()
             ->get();
         $reviewers = $this->providerApplicationReviewers($providerId);
-        $applicationsQuery = ScholarshipApplication::query()
-            ->with([
-                'applicant.studentProfile',
-                'documents.reviewer',
-                'assignedReviewer.providerProfile',
-                'statusHistories.actor',
-                'scholarship' => fn ($query) => $query->withCount($this->providerProgramCountRelations()),
-            ])
+        $applicationsBase = ScholarshipApplication::query()
             ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId));
 
         if ($selectedScholarship) {
-            $applicationsQuery->where('scholarship_id', $selectedScholarship->id);
+            $applicationsBase->where('scholarship_id', $selectedScholarship->id);
         }
 
-        $applications = $applicationsQuery
-            ->latest('submitted_at')
-            ->get();
-        $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
-        $statusCounts = $applications
+        $statusCounts = (clone $applicationsBase)
+            ->selectRaw('status, count(*) as total')
             ->groupBy('status')
-            ->map(fn ($items) => $items->count());
-        $recommendationCounts = $applications
+            ->pluck('total', 'status');
+        $recommendationCounts = (clone $applicationsBase)
+            ->selectRaw('dss_recommendation, count(*) as total')
+            ->whereNotNull('dss_recommendation')
             ->groupBy('dss_recommendation')
-            ->map(fn ($items) => $items->count());
+            ->pluck('total', 'dss_recommendation');
+        $stageCounts = (clone $applicationsBase)
+            ->selectRaw("COALESCE(workflow_stage, 'screening') as workflow_stage, count(*) as total")
+            ->whereNotIn('application_state', ['closed', 'withdrawn'])
+            ->groupByRaw("COALESCE(workflow_stage, 'screening')")
+            ->pluck('total', 'workflow_stage');
+        $filterCounts = $this->providerApplicationFilterCounts($applicationsBase);
+        $totalApplications = (int) ($filterCounts['all'] ?? 0);
+
+        $applicationsQuery = (clone $applicationsBase)
+            ->with([
+                'applicant.studentProfile',
+                'applicant.applicantVerificationDocuments',
+                'documents.reviewer',
+                'assignedReviewer.providerProfile',
+                'statusHistories.actor',
+                'schedules',
+                'stageProgresses',
+                'scholarship' => fn ($query) => $query
+                    ->with(['events', 'benefits'])
+                    ->withCount($this->providerProgramCountRelations()),
+            ]);
+        $this->applyProviderApplicationSearch($applicationsQuery, $search);
+        $this->applyProviderApplicationFilter($applicationsQuery, $filter);
+        $this->applyProviderApplicationSort($applicationsQuery, $sort);
+
+        $applications = $applicationsQuery->paginate($perPage);
+        $applications->getCollection()
+            ->filter(fn (ScholarshipApplication $application): bool => $application->dss_score === null
+                || blank($application->dss_recommendation)
+                || blank($application->dss_breakdown))
+            ->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
 
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
@@ -1063,14 +1104,17 @@ class ProviderController extends Controller
                 ->values(),
             'stats' => [
                 'scholarships' => $scholarships->count(),
-                'applications' => $applications->count(),
+                'applications' => $totalApplications,
                 'drafts' => $scholarships->where('status', 'draft')->count(),
                 'under_review' => $statusCounts['under_review'] ?? 0,
                 'approved' => $statusCounts['approved'] ?? 0,
                 'rejected' => $statusCounts['rejected'] ?? 0,
-                'average_match_score' => round((float) $applications->avg('eligibility_score'), 1),
-                'average_dss_score' => round((float) $applications->avg('dss_score'), 1),
-                'pending_documents' => $applications->flatMap(fn (ScholarshipApplication $application) => $application->documents)->where('status', 'pending')->count(),
+                'average_match_score' => round((float) (clone $applicationsBase)->avg('eligibility_score'), 1),
+                'average_dss_score' => round((float) (clone $applicationsBase)->avg('dss_score'), 1),
+                'pending_documents' => ApplicationDocument::query()
+                    ->where('status', 'pending')
+                    ->whereHas('application.scholarship', fn ($query) => $query->where('provider_id', $providerId))
+                    ->count(),
             ],
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
             'selected_scholarship' => $selectedScholarship
@@ -1082,7 +1126,19 @@ class ProviderController extends Controller
                     ->map(fn (ScholarshipEvent $event) => ScholarshipEventPayload::make($event))
                     ->values()
                 : [],
-            'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
+            'applications' => $applications->getCollection()
+                ->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))
+                ->values(),
+            'pagination' => [
+                'current_page' => $applications->currentPage(),
+                'last_page' => $applications->lastPage(),
+                'per_page' => $applications->perPage(),
+                'total' => $applications->total(),
+                'from' => $applications->firstItem(),
+                'to' => $applications->lastItem(),
+            ],
+            'filter_counts' => $filterCounts,
+            'stage_counts' => $stageCounts,
             'status_counts' => [
                 'submitted' => $statusCounts['submitted'] ?? 0,
                 'under_review' => $statusCounts['under_review'] ?? 0,
@@ -1103,26 +1159,153 @@ class ProviderController extends Controller
                 'low_priority' => $recommendationCounts['low_priority'] ?? 0,
                 'not_recommended' => $recommendationCounts['not_recommended'] ?? 0,
             ],
-            'program_performance' => $scholarships->map(function (Scholarship $scholarship) use ($applications) {
-                $programApplications = $applications->filter(fn (ScholarshipApplication $application) => $application->scholarship_id === $scholarship->id);
-                $completeApplications = $programApplications
-                    ->filter(fn (ScholarshipApplication $application) => $this->documentReadiness($application)['percent'] === 100)
-                    ->count();
-
+            'program_performance' => $scholarships->map(function (Scholarship $scholarship) {
                 return [
                     'id' => $scholarship->id,
                     'title' => $scholarship->title,
                     'status' => $scholarship->status,
-                    'applications' => $programApplications->count(),
-                    'complete_applications' => $completeApplications,
-                    'average_match_score' => round((float) $programApplications->avg('eligibility_score'), 1),
-                    'average_dss_score' => round((float) $programApplications->avg('dss_score'), 1),
+                    'applications' => (int) ($scholarship->applications_count ?? 0),
+                    'average_match_score' => round((float) ($scholarship->average_match_score ?? 0), 1),
+                    'average_dss_score' => round((float) ($scholarship->average_dss_score ?? 0), 1),
                     'saved_count' => $scholarship->bookmarks_count ?? 0,
                     'deadline' => $scholarship->deadline?->format('M d, Y'),
                     'days_left' => $scholarship->deadline ? now()->startOfDay()->diffInDays($scholarship->deadline->startOfDay(), false) : null,
                 ];
             })->values(),
         ]);
+    }
+
+    private function applyProviderApplicationSearch(Builder $query, string $search): void
+    {
+        if ($search === '') {
+            return;
+        }
+
+        $likeSearch = '%'.$search.'%';
+
+        $query->where(function (Builder $query) use ($likeSearch): void {
+            $query
+                ->whereHas('applicant', function (Builder $applicantQuery) use ($likeSearch): void {
+                    $applicantQuery
+                        ->where('email', 'like', $likeSearch)
+                        ->orWhere('username', 'like', $likeSearch)
+                        ->orWhereHas('studentProfile', fn (Builder $profileQuery) => $profileQuery
+                            ->where('first_name', 'like', $likeSearch)
+                            ->orWhere('last_name', 'like', $likeSearch));
+                })
+                ->orWhereHas('scholarship', fn (Builder $scholarshipQuery) => $scholarshipQuery
+                    ->where('title', 'like', $likeSearch));
+        });
+    }
+
+    private function applyProviderApplicationFilter(Builder $query, string $filter): void
+    {
+        if ($filter === 'pending_review') {
+            $query
+                ->where(fn (Builder $query) => $query
+                    ->where('workflow_stage', 'screening')
+                    ->orWhereNull('workflow_stage'))
+                ->whereNotIn('application_state', ['closed', 'withdrawn']);
+
+            return;
+        }
+
+        if ($filter === 'document_issues') {
+            $driver = DB::connection()->getDriverName();
+            $checklistLength = in_array($driver, ['mysql', 'mariadb'], true)
+                ? 'COALESCE(JSON_LENGTH(scholarship_applications.document_checklist), 0)'
+                : 'COALESCE(json_array_length(scholarship_applications.document_checklist), 0)';
+
+            $query->where(function (Builder $query) use ($checklistLength): void {
+                $query
+                    ->whereHas('documents', fn (Builder $documentQuery) => $documentQuery
+                        ->whereIn('status', ['pending', 'needs_replacement']))
+                    ->orWhereRaw("{$checklistLength} > (
+                        SELECT COUNT(*)
+                        FROM application_documents
+                        WHERE application_documents.scholarship_application_id = scholarship_applications.id
+                          AND application_documents.status = 'accepted'
+                    )");
+            });
+
+            return;
+        }
+
+        if ($filter === 'active_stages') {
+            $query
+                ->whereIn('workflow_stage', ['exam', 'interview'])
+                ->whereNotIn('application_state', ['closed', 'withdrawn']);
+
+            return;
+        }
+
+        if ($filter === 'formal_application') {
+            $query
+                ->whereIn('workflow_stage', ['formal_application', 'decision'])
+                ->whereNotIn('application_state', ['closed', 'withdrawn']);
+
+            return;
+        }
+
+        if ($filter === 'decided') {
+            $query->where(function (Builder $query): void {
+                $query
+                    ->whereIn('application_state', ['closed', 'withdrawn'])
+                    ->orWhereNotNull('final_outcome');
+            });
+        }
+    }
+
+    private function applyProviderApplicationSort(Builder $query, string $sort): void
+    {
+        if ($sort === 'dss') {
+            $query->orderByDesc('dss_score')->orderBy('submitted_at');
+
+            return;
+        }
+
+        if ($sort === 'documents') {
+            $query
+                ->withCount([
+                    'documents as unresolved_documents_count' => fn (Builder $documentQuery) => $documentQuery
+                        ->whereIn('status', ['pending', 'needs_replacement']),
+                ])
+                ->orderByDesc('unresolved_documents_count')
+                ->orderBy('submitted_at');
+
+            return;
+        }
+
+        if ($sort === 'oldest') {
+            $query->orderBy('submitted_at')->orderBy('id');
+
+            return;
+        }
+
+        $query
+            ->orderByRaw("CASE
+                WHEN correction_status = 'submitted' THEN 0
+                WHEN COALESCE(workflow_stage, 'screening') = 'screening' AND application_state NOT IN ('closed', 'withdrawn') THEN 1
+                WHEN workflow_stage IN ('exam', 'interview') AND application_state NOT IN ('closed', 'withdrawn') THEN 2
+                WHEN workflow_stage IN ('formal_application', 'decision') AND application_state NOT IN ('closed', 'withdrawn') THEN 3
+                ELSE 4
+            END")
+            ->orderByDesc('dss_score')
+            ->orderBy('submitted_at')
+            ->orderBy('id');
+    }
+
+    private function providerApplicationFilterCounts(Builder $baseQuery): array
+    {
+        $counts = ['all' => (clone $baseQuery)->count()];
+
+        foreach (['pending_review', 'document_issues', 'active_stages', 'formal_application', 'decided'] as $filter) {
+            $query = clone $baseQuery;
+            $this->applyProviderApplicationFilter($query, $filter);
+            $counts[$filter] = $query->count();
+        }
+
+        return $counts;
     }
 
     public function applicationDetailData(Request $request, ScholarshipApplication $application): JsonResponse

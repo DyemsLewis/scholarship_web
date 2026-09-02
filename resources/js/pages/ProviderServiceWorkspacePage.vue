@@ -222,11 +222,11 @@ onMounted(loadWorkspace);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="provider-page">
+            <div class="provider-container">
                 <header class="provider-hero">
                     <a href="/provider/billing" class="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-950">
                         <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to services
@@ -249,7 +249,7 @@ onMounted(loadWorkspace);
                 <div v-else-if="errorMessage || !purchase" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
 
                 <template v-else>
-                    <section class="mt-6 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm sm:grid-cols-3">
+                    <section class="provider-panel mt-5 grid overflow-hidden sm:grid-cols-3">
                         <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
                             <p class="text-xs font-semibold text-slate-500">Assigned support</p>
                             <p class="mt-1 text-sm font-bold text-slate-950">{{ purchase.assigned_to_name || 'Awaiting assignment' }}</p>
@@ -268,9 +268,9 @@ onMounted(loadWorkspace);
                         Payment must be confirmed before this workspace can be updated. Return to Services to continue or check the payment status.
                     </div>
 
-                    <div class="mt-6 space-y-6">
-                        <div class="space-y-6">
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div class="mt-5 space-y-4">
+                        <div class="space-y-4">
+                            <section class="provider-panel p-5 sm:p-6">
                                 <div class="flex items-start gap-3">
                                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span>
                                     <div>
@@ -291,7 +291,7 @@ onMounted(loadWorkspace);
                                 </form>
                             </section>
 
-                            <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <section class="provider-panel overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6">
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Included work</p>
@@ -315,7 +315,7 @@ onMounted(loadWorkspace);
                                 </ol>
                             </section>
 
-                            <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <section class="provider-panel overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
                                     <div class="flex items-start gap-3">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i></span>
@@ -380,7 +380,7 @@ onMounted(loadWorkspace);
                                 </div>
                             </section>
 
-                            <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <section class="provider-panel overflow-hidden">
                                 <div class="border-b border-slate-200 p-5 sm:p-6">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Files</p>
                                     <h2 class="mt-1 text-xl font-bold text-slate-950">Supporting files and deliverables</h2>
@@ -416,7 +416,7 @@ onMounted(loadWorkspace);
                                 </div>
                             </section>
 
-                            <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <section class="provider-panel overflow-hidden">
                                 <div class="border-b border-slate-200 p-5 sm:p-6">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Updates</p>
                                     <h2 class="mt-1 text-xl font-bold text-slate-950">Service history</h2>
@@ -441,7 +441,7 @@ onMounted(loadWorkspace);
                             </section>
                         </div>
 
-                        <div class="space-y-6">
+                        <div class="space-y-4">
                             <section v-if="purchase.fulfillment_status === 'provider_review'" class="rounded-lg border border-sky-200 bg-sky-50 p-5 shadow-sm">
                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">Your decision</p>
                                 <h2 class="mt-1 text-lg font-bold text-slate-950">Review the completed work</h2>
@@ -455,7 +455,7 @@ onMounted(loadWorkspace);
                                 <button type="button" class="mt-4 w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50" :disabled="isSaving" @click="confirmCompletion">Confirm completion</button>
                             </section>
 
-                            <section v-if="canReopen" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="canReopen" class="provider-panel p-5">
                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Still needs work?</p>
                                 <textarea v-model="reopenReason" rows="3" maxlength="2000" class="mt-3 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm" placeholder="Explain what remains unresolved."></textarea>
                                 <button type="button" class="mt-3 w-full rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50" :disabled="isSaving || reopenReason.trim().length < 10" @click="reopenService">Request additional work</button>

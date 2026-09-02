@@ -69,7 +69,8 @@ Required production settings:
 - Run `npm run build` before deployment or during the host build step.
 - Keep a queue worker running for notification email delivery.
 - Run `php artisan schedule:run` every minute using the host's cron or task scheduler.
-- Back up the database and private `storage/app` documents outside the web root.
+- Set `PLATFORM_BACKUP_PATH` to a protected location outside the web root, preferably on a separate mounted disk.
+- Run `php artisan platform:backup` once and verify the resulting archive before opening the site publicly.
 
 Recommended production commands:
 
@@ -93,6 +94,38 @@ php artisan schedule:run
 ```
 
 On production, supervise the queue worker so it restarts automatically. Configure cron to run `schedule:run` every minute; do not launch it manually once per day.
+
+## Backups And Retention
+
+The scheduler creates a verified database and upload archive at 2:00 AM when `PLATFORM_BACKUP_ENABLED=true`. Each archive includes a manifest and a `.sha256` checksum. Backups older than `PLATFORM_BACKUP_RETENTION_DAYS` are removed only after a new archive passes verification.
+
+Run and inspect a backup manually:
+
+```bash
+php artisan platform:backup
+php artisan platform:restore-check
+```
+
+The default local backup folder is `storage/app/backups`, which is outside the public web root. On hosting, use a protected mounted disk or copy completed archives to separate storage so a server or disk failure cannot remove both the live system and its backups.
+
+The 3:00 AM retention task removes expired registration codes, mobile sessions, password-reset tokens, database sessions, old read notifications, and activity logs beyond their configured period. It does not automatically remove applicants, applications, decisions, support reports, or uploaded proof.
+
+Preview retention cleanup without deleting anything:
+
+```bash
+php artisan platform:prune-data --dry-run
+```
+
+Restore drill:
+
+1. Compare the archive hash with its `.sha256` file and extract the archive on a staging machine.
+2. Put Laravel in maintenance mode and stop the queue worker before a real restore.
+3. Import `database/database.sql` into an empty MySQL database, or replace the SQLite file with `database/database.sqlite`.
+4. Restore `storage/private` to `storage/app/private` and `storage/public` to `storage/app/public`.
+5. Run `php artisan migrate --force`, `php artisan optimize:clear`, and `php artisan platform:readiness --strict`.
+6. Restart the queue worker, open `/up`, verify a private document preview, and then run `php artisan up`.
+
+Perform this drill on staging before deployment and periodically afterward. Never test a restore by overwriting the only production database.
 
 If you change `.env` after caching config, run:
 
@@ -142,4 +175,5 @@ Run these before pushing or deploying:
 ```bash
 npm run build
 php artisan test
+php artisan platform:readiness --strict
 ```

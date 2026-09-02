@@ -137,6 +137,10 @@ class SupportReportRoutingTest extends TestCase
             ->assertJsonFragment([
                 'value' => 'privacy',
                 'label' => 'Privacy and personal data concern',
+            ])
+            ->assertJsonFragment([
+                'value' => 'correction',
+                'label' => 'Correct personal information',
             ]);
 
         $this->actingAs($applicant)
@@ -145,14 +149,27 @@ class SupportReportRoutingTest extends TestCase
                 'subject' => 'Request to correct personal information',
                 'description' => 'Please help me review an incorrect personal detail in my account.',
             ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('privacy_request_type');
+
+        $this->actingAs($applicant)
+            ->postJson('/dashboard/reports', [
+                'category' => 'privacy',
+                'privacy_request_type' => 'correction',
+                'subject' => 'Request to correct personal information',
+                'description' => 'Please help me review an incorrect personal detail in my account.',
+            ])
             ->assertCreated()
-            ->assertJsonPath('report.sent_to', 'Platform support');
+            ->assertJsonPath('report.sent_to', 'Platform support')
+            ->assertJsonPath('report.privacy_request_type', 'correction')
+            ->assertJsonPath('report.privacy_request_type_label', 'Correct personal information');
 
         $report = SupportReport::query()->firstOrFail();
 
         $this->assertDatabaseHas('support_reports', [
             'id' => $report->id,
             'category' => 'privacy',
+            'privacy_request_type' => 'correction',
             'assigned_role' => 'admin',
             'provider_id' => null,
             'provider_status' => 'not_required',
@@ -166,7 +183,8 @@ class SupportReportRoutingTest extends TestCase
         $this->actingAs($admin)
             ->getJson('/admin/reports/data')
             ->assertOk()
-            ->assertJsonPath('reports.0.id', $report->id);
+            ->assertJsonPath('reports.0.id', $report->id)
+            ->assertJsonPath('reports.0.privacy_request_type_label', 'Correct personal information');
     }
 
     public function test_program_provider_and_admin_complete_independent_report_states_without_conflict(): void

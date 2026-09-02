@@ -403,8 +403,14 @@ class ApplicationWorkflowService
 
     public function payload(ScholarshipApplication $application): array
     {
-        $application = $this->initialize($application);
+        $application->loadMissing(['scholarship', 'stageProgresses']);
         $stages = $this->stagesForApplication($application);
+
+        if (! $this->hasInitializedWorkflow($application, $stages)) {
+            $application = $this->initialize($application);
+            $stages = $this->stagesForApplication($application);
+        }
+
         $progress = $application->stageProgresses->keyBy('stage_key');
         $steps = collect($stages)->map(function (string $stage, int $position) use ($progress): array {
             $record = $progress->get($stage);
@@ -439,6 +445,23 @@ class ApplicationWorkflowService
             'percent' => (int) round(($completed / max($steps->count(), 1)) * 100),
             'steps' => $steps->all(),
         ];
+    }
+
+    private function hasInitializedWorkflow(ScholarshipApplication $application, array $stages): bool
+    {
+        if ((int) $application->workflow_version !== 2
+            || blank($application->workflow_stage)
+            || blank($application->application_state)) {
+            return false;
+        }
+
+        $progressStages = $application->stageProgresses
+            ->pluck('stage_key')
+            ->all();
+
+        return collect($stages)->every(
+            fn (string $stage): bool => in_array($stage, $progressStages, true),
+        );
     }
 
     private function createInitialProgress(
@@ -637,23 +660,93 @@ class ApplicationWorkflowService
     private function nextAction(ScholarshipApplication $application): array
     {
         if ($application->correction_status === 'requested') {
-            return ['key' => 'correction', 'label' => 'Update the requested information', 'url' => route('dashboard.applications.show', $application, false)];
+            return [
+                'key' => 'correction',
+                'label' => 'Update the requested information',
+                'actor' => 'applicant',
+                'actor_label' => 'Applicant',
+                'description' => 'The provider requested a correction. Open the application, review the note, and submit the updated information.',
+                'url' => route('dashboard.applications.show', $application, false),
+            ];
         }
 
         if ($application->correction_status === 'submitted') {
-            return ['key' => 'correction_review', 'label' => 'Wait for the provider to review your correction', 'url' => route('dashboard.applications.show', $application, false)];
+            return [
+                'key' => 'correction_review',
+                'label' => 'Wait for the provider to review your correction',
+                'actor' => 'provider',
+                'actor_label' => 'Scholarship provider',
+                'description' => 'Your correction was submitted successfully. No further applicant action is needed unless the provider sends another request.',
+                'url' => route('dashboard.applications.show', $application, false),
+            ];
         }
 
         return match ($application->application_state) {
-            'submitted', 'under_review' => ['key' => 'wait', 'label' => 'Wait for the provider review', 'url' => route('dashboard.applications.show', $application, false)],
-            'awaiting_decision' => ['key' => 'decision', 'label' => 'Wait for the final provider decision', 'url' => route('dashboard.applications.show', $application, false)],
-            'withdrawn' => ['key' => 'withdrawn', 'label' => 'Application withdrawn', 'url' => route('dashboard.applications.show', $application, false)],
-            'closed' => ['key' => 'result', 'label' => 'Review the application result', 'url' => route('dashboard.applications.show', $application, false)],
+            'submitted', 'under_review' => [
+                'key' => 'wait',
+                'label' => 'Wait for the provider review',
+                'actor' => 'provider',
+                'actor_label' => 'Scholarship provider',
+                'description' => 'The provider is checking eligibility, profile details, and submitted files. Keep your contact details current.',
+                'url' => route('dashboard.applications.show', $application, false),
+            ],
+            'awaiting_decision' => [
+                'key' => 'decision',
+                'label' => 'Wait for the final provider decision',
+                'actor' => 'provider',
+                'actor_label' => 'Scholarship provider',
+                'description' => 'All configured stages are complete. The provider must now record the final selection outcome.',
+                'url' => route('dashboard.applications.show', $application, false),
+            ],
+            'withdrawn' => [
+                'key' => 'withdrawn',
+                'label' => 'Application withdrawn',
+                'actor' => 'none',
+                'actor_label' => 'No action required',
+                'description' => 'This application is closed because it was withdrawn.',
+                'url' => route('dashboard.applications.show', $application, false),
+            ],
+            'closed' => [
+                'key' => 'result',
+                'label' => 'Review the application result',
+                'actor' => 'applicant',
+                'actor_label' => 'Applicant',
+                'description' => 'The provider process is complete. Open the application to review the recorded result and any final instructions.',
+                'url' => route('dashboard.applications.show', $application, false),
+            ],
             default => match ($application->workflow_stage) {
-                'formal_application' => ['key' => 'formal_application', 'label' => 'Follow the provider application instructions', 'url' => route('dashboard.applications.show', $application, false)],
-                'exam' => ['key' => 'exam', 'label' => 'Review the exam details', 'url' => route('dashboard.applications.show', $application, false)],
-                'interview' => ['key' => 'interview', 'label' => 'Review the interview details', 'url' => route('dashboard.applications.show', $application, false)],
-                default => ['key' => 'application', 'label' => 'Review application', 'url' => route('dashboard.applications.show', $application, false)],
+                'formal_application' => [
+                    'key' => 'formal_application',
+                    'label' => 'Follow the provider application instructions',
+                    'actor' => 'applicant',
+                    'actor_label' => 'Applicant',
+                    'description' => 'Continue through the provider\'s formal process and keep original documents ready when requested.',
+                    'url' => route('dashboard.applications.show', $application, false),
+                ],
+                'exam' => [
+                    'key' => 'exam',
+                    'label' => 'Review the exam details',
+                    'actor' => 'applicant',
+                    'actor_label' => 'Applicant',
+                    'description' => 'Check the provider-managed exam schedule and follow the listed instructions.',
+                    'url' => route('dashboard.applications.show', $application, false),
+                ],
+                'interview' => [
+                    'key' => 'interview',
+                    'label' => 'Review the interview details',
+                    'actor' => 'applicant',
+                    'actor_label' => 'Applicant',
+                    'description' => 'Check the provider-managed interview schedule and follow the listed instructions.',
+                    'url' => route('dashboard.applications.show', $application, false),
+                ],
+                default => [
+                    'key' => 'application',
+                    'label' => 'Review application',
+                    'actor' => 'applicant',
+                    'actor_label' => 'Applicant',
+                    'description' => 'Open the application to review its latest status and instructions.',
+                    'url' => route('dashboard.applications.show', $application, false),
+                ],
             },
         };
     }
@@ -661,20 +754,32 @@ class ApplicationWorkflowService
     private function providerAction(ScholarshipApplication $application): array
     {
         if ($application->correction_status === 'requested') {
-            return ['key' => 'await_correction', 'label' => 'Wait for the applicant correction'];
+            return [
+                'key' => 'await_correction',
+                'label' => 'Wait for the applicant correction',
+                'actor' => 'applicant',
+                'actor_label' => 'Applicant',
+                'description' => 'The applicant must respond before another provider decision can be recorded.',
+            ];
         }
 
         if ($application->correction_status === 'submitted') {
-            return ['key' => 'review_correction', 'label' => 'Review the applicant correction'];
+            return [
+                'key' => 'review_correction',
+                'label' => 'Review the applicant correction',
+                'actor' => 'provider',
+                'actor_label' => 'Provider reviewer',
+                'description' => 'The applicant submitted the requested correction and it is ready for review.',
+            ];
         }
 
         return match ($application->workflow_stage) {
-            'screening' => ['key' => 'screening', 'label' => 'Review eligibility and required files'],
-            'formal_application' => ['key' => 'formal_application', 'label' => 'Record the formal application result'],
-            'exam' => ['key' => 'exam', 'label' => 'Record the exam result'],
-            'interview' => ['key' => 'interview', 'label' => 'Record the interview result'],
-            'decision' => ['key' => 'decision', 'label' => 'Record the final outcome'],
-            default => ['key' => 'complete', 'label' => 'No action required'],
+            'screening' => ['key' => 'screening', 'label' => 'Review eligibility and required files', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'Check the applicant profile, DSS guidance, and supporting files before recording the pre-screening result.'],
+            'formal_application' => ['key' => 'formal_application', 'label' => 'Record the formal application result', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'Confirm whether the applicant completed the provider-managed formal application requirements.'],
+            'exam' => ['key' => 'exam', 'label' => 'Record the exam result', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'After the shared exam activity is complete, record whether this applicant passed.'],
+            'interview' => ['key' => 'interview', 'label' => 'Record the interview result', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'After the shared interview activity is complete, record whether this applicant passed.'],
+            'decision' => ['key' => 'decision', 'label' => 'Record the final outcome', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'Choose selected, waitlisted, or not selected after all configured stages are complete.'],
+            default => ['key' => 'complete', 'label' => 'No action required', 'actor' => 'none', 'actor_label' => 'No action required', 'description' => 'This application workflow is complete.'],
         };
     }
 }

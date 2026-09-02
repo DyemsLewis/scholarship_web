@@ -2004,7 +2004,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <main class="min-h-screen bg-[#f4f5f7] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
 
         <ConfirmationDialog
@@ -2013,9 +2013,9 @@ onBeforeUnmount(() => {
             @cancel="cancelConfirmation"
         />
 
-        <section class="px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-            <div class="mx-auto max-w-6xl">
-                <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <section class="provider-page">
+            <div class="provider-container provider-container-narrow">
+                <header class="provider-hero flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div class="min-w-0">
                         <p class="text-xs font-bold uppercase text-amber-700">
                             {{ isEditMode ? 'Edit program' : 'New program' }}

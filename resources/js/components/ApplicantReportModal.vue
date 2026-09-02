@@ -17,9 +17,11 @@ const isLoading = ref(false);
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const categories = ref([]);
+const privacyRequestTypes = ref([]);
 const programs = ref([]);
 const form = ref({
     category: '',
+    privacyRequestType: '',
     scholarshipId: '',
     subject: '',
     description: '',
@@ -38,6 +40,7 @@ const destinationMessage = computed(() => (
 function resetForm(category = '') {
     form.value = {
         category,
+        privacyRequestType: '',
         scholarshipId: '',
         subject: '',
         description: '',
@@ -61,6 +64,7 @@ async function loadOptions() {
         const response = await window.axios.get('/dashboard/reports/data');
 
         categories.value = response.data.categories ?? [];
+        privacyRequestTypes.value = response.data.privacy_request_types ?? [];
         programs.value = response.data.programs ?? [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load the report form.';
@@ -76,6 +80,7 @@ async function submitReport() {
     try {
         await window.axios.post('/dashboard/reports', {
             category: form.value.category,
+            privacy_request_type: isPrivacyConcern.value ? form.value.privacyRequestType : null,
             scholarship_id: isProgramConcern.value ? form.value.scholarshipId : null,
             subject: form.value.subject,
             description: form.value.description,
@@ -114,6 +119,10 @@ watch(() => props.initialCategory, (category) => {
 watch(() => form.value.category, (category) => {
     if (category !== 'program') {
         form.value.scholarshipId = '';
+    }
+
+    if (category !== 'privacy') {
+        form.value.privacyRequestType = '';
     }
 });
 
@@ -187,7 +196,22 @@ onUnmounted(() => {
                             </select>
                         </div>
 
-                        <div :class="isProgramConcern ? 'sm:col-span-2' : ''">
+                        <div v-if="isPrivacyConcern">
+                            <label for="modal-privacy-request-type" class="mb-2 block text-sm font-semibold text-slate-700">Privacy request</label>
+                            <select
+                                id="modal-privacy-request-type"
+                                v-model="form.privacyRequestType"
+                                required
+                                class="w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
+                            >
+                                <option value="" disabled>Select what you need</option>
+                                <option v-for="requestType in privacyRequestTypes" :key="requestType.value" :value="requestType.value">
+                                    {{ requestType.label }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <div :class="isProgramConcern || isPrivacyConcern ? 'sm:col-span-2' : ''">
                             <label for="modal-report-subject" class="mb-2 block text-sm font-semibold text-slate-700">Short title</label>
                             <input
                                 id="modal-report-subject"

@@ -271,11 +271,11 @@ onMounted(loadReviewData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="admin-shell">
         <AdminSidebar active="reviews" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="admin-page">
+            <div class="admin-container">
                 <header class="admin-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -304,11 +304,11 @@ onMounted(loadReviewData);
                     Loading review details...
                 </div>
 
-                <div v-else class="mt-6 space-y-6">
+                <div v-else class="admin-content-stack">
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section class="admin-panel overflow-hidden">
                         <nav class="grid gap-1 p-2 md:grid-cols-3" aria-label="Admin review queues">
                             <button
                                 v-for="tab in reviewTabs"
@@ -350,7 +350,7 @@ onMounted(loadReviewData);
                         </div>
                     </section>
 
-                    <section v-if="activeReviewType === 'providers'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-if="activeReviewType === 'providers'" class="admin-panel p-5">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Provider Verification
@@ -418,7 +418,7 @@ onMounted(loadReviewData);
                         </div>
                     </section>
 
-                    <section v-else-if="activeReviewType === 'programs'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-else-if="activeReviewType === 'programs'" class="admin-panel p-5">
                         <div>
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -493,7 +493,7 @@ onMounted(loadReviewData);
                         </div>
                     </section>
 
-                    <section v-else class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-else class="admin-panel p-5">
                         <div>
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant Review</p>

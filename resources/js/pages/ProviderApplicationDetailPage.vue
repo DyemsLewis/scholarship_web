@@ -1087,7 +1087,7 @@ onMounted(loadApplication);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
 
         <ConfirmationDialog
@@ -1096,8 +1096,8 @@ onMounted(loadApplication);
             @cancel="cancelConfirmation"
         />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="provider-page">
+            <div class="provider-container">
                 <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
                     <a href="/provider/programs" class="font-bold text-slate-600 transition hover:text-slate-950">Programs</a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
@@ -1180,7 +1180,7 @@ onMounted(loadApplication);
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section class="provider-panel overflow-hidden">
                         <div class="border-b border-slate-200 px-4 py-3">
                             <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Review steps</p>
                         </div>
@@ -1272,7 +1272,7 @@ onMounted(loadApplication);
 
                     <div :class="usesDetailSidebar ? 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]' : 'block'">
                         <div v-if="activeSection !== 'applicant'" class="flex flex-col gap-5">
-                            <section v-if="activeSection === 'eligibility'" class="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <section v-if="activeSection === 'eligibility'" class="provider-panel order-1 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Eligibility check</p>
@@ -1322,7 +1322,7 @@ onMounted(loadApplication);
                                 <p v-else class="p-5 text-sm leading-6 text-slate-600">This program does not have structured eligibility rules to compare.</p>
                             </section>
 
-                            <section v-if="activeSection === 'eligibility' && application.exam" class="order-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <section v-if="activeSection === 'eligibility' && application.exam" class="provider-panel order-3 overflow-hidden">
                                 <div class="grid sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center">
                                     <div class="flex h-36 items-center justify-center border-b border-slate-200 bg-slate-50 p-4 sm:border-b-0 sm:border-r">
                                         <img :src="application.exam.image_url" :alt="application.exam.title" class="h-full w-full object-contain">
@@ -1647,7 +1647,7 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'decision' && rubricReview.criteria?.length" class="order-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'decision' && rubricReview.criteria?.length" class="provider-panel order-4 p-5">
                                 <div>
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -1727,7 +1727,7 @@ onMounted(loadApplication);
                                 </p>
                             </section>
 
-                            <section v-if="activeSection === 'eligibility'" class="order-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <section v-if="activeSection === 'eligibility'" class="provider-panel order-2 overflow-hidden">
                                 <div class="border-b border-slate-200 p-5">
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Decision support</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">How the current data was interpreted</h3>
@@ -1828,7 +1828,7 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'documents'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'documents'" class="provider-panel p-5">
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -1912,7 +1912,7 @@ onMounted(loadApplication);
                             </section>
 
                             <section v-if="activeSection === 'schedule'" class="space-y-5">
-                                <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                                <div class="provider-panel p-5">
                                     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                                         <div>
                                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant schedule</p>
@@ -1932,7 +1932,7 @@ onMounted(loadApplication);
                                     <details
                                         v-for="schedule in schedules"
                                         :key="schedule.id"
-                                        class="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                                        class="provider-panel group overflow-hidden"
                                     >
                                         <summary class="flex cursor-pointer list-none items-center gap-3 p-3.5 [&::-webkit-details-marker]:hidden">
                                             <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-white">
@@ -1987,7 +1987,7 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'history' && timeline.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'history' && timeline.length" class="provider-panel p-5">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Timeline
                                 </p>
@@ -2016,7 +2016,7 @@ onMounted(loadApplication);
                             v-if="activeSection === 'applicant' || activeSection === 'history'"
                             :class="activeSection === 'applicant' ? 'grid gap-5 lg:grid-cols-2' : 'space-y-5'"
                         >
-                            <section v-if="activeSection === 'history' && application.status_progress" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'history' && application.status_progress" class="provider-panel p-5">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Progress
                                 </p>
@@ -2031,7 +2031,7 @@ onMounted(loadApplication);
                                 </p>
                             </section>
 
-                            <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+                            <section v-if="activeSection === 'applicant'" class="provider-panel p-5 lg:col-span-2">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div class="flex min-w-0 items-center gap-4">
                                         <div class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-lg font-bold text-white">
@@ -2089,7 +2089,7 @@ onMounted(loadApplication);
                                 </p>
                             </section>
 
-                            <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'applicant'" class="provider-panel p-5">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Learning record
                                 </p>
@@ -2126,7 +2126,7 @@ onMounted(loadApplication);
                                 </dl>
                             </section>
 
-                            <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'applicant'" class="provider-panel p-5">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Household, location, and support
                                 </p>
@@ -2155,7 +2155,7 @@ onMounted(loadApplication);
                                 </dl>
                             </section>
 
-                            <section v-if="activeSection === 'applicant' && hasGuardianDetails" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+                            <section v-if="activeSection === 'applicant' && hasGuardianDetails" class="provider-panel p-5 lg:col-span-2">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Parent or guardian</p>
                                     <span v-if="application.applicant?.guardian_is_account_owner" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
@@ -2182,7 +2182,7 @@ onMounted(loadApplication);
                                 </dl>
                             </section>
 
-                            <section v-if="activeSection === 'applicant'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:col-span-2">
+                            <section v-if="activeSection === 'applicant'" class="provider-panel overflow-hidden lg:col-span-2">
                                 <div class="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Academic record</p>
@@ -2239,7 +2239,7 @@ onMounted(loadApplication);
                                 </p>
                             </section>
 
-                            <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'applicant'" class="provider-panel p-5">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant preferences</p>
                                 <div class="mt-3 grid gap-2 text-sm">
                                     <p class="whitespace-pre-line rounded-md bg-slate-50 p-3 leading-6 text-slate-600"><span class="font-bold text-slate-800">Goal:</span> {{ application.applicant?.scholarship_goal || 'Not provided' }}</p>
@@ -2248,7 +2248,7 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'applicant'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'applicant'" class="provider-panel p-5">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Notes</p>
                                 <p class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">{{ application.notes || 'No applicant note added.' }}</p>
                                 <div v-if="application.review_notes" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
@@ -2259,7 +2259,7 @@ onMounted(loadApplication);
 
                             <section
                                 v-if="activeSection === 'applicant' && providerContractSections.length"
-                                class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2"
+                                class="provider-panel p-5 lg:col-span-2"
                             >
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Possible recipient commitments</p>
                                 <p class="mt-2 text-sm leading-6 text-slate-600">A preview only. Explain and confirm the final agreement with the applicant after acceptance.</p>

@@ -2,14 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Mail\RegistrationVerificationCodeMail;
 use App\Models\ApplicationDocument;
 use App\Models\PortalNotification;
-use App\Models\ProviderVerificationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\StudentDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -19,27 +20,36 @@ class DemoReadinessWorkflowTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_provider_and_applicant_can_complete_the_core_workflow(): void
+    public function test_fresh_admin_provider_and_applicant_can_complete_the_core_workflow(): void
     {
         Mail::fake();
         Storage::fake('local');
         $admin = User::factory()->create(['role' => 'admin']);
-        $provider = User::factory()->create(['role' => 'provider']);
-        $provider->providerProfile()->update(['verification_status' => 'pending']);
-        $applicant = $this->completeApplicant();
-        $proofPath = "provider-verification/{$provider->id}/registration.pdf";
-        Storage::disk('local')->put($proofPath, 'Demo organization registration');
-        ProviderVerificationDocument::create([
-            'provider_id' => $provider->id,
-            'uploaded_by' => $provider->id,
-            'document_type' => 'organization_registration',
-            'original_name' => 'registration.pdf',
-            'path' => $proofPath,
-            'mime_type' => 'application/pdf',
-            'size' => 30,
-            'status' => 'submitted',
-            'uploaded_at' => now(),
-        ]);
+        $provider = $this->registerAndVerifyUser('provider');
+        $applicant = $this->completeApplicant($this->registerAndVerifyUser('applicant'));
+
+        $this->actingAs($provider)
+            ->patchJson('/provider/profile', [
+                'profile_section' => 'organization',
+                'provider_name' => 'Fresh Start Scholarship Foundation',
+                'provider_type' => 'foundation',
+                'provider_website' => 'https://example.test/fresh-start',
+                'provider_address' => 'Quezon City, Metro Manila',
+                'provider_description' => 'A community provider used to verify the clean-account workflow.',
+                'provider_contact_email' => 'programs@example.test',
+                'provider_contact_number' => '09179876543',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.provider_name', 'Fresh Start Scholarship Foundation');
+
+        $this->actingAs($provider)
+            ->post('/provider/verification-documents', [
+                'document_type' => 'organization_registration',
+                'document_file' => UploadedFile::fake()->create('registration.pdf', 100, 'application/pdf'),
+                'terms_accepted' => '1',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('document.document_type', 'organization_registration');
 
         $this->actingAs($admin)
             ->patchJson("/admin/providers/{$provider->id}/verification", [
@@ -48,6 +58,9 @@ class DemoReadinessWorkflowTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('provider.verification_status', 'approved');
+
+        // Production requests reload the authenticated provider after admin approval.
+        $provider = $provider->fresh(['providerProfile']);
 
         $applicationOpensAt = now()->subDay()->toDateString();
         $deadline = now()->addMonth()->toDateString();
@@ -185,6 +198,28 @@ class DemoReadinessWorkflowTest extends TestCase
                 ->assertOk());
 
         $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$applicationId}/correction", [
+                'action' => 'request',
+                'message' => 'Confirm that the uploaded grade record reflects the current school year.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.correction_status', 'requested');
+
+        $this->actingAs($applicant)
+            ->patchJson("/dashboard/applications/{$applicationId}/correction-response", [
+                'response' => 'Confirmed. The uploaded record is for the current school year.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.correction_status', 'submitted');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$applicationId}/correction", [
+                'action' => 'resolve',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.correction_status', 'resolved');
+
+        $this->actingAs($provider)
             ->patchJson("/provider/applications/{$applicationId}/decision", [
                 'decision' => 'approve',
                 'review_notes' => 'The applicant meets the published criteria.',
@@ -216,7 +251,13 @@ class DemoReadinessWorkflowTest extends TestCase
 
         $this->assertDatabaseHas('provider_profiles', [
             'user_id' => $provider->id,
+            'provider_name' => 'Fresh Start Scholarship Foundation',
             'verification_status' => 'approved',
+        ]);
+        $this->assertDatabaseHas('provider_verification_documents', [
+            'provider_id' => $provider->id,
+            'document_type' => 'organization_registration',
+            'status' => 'approved',
         ]);
         $this->assertDatabaseHas('scholarships', [
             'id' => $scholarshipId,
@@ -334,9 +375,54 @@ class DemoReadinessWorkflowTest extends TestCase
             ->exists());
     }
 
-    private function completeApplicant(): User
+    private function registerAndVerifyUser(string $role): User
     {
-        $applicant = User::factory()->create();
+        $email = "fresh.{$role}@example.test";
+        $registration = $this->postJson('/register', [
+            'first_name' => 'Fresh',
+            'last_name' => ucfirst($role),
+            'middle_initial' => 'D',
+            'email' => $email,
+            'username' => "fresh_{$role}",
+            'number' => $role === 'provider' ? '09179876543' : '09171234567',
+            'role' => $role,
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'terms_accepted' => true,
+        ]);
+
+        $registration->assertStatus(202);
+        $this->assertDatabaseMissing('users', ['email' => $email]);
+
+        $verificationMail = null;
+        Mail::assertSent(
+            RegistrationVerificationCodeMail::class,
+            function (RegistrationVerificationCodeMail $mail) use ($email, &$verificationMail): bool {
+                if (! $mail->hasTo($email)) {
+                    return false;
+                }
+
+                $verificationMail = $mail;
+
+                return true;
+            },
+        );
+
+        $this->assertInstanceOf(RegistrationVerificationCodeMail::class, $verificationMail);
+        $this->postJson('/register/verify', [
+            'registration_token' => $registration->json('registration_token'),
+            'code' => $verificationMail->verificationCode,
+        ])->assertCreated();
+
+        $user = User::query()->where('email', $email)->firstOrFail();
+        $this->assertSame($role, $user->role);
+        $this->assertTrue($user->hasVerifiedEmail());
+
+        return $user;
+    }
+
+    private function completeApplicant(User $applicant): User
+    {
         $applicant->studentProfile()->update([
             'birthdate' => '2005-06-01',
             'education_level' => 'college',

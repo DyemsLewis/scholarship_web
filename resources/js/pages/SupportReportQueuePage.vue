@@ -160,11 +160,11 @@ onMounted(() => loadReports());
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main :class="isAdmin ? 'admin-shell' : 'provider-shell'">
         <component :is="Sidebar" :active="isAdmin ? 'reports' : undefined" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section :class="isAdmin ? 'admin-page' : 'provider-page'">
+            <div :class="isAdmin ? 'admin-container' : 'provider-container'">
                 <header :class="isAdmin ? 'admin-hero' : 'provider-hero'">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -182,7 +182,7 @@ onMounted(() => loadReports());
                 <AdminSectionNav v-if="isAdmin" section="operations" />
                 <ProviderSectionNav v-else section="support" />
 
-                <section class="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <section :class="[isAdmin ? 'admin-panel' : 'provider-panel', 'mt-5 p-5']">
                     <div>
                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">{{ pageCopy.queueEyebrow }}</p>
                         <h3 class="mt-2 text-xl font-bold text-slate-950">{{ pageCopy.queueTitle }}</h3>
@@ -235,6 +235,7 @@ onMounted(() => loadReports());
                                 <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
                                     <span>{{ report.applicant?.name || 'Applicant' }}</span>
                                     <span>{{ report.category_label }}</span>
+                                    <span v-if="report.privacy_request_type_label" class="text-amber-700">{{ report.privacy_request_type_label }}</span>
                                     <span v-if="report.program">{{ report.program.title }}</span>
                                     <span>{{ report.created_at }}</span>
                                 </div>
@@ -352,6 +353,9 @@ onMounted(() => loadReports());
 
                     <section class="mt-4 rounded-md border border-slate-200 bg-white p-4 sm:p-5">
                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Reported concern</p>
+                        <p v-if="selectedReport.privacy_request_type_label" class="mt-3 inline-flex rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
+                            {{ selectedReport.privacy_request_type_label }}
+                        </p>
                         <p class="mt-3 whitespace-pre-line text-sm leading-7 text-slate-700">{{ selectedReport.description }}</p>
                     </section>
 

@@ -247,6 +247,8 @@ class DecisionSupportService
             'percent' => $workflow['percent'],
             'tone' => $this->statusTone($status),
             'next_action' => $workflow['next_action']['label'],
+            'next_action_details' => $workflow['next_action'],
+            'provider_action_details' => $workflow['provider_action'],
             'steps' => $steps,
         ];
     }

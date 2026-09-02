@@ -183,7 +183,7 @@ onMounted(loadProvider);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="admin-shell">
         <AdminSidebar active="reviews" />
 
         <FilePreviewModal
@@ -193,8 +193,8 @@ onMounted(loadProvider);
             @close="closeDocumentPreview"
         />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="admin-page">
+            <div class="admin-container">
                 <header class="admin-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -240,7 +240,7 @@ onMounted(loadProvider);
                 </div>
 
                 <div v-else class="mt-6 space-y-5">
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section class="admin-panel overflow-hidden">
                         <nav class="grid gap-1 p-2 sm:grid-cols-3" aria-label="Provider verification steps">
                             <button
                                 v-for="(section, index) in reviewSections"
@@ -269,7 +269,7 @@ onMounted(loadProvider);
                     </section>
 
                     <div v-if="activeReviewSection !== 'decision'" class="space-y-5">
-                        <article v-if="activeReviewSection === 'organization'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <article v-if="activeReviewSection === 'organization'" class="admin-panel overflow-hidden">
                             <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                                 <div class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
                                     {{ providerInitials(provider) }}
@@ -304,7 +304,7 @@ onMounted(loadProvider);
                             </dl>
                         </article>
 
-                        <article v-if="activeReviewSection === 'organization'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article v-if="activeReviewSection === 'organization'" class="admin-panel p-5">
                             <div>
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Organization information</p>
                                 <h3 class="mt-1 text-xl font-bold text-slate-950">Provider record</h3>
@@ -354,7 +354,7 @@ onMounted(loadProvider);
                             </dl>
                         </article>
 
-                        <article v-if="activeReviewSection === 'proof'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article v-if="activeReviewSection === 'proof'" class="admin-panel p-5">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Verification proof</p>
@@ -402,7 +402,7 @@ onMounted(loadProvider);
                         </article>
                     </div>
 
-                    <aside v-if="activeReviewSection === 'decision'" class="w-full rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <aside v-if="activeReviewSection === 'decision'" class="admin-panel w-full p-5">
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>

@@ -15,12 +15,22 @@ class SupportReport extends Model
         'other' => 'Other platform concern',
     ];
 
+    public const PRIVACY_REQUEST_TYPES = [
+        'access_copy' => 'Request a copy of my information',
+        'correction' => 'Correct personal information',
+        'restriction' => 'Restrict how information is used',
+        'account_closure' => 'Close my account',
+        'deletion_review' => 'Request deletion review',
+        'security_incident' => 'Report possible unauthorized access',
+    ];
+
     protected $fillable = [
         'applicant_id',
         'scholarship_id',
         'provider_id',
         'assigned_role',
         'category',
+        'privacy_request_type',
         'subject',
         'description',
         'status',

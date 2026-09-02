@@ -206,11 +206,11 @@ onMounted(loadProviderData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="provider-page">
+            <div class="provider-container">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -242,7 +242,7 @@ onMounted(loadProviderData);
                     {{ errorMessage }}
                 </div>
 
-                <div v-else class="mt-6 space-y-6">
+                <div v-else class="provider-content-stack">
                     <section
                         :class="[
                             'flex flex-col gap-4 rounded-lg border p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between',
@@ -293,7 +293,7 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <section v-if="reviewQueue.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-if="reviewQueue.length" class="provider-panel p-5">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -334,7 +334,8 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <section v-if="canManagePrograms" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div class="grid items-stretch gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                    <section v-if="canManagePrograms" class="provider-panel h-full overflow-hidden">
                         <div class="border-b border-slate-200 px-5 py-4">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -366,8 +367,8 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <section>
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section class="h-full">
+                        <article class="provider-panel h-full p-5">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -411,6 +412,7 @@ onMounted(loadProviderData);
                             </div>
                         </article>
                     </section>
+                    </div>
 
                 </div>
 

@@ -358,7 +358,7 @@ onMounted(loadProviderProfile);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
 
         <FilePreviewModal
@@ -374,8 +374,8 @@ onMounted(loadProviderProfile);
             @cancel="cancelConfirmation"
         />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="provider-page">
+            <div class="provider-container">
                 <header class="provider-hero">
                     <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                         Organization Profile
@@ -446,7 +446,7 @@ onMounted(loadProviderProfile);
                         </div>
                     </section>
 
-                    <nav class="grid gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-3" aria-label="Provider profile sections">
+                    <nav class="provider-panel grid gap-2 p-2 md:grid-cols-3" aria-label="Provider profile sections">
                         <button
                             type="button"
                             :aria-current="activeProfileSection === 'details' ? 'page' : undefined"
@@ -509,7 +509,7 @@ onMounted(loadProviderProfile);
                         </button>
                     </nav>
 
-                    <section v-show="activeProfileSection === 'verification'" id="verification-documents" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <section v-show="activeProfileSection === 'verification'" id="verification-documents" class="provider-panel scroll-mt-6 p-5 sm:p-6">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex items-center gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
@@ -652,7 +652,7 @@ onMounted(loadProviderProfile);
                         </div>
                     </section>
 
-                    <form v-show="activeProfileSection === 'details'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" @submit.prevent="saveProviderProfile('organization')">
+                    <form v-show="activeProfileSection === 'details'" class="provider-panel overflow-hidden" @submit.prevent="saveProviderProfile('organization')">
                         <div class="flex items-center gap-3 p-5 sm:p-6">
                             <span class="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800">
                                 <i class="fa-solid fa-building" aria-hidden="true"></i>
@@ -736,7 +736,7 @@ onMounted(loadProviderProfile);
                         </div>
                     </form>
 
-                    <form v-show="activeProfileSection === 'representative'" id="representative-account" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" @submit.prevent="saveProviderProfile('representative')">
+                    <form v-show="activeProfileSection === 'representative'" id="representative-account" class="provider-panel overflow-hidden" @submit.prevent="saveProviderProfile('representative')">
                         <div class="flex items-center gap-3 p-5 sm:p-6">
                             <span class="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800">
                                 <i class="fa-solid fa-user-tie" aria-hidden="true"></i>

@@ -56,7 +56,7 @@ Route::patch('/dashboard/applications/{application}/response', [ApplicantDashboa
 Route::patch('/dashboard/applications/{application}/withdraw', [ApplicantDashboardController::class, 'withdrawApplication'])->middleware(['auth', 'throttle:6,1'])->name('dashboard.applications.withdraw');
 Route::patch('/dashboard/applications/{application}/correction-response', [ApplicantDashboardController::class, 'respondToCorrection'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applications.correction-response');
 Route::patch('/dashboard/applications/{application}/schedules/{schedule}/acknowledge', [ApplicantDashboardController::class, 'acknowledgeApplicationSchedule'])->middleware('auth')->name('dashboard.applications.schedules.acknowledge');
-Route::post('/dashboard/applications/{application}/documents', [ApplicantDashboardController::class, 'uploadDocument'])->middleware('auth')->name('dashboard.applications.documents.store');
+Route::post('/dashboard/applications/{application}/documents', [ApplicantDashboardController::class, 'uploadDocument'])->middleware(['auth', 'throttle:20,1'])->name('dashboard.applications.documents.store');
 Route::delete('/dashboard/documents/{document}', [ApplicantDashboardController::class, 'deleteDocument'])->middleware('auth')->name('dashboard.documents.destroy');
 Route::post('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardController::class, 'saveScholarship'])->middleware('auth')->name('dashboard.scholarships.save');
 Route::delete('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardController::class, 'unsaveScholarship'])->middleware('auth')->name('dashboard.scholarships.unsave');
@@ -161,7 +161,7 @@ Route::middleware(['auth', 'provider'])
             ->name('review');
         Route::get('/profile/data', [ProviderController::class, 'profileData'])->name('profile.data');
         Route::patch('/profile', [ProviderController::class, 'updateProfile'])->name('profile.update');
-        Route::post('/verification-documents', [ProviderController::class, 'uploadVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.store');
+        Route::post('/verification-documents', [ProviderController::class, 'uploadVerificationDocument'])->middleware(['permission:manage_profile', 'throttle:10,1'])->name('verification-documents.store');
         Route::get('/verification-documents/{document}/view', [ProviderController::class, 'viewVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.view');
         Route::get('/verification-documents/{document}/download', [ProviderController::class, 'downloadVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.download');
         Route::delete('/verification-documents/{document}', [ProviderController::class, 'deleteVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.destroy');

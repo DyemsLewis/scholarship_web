@@ -137,11 +137,11 @@ onMounted(loadAdminData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)]">
+    <main class="admin-shell">
         <AdminSidebar active="users" />
 
-        <section class="min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto w-full min-w-0 max-w-7xl">
+        <section class="admin-page">
+            <div class="admin-container min-w-0">
                 <header class="admin-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -167,7 +167,7 @@ onMounted(loadAdminData);
                     </div>
                 </header>
 
-                <section class="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <section class="admin-panel mt-5 p-5">
                     <div>
                         <h3 class="text-xl font-bold text-slate-950">Account directory</h3>
                         <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">

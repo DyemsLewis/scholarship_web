@@ -446,7 +446,10 @@ class ApplicantDashboardController extends Controller
         abort_unless($document->user_id === $request->user()->id, 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
-        return Storage::disk('local')->download($document->path, $document->original_name);
+        return Storage::disk('local')->download($document->path, $document->original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function viewPreparedDocument(Request $request, StudentDocument $document)
@@ -455,7 +458,10 @@ class ApplicantDashboardController extends Controller
         abort_unless($document->user_id === $request->user()->id, 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
-        return Storage::disk('local')->response($document->path, $document->original_name);
+        return Storage::disk('local')->response($document->path, $document->original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function uploadApplicantVerificationDocument(Request $request): JsonResponse
@@ -656,7 +662,10 @@ class ApplicantDashboardController extends Controller
         abort_unless($document->applicant_id === $request->user()->id, 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
-        return Storage::disk('local')->response($document->path, $document->original_name);
+        return Storage::disk('local')->response($document->path, $document->original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function uploadProfilePhoto(Request $request): JsonResponse

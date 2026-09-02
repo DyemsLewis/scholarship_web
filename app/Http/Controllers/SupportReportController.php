@@ -42,6 +42,9 @@ class SupportReportController extends Controller
             'categories' => collect(SupportReport::CATEGORIES)
                 ->map(fn (string $label, string $value): array => compact('value', 'label'))
                 ->values(),
+            'privacy_request_types' => collect(SupportReport::PRIVACY_REQUEST_TYPES)
+                ->map(fn (string $label, string $value): array => compact('value', 'label'))
+                ->values(),
             'programs' => $programs,
             'reports' => collect($reports->items())
                 ->map(fn (SupportReport $report): array => $this->reportPayload($report))
@@ -56,6 +59,11 @@ class SupportReportController extends Controller
 
         $validated = $request->validate([
             'category' => ['required', Rule::in(array_keys(SupportReport::CATEGORIES))],
+            'privacy_request_type' => [
+                Rule::requiredIf($request->input('category') === 'privacy'),
+                'nullable',
+                Rule::in(array_keys(SupportReport::PRIVACY_REQUEST_TYPES)),
+            ],
             'scholarship_id' => [
                 Rule::requiredIf($request->input('category') === 'program'),
                 'nullable',
@@ -85,6 +93,9 @@ class SupportReportController extends Controller
             'provider_id' => $scholarship?->provider_id,
             'assigned_role' => $scholarship ? 'provider' : 'admin',
             'category' => $validated['category'],
+            'privacy_request_type' => $validated['category'] === 'privacy'
+                ? $validated['privacy_request_type']
+                : null,
             'subject' => trim($validated['subject']),
             'description' => trim($validated['description']),
             'status' => 'open',
@@ -118,10 +129,14 @@ class SupportReportController extends Controller
             ->each(fn (User $admin) => PortalNotification::create([
                 'user_id' => $admin->id,
                 'type' => 'support_report',
-                'title' => $scholarship ? 'New program concern' : 'New applicant report',
+                'title' => $scholarship
+                    ? 'New program concern'
+                    : ($validated['category'] === 'privacy' ? 'New privacy request' : 'New applicant report'),
                 'message' => $scholarship
                     ? "{$request->user()->name} reported a concern about {$scholarship->title}."
-                    : "{$request->user()->name} submitted a {$validated['category']} concern.",
+                    : ($validated['category'] === 'privacy'
+                        ? "{$request->user()->name} submitted a ".(SupportReport::PRIVACY_REQUEST_TYPES[$validated['privacy_request_type']] ?? 'privacy request').'.'
+                        : "{$request->user()->name} submitted a {$validated['category']} concern."),
                 'action_url' => '/admin/reports',
             ]));
 
@@ -134,6 +149,7 @@ class SupportReportController extends Controller
                 'support_report_id' => $report->id,
                 'assigned_role' => $report->assigned_role,
                 'scholarship_id' => $report->scholarship_id,
+                'privacy_request_type' => $report->privacy_request_type,
             ],
         );
 
@@ -331,13 +347,16 @@ class SupportReportController extends Controller
         SupportReport $report,
         bool $includeApplicant = false,
         ?string $viewerRole = null,
-    ): array
-    {
+    ): array {
         $roleStatus = $viewerRole ? $report->{"{$viewerRole}_status"} : $report->status;
         $payload = [
             'id' => $report->id,
             'category' => $report->category,
             'category_label' => SupportReport::CATEGORIES[$report->category] ?? 'Concern',
+            'privacy_request_type' => $report->privacy_request_type,
+            'privacy_request_type_label' => $report->privacy_request_type
+                ? (SupportReport::PRIVACY_REQUEST_TYPES[$report->privacy_request_type] ?? 'Privacy request')
+                : null,
             'subject' => $report->subject,
             'description' => $report->description,
             'status' => $roleStatus,

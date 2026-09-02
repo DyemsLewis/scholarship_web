@@ -100,11 +100,11 @@ onMounted(() => {
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="admin-shell">
         <AdminSidebar active="billing" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="admin-page">
+            <div class="admin-container">
                 <header class="admin-hero">
                     <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Provider Services</p>
                     <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Service request queue</h1>
@@ -125,7 +125,7 @@ onMounted(() => {
                     {{ errorMessage }}
                 </div>
 
-                <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <section class="admin-panel mt-5 overflow-hidden">
                     <form class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 p-4 sm:flex-row" @submit.prevent="loadPurchases(1)">
                         <label class="relative min-w-0 flex-1">
                             <span class="sr-only">Search payments</span>

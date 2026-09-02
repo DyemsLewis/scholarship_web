@@ -509,7 +509,7 @@ onMounted(loadAccount);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="admin-shell">
         <AdminSidebar active="users" />
 
         <ConfirmationDialog
@@ -525,8 +525,8 @@ onMounted(loadAccount);
             @close="closeDocumentPreview"
         />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="admin-page">
+            <div class="admin-container">
                 <header class="admin-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -561,7 +561,7 @@ onMounted(loadAccount);
                     class="mt-6 grid gap-5"
                     @submit.prevent="saveAccount"
                 >
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section class="admin-panel overflow-hidden">
                         <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
                             <div class="flex items-center gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
@@ -633,7 +633,7 @@ onMounted(loadAccount);
                         </div>
                     </section>
 
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section class="admin-panel overflow-hidden">
                         <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
                             <div class="flex items-center gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-300 text-slate-950">
@@ -753,7 +753,7 @@ onMounted(loadAccount);
                         </div>
                     </section>
 
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section class="admin-panel overflow-hidden">
                         <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
                             <div class="flex items-center gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-200 text-slate-800">
@@ -833,7 +833,7 @@ onMounted(loadAccount);
 
                 <section
                     v-if="isEditMode && account"
-                    class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                    class="admin-panel mt-4 overflow-hidden"
                 >
                     <div class="border-b border-slate-200 p-5 sm:p-6">
                         <div>
@@ -999,7 +999,7 @@ onMounted(loadAccount);
 
                 <section
                     v-if="isEditMode && account?.role === 'applicant'"
-                    class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                    class="admin-panel mt-4 overflow-hidden"
                 >
                     <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
                         <div>

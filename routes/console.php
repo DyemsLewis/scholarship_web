@@ -11,3 +11,12 @@ Artisan::command('inspire', function () {
 Schedule::command('scholarships:send-reminders')
     ->dailyAt('08:00')
     ->withoutOverlapping();
+
+Schedule::command('platform:backup')
+    ->dailyAt('02:00')
+    ->when(fn (): bool => (bool) config('platform.backup.enabled'))
+    ->withoutOverlapping();
+
+Schedule::command('platform:prune-data')
+    ->dailyAt('03:00')
+    ->withoutOverlapping();

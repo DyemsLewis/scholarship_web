@@ -749,7 +749,10 @@ class AdminController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
-        return Storage::disk('local')->download($document->path, $document->original_name);
+        return Storage::disk('local')->download($document->path, $document->original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function viewProviderVerificationDocument(Request $request, ProviderVerificationDocument $document)

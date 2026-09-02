@@ -314,6 +314,12 @@ function applicationNextAction(application) {
         ?? 'Open the application for the latest update.';
 }
 
+function applicationNextActionDetails(application) {
+    return application?.workflow?.next_action
+        ?? application?.status_progress?.next_action_details
+        ?? {};
+}
+
 function statusClass(status) {
     if (['approved', 'awarded', 'disbursed', 'renewed', 'exam_passed'].includes(status)) {
         return 'bg-emerald-100 text-emerald-800';
@@ -1257,9 +1263,19 @@ watch(selectedScholarship, (scholarship) => {
                                         </div>
                                     </div>
 
-                                    <div class="mt-3 flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-                                        <i class="fa-solid fa-arrow-right mt-1 text-xs text-amber-700" aria-hidden="true"></i>
-                                        <span><strong>Next:</strong> {{ applicationNextAction(application) }}</span>
+                                    <div class="mt-3 flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-700">
+                                        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-xs text-amber-700 ring-1 ring-slate-200">
+                                            <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                                        </span>
+                                        <span class="min-w-0">
+                                            <span class="block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                                                Who acts next: {{ applicationNextActionDetails(application).actor_label || 'Check application' }}
+                                            </span>
+                                            <strong class="mt-0.5 block text-sm text-slate-900">{{ applicationNextAction(application) }}</strong>
+                                            <span v-if="applicationNextActionDetails(application).description" class="mt-0.5 hidden text-xs leading-5 text-slate-500 sm:block">
+                                                {{ applicationNextActionDetails(application).description }}
+                                            </span>
+                                        </span>
                                     </div>
 
                                     <details v-if="application.status_progress?.steps?.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">

@@ -258,7 +258,7 @@ onMounted(loadProviderData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
 
         <ConfirmationDialog
@@ -267,8 +267,8 @@ onMounted(loadProviderData);
             @cancel="cancelConfirmation"
         />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="provider-page">
+            <div class="provider-container">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -301,7 +301,7 @@ onMounted(loadProviderData);
                     {{ errorMessage }}
                 </div>
 
-                <div v-else class="mt-6 space-y-6">
+                <div v-else class="provider-content-stack">
                     <div
                         v-if="!canPostScholarships"
                         class="flex flex-col gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm sm:flex-row sm:items-center sm:justify-between"
@@ -325,7 +325,7 @@ onMounted(loadProviderData);
                         </a>
                     </div>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section class="provider-panel p-5">
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                             <div>
                                 <h3 class="text-xl font-bold text-slate-950">Your programs</h3>

@@ -149,11 +149,11 @@ onMounted(loadInsights);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="provider-page">
+            <div class="provider-container">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -183,7 +183,7 @@ onMounted(loadInsights);
 
                 <div v-else class="mt-6 flex flex-col gap-6">
                     <section class="order-3 grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article class="provider-panel p-5">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Application Funnel
                             </p>
@@ -206,7 +206,7 @@ onMounted(loadInsights);
                             </div>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article class="provider-panel p-5">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Program Review
                             </p>
@@ -243,7 +243,7 @@ onMounted(loadInsights);
                         </article>
                     </section>
 
-                    <section class="order-1 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section class="provider-panel order-1 p-5">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -362,7 +362,7 @@ onMounted(loadInsights);
                     </section>
 
                     <section class="order-2 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article class="provider-panel p-5">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Document Issues
                             </p>
@@ -410,7 +410,7 @@ onMounted(loadInsights);
                             </div>
                         </article>
 
-                        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article class="provider-panel p-5">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 DSS Summary
                             </p>

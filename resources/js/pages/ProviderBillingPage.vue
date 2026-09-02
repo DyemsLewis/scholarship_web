@@ -283,11 +283,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="provider-page">
+            <div class="provider-container">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -322,7 +322,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                 </div>
 
                 <template v-else>
-                    <section class="mt-6 flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3.5 shadow-sm sm:items-center">
+                    <section class="provider-panel mt-5 flex items-start gap-3 px-4 py-3.5 sm:items-center">
                         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-amber-300">
                             <i class="fa-solid fa-shield-heart" aria-hidden="true"></i>
                         </span>
@@ -332,7 +332,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                         </div>
                     </section>
 
-                    <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section class="provider-panel mt-4 overflow-hidden">
                         <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                                 <p class="text-xs font-bold uppercase text-amber-700">Available support</p>
@@ -385,7 +385,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                         </div>
                     </section>
 
-                    <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section class="provider-panel mt-4 overflow-hidden">
                         <div class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-5 py-4">
                             <div>
                                 <p class="text-xs font-bold uppercase text-amber-700">Your requests</p>

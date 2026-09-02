@@ -117,7 +117,12 @@ const workflow = computed(() => application.value?.workflow ?? {});
 const formalApplicationHandoff = computed(() => application.value?.formal_application_handoff ?? null);
 const handoffRequiresOriginalDocuments = computed(() => formalApplicationHandoff.value?.mode === 'onsite'
     && (formalApplicationHandoff.value?.requirements?.length ?? 0) > 0);
+const applicantNextActionDetails = computed(() => workflow.value.next_action
+    ?? application.value?.status_progress?.next_action_details
+    ?? {});
 const applicantNextStep = computed(() => workflow.value.next_action?.label ?? applicantNextAction(application.value));
+const applicantNextActor = computed(() => applicantNextActionDetails.value.actor_label ?? 'Check application');
+const applicantNextDescription = computed(() => applicantNextActionDetails.value.description ?? 'Open the application for the latest instructions.');
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
 const currentSchedule = computed(() => schedules.value.find((schedule) => (
@@ -712,6 +717,8 @@ onMounted(loadApplication);
                             <div>
                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">What to do now</p>
                                 <p class="mt-1 text-sm font-semibold leading-6 text-slate-800">{{ applicantNextStep }}</p>
+                                <p class="mt-1 text-xs font-bold text-amber-900">Who acts next: {{ applicantNextActor }}</p>
+                                <p class="mt-1 max-w-3xl text-xs leading-5 text-slate-600">{{ applicantNextDescription }}</p>
                             </div>
                         </div>
                         <button

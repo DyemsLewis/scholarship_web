@@ -102,11 +102,11 @@ onMounted(() => loadLogs());
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="admin-shell">
         <AdminSidebar active="logs" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="admin-page">
+            <div class="admin-container">
                 <header class="admin-hero">
                     <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -133,7 +133,7 @@ onMounted(() => loadLogs());
 
                 <AdminSectionNav section="operations" />
 
-                <section class="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <section class="admin-panel mt-5 p-5">
                     <div>
                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Activity Trail</p>
                         <h3 class="mt-2 text-xl font-bold text-slate-950">Recent platform activity</h3>

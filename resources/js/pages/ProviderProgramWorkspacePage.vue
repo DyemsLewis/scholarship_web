@@ -206,7 +206,7 @@ onMounted(loadProgram);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
         <ConfirmationDialog
             v-bind="confirmation"
@@ -214,8 +214,8 @@ onMounted(loadProgram);
             @cancel="cancelConfirmation"
         />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="provider-page">
+            <div class="provider-container">
                 <nav class="flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
                     <a href="/provider/programs" class="font-bold text-slate-600 transition hover:text-slate-950">Programs</a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
@@ -232,7 +232,7 @@ onMounted(loadProgram);
                 </div>
 
                 <template v-else-if="scholarship">
-                    <section class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section class="provider-panel mt-5 overflow-hidden">
                         <header class="relative overflow-hidden bg-[#081426] px-5 py-6 text-white sm:px-7">
                             <div class="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border-[42px] border-amber-300/10"></div>
                             <div class="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -339,7 +339,7 @@ onMounted(loadProgram);
                         </div>
                     </section>
 
-                    <section id="announcements" class="mt-5 scroll-mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section id="announcements" class="provider-panel mt-4 scroll-mt-5 overflow-hidden">
                         <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                             <div>
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program communication</p>

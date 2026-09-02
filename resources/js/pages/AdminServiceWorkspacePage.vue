@@ -179,11 +179,11 @@ onMounted(loadWorkspace);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="admin-shell">
         <AdminSidebar active="billing" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="admin-page">
+            <div class="admin-container">
                 <header class="admin-hero">
                     <a href="/admin/billing" class="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to service queue</a>
                     <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -202,16 +202,16 @@ onMounted(loadWorkspace);
                 <div v-else-if="errorMessage || !purchase" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
 
                 <template v-else>
-                    <section class="mt-6 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm sm:grid-cols-4">
+                    <section class="admin-panel mt-5 grid overflow-hidden sm:grid-cols-4">
                         <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r"><p class="text-xs font-semibold text-slate-500">Payment</p><p class="mt-1 text-sm font-bold text-slate-950">{{ statusLabel(purchase.status) }}</p></div>
                         <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r"><p class="text-xs font-semibold text-slate-500">Priority</p><p class="mt-1 text-sm font-bold text-slate-950">{{ statusLabel(purchase.priority) }}</p></div>
                         <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r"><p class="text-xs font-semibold text-slate-500">Assigned to</p><p class="mt-1 text-sm font-bold text-slate-950">{{ purchase.assigned_to_name || 'Unassigned' }}</p></div>
                         <div class="p-4"><p class="text-xs font-semibold text-slate-500">Target date</p><p class="mt-1 text-sm font-bold text-slate-950">{{ dateTime(purchase.target_due_at) }}</p></div>
                     </section>
 
-                    <div class="mt-6 space-y-6">
-                        <div class="space-y-6">
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div class="mt-5 space-y-4">
+                        <div class="space-y-4">
+                            <section class="admin-panel p-5 sm:p-6">
                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider brief</p>
                                 <h2 class="mt-1 text-xl font-bold text-slate-950">Requested support</h2>
                                 <div class="mt-4 grid gap-4 lg:grid-cols-2">
@@ -220,7 +220,7 @@ onMounted(loadWorkspace);
                                 </div>
                             </section>
 
-                            <section v-if="purchase.meeting_status" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <section v-if="purchase.meeting_status" class="admin-panel overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
                                     <div class="flex items-start gap-3">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span>
@@ -269,7 +269,7 @@ onMounted(loadWorkspace);
                                 </div>
                             </section>
 
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                            <section class="admin-panel p-5 sm:p-6">
                                 <div class="flex items-start justify-between gap-3">
                                     <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Workflow</p><h2 class="mt-1 text-xl font-bold text-slate-950">Manage the service</h2></div>
                                     <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ completedMilestones }}/{{ workflowForm.milestones.length }} milestones</span>
@@ -295,7 +295,7 @@ onMounted(loadWorkspace);
                                 </form>
                             </section>
 
-                            <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                            <section class="admin-panel overflow-hidden">
                                 <div class="border-b border-slate-200 p-5 sm:p-6"><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">History</p><h2 class="mt-1 text-xl font-bold text-slate-950">Updates and internal notes</h2></div>
                                 <div class="divide-y divide-slate-200">
                                     <article v-for="update in purchase.updates" :key="update.id" :class="['flex gap-3 p-4 sm:px-6', update.visible_to_provider ? '' : 'bg-amber-50/60']">
@@ -314,13 +314,13 @@ onMounted(loadWorkspace);
                             </section>
                         </div>
 
-                        <div class="space-y-6">
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <div class="space-y-4">
+                            <section class="admin-panel p-5">
                                 <div class="flex items-center justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Deliverables</p><h2 class="mt-1 text-lg font-bold text-slate-950">Files for provider</h2></div><label v-if="purchase.status === 'paid' && purchase.fulfillment_status !== 'completed'" class="cursor-pointer rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white"><span>{{ isUploading ? 'Uploading...' : 'Upload' }}</span><input type="file" class="sr-only" :disabled="isUploading" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv,.txt" @change="uploadDeliverable"></label></div>
                                 <div class="mt-4 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in deliverables" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-circle-check text-emerald-600" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!deliverables.length" class="p-4 text-sm text-slate-500">No deliverables uploaded.</p></div>
                             </section>
 
-                            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <section class="admin-panel p-5">
                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider files</p><h2 class="mt-1 text-lg font-bold text-slate-950">Supporting material</h2>
                                 <div class="mt-4 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in supportingFiles" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-lines text-slate-400" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!supportingFiles.length" class="p-4 text-sm text-slate-500">No provider files uploaded.</p></div>
                             </section>

@@ -88,11 +88,11 @@ onMounted(loadTeam);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="provider-page">
+            <div class="provider-container">
                 <header class="provider-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -114,7 +114,7 @@ onMounted(loadTeam);
                     {{ errorMessage }}
                 </div>
 
-                <section class="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <section class="provider-panel mt-5 overflow-hidden">
                     <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                         <div class="flex items-center gap-3">
                             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-white">

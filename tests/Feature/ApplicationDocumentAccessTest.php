@@ -61,6 +61,21 @@ class ApplicationDocumentAccessTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_another_applicant_cannot_open_or_download_private_application_documents(): void
+    {
+        Storage::fake('local');
+        [, , $document] = $this->applicationDocument();
+        $otherApplicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($otherApplicant)
+            ->get("/documents/{$document->id}/view")
+            ->assertForbidden();
+
+        $this->actingAs($otherApplicant)
+            ->get("/documents/{$document->id}/download")
+            ->assertForbidden();
+    }
+
     private function applicationDocument(): array
     {
         $provider = User::factory()->create(['role' => 'provider']);

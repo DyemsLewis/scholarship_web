@@ -127,11 +127,11 @@ onMounted(loadAdminData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="admin-shell">
         <AdminSidebar active="dashboard" />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="admin-page">
+            <div class="admin-container">
                 <header class="admin-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -164,8 +164,8 @@ onMounted(loadAdminData);
                     {{ errorMessage }}
                 </div>
 
-                <div v-else class="mt-6 space-y-6">
-                    <section v-if="canManageReviews" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div v-else class="admin-content-stack">
+                    <section v-if="canManageReviews" class="admin-panel overflow-hidden">
                         <div class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -199,7 +199,7 @@ onMounted(loadAdminData);
                     </section>
 
                     <section v-if="canManageReviews || canManageAccounts" class="grid gap-4 lg:grid-cols-2">
-                        <article v-if="canManageReviews" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article v-if="canManageReviews" class="admin-panel h-full p-5">
                             <div class="flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -233,7 +233,7 @@ onMounted(loadAdminData);
                             </div>
                         </article>
 
-                        <article v-if="canManageAccounts" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article v-if="canManageAccounts" class="admin-panel h-full p-5">
                             <div class="flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">

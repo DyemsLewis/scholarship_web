@@ -31,6 +31,10 @@ const selectedQueueFilter = ref(queueFilterValues.includes(requestedQueueFilter)
 const selectedQueueSort = ref(queueSortValues.includes(requestedQueueSort) ? requestedQueueSort : 'priority');
 const applicationSearch = ref(pageSearchParams.get('search') ?? '');
 const applicationPage = ref(Number.isInteger(requestedApplicationPage) && requestedApplicationPage > 0 ? requestedApplicationPage : 1);
+const applicationPagination = ref({ current_page: 1, last_page: 1, per_page: 10, total: 0, from: null, to: null });
+const queueFilterCounts = ref({ pending_review: 0, document_issues: 0, active_stages: 0, formal_application: 0, decided: 0, all: 0 });
+const applicationStageCounts = ref({});
+const totalProviderApplications = ref(0);
 const selectedApplicationPreview = ref(null);
 const applicationsPerPage = 10;
 const activeWorkspaceSection = ref(['applications', 'schedule'].includes(requestedWorkspaceSection)
@@ -55,6 +59,8 @@ const {
 const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
     .toISOString()
     .slice(0, 16);
+let queueReloadTimer = null;
+let providerLoadRequestId = 0;
 
 const scheduleTypeCatalog = [
     { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question', help: 'Provider-managed exam schedule' },
@@ -88,16 +94,11 @@ const availableBulkAdvanceTargets = computed(() => {
         (application.bulk_advance_targets ?? []).includes(target.value)
     )));
 });
-const pendingReviewCount = computed(() => applications.value.filter((application) => (
-    workflowStage(application) === 'screening' && !workflowClosed(application)
-)).length);
+const pendingReviewCount = computed(() => Number(queueFilterCounts.value.pending_review ?? 0));
 const waitingScheduleTypes = computed(() => {
     return configuredScheduleTypes.value.filter((type) => (
         scheduleEvent(type.value)?.status !== 'scheduled'
-        && applications.value.some((application) => (
-            workflowStage(application) === type.value
-            && !applicationSchedule(application, type.value)
-        ))
+        && Number(applicationStageCounts.value[type.value] ?? 0) > 0
     ));
 });
 const workspaceTasks = computed(() => {
@@ -148,29 +149,29 @@ const reviewFilterOptions = computed(() => [
     {
         value: 'pending_review',
         label: 'Needs review',
-        count: applications.value.filter((application) => workflowStage(application) === 'screening' && !workflowClosed(application)).length,
+        count: Number(queueFilterCounts.value.pending_review ?? 0),
     },
     {
         value: 'document_issues',
         label: 'Document issues',
-        count: applications.value.filter((application) => documentIssueCount(application) > 0 || Number(application.document_readiness?.percent ?? 0) < 100).length,
+        count: Number(queueFilterCounts.value.document_issues ?? 0),
     },
     {
         value: 'active_stages',
         label: 'Active stages',
-        count: applications.value.filter((application) => ['exam', 'interview'].includes(workflowStage(application)) && !workflowClosed(application)).length,
+        count: Number(queueFilterCounts.value.active_stages ?? 0),
     },
     {
         value: 'formal_application',
         label: 'Formal application',
-        count: applications.value.filter((application) => ['formal_application', 'decision'].includes(workflowStage(application)) && !workflowClosed(application)).length,
+        count: Number(queueFilterCounts.value.formal_application ?? 0),
     },
     {
         value: 'decided',
         label: 'Decisions',
-        count: applications.value.filter((application) => workflowClosed(application) || Boolean(application.workflow?.final_outcome)).length,
+        count: Number(queueFilterCounts.value.decided ?? 0),
     },
-    { value: 'all', label: 'All applicants', count: applications.value.length },
+    { value: 'all', label: 'All applicants', count: Number(queueFilterCounts.value.all ?? 0) },
 ]);
 const emptyQueueMessage = computed(() => ({
     pending_review: 'No applicants currently need an initial review.',
@@ -181,72 +182,19 @@ const emptyQueueMessage = computed(() => ({
     all: 'No applicants match this search.',
 }[selectedQueueFilter.value]));
 const rankedApplications = computed(() => {
-    const query = applicationSearch.value.trim().toLowerCase();
-    const filteredApplications = applications.value.filter((application) => {
-        const matchesSearch = !query || [
-            application.applicant?.name,
-            application.applicant?.email,
-            application.scholarship?.title,
-        ].filter(Boolean).join(' ').toLowerCase().includes(query);
-
-        if (!matchesSearch) {
-            return false;
-        }
-
-        if (selectedQueueFilter.value === 'pending_review') {
-            return workflowStage(application) === 'screening' && !workflowClosed(application);
-        }
-
-        if (selectedQueueFilter.value === 'document_issues') {
-            return documentIssueCount(application) > 0 || Number(application.document_readiness?.percent ?? 0) < 100;
-        }
-
-        if (selectedQueueFilter.value === 'active_stages') {
-            return ['exam', 'interview'].includes(workflowStage(application)) && !workflowClosed(application);
-        }
-
-        if (selectedQueueFilter.value === 'formal_application') {
-            return ['formal_application', 'decision'].includes(workflowStage(application)) && !workflowClosed(application);
-        }
-
-        if (selectedQueueFilter.value === 'decided') {
-            return workflowClosed(application) || Boolean(application.workflow?.final_outcome);
-        }
-
-        return true;
-    });
-
-    return [...filteredApplications].sort((first, second) => {
-        if (selectedQueueSort.value === 'dss') {
-            return Number(second.dss_score ?? 0) - Number(first.dss_score ?? 0);
-        }
-
-        if (selectedQueueSort.value === 'documents') {
-            return documentIssueCount(second) - documentIssueCount(first);
-        }
-
-        if (selectedQueueSort.value === 'oldest') {
-            return Number(second.waiting_days ?? 0) - Number(first.waiting_days ?? 0);
-        }
-
-        return reviewPriorityScore(second) - reviewPriorityScore(first) || Number(second.dss_score ?? 0) - Number(first.dss_score ?? 0);
-    });
+    return applications.value;
 });
-const totalApplicationPages = computed(() => Math.max(1, Math.ceil(rankedApplications.value.length / applicationsPerPage)));
-const visibleApplications = computed(() => {
-    const start = (applicationPage.value - 1) * applicationsPerPage;
-
-    return rankedApplications.value.slice(start, start + applicationsPerPage);
-});
+const totalApplicationPages = computed(() => Math.max(1, Number(applicationPagination.value.last_page ?? 1)));
+const visibleApplications = computed(() => rankedApplications.value);
 const visibleApplicationRange = computed(() => {
-    if (rankedApplications.value.length === 0) {
+    if (Number(applicationPagination.value.total ?? 0) === 0) {
         return '0 applications';
     }
 
-    const start = (applicationPage.value - 1) * applicationsPerPage + 1;
-    const end = Math.min(applicationPage.value * applicationsPerPage, rankedApplications.value.length);
+    const start = Number(applicationPagination.value.from ?? 0);
+    const end = Number(applicationPagination.value.to ?? 0);
 
-    return `${start}-${end} of ${rankedApplications.value.length}`;
+    return `${start}-${end} of ${applicationPagination.value.total}`;
 });
 const bulkEligibleVisibleApplications = computed(() => visibleApplications.value.filter((application) => (
     canBulkAdvance(application)
@@ -306,6 +254,10 @@ function applicationActionLabel(application) {
     }
 
     return 'Review stage';
+}
+
+function providerNextAction(application) {
+    return application?.workflow?.provider_action?.label ?? 'Review application';
 }
 
 function canBulkAdvance(application) {
@@ -421,65 +373,6 @@ function showWaitingTime(application) {
         && !['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'disbursed', 'renewed'].includes(application.status);
 }
 
-function reviewPriorityScore(application) {
-    const status = application.status ?? 'submitted';
-    const readiness = Number(application.document_readiness?.percent ?? 0);
-    const dssScore = Number(application.dss_score ?? 0);
-    const eligibilityScore = Number(application.eligibility_score ?? 0);
-    const issues = documentIssueCount(application);
-    let score = 0;
-
-    if (status === 'submitted') {
-        score += 24;
-    }
-
-    if (status === 'under_review') {
-        score += 16;
-    }
-
-    if (application.documents_changed_since_review) {
-        score += 20;
-    }
-
-    if (['exam_qualified', 'exam_scheduled', 'exam_taken'].includes(status)) {
-        score += 14;
-    }
-
-    if (status === 'exam_passed') {
-        score += 10;
-    }
-
-    if (issues > 0) {
-        score += Math.min(35, issues * 12);
-    }
-
-    if (readiness < 100) {
-        score += readiness === 0 ? 22 : 14;
-    }
-
-    if (dssScore >= 80 || eligibilityScore >= 80) {
-        score += 12;
-    }
-
-    if (application.dss_recommendation === 'needs_review') {
-        score += 20;
-    }
-
-    if (application.dss_recommendation === 'not_recommended') {
-        score += 10;
-    }
-
-    if (!application.review_notes && ['submitted', 'under_review'].includes(status)) {
-        score += 5;
-    }
-
-    if (['not_awarded', 'disbursed', 'renewed', 'rejected', 'exam_failed', 'interview_failed'].includes(status)) {
-        score -= 25;
-    }
-
-    return Math.max(0, score);
-}
-
 function openApplicationPreview(application) {
     selectedApplicationPreview.value = application;
 }
@@ -536,10 +429,6 @@ function scheduleTypeLabel(type) {
 
 function scheduleEvent(type) {
     return programEvents.value.find((event) => event.type === type) ?? null;
-}
-
-function applicationSchedule(application, type) {
-    return (application.schedules ?? []).find((schedule) => schedule.type === type) ?? null;
 }
 
 function eventStatusClass(status) {
@@ -641,28 +530,53 @@ async function saveProgramSchedule() {
 }
 
 async function loadProviderData(showLoading = true) {
+    const requestId = ++providerLoadRequestId;
     isLoading.value = showLoading;
     errorMessage.value = '';
 
     try {
         const response = await window.axios.get('/provider/applications/data', {
-            params: hasProgramContext.value ? { scholarship_id: selectedScholarshipId.value } : {},
+            params: {
+                ...(hasProgramContext.value ? { scholarship_id: selectedScholarshipId.value } : {}),
+                filter: selectedQueueFilter.value,
+                sort: selectedQueueSort.value,
+                search: applicationSearch.value.trim() || undefined,
+                page: applicationPage.value,
+                per_page: applicationsPerPage,
+            },
         });
+
+        if (requestId !== providerLoadRequestId) {
+            return;
+        }
 
         applications.value = response.data.applications;
         reviewers.value = Array.isArray(response.data.reviewers) ? response.data.reviewers : [];
         selectedScholarshipContext.value = response.data.selected_scholarship ?? selectedScholarshipContext.value;
         programEvents.value = response.data.program_events ?? [];
+        applicationPagination.value = response.data.pagination ?? applicationPagination.value;
+        queueFilterCounts.value = response.data.filter_counts ?? queueFilterCounts.value;
+        applicationStageCounts.value = response.data.stage_counts ?? {};
+        totalProviderApplications.value = Number(response.data.stats?.applications ?? 0);
 
         if (!availableBulkAdvanceTargets.value.some((target) => target.value === bulkAdvanceTarget.value)) {
             bulkAdvanceTarget.value = availableBulkAdvanceTargets.value[0]?.value ?? 'pass_prescreening';
         }
 
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to load provider applications.';
+        if (requestId === providerLoadRequestId) {
+            errorMessage.value = error.response?.data?.message ?? 'Unable to load provider applications.';
+        }
     } finally {
-        isLoading.value = false;
+        if (requestId === providerLoadRequestId) {
+            isLoading.value = false;
+        }
     }
+}
+
+function scheduleProviderDataLoad(delay = 0) {
+    window.clearTimeout(queueReloadTimer);
+    queueReloadTimer = window.setTimeout(() => loadProviderData(false), delay);
 }
 
 async function assignReviewer(application, event) {
@@ -688,9 +602,17 @@ async function assignReviewer(application, event) {
     }
 }
 
-watch([selectedQueueFilter, selectedQueueSort, applicationSearch], () => {
-    applicationPage.value = 1;
+watch([selectedQueueFilter, selectedQueueSort, applicationSearch], ([, , search], [, , previousSearch]) => {
+    if (applicationPage.value !== 1) {
+        applicationPage.value = 1;
+
+        return;
+    }
+
+    scheduleProviderDataLoad(search !== previousSearch ? 300 : 0);
 });
+
+watch(applicationPage, () => scheduleProviderDataLoad());
 
 watch([selectedQueueFilter, selectedQueueSort, applicationSearch, applicationPage], ([filter, sort, search, page]) => {
     const url = new URL(window.location.href);
@@ -729,6 +651,7 @@ watch(selectedApplicationPreview, (application) => {
 });
 
 onUnmounted(() => {
+    window.clearTimeout(queueReloadTimer);
     document.body.classList.remove('overflow-hidden');
 });
 
@@ -736,11 +659,11 @@ onMounted(loadProviderData);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="provider-shell">
         <ProviderSidebar />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="provider-page">
+            <div class="provider-container">
                 <nav v-if="hasProgramContext" class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
                     <a href="/provider/programs" class="font-bold text-slate-600 transition hover:text-slate-950">Programs</a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
@@ -782,8 +705,8 @@ onMounted(loadProviderData);
                     {{ errorMessage }}
                 </div>
 
-                <div v-else class="mt-6 flex flex-col gap-6">
-                    <section v-if="hasProgramContext" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div v-else class="mt-5 flex flex-col gap-4">
+                    <section v-if="hasProgramContext" class="provider-panel overflow-hidden">
                         <div class="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
                             <div class="flex min-w-0 items-center gap-3">
                                 <img
@@ -844,7 +767,7 @@ onMounted(loadProviderData);
                         </button>
                     </section>
 
-                    <section v-if="hasProgramContext && activeWorkspaceSection === 'schedule'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-if="hasProgramContext && activeWorkspaceSection === 'schedule'" class="provider-panel p-5">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program Schedule</p>
@@ -960,7 +883,7 @@ onMounted(loadProviderData);
                         </form>
                     </section>
 
-                    <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="provider-panel p-5">
                         <div>
                             <h3 class="text-xl font-bold text-slate-950">Review queue</h3>
                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
@@ -1061,7 +984,7 @@ onMounted(loadProviderData);
                             <p v-if="bulkAdvanceError" class="mt-2 text-xs font-semibold text-rose-700">{{ bulkAdvanceError }}</p>
                         </div>
 
-                        <div v-if="applications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                        <div v-if="totalProviderApplications === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
                             <p class="text-sm font-bold text-slate-900">No applicants yet</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
                                 {{ hasProgramContext
@@ -1122,6 +1045,7 @@ onMounted(loadProviderData);
                                         <span v-if="application.correction_status === 'requested'" class="text-amber-700">Correction requested</span>
                                         <span v-if="application.correction_status === 'submitted'" class="text-sky-700">Correction ready to review</span>
                                         <span v-if="application.status === 'waitlisted' && application.waitlist_position" class="text-sky-700">Alternate #{{ application.waitlist_position }}</span>
+                                        <span class="text-slate-700">Next: {{ providerNextAction(application) }}</span>
                                     </div>
                                 </div>
 

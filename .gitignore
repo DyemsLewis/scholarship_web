@@ -18,6 +18,7 @@
 /public/storage
 /storage/*.key
 /storage/pail
+/storage/framework/temp
 /tmp-view-cache
 /vendor
 Homestead.json

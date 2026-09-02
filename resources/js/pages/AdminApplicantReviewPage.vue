@@ -223,7 +223,7 @@ onMounted(loadApplicant);
 </script>
 
 <template>
-    <main class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef2f6_52%,_#e7edf4_100%)] text-slate-900 lg:grid lg:grid-cols-[18rem_1fr]">
+    <main class="admin-shell">
         <AdminSidebar active="reviews" />
 
         <FilePreviewModal
@@ -233,8 +233,8 @@ onMounted(loadApplicant);
             @close="closeDocumentPreview"
         />
 
-        <section class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div class="mx-auto max-w-7xl">
+        <section class="admin-page">
+            <div class="admin-container">
                 <header class="admin-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -280,7 +280,7 @@ onMounted(loadApplicant);
                 </div>
 
                 <div v-else class="mt-6 space-y-5">
-                        <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <section class="admin-panel overflow-hidden">
                             <nav class="grid gap-1 p-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="Academic verification steps">
                                 <button
                                     v-for="(section, index) in reviewSections"
@@ -309,7 +309,7 @@ onMounted(loadApplicant);
                             </nav>
                         </section>
 
-                        <article v-if="activeReviewSection === 'profile'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <article v-if="activeReviewSection === 'profile'" class="admin-panel overflow-hidden">
                             <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                                 <div class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
                                     {{ applicantInitials(applicant) }}
@@ -344,7 +344,7 @@ onMounted(loadApplicant);
                             </dl>
                         </article>
 
-                        <article v-if="activeReviewSection === 'profile'" id="applicant-details" class="scroll-mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <article v-if="activeReviewSection === 'profile'" id="applicant-details" class="admin-panel scroll-mt-6 overflow-hidden">
                             <div class="flex items-start gap-3 border-b border-slate-200 p-5">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-white">
                                     <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i>
@@ -392,7 +392,7 @@ onMounted(loadApplicant);
                             </dl>
                         </article>
 
-                        <article v-if="activeReviewSection === 'proof'" id="verification-files" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <article v-if="activeReviewSection === 'proof'" id="verification-files" class="admin-panel scroll-mt-6 p-5">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 2 - Profile evidence</p>
@@ -441,7 +441,7 @@ onMounted(loadApplicant);
                             </p>
                         </article>
 
-                        <article v-if="activeReviewSection === 'oversight'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <article v-if="activeReviewSection === 'oversight'" class="admin-panel overflow-hidden">
                             <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
                                 <div class="flex items-start gap-3">
                                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-white">
@@ -542,7 +542,7 @@ onMounted(loadApplicant);
                             </div>
                         </article>
 
-                    <section v-if="activeReviewSection === 'decision'" id="verification-decision" class="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section v-if="activeReviewSection === 'decision'" id="verification-decision" class="admin-panel scroll-mt-6 p-5">
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Step 4 - Admin decision</p>
