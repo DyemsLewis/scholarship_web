@@ -352,6 +352,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'must_reset_password' => (bool) $this->must_reset_password,
             'password_reset_required_at' => $this->password_reset_required_at?->format('M d, Y h:i A'),
             'account_managed_by' => $this->studentProfile?->account_managed_by,
+            'citizenship_status' => $this->studentProfile?->citizenship_status,
             'display_name' => $this->adminProfile?->display_name,
             'provider_name' => $providerProfile?->provider_name,
             'provider_type' => $providerProfile?->provider_type,
@@ -379,6 +380,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'course_or_strand' => $this->studentProfile?->course_or_strand,
             'year_level' => $this->studentProfile?->year_level,
             'enrollment_status' => $this->studentProfile?->enrollment_status,
+            'academic_year' => $this->studentProfile?->academic_year,
+            'academic_term' => $this->studentProfile?->academic_term,
             'gwa' => $this->studentProfile?->gwa,
             'grading_scale' => $this->studentProfile?->grading_scale,
             'income_bracket' => $this->studentProfile?->income_bracket,
@@ -387,6 +390,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'preferred_locations' => $this->studentProfile?->preferred_locations,
             'willing_to_relocate' => $this->studentProfile?->willing_to_relocate,
             'support_needs' => $this->studentProfile?->support_needs,
+            'current_scholarship_status' => $this->studentProfile?->current_scholarship_status,
+            'current_scholarship_details' => $this->studentProfile?->current_scholarship_details,
             'scholarship_goal' => $this->studentProfile?->scholarship_goal,
             'address' => $this->studentProfile?->address,
             'barangay' => $this->studentProfile?->barangay,
@@ -424,6 +429,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'last_name' => 'Last name',
             'contact_number' => 'Contact number',
             'birthdate' => 'Birthdate',
+            'citizenship_status' => 'Citizenship declaration',
         ];
 
         $fields += [
@@ -440,6 +446,8 @@ class User extends Authenticatable implements MustVerifyEmail
         ];
 
         if ($requiresGrades) {
+            $fields['academic_year'] = 'Academic year';
+            $fields['academic_term'] = 'Academic term or grading period';
             $fields['grading_scale'] = 'Grading scale';
 
             if (blank($payload['grading_scale'] ?? null)

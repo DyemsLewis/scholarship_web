@@ -38,7 +38,6 @@ const matchSummary = ref({
     strong_matches: 0,
     needs_review: 0,
     blocked_programs: 0,
-    preference_matches: 0,
     top_gaps: [],
 });
 const verificationDocuments = ref([]);
@@ -74,8 +73,38 @@ const birthdateMaximumValue = birthdateMaximum.toISOString().slice(0, 10);
 
 const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
 const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
-const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
 const supportNeedOptions = ['Tuition', 'Books and supplies', 'Transportation', 'Uniform', 'Internet / device', 'Boarding / housing', 'Exam or certification fees'];
+const citizenshipOptions = [
+    { value: 'filipino', label: 'Filipino citizen' },
+    { value: 'dual_filipino', label: 'Dual citizen, including Filipino' },
+    { value: 'other', label: 'Other citizenship status' },
+];
+const academicTermOptions = [
+    { value: 'full_year', label: 'Full school year' },
+    { value: 'first_grading_period', label: 'First grading period' },
+    { value: 'second_grading_period', label: 'Second grading period' },
+    { value: 'third_grading_period', label: 'Third grading period' },
+    { value: 'fourth_grading_period', label: 'Fourth grading period' },
+    { value: 'first_semester', label: 'First semester / term' },
+    { value: 'second_semester', label: 'Second semester / term' },
+    { value: 'third_term', label: 'Third trimester / term' },
+    { value: 'summer_term', label: 'Summer term' },
+    { value: 'latest_completed_term', label: 'Latest completed term' },
+    { value: 'not_applicable', label: 'Not applicable' },
+];
+const currentScholarshipOptions = [
+    { value: 'none', label: 'Not receiving another scholarship' },
+    { value: 'receiving', label: 'Currently receiving scholarship support' },
+    { value: 'pending', label: 'Another scholarship application is pending' },
+    { value: 'completed', label: 'Previous scholarship already completed' },
+    { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+];
+const schoolYearStart = new Date().getMonth() >= 5 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+const academicYearOptions = [
+    schoolYearStart,
+    schoolYearStart + 1,
+    ...Array.from({ length: 4 }, (_, index) => schoolYearStart - index - 1),
+].map((start) => `${start}-${start + 1}`);
 const accountManagerOptions = [
     { value: 'learner', label: 'Learner / student' },
     { value: 'parent_guardian', label: 'Parent or guardian' },
@@ -86,12 +115,6 @@ const accountManagerOptions = [
 const guardianRelationshipOptions = ['Parent / guardian', 'Mother', 'Father', 'Grandparent', 'Sibling', 'Relative', 'Teacher / adviser', 'Other'];
 const regionOptions = ['NCR', 'CAR', 'Region I', 'Region II', 'Region III', 'Region IV-A', 'MIMAROPA', 'Region V', 'Region VI', 'Region VII', 'Region VIII', 'Region IX', 'Region X', 'Region XI', 'Region XII', 'Region XIII', 'BARMM'];
 const provinceOptions = ['Metro Manila', 'Abra', 'Agusan del Norte', 'Agusan del Sur', 'Aklan', 'Albay', 'Antique', 'Apayao', 'Aurora', 'Bataan', 'Batangas', 'Benguet', 'Bohol', 'Bukidnon', 'Bulacan', 'Cagayan', 'Camarines Norte', 'Camarines Sur', 'Capiz', 'Cavite', 'Cebu', 'Davao del Norte', 'Davao del Sur', 'Davao Oriental', 'Iloilo', 'Isabela', 'Laguna', 'La Union', 'Leyte', 'Misamis Oriental', 'Negros Occidental', 'Negros Oriental', 'Nueva Ecija', 'Nueva Vizcaya', 'Pampanga', 'Pangasinan', 'Quezon', 'Rizal', 'South Cotabato', 'Tarlac', 'Zambales'];
-const preferredLocationOptions = ['Anywhere in the Philippines', 'Near my home address', 'Online-friendly', ...regionOptions, 'Cebu', 'Davao'];
-const relocationOptions = [
-    { value: 'yes', label: 'Yes, if needed' },
-    { value: 'no', label: 'No, local only' },
-    { value: 'depends', label: 'Depends on the scholarship' },
-];
 const educationLevelOptions = [
     { value: 'preschool', label: 'Preschool / Kindergarten' },
     { value: 'elementary', label: 'Elementary' },
@@ -133,6 +156,7 @@ const fieldLabels = {
     gender: 'Gender',
     contact_number: 'Contact number',
     account_managed_by: 'Account managed by',
+    citizenship_status: 'Citizenship declaration',
     birthdate: 'Birthdate',
     education_level: 'Education level',
     school: 'School / learning institution',
@@ -141,15 +165,15 @@ const fieldLabels = {
     course_or_strand: 'Program path',
     year_level: 'Grade / year / level',
     enrollment_status: 'Enrollment status',
+    academic_year: 'Academic year',
+    academic_term: 'Academic term or grading period',
     gwa: 'GWA / general average',
     grading_scale: 'Grading scale',
     income_bracket: 'Household income bracket',
     household_size: 'Household size',
-    preferred_categories: 'Preferred scholarship types',
-    preferred_locations: 'Preferred locations',
-    willing_to_relocate: 'Willing to relocate',
     support_needs: 'Support needs',
-    scholarship_goal: 'Scholarship goal',
+    current_scholarship_status: 'Current scholarship support',
+    current_scholarship_details: 'Current scholarship details',
     address: 'Address',
     barangay: 'Barangay',
     city: 'City / municipality',
@@ -170,8 +194,8 @@ const profileSections = [
         icon: 'fa-solid fa-address-card',
         impact: 'Identity, contact, and household context.',
         required: true,
-        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'income_bracket', 'household_size', 'support_needs', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
-        requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number', 'account_managed_by', 'income_bracket', 'guardian_name', 'guardian_relationship', 'guardian_contact'],
+        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'household_size', 'support_needs', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
+        requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'guardian_name', 'guardian_relationship', 'guardian_contact'],
     },
     {
         id: 'academic',
@@ -180,8 +204,8 @@ const profileSections = [
         icon: 'fa-solid fa-book-open-reader',
         impact: 'Matching details.',
         required: true,
-        fields: ['education_level', 'school', 'school_type', 'learner_reference_number', 'course_or_strand', 'year_level', 'enrollment_status', 'grading_scale', 'gwa'],
-        requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'grading_scale', 'gwa'],
+        fields: ['education_level', 'school', 'school_type', 'learner_reference_number', 'course_or_strand', 'year_level', 'enrollment_status', 'academic_year', 'academic_term', 'grading_scale', 'gwa'],
+        requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'academic_year', 'academic_term', 'grading_scale', 'gwa'],
     },
     {
         id: 'location',
@@ -192,15 +216,6 @@ const profileSections = [
         required: true,
         fields: ['address', 'barangay', 'city', 'province', 'region'],
         requiredFields: ['city', 'province', 'region'],
-    },
-    {
-        id: 'preferences',
-        label: 'Preferences',
-        detail: 'Finder priorities',
-        icon: 'fa-solid fa-sliders',
-        impact: 'Personalizes result order.',
-        required: false,
-        fields: ['preferred_categories', 'preferred_locations', 'willing_to_relocate', 'scholarship_goal'],
     },
     {
         id: 'verification',
@@ -270,7 +285,13 @@ const academicProofOption = computed(() => {
         label: 'Academic or progress record',
         detail: 'Select an education level in Learning to see the best academic record to upload.',
     };
-    const context = [educationLabel, form.value.year_level, gradingLabel].filter(hasValue);
+    const context = [
+        educationLabel,
+        form.value.year_level,
+        form.value.academic_year ? `AY ${form.value.academic_year}` : '',
+        academicTermLabel(form.value.academic_term),
+        gradingLabel,
+    ].filter(hasValue);
 
     if (requiresNumericGrade.value && hasValue(form.value.gwa)) {
         context.push(gradingScale === 'percentage'
@@ -312,13 +333,7 @@ const hasGuardianDetails = computed(() => [
 ].some(hasValue) || form.value.guardian_is_account_owner);
 const visibleProfileSections = computed(() => profileSections);
 const requiredProfileFields = computed(() => profileSections.flatMap((section) => sectionRequiredFields(section)));
-const boosterFields = computed(() => profileSections.flatMap((section) => sectionAllFields(section).filter((field) => !sectionRequiredFields(section).includes(field))));
 const requiredFieldData = computed(() => requiredProfileFields.value.map((key) => ({
-    key,
-    label: fieldLabel(key),
-    value: form.value[key],
-})));
-const boosterFieldData = computed(() => boosterFields.value.map((key) => ({
     key,
     label: fieldLabel(key),
     value: form.value[key],
@@ -361,7 +376,7 @@ const verificationSteps = computed(() => {
             detail: status === 'approved'
                 ? 'Result checked.'
                 : status === 'pending'
-                    ? 'An admin is checking the file.'
+                    ? 'An authorized reviewer is checking the file.'
                     : status === 'rejected'
                         ? 'Restarts after resubmission.'
                         : 'Starts after upload.',
@@ -379,14 +394,14 @@ const verificationUploadCopy = computed(() => {
     if (profileVerificationStatus.value === 'rejected') {
         return {
             title: 'Replace the academic record',
-            detail: 'Review the admin note, then submit a clearer or updated academic record.',
+            detail: 'Review the verification note, then submit a clearer or updated academic record.',
         };
     }
 
     if (profileVerificationStatus.value === 'pending') {
         return {
             title: 'Files submitted',
-            detail: 'An admin is checking your academic record.',
+            detail: 'An authorized reviewer is checking your academic record.',
         };
     }
 
@@ -447,20 +462,22 @@ const applicationSetupItems = computed(() => [
         section: recommendedSection.value,
     },
     {
-        id: 'email',
-        label: 'Email address',
-        detail: user.value?.email_verified ? 'Verified for account notifications.' : 'Verify through the message sent to your inbox.',
-        state: user.value?.email_verified ? 'complete' : 'action',
-    },
-    {
         id: 'verification',
-        label: 'Academic record',
-        detail: verificationStatusLabel(profileVerificationStatus.value),
+        label: 'Academic proof',
+        detail: profileVerificationStatus.value === 'approved'
+            ? 'Verified and ready for provider review.'
+            : profileVerificationStatus.value === 'pending'
+                ? 'Submitted and waiting for review.'
+                : profileVerificationStatus.value === 'rejected'
+                    ? 'Replace the file using the reviewer note.'
+                    : 'Recommended so reviewers can confirm your academic result.',
         state: profileVerificationStatus.value === 'approved'
             ? 'complete'
             : profileVerificationStatus.value === 'pending'
                 ? 'pending'
-                : 'action',
+                : profileVerificationStatus.value === 'rejected'
+                    ? 'action'
+                    : 'optional',
         section: 'verification',
     },
     {
@@ -513,9 +530,9 @@ const profileRecommendedAction = computed(() => {
 
     if (profileVerificationStatus.value === 'unsubmitted') {
         return {
-            label: 'Submit academic record',
+            label: 'Add academic proof',
             section: 'verification',
-            detail: 'This lets an admin check the academic result used for matching.',
+            detail: 'Recommended so an authorized reviewer can confirm the academic result in your profile.',
         };
     }
 
@@ -523,7 +540,7 @@ const profileRecommendedAction = computed(() => {
         return {
             label: 'Replace academic record',
             section: 'verification',
-            detail: 'Review the admin note and upload a clearer or updated academic record.',
+            detail: 'Review the verification note and upload a clearer or updated academic record.',
         };
     }
 
@@ -591,6 +608,7 @@ function emptyForm() {
         gender: '',
         contact_number: '',
         account_managed_by: '',
+        citizenship_status: '',
         education_level: '',
         school: '',
         school_type: '',
@@ -598,15 +616,15 @@ function emptyForm() {
         course_or_strand: '',
         year_level: '',
         enrollment_status: '',
+        academic_year: '',
+        academic_term: '',
         gwa: '',
         grading_scale: '',
         income_bracket: '',
         household_size: '',
-        preferred_categories: '',
-        preferred_locations: '',
-        willing_to_relocate: '',
         support_needs: '',
-        scholarship_goal: '',
+        current_scholarship_status: '',
+        current_scholarship_details: '',
         address: '',
         barangay: '',
         city: '',
@@ -684,6 +702,10 @@ function isFieldRelevant(field) {
             || (!requiresGrades.value && hasValue(form.value.gwa));
     }
 
+    if (['academic_year', 'academic_term'].includes(field)) {
+        return requiresGrades.value || hasValue(form.value[field]);
+    }
+
     if (['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'].includes(field)) {
         return needsGuardianContext.value
             || hasValue(form.value.guardian_name)
@@ -711,6 +733,10 @@ function isFieldRequired(field) {
 
     if (field === 'gwa') {
         return requiresGrades.value && (!form.value.grading_scale || requiresNumericGrade.value);
+    }
+
+    if (['academic_year', 'academic_term'].includes(field)) {
+        return requiresGrades.value;
     }
 
     if (['guardian_name', 'guardian_relationship', 'guardian_contact'].includes(field)) {
@@ -799,22 +825,6 @@ function sectionForField(field) {
     return profileSections.find((section) => section.fields.includes(field))?.id ?? 'personal';
 }
 
-function sectionForMatchGap(gap) {
-    if (['academic', 'education_level', 'course', 'school_type', 'year_level'].includes(gap?.key)) {
-        return 'academic';
-    }
-
-    if (gap?.key === 'income') {
-        return 'personal';
-    }
-
-    if (gap?.key === 'location') {
-        return 'location';
-    }
-
-    return 'personal';
-}
-
 function sectionHasErrors(section) {
     return Object.keys(fieldErrors.value).some((field) => section.fields.includes(field));
 }
@@ -882,12 +892,9 @@ function overviewSectionSummary(sectionId) {
             educationLevelLabel(form.value.education_level),
             form.value.school,
             [form.value.course_or_strand, form.value.year_level].filter(hasValue).join(' - '),
+            form.value.academic_year ? `AY ${form.value.academic_year}` : '',
         ],
         location: [form.value.city, form.value.province, form.value.region],
-        preferences: [
-            listFromText(form.value.preferred_categories).slice(0, 2).join(', '),
-            form.value.willing_to_relocate ? relocationOptions.find((option) => option.value === form.value.willing_to_relocate)?.label : '',
-        ],
     };
 
     return (summaries[sectionId] ?? []).filter(hasValue).join(' - ') || 'No details added yet.';
@@ -899,6 +906,18 @@ function gradingScaleLabel(value) {
 
 function genderLabel(value) {
     return genderOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function citizenshipLabel(value) {
+    return citizenshipOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function academicTermLabel(value) {
+    return academicTermOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function currentScholarshipLabel(value) {
+    return currentScholarshipOptions.find((option) => option.value === value)?.label ?? value;
 }
 
 function educationLevelLabel(value) {
@@ -1062,7 +1081,7 @@ const guardianRequirementText = computed(() => {
 const reviewGroups = computed(() => [
     {
         id: 'personal',
-        title: 'Personal details',
+        title: 'Personal and household',
         icon: 'fa-solid fa-address-card',
         items: [
             ['Name', [form.value.first_name, form.value.middle_initial ? `${form.value.middle_initial}.` : '', form.value.last_name, form.value.suffix].filter(Boolean).join(' ')],
@@ -1070,9 +1089,12 @@ const reviewGroups = computed(() => [
             ['Birthdate', form.value.birthdate],
             ['Contact', form.value.contact_number],
             ['Account managed by', accountManagerLabel(form.value.account_managed_by)],
+            ['Citizenship', citizenshipLabel(form.value.citizenship_status)],
             ['Income bracket', form.value.income_bracket],
             ['Household size', form.value.household_size],
             ['Support needed', listFromText(form.value.support_needs).join(', ')],
+            ['Current scholarship', currentScholarshipLabel(form.value.current_scholarship_status)],
+            ...(form.value.current_scholarship_details ? [['Scholarship details', form.value.current_scholarship_details]] : []),
             ...((needsGuardianContext.value || hasGuardianDetails.value) ? [
                 ['Guardian name', form.value.guardian_name],
                 ['Guardian relationship', relationshipLabel(form.value.guardian_relationship)],
@@ -1089,6 +1111,8 @@ const reviewGroups = computed(() => [
             ['Level', educationLevelLabel(form.value.education_level)],
             ['School', form.value.school],
             [yearLabel.value, form.value.year_level],
+            ['Academic year', form.value.academic_year],
+            ['Record period', academicTermLabel(form.value.academic_term)],
             ...(isFieldRelevant('course_or_strand') ? [[courseLabel.value, form.value.course_or_strand]] : []),
             ...(isFieldRelevant('gwa') ? [[gwaLabel.value, form.value.gwa], ['Grading scale', gradingScaleLabel(form.value.grading_scale)]] : []),
         ],
@@ -1099,17 +1123,6 @@ const reviewGroups = computed(() => [
         icon: 'fa-solid fa-location-dot',
         items: [
             ['Address', [form.value.address, form.value.barangay, form.value.city, form.value.province, form.value.region].filter(Boolean).join(', ')],
-        ],
-    },
-    {
-        id: 'preferences',
-        title: 'Preferences',
-        icon: 'fa-solid fa-sliders',
-        items: [
-            ['Scholarship types', listFromText(form.value.preferred_categories).join(', ')],
-            ['Preferred locations', listFromText(form.value.preferred_locations).join(', ')],
-            ['Relocation', fieldDisplayValue({ key: 'willing_to_relocate', value: form.value.willing_to_relocate })],
-            ['Goal', form.value.scholarship_goal],
         ],
     },
 ]);
@@ -1171,12 +1184,20 @@ function fieldDisplayValue(field) {
         return genderLabel(field.value);
     }
 
-    if (field.key === 'willing_to_relocate') {
-        return relocationOptions.find((option) => option.value === field.value)?.label ?? field.value;
-    }
-
     if (field.key === 'account_managed_by') {
         return accountManagerLabel(field.value);
+    }
+
+    if (field.key === 'citizenship_status') {
+        return citizenshipLabel(field.value);
+    }
+
+    if (field.key === 'academic_term') {
+        return academicTermLabel(field.value);
+    }
+
+    if (field.key === 'current_scholarship_status') {
+        return currentScholarshipLabel(field.value);
     }
 
     if (field.key === 'guardian_relationship') {
@@ -1219,6 +1240,7 @@ function fillForm(payload) {
         gender: payload?.gender ?? '',
         contact_number: payload?.contact_number ?? '',
         account_managed_by: payload?.account_managed_by ?? '',
+        citizenship_status: payload?.citizenship_status ?? '',
         education_level: payload?.education_level ?? '',
         school: payload?.school ?? '',
         school_type: payload?.school_type ?? '',
@@ -1226,15 +1248,15 @@ function fillForm(payload) {
         course_or_strand: payload?.course_or_strand ?? '',
         year_level: payload?.year_level ?? '',
         enrollment_status: payload?.enrollment_status ?? '',
+        academic_year: payload?.academic_year ?? '',
+        academic_term: payload?.academic_term ?? '',
         gwa: payload?.gwa ?? '',
         grading_scale: payload?.grading_scale ?? '',
         income_bracket: payload?.income_bracket ?? '',
         household_size: payload?.household_size ?? '',
-        preferred_categories: payload?.preferred_categories ?? '',
-        preferred_locations: payload?.preferred_locations ?? '',
-        willing_to_relocate: payload?.willing_to_relocate ?? '',
         support_needs: payload?.support_needs ?? '',
-        scholarship_goal: payload?.scholarship_goal ?? '',
+        current_scholarship_status: payload?.current_scholarship_status ?? '',
+        current_scholarship_details: payload?.current_scholarship_details ?? '',
         address: payload?.address ?? '',
         barangay: payload?.barangay ?? '',
         city: payload?.city ?? '',
@@ -1380,7 +1402,7 @@ function handleProfileLocationError(message) {
 function verificationStatusLabel(status) {
     return {
         unsubmitted: 'Not submitted',
-        pending: 'Pending admin review',
+        pending: 'Pending review',
         approved: 'Verified',
         rejected: 'Needs replacement',
     }[status] ?? 'Not submitted';
@@ -1607,7 +1629,7 @@ watch(() => form.value.grading_scale, (scale) => {
                 @click.self="showProviderPreview = false"
             >
                 <section
-                    class="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-slate-50 shadow-2xl"
+                    class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-slate-50 shadow-2xl"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="provider-preview-title"
@@ -1661,12 +1683,48 @@ watch(() => form.value.grading_scale, (scale) => {
                         </section>
 
                         <div class="mt-4 grid gap-4 md:grid-cols-2">
+                            <section class="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Applicant details</p>
+                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                    <div>
+                                        <dt class="text-slate-500">Birthdate</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">
+                                            {{ form.birthdate || 'Not provided' }}<span v-if="applicantAge !== null" class="font-semibold text-slate-500"> - Age {{ applicantAge }}</span>
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Gender</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ genderLabel(form.gender) || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Account managed by</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ accountManagerLabel(form.account_managed_by) || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Citizenship</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ citizenshipLabel(form.citizenship_status) || 'Not provided' }}</dd>
+                                    </div>
+                                </dl>
+                            </section>
+
                             <section class="rounded-lg border border-slate-200 bg-white p-4">
                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Learning record</p>
                                 <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                                     <div>
+                                        <dt class="text-slate-500">Education level</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ educationLevelLabel(form.education_level) || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Enrollment</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ form.enrollment_status || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
                                         <dt class="text-slate-500">School</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ form.school || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Institution type</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ schoolTypeLabel(form.school_type) || 'Not provided' }}</dd>
                                     </div>
                                     <div>
                                         <dt class="text-slate-500">Grade / year</dt>
@@ -1682,7 +1740,23 @@ watch(() => form.value.grading_scale, (scale) => {
                                             {{ form.gwa ? `${form.gwa} - ${gradingScaleLabel(form.grading_scale)}` : gradingScaleLabel(form.grading_scale) || 'Not provided' }}
                                         </dd>
                                     </div>
+                                    <div>
+                                        <dt class="text-slate-500">Academic year</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ form.academic_year || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-slate-500">Record period</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ academicTermLabel(form.academic_term) || 'Not provided' }}</dd>
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <dt class="text-slate-500">Learner / student ID</dt>
+                                        <dd class="mt-1 break-words font-bold text-slate-950">{{ form.learner_reference_number || 'Not provided' }}</dd>
+                                    </div>
                                 </dl>
+                                <p class="mt-3 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
+                                    <i class="fa-solid fa-file-shield mr-1.5" aria-hidden="true"></i>
+                                    Academic values are self-declared until the uploaded academic record is verified.
+                                </p>
                             </section>
 
                             <section class="rounded-lg border border-slate-200 bg-white p-4">
@@ -1697,6 +1771,10 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <dd class="mt-1 font-bold text-slate-950">{{ form.household_size || 'Not provided' }}</dd>
                                     </div>
                                     <div class="sm:col-span-2">
+                                        <dt class="text-slate-500">Current scholarship support</dt>
+                                        <dd class="mt-1 font-bold text-slate-950">{{ currentScholarshipLabel(form.current_scholarship_status) || 'Not provided' }}</dd>
+                                    </div>
+                                    <div class="sm:col-span-2">
                                         <dt class="text-slate-500">Location</dt>
                                         <dd class="mt-1 font-bold leading-6 text-slate-950">{{ profileLocationSummary }}</dd>
                                     </div>
@@ -1704,7 +1782,15 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <dt class="text-slate-500">Support needed</dt>
                                         <dd class="mt-1 font-bold leading-6 text-slate-950">{{ listFromText(form.support_needs).join(', ') || 'Not provided' }}</dd>
                                     </div>
+                                    <div v-if="form.current_scholarship_details" class="sm:col-span-2">
+                                        <dt class="text-slate-500">Scholarship details</dt>
+                                        <dd class="mt-1 font-bold leading-6 text-slate-950">{{ form.current_scholarship_details }}</dd>
+                                    </div>
                                 </dl>
+                                <p class="mt-3 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
+                                    <i class="fa-solid fa-user-pen mr-1.5" aria-hidden="true"></i>
+                                    Household and citizenship details are applicant-declared unless a program requests supporting proof.
+                                </p>
                             </section>
 
                             <section v-if="needsGuardianContext || hasGuardianDetails" class="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
@@ -1746,7 +1832,7 @@ watch(() => form.value.grading_scale, (scale) => {
         <section class="student-page">
             <div class="student-container">
                 <ApplicantPageHeader
-                    eyebrow="Student Profile"
+                    eyebrow="Applicant Profile"
                     title="Your scholarship profile"
                     description="A reusable applicant record for matching, verification, and scholarship applications."
                     icon="fa-solid fa-id-card"
@@ -1823,7 +1909,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.6fr)] lg:items-center">
                                 <div>
                                     <div class="flex items-center justify-between gap-3 text-sm">
-                                        <span class="font-bold text-slate-900">Application readiness</span>
+                                        <span class="font-bold text-slate-900">Profile completeness</span>
                                         <span class="font-bold text-slate-700">{{ profileCompletion }}%</span>
                                     </div>
                                     <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -1865,8 +1951,8 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <p class="text-[11px] font-semibold text-slate-500">Eligible</p>
                                     </div>
                                     <div class="border-r border-slate-200 px-3 py-2.5">
-                                        <p class="text-lg font-bold text-slate-950">{{ matchSummary.preference_matches }}</p>
-                                        <p class="text-[11px] font-semibold text-slate-500">Preference fit</p>
+                                        <p class="text-lg font-bold text-slate-950">{{ matchSummary.needs_review }}</p>
+                                        <p class="text-[11px] font-semibold text-slate-500">Needs review</p>
                                     </div>
                                     <div class="px-3 py-2.5">
                                         <p class="text-lg font-bold text-slate-950">{{ matchSummary.available_programs }}</p>
@@ -1928,8 +2014,8 @@ watch(() => form.value.grading_scale, (scale) => {
                         <aside class="space-y-5 lg:h-full">
                             <section class="student-card overflow-hidden lg:flex lg:h-full lg:flex-col">
                                 <div class="border-b border-slate-200 p-5">
-                                    <p class="student-kicker">Before applying</p>
-                                    <h3 class="mt-2 text-lg font-bold text-slate-950">Application setup</h3>
+                                    <p class="student-kicker">Application checklist</p>
+                                    <h3 class="mt-2 text-lg font-bold text-slate-950">Profile and files</h3>
                                 </div>
                                 <div class="divide-y divide-slate-200 lg:flex lg:flex-1 lg:flex-col">
                                     <div v-for="item in applicationSetupItems" :key="item.id" class="flex items-start gap-3 px-5 py-3.5 lg:flex-1 lg:items-center">
@@ -2189,7 +2275,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <h4 :class="formPanelTitleClass">Basic information</h4>
                                         <p :class="formPanelDescriptionClass">Used for age-based eligibility and account communication.</p>
                                     </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-3">
+                                    <div class="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-4">
                                         <div>
                                             <label :class="labelClass" for="profile-birthdate">Birthdate</label>
                                             <input id="profile-birthdate" v-model="form.birthdate" type="date" :min="birthdateMinimumValue" :max="birthdateMaximumValue" :class="inputClass">
@@ -2208,6 +2294,14 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <div>
                                             <label :class="labelClass" for="profile-contact">Contact number</label>
                                             <input id="profile-contact" :value="form.contact_number" maxlength="20" placeholder="09XX XXX XXXX" :class="inputClass" @input="handlePhoneInput('contact_number', $event)">
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" for="profile-citizenship">Citizenship declaration</label>
+                                            <select id="profile-citizenship" v-model="form.citizenship_status" :class="inputClass">
+                                                <option value="">Select citizenship status</option>
+                                                <option v-for="option in citizenshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                            </select>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">Used only when a program has a citizenship rule.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -2303,26 +2397,55 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </label>
                                 </div>
 
-                                <fieldset :class="formPanelClass">
-                                    <legend class="sr-only">Study support needs</legend>
+                                <div :class="formPanelClass">
                                     <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">Study support needed <span class="font-normal text-slate-400">(optional)</span></h4>
-                                        <p :class="formPanelDescriptionClass">Choose the expenses that are relevant to the learner.</p>
+                                        <h4 :class="formPanelTitleClass">Scholarship support context <span class="font-normal text-slate-400">(optional)</span></h4>
+                                        <p :class="formPanelDescriptionClass">Share the study costs that matter and whether the learner already receives scholarship support.</p>
                                     </div>
-                                    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                                        <button
-                                            v-for="option in supportNeedOptions"
-                                            :key="option"
-                                            type="button"
-                                            :aria-pressed="isOptionSelected('support_needs', option)"
-                                            :class="optionButtonClass(isOptionSelected('support_needs', option))"
-                                            @click="toggleListOption('support_needs', option)"
-                                        >
-                                            <span>{{ option }}</span>
-                                            <i v-if="isOptionSelected('support_needs', option)" class="fa-solid fa-check text-xs" aria-hidden="true"></i>
-                                        </button>
+                                    <div class="grid gap-5 lg:grid-cols-2 lg:gap-0">
+                                        <fieldset class="lg:pr-5">
+                                            <legend class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Study costs</legend>
+                                            <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                                                <button
+                                                    v-for="option in supportNeedOptions"
+                                                    :key="option"
+                                                    type="button"
+                                                    :aria-pressed="isOptionSelected('support_needs', option)"
+                                                    :class="optionButtonClass(isOptionSelected('support_needs', option))"
+                                                    @click="toggleListOption('support_needs', option)"
+                                                >
+                                                    <span>{{ option }}</span>
+                                                    <i v-if="isOptionSelected('support_needs', option)" class="fa-solid fa-check text-xs" aria-hidden="true"></i>
+                                                </button>
+                                            </div>
+                                        </fieldset>
+
+                                        <div class="border-t border-slate-200 pt-5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Other scholarship support</p>
+                                            <div class="mt-3 space-y-4">
+                                                <div>
+                                                    <label :class="labelClass" for="profile-current-scholarship">Current situation</label>
+                                                    <select id="profile-current-scholarship" v-model="form.current_scholarship_status" :class="inputClass">
+                                                        <option value="">Select an option</option>
+                                                        <option v-for="option in currentScholarshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                                    </select>
+                                                </div>
+                                                <div v-if="['receiving', 'pending'].includes(form.current_scholarship_status)">
+                                                    <label :class="labelClass" for="profile-current-scholarship-details">Program and support received</label>
+                                                    <textarea
+                                                        id="profile-current-scholarship-details"
+                                                        v-model="form.current_scholarship_details"
+                                                        rows="3"
+                                                        maxlength="1000"
+                                                        placeholder="Program name and type of support"
+                                                        :class="inputClass"
+                                                    ></textarea>
+                                                </div>
+                                                <p class="text-xs leading-5 text-slate-500">Used only when a program checks overlapping scholarship support.</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                </fieldset>
+                                </div>
 
                                 <p class="border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
                                     <i class="fa-solid fa-lock mr-1.5" aria-hidden="true"></i>
@@ -2371,6 +2494,30 @@ watch(() => form.value.grading_scale, (scale) => {
                                             <select id="profile-enrollment" v-model="form.enrollment_status" :class="inputClass">
                                                 <option value="">Select status</option>
                                                 <option v-for="option in enrollmentOptions" :key="option" :value="option">{{ option }}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div v-if="requiresGrades || form.academic_year || form.academic_term" :class="formPanelClass">
+                                    <div class="mb-4">
+                                        <h4 :class="formPanelTitleClass">Academic record period</h4>
+                                        <p :class="formPanelDescriptionClass">Identify the school year and grading period represented by the saved result and proof.</p>
+                                    </div>
+                                    <div class="grid items-start gap-4 md:grid-cols-2">
+                                        <div>
+                                            <label :class="labelClass" for="profile-academic-year">Academic year</label>
+                                            <select id="profile-academic-year" v-model="form.academic_year" :class="inputClass">
+                                                <option value="">Select academic year</option>
+                                                <option v-if="form.academic_year && !academicYearOptions.includes(form.academic_year)" :value="form.academic_year">{{ form.academic_year }}</option>
+                                                <option v-for="option in academicYearOptions" :key="option" :value="option">{{ option }}</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" for="profile-academic-term">Term or grading period</label>
+                                            <select id="profile-academic-term" v-model="form.academic_term" :class="inputClass">
+                                                <option value="">Select record period</option>
+                                                <option v-for="option in academicTermOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                                             </select>
                                         </div>
                                     </div>
@@ -2568,95 +2715,6 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </section>
 
-                        <section v-if="activeSection === 'preferences'" id="profile-preferences" :class="sectionCardClass">
-                            <div :class="sectionHeaderClass">
-                                <div>
-                                    <p class="student-kicker">Optional</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Scholarship preferences</h3>
-                                    <p class="mt-1 text-sm text-slate-500">Choose what matters most so the finder can order results more usefully.</p>
-                                </div>
-                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('preferences'))]">
-                                    {{ sectionStatusLabel(profileSection('preferences')) }}
-                                </span>
-                            </div>
-
-                            <div :class="[sectionBodyClass, 'space-y-4']">
-                                <fieldset :class="formPanelClass">
-                                    <legend class="sr-only">Preferred scholarship types</legend>
-                                    <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">Scholarship types</h4>
-                                        <p :class="formPanelDescriptionClass">Choose the kinds of support you want to see first.</p>
-                                    </div>
-                                    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                        <button
-                                            v-for="option in categoryOptions"
-                                            :key="option"
-                                            type="button"
-                                            :aria-pressed="isOptionSelected('preferred_categories', option)"
-                                            :class="optionButtonClass(isOptionSelected('preferred_categories', option))"
-                                            @click="toggleListOption('preferred_categories', option)"
-                                        >
-                                            <span>{{ option }}</span>
-                                            <i v-if="isOptionSelected('preferred_categories', option)" class="fa-solid fa-check text-xs" aria-hidden="true"></i>
-                                        </button>
-                                    </div>
-                                </fieldset>
-
-                                <fieldset :class="formPanelClass">
-                                    <legend class="sr-only">Preferred locations</legend>
-                                    <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">Preferred locations</h4>
-                                        <p :class="formPanelDescriptionClass">Choose nearby, regional, nationwide, or online-friendly options.</p>
-                                    </div>
-                                    <div class="grid max-h-64 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
-                                        <button
-                                            v-for="option in preferredLocationOptions"
-                                            :key="option"
-                                            type="button"
-                                            :aria-pressed="isOptionSelected('preferred_locations', option)"
-                                            :class="optionButtonClass(isOptionSelected('preferred_locations', option))"
-                                            @click="toggleListOption('preferred_locations', option)"
-                                        >
-                                            <span>{{ option }}</span>
-                                            <i v-if="isOptionSelected('preferred_locations', option)" class="fa-solid fa-check text-xs" aria-hidden="true"></i>
-                                        </button>
-                                    </div>
-                                </fieldset>
-
-                                <div :class="formPanelClass">
-                                    <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">Study plans <span class="font-normal text-slate-400">(optional)</span></h4>
-                                        <p :class="formPanelDescriptionClass">Add relocation flexibility and a short goal for more relevant recommendations.</p>
-                                    </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-[minmax(14rem,0.7fr)_minmax(0,1.3fr)]">
-                                        <div>
-                                            <label :class="labelClass" for="profile-relocation">Willing to relocate</label>
-                                            <select id="profile-relocation" v-model="form.willing_to_relocate" :class="inputClass">
-                                                <option value="">No preference selected</option>
-                                                <option v-for="option in relocationOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-goal">Scholarship goal</label>
-                                            <textarea
-                                                id="profile-goal"
-                                                v-model="form.scholarship_goal"
-                                                rows="3"
-                                                maxlength="1500"
-                                                placeholder="Briefly describe what the scholarship would help you continue or achieve."
-                                                :class="inputClass"
-                                            ></textarea>
-                                            <p class="mt-1 text-right text-xs text-slate-400">{{ form.scholarship_goal.length }}/1500</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <p class="border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
-                                    Preferences only change result ordering. They do not override eligibility rules or provider decisions.
-                                </p>
-                            </div>
-                        </section>
-
                         <section v-if="activeSection === 'verification'" id="profile-verification" :class="sectionCardClass">
                             <div :class="sectionHeaderClass">
                                 <div>
@@ -2708,7 +2766,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             >
                                 <i class="fa-solid fa-message mt-1 shrink-0" aria-hidden="true"></i>
                                 <div>
-                                    <p class="font-bold">Admin review note</p>
+                                    <p class="font-bold">Verification note</p>
                                     <p class="mt-1 leading-6">{{ user.applicant_verification_notes }}</p>
                                 </div>
                             </div>
@@ -2864,8 +2922,8 @@ watch(() => form.value.grading_scale, (scale) => {
                             <div :class="sectionHeaderClass">
                                 <div>
                                     <p class="student-kicker">Final check</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Review profile</h3>
-                                    <p class="mt-1 text-sm text-slate-500">Check the saved details that matching rules and scholarship reviewers will use.</p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Check before applying</h3>
+                                    <p class="mt-1 text-sm text-slate-500">Confirm that your saved information is current and ready to share with a provider.</p>
                                 </div>
                                 <span
                                     :class="[
@@ -2877,122 +2935,101 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </span>
                             </div>
 
-                            <div :class="[sectionBodyClass, 'space-y-4']">
-                                <section :class="['overflow-hidden rounded-lg border', profileComplete ? 'border-slate-200 bg-white' : 'border-amber-200 bg-amber-50']">
-                                    <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                                        <div class="flex min-w-0 items-start gap-3">
-                                            <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md', profileComplete ? 'bg-slate-900 text-white' : 'bg-amber-100 text-amber-800']">
+                            <div :class="[sectionBodyClass, 'space-y-5']">
+                                <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                    <div
+                                        :class="[
+                                            'grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center',
+                                            profileComplete ? 'bg-slate-950 text-white' : 'bg-amber-50 text-slate-950',
+                                        ]"
+                                    >
+                                        <div class="flex min-w-0 items-start gap-4">
+                                            <span
+                                                :class="[
+                                                    'grid h-12 w-12 shrink-0 place-items-center rounded-md text-lg',
+                                                    profileComplete ? 'bg-amber-400 text-slate-950' : 'bg-amber-200 text-amber-900',
+                                                ]"
+                                            >
                                                 <i :class="profileComplete ? 'fa-solid fa-check' : 'fa-solid fa-list-check'" aria-hidden="true"></i>
                                             </span>
-                                            <div>
-                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Application readiness</p>
-                                                <h4 class="mt-1 text-lg font-bold text-slate-950">
-                                                    {{ profileComplete ? 'Your profile is ready to use' : `${missingProfileFields.length} required detail${missingProfileFields.length === 1 ? '' : 's'} remaining` }}
-                                                </h4>
-                                                <p class="mt-1 text-sm leading-6 text-slate-600">{{ profileQuality.detail }}</p>
+                                            <div class="min-w-0 flex-1">
+                                                <p :class="['text-xs font-bold uppercase tracking-[0.16em]', profileComplete ? 'text-amber-300' : 'text-amber-800']">Application readiness</p>
+                                                <div class="mt-1 flex flex-wrap items-end justify-between gap-2">
+                                                    <h4 class="text-lg font-bold">
+                                                        {{ profileComplete ? 'Profile ready for applications' : `${missingProfileFields.length} required detail${missingProfileFields.length === 1 ? '' : 's'} remaining` }}
+                                                    </h4>
+                                                    <span class="text-sm font-bold">{{ profileCompletion }}%</span>
+                                                </div>
+                                                <div :class="['mt-3 h-1.5 overflow-hidden rounded-full', profileComplete ? 'bg-white/15' : 'bg-amber-200']">
+                                                    <div :class="['h-full rounded-full', profileComplete ? 'bg-amber-400' : 'bg-amber-600']" :style="{ width: `${profileCompletion}%` }"></div>
+                                                </div>
+                                                <p :class="['mt-2 text-sm leading-5', profileComplete ? 'text-slate-300' : 'text-slate-600']">{{ profileQuality.detail }}</p>
                                             </div>
                                         </div>
 
                                         <button
                                             v-if="!profileComplete"
                                             type="button"
-                                            class="w-fit shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                            class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                                             @click="openSection(profileRecommendedAction.section)"
                                         >
-                                            Add next detail
+                                            Complete next detail
+                                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                         </button>
                                         <a
                                             v-else
                                             href="/dashboard/scholarships"
-                                            class="w-fit shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                            class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300"
                                         >
                                             Browse scholarships
+                                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                         </a>
                                     </div>
 
-                                    <div class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-3 sm:divide-x sm:divide-slate-200">
+                                    <div class="grid divide-y divide-slate-200 bg-white sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                                         <button
                                             type="button"
-                                            class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-left transition hover:bg-white sm:border-b-0"
+                                            class="flex items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50"
                                             @click="openSection(profileComplete ? 'personal' : recommendedSection)"
                                         >
-                                            <span>
-                                                <span class="block text-xs font-semibold text-slate-500">Required details</span>
-                                                <span class="mt-0.5 block text-sm font-bold text-slate-950">{{ profileComplete ? 'Complete' : `${missingProfileFields.length} remaining` }}</span>
+                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', profileComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']">
+                                                <i :class="profileComplete ? 'fa-solid fa-check' : 'fa-solid fa-pen'" aria-hidden="true"></i>
+                                            </span>
+                                            <span class="min-w-0 flex-1">
+                                                <span class="block text-xs font-semibold text-slate-500">Profile details</span>
+                                                <span class="mt-0.5 block truncate text-sm font-bold text-slate-950">{{ profileComplete ? 'Complete' : `${missingProfileFields.length} remaining` }}</span>
                                             </span>
                                             <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
                                         </button>
                                         <button
                                             type="button"
-                                            class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-left transition hover:bg-white sm:border-b-0"
+                                            class="flex items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50"
                                             @click="openSection('verification')"
                                         >
-                                            <span>
-                                                <span class="block text-xs font-semibold text-slate-500">Academic verification</span>
-                                                <span class="mt-0.5 block text-sm font-bold text-slate-950">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
+                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', profileVerificationStatus === 'approved' ? 'bg-emerald-100 text-emerald-700' : profileVerificationStatus === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">
+                                                <i class="fa-solid fa-shield-check" aria-hidden="true"></i>
+                                            </span>
+                                            <span class="min-w-0 flex-1">
+                                                <span class="block text-xs font-semibold text-slate-500">Academic record</span>
+                                                <span class="mt-0.5 block truncate text-sm font-bold text-slate-950">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
                                             </span>
                                             <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
                                         </button>
-                                        <a
-                                            href="/dashboard/documents"
-                                            class="flex items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-white"
-                                        >
-                                            <span>
+                                        <a href="/dashboard/documents" class="flex items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50">
+                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', preparedDocumentsCount ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600']">
+                                                <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+                                            </span>
+                                            <span class="min-w-0 flex-1">
                                                 <span class="block text-xs font-semibold text-slate-500">Prepared files</span>
-                                                <span class="mt-0.5 block text-sm font-bold text-slate-950">{{ preparedDocumentsCount }} saved</span>
+                                                <span class="mt-0.5 block truncate text-sm font-bold text-slate-950">{{ preparedDocumentsCount }} saved</span>
                                             </span>
                                             <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
                                         </a>
                                     </div>
 
-                                    <div class="border-t border-slate-200 px-4 py-4 sm:px-5">
-                                        <div class="flex flex-wrap items-center justify-between gap-3">
-                                            <div>
-                                                <p class="text-sm font-bold text-slate-950">Scholarship matching</p>
-                                                <p class="mt-0.5 text-xs text-slate-500">Your current profile compared with available programs.</p>
-                                            </div>
-                                            <a href="/dashboard/scholarships" class="flex items-center gap-2 text-xs font-bold text-slate-700 transition hover:text-slate-950">
-                                                Open finder
-                                                <i class="fa-solid fa-chevron-right text-[10px]" aria-hidden="true"></i>
-                                            </a>
-                                        </div>
-
-                                        <div class="mt-3 grid grid-cols-2 overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-4">
-                                            <div class="border-b border-r border-slate-200 px-3 py-2.5 sm:border-b-0">
-                                                <p class="text-lg font-bold text-slate-950">{{ matchSummary.strong_matches }}</p>
-                                                <p class="text-[11px] font-semibold text-slate-500">Strong matches</p>
-                                            </div>
-                                            <div class="border-b border-slate-200 px-3 py-2.5 sm:border-b-0 sm:border-r">
-                                                <p class="text-lg font-bold text-slate-950">{{ matchSummary.eligible_programs }}</p>
-                                                <p class="text-[11px] font-semibold text-slate-500">Eligible</p>
-                                            </div>
-                                            <div class="border-r border-slate-200 px-3 py-2.5">
-                                                <p class="text-lg font-bold text-slate-950">{{ matchSummary.preference_matches }}</p>
-                                                <p class="text-[11px] font-semibold text-slate-500">Preference fit</p>
-                                            </div>
-                                            <div class="px-3 py-2.5">
-                                                <p class="text-lg font-bold text-slate-950">{{ matchSummary.available_programs }}</p>
-                                                <p class="text-[11px] font-semibold text-slate-500">Programs checked</p>
-                                            </div>
-                                        </div>
-
-                                        <div v-if="matchSummary.top_gaps?.length" class="mt-3 flex flex-wrap items-center gap-2">
-                                            <span class="text-xs font-semibold text-slate-500">Improve your matches:</span>
-                                            <button
-                                                v-for="gap in matchSummary.top_gaps"
-                                                :key="gap.key || gap.label"
-                                                type="button"
-                                                class="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200"
-                                                @click="openSection(sectionForMatchGap(gap))"
-                                            >
-                                                {{ gap.label }} ({{ gap.count }})
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div v-if="missingProfileFields.length" class="border-t border-amber-200 px-4 py-3 sm:px-5">
-                                        <p class="text-xs font-bold text-amber-900">Still needed</p>
-                                        <div class="mt-2 flex flex-wrap gap-2">
+                                    <div v-if="missingProfileFields.length" class="border-t border-amber-200 bg-amber-50 px-4 py-3 sm:px-5">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="mr-1 text-xs font-bold text-amber-900">Still needed:</span>
                                             <button
                                                 v-for="field in missingProfileFields"
                                                 :key="field.key"
@@ -3006,55 +3043,59 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
                                 </section>
 
-                                <section>
-                                    <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                    <div class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                                         <div>
-                                            <h4 class="text-base font-bold text-slate-950">Saved information</h4>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">Review a section and edit it directly if something has changed.</p>
+                                            <h4 class="text-base font-bold text-slate-950">Information providers will see</h4>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">Review the details shared after you submit an application.</p>
                                         </div>
-                                        <p class="text-xs font-semibold text-slate-500">Relevant details are shared with a provider after you apply.</p>
+                                        <button
+                                            type="button"
+                                            class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                            @click="showProviderPreview = true"
+                                        >
+                                            <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                                            Preview provider view
+                                        </button>
                                     </div>
 
-                                    <div class="grid gap-3 md:grid-cols-2">
-                                    <article
-                                        v-for="group in reviewGroups"
-                                        :key="group.id"
-                                        class="overflow-hidden rounded-lg border border-slate-200 bg-white"
-                                    >
-                                        <div class="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
-                                            <div class="flex min-w-0 items-center gap-2.5">
-                                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-900 text-xs text-white">
-                                                    <i :class="group.icon" aria-hidden="true"></i>
-                                                </span>
-                                                <div class="min-w-0">
-                                                    <h5 class="truncate text-sm font-bold text-slate-950">{{ group.title }}</h5>
-                                                    <p class="mt-0.5 text-[11px] font-semibold text-slate-500">{{ sectionStatusLabel(profileSection(group.id)) }}</p>
+                                    <div class="divide-y divide-slate-200">
+                                        <article
+                                            v-for="group in reviewGroups"
+                                            :key="group.id"
+                                            class="grid gap-4 px-5 py-5 lg:grid-cols-[12rem_minmax(0,1fr)] lg:gap-6"
+                                        >
+                                            <div>
+                                                <div class="flex items-center gap-2.5">
+                                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-white">
+                                                        <i :class="group.icon" aria-hidden="true"></i>
+                                                    </span>
+                                                    <div class="min-w-0">
+                                                        <h5 class="truncate text-sm font-bold text-slate-950">{{ group.title }}</h5>
+                                                        <p class="mt-0.5 text-[11px] font-semibold text-slate-500">{{ sectionStatusLabel(profileSection(group.id)) }}</p>
+                                                    </div>
                                                 </div>
+                                                <button
+                                                    type="button"
+                                                    class="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 transition hover:text-slate-950"
+                                                    @click="openSection(group.id)"
+                                                >
+                                                    <i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
+                                                    Edit section
+                                                </button>
                                             </div>
-                                            <button
-                                                type="button"
-                                                class="shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                                @click="openSection(group.id)"
-                                            >
-                                                Edit
-                                            </button>
-                                        </div>
-                                        <dl class="divide-y divide-slate-100 px-4">
-                                            <div
-                                                v-for="item in group.items"
-                                                :key="`${group.title}-${item[0]}`"
-                                                class="grid gap-1 py-2.5 text-sm sm:grid-cols-[minmax(7rem,0.42fr)_minmax(0,1fr)] sm:gap-3"
-                                            >
-                                                <dt class="text-slate-500">{{ item[0] }}</dt>
-                                                <dd :class="['break-words font-semibold sm:text-right', hasValue(item[1]) ? 'text-slate-900' : 'text-slate-400']">
-                                                    {{ hasValue(item[1]) ? item[1] : 'Not provided' }}
-                                                </dd>
-                                            </div>
-                                        </dl>
-                                    </article>
+
+                                            <dl class="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+                                                <div v-for="item in group.items" :key="`${group.title}-${item[0]}`" class="min-w-0">
+                                                    <dt class="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">{{ item[0] }}</dt>
+                                                    <dd :class="['mt-1 break-words text-sm font-semibold leading-5', hasValue(item[1]) ? 'text-slate-900' : 'text-slate-400']">
+                                                        {{ hasValue(item[1]) ? item[1] : 'Not provided' }}
+                                                    </dd>
+                                                </div>
+                                            </dl>
+                                        </article>
                                     </div>
                                 </section>
-
                             </div>
                         </section>
 

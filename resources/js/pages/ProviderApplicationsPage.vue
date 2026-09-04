@@ -5,6 +5,7 @@ import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import ProviderWorkflowNav from '../components/ProviderWorkflowNav.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const appElement = document.getElementById('app');
@@ -141,7 +142,7 @@ const exportApplicationsUrl = computed(() => {
 const pageKicker = computed(() => (hasProgramContext.value ? 'Program Applicants' : 'Applicants'));
 const pageTitle = computed(() => (hasProgramContext.value
     ? selectedScholarshipContext.value?.title || 'Scholarship program'
-    : 'Review applicants'));
+    : 'Applicant workflow'));
 const pageDescription = computed(() => (hasProgramContext.value
     ? 'Review pre-screening submissions, then manage shared activities and formal outcomes when needed.'
     : 'Find applicants needing attention and review their profile, eligibility, and supporting files.'));
@@ -173,6 +174,18 @@ const reviewFilterOptions = computed(() => [
     },
     { value: 'all', label: 'All applicants', count: Number(queueFilterCounts.value.all ?? 0) },
 ]);
+const activeProviderWorkflowStage = computed(() => {
+    if (selectedQueueFilter.value === 'decided') {
+        return 'outcomes';
+    }
+
+    if (['active_stages', 'formal_application'].includes(selectedQueueFilter.value)
+        || activeWorkspaceSection.value === 'schedule') {
+        return 'stages';
+    }
+
+    return 'screening';
+});
 const emptyQueueMessage = computed(() => ({
     pending_review: 'No applicants currently need an initial review.',
     document_issues: 'No applicants currently have missing or unresolved document issues.',
@@ -671,7 +684,7 @@ onMounted(loadProviderData);
                         {{ selectedScholarshipContext?.title || 'Program workspace' }}
                     </a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <span class="font-semibold text-slate-950">{{ activeWorkspaceSection === 'schedule' ? 'Schedule' : 'Applicants' }}</span>
+                    <span class="font-semibold text-slate-950">{{ activeWorkspaceSection === 'schedule' ? 'Activities' : 'Applicants' }}</span>
                 </nav>
 
                 <header class="provider-hero">
@@ -689,6 +702,12 @@ onMounted(loadProviderData);
                         </div>
                     </div>
                 </header>
+
+                <ProviderWorkflowNav
+                    v-if="!hasProgramContext"
+                    :active="activeProviderWorkflowStage"
+                    class="mt-5"
+                />
 
                 <ProviderProgramNav
                     v-if="hasProgramContext"
@@ -770,8 +789,8 @@ onMounted(loadProviderData);
                     <section v-if="hasProgramContext && activeWorkspaceSection === 'schedule'" class="provider-panel p-5">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program Schedule</p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">Schedule applicant activities</h3>
+                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program activities</p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">Publish exam or interview details</h3>
                                 <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
                                     Publish confirmed exam or interview details after applicants reach that stage. Pre-screening and final decisions stay in applicant review.
                                 </p>

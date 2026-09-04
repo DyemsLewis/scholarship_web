@@ -16,16 +16,19 @@ use App\Models\ScholarshipFunnelEvent;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Rules\PhoneNumber;
+use App\Services\ApplicationWorkflowService;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationSchedulePayload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class MobileAuthController extends Controller
 {
@@ -194,10 +197,12 @@ class MobileAuthController extends Controller
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'suffix' => ['nullable', 'string', 'max:20'],
             'gender' => ['nullable', Rule::in(['female', 'male', 'non_binary', 'prefer_not_to_say'])],
             'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
+            'account_managed_by' => ['nullable', Rule::in(['learner', 'parent_guardian', 'relative', 'school_representative', 'other'])],
+            'citizenship_status' => ['nullable', Rule::in(['filipino', 'dual_filipino', 'other'])],
             'education_level' => ['nullable', 'string', 'max:100'],
             'school' => ['nullable', 'string', 'max:255'],
             'school_type' => ['nullable', 'string', 'max:100'],
@@ -205,6 +210,8 @@ class MobileAuthController extends Controller
             'course_or_strand' => ['nullable', 'string', 'max:255'],
             'year_level' => ['nullable', 'string', 'max:100'],
             'enrollment_status' => ['nullable', 'string', 'max:100'],
+            'academic_year' => ['nullable', 'string', 'max:20'],
+            'academic_term' => ['nullable', Rule::in(['full_year', 'first_grading_period', 'second_grading_period', 'third_grading_period', 'fourth_grading_period', 'first_semester', 'second_semester', 'third_term', 'summer_term', 'latest_completed_term', 'not_applicable'])],
             'gwa' => ['nullable', 'numeric', 'min:0', "max:{$gradeMaximum}"],
             'grading_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
             'income_bracket' => ['nullable', 'string', 'max:100'],
@@ -213,6 +220,8 @@ class MobileAuthController extends Controller
             'preferred_locations' => ['nullable', 'string', 'max:1000'],
             'willing_to_relocate' => ['nullable', Rule::in(['yes', 'no', 'depends'])],
             'support_needs' => ['nullable', 'string', 'max:1500'],
+            'current_scholarship_status' => ['nullable', Rule::in(['none', 'receiving', 'pending', 'completed', 'prefer_not_to_say'])],
+            'current_scholarship_details' => ['nullable', 'string', 'max:1000'],
             'scholarship_goal' => ['nullable', 'string', 'max:1500'],
             'address' => ['nullable', 'string', 'max:500'],
             'barangay' => ['nullable', 'string', 'max:255'],
@@ -223,21 +232,83 @@ class MobileAuthController extends Controller
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'birthdate' => ['nullable', 'date', 'before_or_equal:'.now()->subYears(5)->toDateString(), 'after_or_equal:'.now()->subYears(100)->toDateString()],
             'guardian_name' => ['nullable', 'string', 'max:255'],
+            'guardian_relationship' => ['nullable', 'string', 'max:100'],
             'guardian_contact' => ['nullable', 'string', 'max:30', new PhoneNumber],
+            'guardian_email' => ['nullable', 'email', 'max:255'],
+            'guardian_is_account_owner' => ['nullable', 'boolean'],
         ]);
 
         if (! AcademicRequirement::requiresNumeric($validated['grading_scale'] ?? null)) {
             $validated['gwa'] = null;
         }
 
-        $user->studentProfile()->updateOrCreate([
-            'user_id' => $user->id,
-        ], [
+        if (! in_array($validated['current_scholarship_status'] ?? null, ['receiving', 'pending'], true)) {
+            $validated['current_scholarship_details'] = null;
+        }
+
+        $profileValues = [
             ...$validated,
             'middle_initial' => filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null,
-        ]);
+            'guardian_is_account_owner' => (bool) ($validated['guardian_is_account_owner'] ?? false),
+        ];
+        $studentProfile = $user->studentProfile()->firstOrNew(['user_id' => $user->id]);
+        $studentProfile->fill($profileValues);
+        $verifiedFields = [
+            'education_level',
+            'school',
+            'school_type',
+            'learner_reference_number',
+            'course_or_strand',
+            'year_level',
+            'enrollment_status',
+            'academic_year',
+            'academic_term',
+            'gwa',
+            'grading_scale',
+        ];
+        $verificationReset = $studentProfile->verification_status === 'approved'
+            && $studentProfile->isDirty($verifiedFields);
+
+        if ($verificationReset) {
+            $studentProfile->fill([
+                'verification_status' => $user->applicantVerificationDocuments()
+                    ->where('document_type', 'academic_record')
+                    ->exists() ? 'pending' : 'unsubmitted',
+                'verification_notes' => null,
+                'verified_at' => null,
+                'verified_by' => null,
+            ]);
+        }
+
+        DB::transaction(function () use ($studentProfile, $user, $verificationReset): void {
+            $studentProfile->save();
+
+            if ($verificationReset) {
+                $user->applicantVerificationDocuments()
+                    ->where('document_type', 'academic_record')
+                    ->update([
+                        'status' => 'submitted',
+                        'review_notes' => null,
+                    ]);
+            }
+        });
 
         $user->unsetRelation('studentProfile');
+
+        if ($verificationReset) {
+            User::query()
+                ->where('role', 'admin')
+                ->where('account_status', 'active')
+                ->get()
+                ->filter(fn (User $admin) => $admin->hasPortalPermission('manage_reviews'))
+                ->each(fn (User $admin) => PortalNotification::create([
+                    'user_id' => $admin->id,
+                    'type' => 'applicant_profile_verification',
+                    'title' => 'Verified academic details changed',
+                    'message' => "{$user->name} changed verified academic information and needs another review.",
+                    'action_url' => route('admin.applicants.review.show', $user, false),
+                ]));
+        }
 
         if ($user->hasCompleteApplicantProfile()) {
             ScholarshipFunnelEvent::record(
@@ -260,14 +331,18 @@ class MobileAuthController extends Controller
             'mobile_profile_updated',
             "{$user->name} updated their profile from the mobile app.",
             $request,
+            ['verification_reset' => $verificationReset],
         );
 
         $freshUser = $user->fresh();
 
         return response()->json([
-            'message' => 'Applicant profile updated.',
+            'message' => $verificationReset
+                ? 'Academic details updated and returned for verification.'
+                : 'Applicant profile updated.',
             'user' => $this->userPayload($freshUser),
             'profile_readiness' => $freshUser->applicantProfileReadiness(),
+            'verification_reset' => $verificationReset,
         ]);
     }
 
@@ -446,6 +521,9 @@ class MobileAuthController extends Controller
             ],
             'document_checklist' => ['sometimes', 'array'],
             'document_checklist.*' => ['string', 'max:255'],
+            'application_answers' => ['sometimes', 'array', 'max:5'],
+            'application_answers.*.question_id' => ['required', 'string', 'max:80'],
+            'application_answers.*.answer' => ['nullable', 'string', 'max:1500'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -469,6 +547,11 @@ class MobileAuthController extends Controller
                     : 'This scholarship is no longer accepting applications.',
             ], 422);
         }
+
+        $applicationAnswers = $this->normalizeApplicationAnswers(
+            $scholarship,
+            $validated['application_answers'] ?? [],
+        );
 
         ScholarshipFunnelEvent::record(
             $user,
@@ -498,6 +581,7 @@ class MobileAuthController extends Controller
             'eligibility_score' => $eligibilityMatch['score'],
             'eligibility_breakdown' => $eligibilityMatch,
             'review_rubric_snapshot' => $scholarship->review_rubric ?? [],
+            'application_answers' => $applicationAnswers,
             'notes' => $validated['notes'] ?? null,
             'submitted_at' => now(),
         ]);
@@ -512,6 +596,7 @@ class MobileAuthController extends Controller
         ]);
 
         $this->attachPreparedDocumentsToApplication($user, $application, $validated['document_checklist'] ?? []);
+        $application = app(ApplicationWorkflowService::class)->start($application);
         app(DecisionSupportService::class)->syncApplication($application, 'mobile_application_submitted');
 
         $application->refresh();
@@ -855,6 +940,7 @@ class MobileAuthController extends Controller
             'distance_label' => $distanceKm === null ? null : number_format($distanceKm, 1).' km away',
             'requirements' => $scholarship->requirements,
             'optional_requirements' => $scholarship->optional_requirements,
+            'application_questions' => $scholarship->application_questions ?? [],
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),
             'award_amount' => $scholarship->award_amount,
@@ -969,6 +1055,7 @@ class MobileAuthController extends Controller
             'id' => $application->id,
             'status' => $application->status,
             'document_checklist' => $application->document_checklist ?? [],
+            'application_answers' => $application->application_answers ?? [],
             'document_readiness' => $this->documentReadiness($application),
             'eligibility_score' => $application->eligibility_score,
             'eligibility_breakdown' => $application->eligibility_breakdown,
@@ -1007,6 +1094,43 @@ class MobileAuthController extends Controller
                 ? $this->scholarshipPayload($application->scholarship, $application->applicant)
                 : null,
         ];
+    }
+
+    private function normalizeApplicationAnswers(Scholarship $scholarship, array $submittedAnswers): array
+    {
+        $answersByQuestion = collect($submittedAnswers)
+            ->filter(fn (mixed $answer): bool => is_array($answer) && filled($answer['question_id'] ?? null))
+            ->keyBy(fn (array $answer): string => (string) $answer['question_id']);
+        $missingRequired = [];
+
+        $answers = collect($scholarship->application_questions ?? [])
+            ->filter(fn (mixed $question): bool => is_array($question) && filled($question['id'] ?? null) && filled($question['prompt'] ?? null))
+            ->map(function (array $question) use ($answersByQuestion, &$missingRequired): array {
+                $questionId = (string) $question['id'];
+                $answer = trim((string) data_get($answersByQuestion->get($questionId), 'answer', ''));
+                $required = (bool) ($question['required'] ?? false);
+
+                if ($required && $answer === '') {
+                    $missingRequired[] = (string) $question['prompt'];
+                }
+
+                return [
+                    'question_id' => $questionId,
+                    'prompt' => (string) $question['prompt'],
+                    'required' => $required,
+                    'answer' => $answer,
+                ];
+            })
+            ->values()
+            ->all();
+
+        if ($missingRequired !== []) {
+            throw ValidationException::withMessages([
+                'application_answers' => 'Answer every required provider question before submitting.',
+            ]);
+        }
+
+        return $answers;
     }
 
     private function formalApplicationHandoffPayload(ScholarshipApplication $application): ?array

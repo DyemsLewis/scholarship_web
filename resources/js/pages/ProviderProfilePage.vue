@@ -5,6 +5,7 @@ import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import ProviderWorkflowNav from '../components/ProviderWorkflowNav.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
@@ -388,6 +389,8 @@ onMounted(loadProviderProfile);
                     </p>
                 </header>
 
+                <ProviderWorkflowNav active="organization" class="mt-5" />
+
                 <ProviderSectionNav section="organization" />
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
@@ -468,25 +471,6 @@ onMounted(loadProviderProfile);
                         </button>
                         <button
                             type="button"
-                            :aria-current="activeProfileSection === 'representative' ? 'page' : undefined"
-                            :class="[
-                                'flex items-center gap-3 rounded-md px-4 py-3 text-left transition',
-                                activeProfileSection === 'representative'
-                                    ? 'bg-slate-950 text-white'
-                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
-                            ]"
-                            @click="selectProfileSection('representative')"
-                        >
-                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', activeProfileSection === 'representative' ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">
-                                <i class="fa-solid fa-user-tie" aria-hidden="true"></i>
-                            </span>
-                            <span>
-                                <span class="block text-sm font-bold">Representative account</span>
-                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'representative' ? 'text-slate-300' : 'text-slate-500']">Private login and contact details</span>
-                            </span>
-                        </button>
-                        <button
-                            type="button"
                             :aria-current="activeProfileSection === 'verification' ? 'page' : undefined"
                             :class="[
                                 'flex items-center gap-3 rounded-md px-4 py-3 text-left transition',
@@ -505,6 +489,25 @@ onMounted(loadProviderProfile);
                                     <span :class="['rounded px-2 py-0.5 text-[9px] uppercase', verificationClass(user?.verification_status)]">{{ verificationLabel(user?.verification_status) }}</span>
                                 </span>
                                 <span :class="['mt-0.5 block text-xs', activeProfileSection === 'verification' ? 'text-slate-300' : 'text-slate-500']">Organization proof and admin review</span>
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            :aria-current="activeProfileSection === 'representative' ? 'page' : undefined"
+                            :class="[
+                                'flex items-center gap-3 rounded-md px-4 py-3 text-left transition',
+                                activeProfileSection === 'representative'
+                                    ? 'bg-slate-950 text-white'
+                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                            ]"
+                            @click="selectProfileSection('representative')"
+                        >
+                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', activeProfileSection === 'representative' ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">
+                                <i class="fa-solid fa-user-tie" aria-hidden="true"></i>
+                            </span>
+                            <span>
+                                <span class="block text-sm font-bold">Representative account</span>
+                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'representative' ? 'text-slate-300' : 'text-slate-500']">Private login and contact details</span>
                             </span>
                         </button>
                     </nav>

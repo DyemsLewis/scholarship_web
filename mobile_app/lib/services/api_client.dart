@@ -103,11 +103,13 @@ class ApiClient {
   Future<Map<String, dynamic>> submitApplication({
     required int scholarshipId,
     required List<String> documentChecklist,
+    List<Map<String, dynamic>> applicationAnswers = const [],
     String? notes,
   }) async {
     return _post('/applications', {
       'scholarship_id': scholarshipId,
       'document_checklist': documentChecklist,
+      'application_answers': applicationAnswers,
       'notes': notes,
     });
   }

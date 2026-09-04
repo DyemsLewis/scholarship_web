@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import ProviderWorkflowNav from '../components/ProviderWorkflowNav.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -12,13 +13,30 @@ const canManagePrograms = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_programs'),
 ));
+const canReviewApplications = computed(() => Boolean(
+    window.portalUser?.has_full_access
+        || window.portalUser?.permissions?.includes('review_applications'),
+));
 const canManageProfile = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_profile'),
 ));
 
-const recentPrograms = computed(() => scholarships.value.slice(0, 3));
+const recentPrograms = computed(() => scholarships.value.slice(0, 4));
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
+const providerName = computed(() => user.value?.provider_name || user.value?.name || 'Provider');
+const publishedProgramCount = computed(() => scholarships.value.filter((program) => program.status === 'published').length);
+const totalApplicationCount = computed(() => scholarships.value.reduce(
+    (total, program) => total + Number(program.applications_count ?? 0),
+    0,
+));
+const selectedRecipientCount = computed(() => scholarships.value.reduce(
+    (total, program) => total + Number(program.awarded_slots_count ?? 0),
+    0,
+));
+const draftPrograms = computed(() => scholarships.value.filter((program) => program.status === 'draft'));
+const rejectedPrograms = computed(() => scholarships.value.filter((program) => program.status === 'rejected'));
+const pendingPrograms = computed(() => scholarships.value.filter((program) => program.status === 'pending_review'));
 const providerProfileNeedsCompletion = computed(() => [
     user.value?.provider_name,
     user.value?.provider_type,
@@ -84,76 +102,95 @@ const verificationPrompt = computed(() => {
         action: 'View verification status',
     };
 });
-const programHealthSignals = computed(() => {
-    const draftPrograms = scholarships.value.filter((scholarship) => scholarship.status === 'draft');
-    const missingDocuments = scholarships.value.filter((scholarship) => !hasText(scholarship.requirements));
-    const missingLocations = scholarships.value.filter((scholarship) => !hasText(scholarship.location_address) || !hasText(scholarship.latitude) || !hasText(scholarship.longitude));
-    const expiredPublished = scholarships.value.filter((scholarship) => scholarship.status === 'published' && deadlineDays(scholarship.deadline) !== null && deadlineDays(scholarship.deadline) < 0);
+const workflowStates = computed(() => ({
+    organization: user.value?.can_post_scholarships ? 'complete' : 'attention',
+    programs: !user.value?.can_post_scholarships
+        ? 'pending'
+        : (scholarships.value.length === 0 || draftPrograms.value.length || rejectedPrograms.value.length ? 'attention' : 'complete'),
+    screening: reviewQueue.value.length
+        ? 'attention'
+        : (totalApplicationCount.value > 0 ? 'complete' : 'pending'),
+    stages: totalApplicationCount.value > 0 && reviewQueue.value.length === 0 ? 'attention' : 'pending',
+    outcomes: selectedRecipientCount.value > 0 ? 'complete' : 'pending',
+}));
+const nextAction = computed(() => {
+    if (!user.value?.can_post_scholarships) {
+        return {
+            eyebrow: 'Step 1 - Organization',
+            title: verificationPrompt.value.title,
+            description: verificationPrompt.value.description,
+            href: verificationActionHref.value,
+            label: verificationPrompt.value.action,
+            icon: 'fa-solid fa-building-shield',
+        };
+    }
 
-    return [
-        {
-            label: 'Draft completion',
+    if (scholarships.value.length === 0) {
+        return {
+            eyebrow: 'Step 2 - Programs',
+            title: 'Create your first scholarship program',
+            description: 'Define the support, eligible learners, required files, and selection process before sending it for admin review.',
+            href: canManagePrograms.value ? '/provider/programs/create' : '/provider/programs',
+            label: canManagePrograms.value ? 'Create program' : 'View programs',
+            icon: 'fa-solid fa-file-circle-plus',
+        };
+    }
+
+    if (reviewQueue.value.length && canReviewApplications.value) {
+        return {
+            eyebrow: 'Step 3 - Pre-screening',
+            title: `${reviewQueue.value.length} recent applicant${reviewQueue.value.length === 1 ? '' : 's'} need attention`,
+            description: 'Review eligibility, applicant information, and submitted files before advancing or declining each application.',
+            href: '/provider/applications?filter=pending_review',
+            label: 'Review applicants',
+            icon: 'fa-solid fa-user-check',
+        };
+    }
+
+    const programToFix = rejectedPrograms.value[0] ?? draftPrograms.value[0];
+
+    if (programToFix) {
+        return {
+            eyebrow: 'Step 2 - Programs',
+            title: programToFix.status === 'rejected' ? 'Update a program that needs changes' : 'Finish a program draft',
+            description: programToFix.title,
+            href: canManagePrograms.value ? `/provider/programs/${programToFix.id}/edit` : `/provider/programs/${programToFix.id}`,
+            label: canManagePrograms.value ? 'Continue setup' : 'Open program',
             icon: 'fa-solid fa-pen-ruler',
-            tone: draftPrograms.length ? 'warn' : 'good',
-            detail: draftPrograms.length ? `${draftPrograms.length} draft${draftPrograms.length === 1 ? '' : 's'} waiting.` : 'Clear.',
-            href: '/provider/programs',
-            action: 'Open programs',
-        },
-        {
-            label: 'Document quality',
-            icon: 'fa-solid fa-list-check',
-            tone: missingDocuments.length ? 'warn' : 'good',
-            detail: missingDocuments.length ? `${missingDocuments.length} missing docs.` : 'Clear.',
-            href: '/provider/programs',
-            action: 'Review requirements',
-        },
-        {
-            label: 'Location coverage',
-            icon: 'fa-solid fa-location-dot',
-            tone: missingLocations.length ? 'info' : 'good',
-            detail: missingLocations.length ? `${missingLocations.length} need map pins.` : 'Clear.',
-            href: '/provider/programs',
-            action: 'Check maps',
-        },
-        {
-            label: 'Deadline risk',
-            icon: 'fa-solid fa-calendar-day',
-            tone: expiredPublished.length ? 'warn' : 'good',
-            detail: expiredPublished.length ? `${expiredPublished.length} expired.` : 'Clear.',
-            href: '/provider/programs',
-            action: 'Update deadlines',
-        },
-    ];
+        };
+    }
+
+    if (pendingPrograms.value.length && publishedProgramCount.value === 0) {
+        return {
+            eyebrow: 'Step 2 - Programs',
+            title: 'Program review is in progress',
+            description: 'An administrator is reviewing your submitted program. You can check its status while you wait.',
+            href: '/provider/programs?status=pending_review',
+            label: 'Check program status',
+            icon: 'fa-solid fa-hourglass-half',
+        };
+    }
+
+    if (totalApplicationCount.value > 0 && canReviewApplications.value) {
+        return {
+            eyebrow: 'Step 4 - Next stages',
+            title: 'Continue active applicant work',
+            description: 'Manage formal application steps, provider-run activities, and final outcomes from the applicant workflow.',
+            href: '/provider/applications?filter=active_stages',
+            label: 'Open applicant workflow',
+            icon: 'fa-solid fa-arrow-right-arrow-left',
+        };
+    }
+
+    return {
+        eyebrow: 'Published programs',
+        title: 'Monitor your open programs',
+        description: 'Your programs are ready for applicant pre-screening. Review activity and keep deadlines or public details current.',
+        href: '/provider/programs',
+        label: 'View programs',
+        icon: 'fa-solid fa-binoculars',
+    };
 });
-
-function hasText(value) {
-    return value !== null && value !== undefined && String(value).trim() !== '';
-}
-
-function deadlineDays(value) {
-    const parsed = Date.parse(value ?? '');
-
-    if (Number.isNaN(parsed)) {
-        return null;
-    }
-
-    const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-
-    return Math.ceil((parsed - startOfToday) / 86400000);
-}
-
-function signalClass(tone) {
-    if (tone === 'good') {
-        return 'bg-slate-100 text-slate-600';
-    }
-
-    if (tone === 'warn') {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    return 'bg-slate-200 text-slate-700';
-}
 
 function verificationLabel(status) {
     return String(status ?? 'pending')
@@ -183,6 +220,27 @@ function statusClass(status) {
     }
 
     return 'bg-amber-100 text-amber-800';
+}
+
+function programActionLabel(program) {
+    if (program.status === 'draft') return 'Continue setup';
+    if (program.status === 'rejected') return 'Fix and resubmit';
+    if (program.status === 'pending_review') return 'View review status';
+    if (program.status === 'published' && Number(program.pending_review_applications_count ?? 0) > 0) return 'Review applicants';
+
+    return 'Open workspace';
+}
+
+function programActionHref(program) {
+    if (['draft', 'rejected'].includes(program.status) && canManagePrograms.value) {
+        return `/provider/programs/${program.id}/edit`;
+    }
+
+    if (program.status === 'published' && Number(program.pending_review_applications_count ?? 0) > 0 && canReviewApplications.value) {
+        return `/provider/programs/${program.id}/applications?workspace=applications`;
+    }
+
+    return `/provider/programs/${program.id}`;
 }
 
 async function loadProviderData() {
@@ -215,21 +273,23 @@ onMounted(loadProviderData);
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Provider Overview
+                                Provider workspace
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Your workspace
+                                Welcome, {{ providerName }}
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Continue the work that needs attention across your programs and applicants.
+                                Move from organization setup to applicant outcomes through one clear scholarship workflow.
                             </p>
                         </div>
 
                         <a
-                            href="/provider/programs"
-                            class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                            v-if="!isLoading && !errorMessage"
+                            :href="nextAction.href"
+                            class="rounded-md bg-slate-950 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
                         >
-                            Manage programs
+                            {{ nextAction.label }}
+                            <i class="fa-solid fa-arrow-right ml-2 text-xs" aria-hidden="true"></i>
                         </a>
                     </div>
                 </header>
@@ -245,174 +305,175 @@ onMounted(loadProviderData);
                 <div v-else class="provider-content-stack">
                     <section
                         :class="[
-                            'flex flex-col gap-4 rounded-lg border p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between',
+                            'relative overflow-hidden rounded-lg border p-5 shadow-sm sm:p-6',
                             user?.can_post_scholarships
-                                ? 'border-slate-200 bg-white'
+                                ? 'border-slate-800 bg-slate-950 text-white'
                                 : 'border-amber-200 bg-amber-50',
                         ]"
                     >
-                        <div class="flex min-w-0 items-center gap-3">
-                            <span
+                        <div v-if="user?.can_post_scholarships" class="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border-[42px] border-amber-300/10"></div>
+                        <div class="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex min-w-0 items-start gap-4">
+                                <span
+                                    :class="[
+                                        'grid h-11 w-11 shrink-0 place-items-center rounded-md',
+                                        user?.can_post_scholarships ? 'bg-amber-300 text-slate-950' : 'bg-amber-200 text-amber-900',
+                                    ]"
+                                >
+                                    <i :class="[nextAction.icon, 'text-sm']" aria-hidden="true"></i>
+                                </span>
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <p :class="['text-[10px] font-bold uppercase tracking-[0.16em]', user?.can_post_scholarships ? 'text-amber-300' : 'text-amber-800']">
+                                            {{ nextAction.eyebrow }}
+                                        </p>
+                                        <span :class="['rounded px-2 py-1 text-[9px] font-bold uppercase', verificationClass(user?.verification_status)]">
+                                            {{ verificationLabel(user?.verification_status) }} provider
+                                        </span>
+                                    </div>
+                                    <h3 :class="['mt-1 text-xl font-bold', user?.can_post_scholarships ? 'text-white' : 'text-slate-950']">
+                                        {{ nextAction.title }}
+                                    </h3>
+                                    <p :class="['mt-1 max-w-3xl text-sm leading-6', user?.can_post_scholarships ? 'text-slate-300' : 'text-amber-950/80']">
+                                        {{ nextAction.description }}
+                                    </p>
+                                    <p v-if="!user?.can_post_scholarships && user?.verification_notes" class="mt-2 text-xs leading-5 text-amber-900">
+                                        <span class="font-bold">Admin note:</span> {{ user.verification_notes }}
+                                    </p>
+                                </div>
+                            </div>
+                            <a
+                                :href="nextAction.href"
                                 :class="[
-                                    'flex h-11 w-11 shrink-0 items-center justify-center rounded-md',
+                                    'inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition',
                                     user?.can_post_scholarships
-                                        ? 'bg-slate-950 text-amber-200'
-                                        : 'bg-amber-200 text-amber-900',
+                                        ? 'bg-white text-slate-950 hover:bg-amber-300'
+                                        : 'bg-slate-950 text-white hover:bg-slate-800',
                                 ]"
                             >
-                                <i :class="[user?.can_post_scholarships ? 'fa-solid fa-building-columns' : 'fa-solid fa-shield-halved', 'text-sm']"></i>
-                            </span>
-                            <div class="min-w-0">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <h3 class="truncate text-lg font-bold text-slate-950">
-                                        {{ user?.provider_name || user?.name || 'Provider account' }}
-                                    </h3>
-                                    <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', verificationClass(user?.verification_status)]">
-                                        {{ verificationLabel(user?.verification_status) }}
-                                    </span>
-                                </div>
-                                <p :class="['mt-1 text-sm font-bold', user?.can_post_scholarships ? 'text-slate-600' : 'text-amber-950']">
-                                    {{ user?.can_post_scholarships ? 'Verified and ready to create programs.' : verificationPrompt.title }}
-                                </p>
-                                <p v-if="!user?.can_post_scholarships" class="mt-1 max-w-2xl text-sm leading-6 text-amber-900/80">
-                                    {{ verificationPrompt.description }}
-                                </p>
-                                <p v-if="!user?.can_post_scholarships && user?.verification_notes" class="mt-2 text-xs leading-5 text-amber-900">
-                                    <span class="font-bold">Admin note:</span> {{ user.verification_notes }}
-                                </p>
-                            </div>
-                        </div>
-                        <div class="flex shrink-0 gap-2">
-                            <a
-                                :href="verificationActionHref"
-                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                            >
-                                {{ user?.can_post_scholarships ? 'Profile' : verificationPrompt.action }}
-                            </a>
-                            <a v-if="user?.can_post_scholarships && canManagePrograms" href="/provider/programs/create" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">New program</a>
-                        </div>
-                    </section>
-
-                    <section v-if="reviewQueue.length" class="provider-panel p-5">
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Applicants
-                                </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Applicants needing attention
-                                </h3>
-                            </div>
-                            <a href="/provider/applications" class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800">
-                                Open applicants
-                            </a>
-                        </div>
-
-                        <div class="mt-4 grid gap-3 lg:grid-cols-3">
-                            <a
-                                v-for="application in reviewQueue"
-                                :key="application.id"
-                                :href="application.detail_url"
-                                class="flex h-full min-w-0 flex-col rounded-md border border-slate-200 bg-slate-50 p-3.5 transition hover:border-slate-300 hover:bg-white"
-                            >
-                                <div class="flex items-start justify-between gap-3">
-                                    <p class="line-clamp-2 min-h-10 text-sm font-bold leading-5 text-slate-950">
-                                        {{ application.applicant || 'Applicant' }}
-                                    </p>
-                                    <span class="shrink-0 rounded-md bg-slate-200 px-2 py-1 text-[10px] font-bold uppercase text-slate-700">
-                                        {{ verificationLabel(application.status) }}
-                                    </span>
-                                </div>
-                                <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
-                                    {{ application.scholarship || 'Scholarship program' }}
-                                </p>
-                                <div class="mt-auto flex items-center justify-between gap-3 pt-4 text-xs font-bold text-slate-600">
-                                    <span>{{ application.pending_documents }} pending file{{ application.pending_documents === 1 ? '' : 's' }}</span>
-                                    <span>{{ application.submitted_at }}</span>
-                                </div>
+                                {{ nextAction.label }}
+                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                             </a>
                         </div>
                     </section>
 
-                    <div class="grid items-stretch gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-                    <section v-if="canManagePrograms" class="provider-panel h-full overflow-hidden">
-                        <div class="border-b border-slate-200 px-5 py-4">
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Program Health
-                                </p>
-                                <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                    Checks before publishing
-                                </h3>
-                            </div>
-                        </div>
+                    <ProviderWorkflowNav :states="workflowStates" show-heading />
 
-                        <div class="divide-y divide-slate-200">
+                    <div class="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+                        <section class="provider-panel h-full overflow-hidden">
+                            <header class="flex items-end justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Work queue</p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">Applicants needing attention</h3>
+                                </div>
+                                <a v-if="reviewQueue.length" href="/provider/applications?filter=pending_review" class="shrink-0 text-xs font-bold text-slate-600 transition hover:text-slate-950">
+                                    View all <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i>
+                                </a>
+                            </header>
+
+                            <div v-if="reviewQueue.length" class="divide-y divide-slate-200">
+                                <a
+                                    v-for="application in reviewQueue"
+                                    :key="application.id"
+                                    :href="application.detail_url"
+                                    class="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50"
+                                >
+                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">
+                                        <i class="fa-solid fa-user" aria-hidden="true"></i>
+                                    </span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block truncate text-sm font-bold text-slate-950">{{ application.applicant || 'Applicant' }}</span>
+                                        <span class="mt-0.5 block truncate text-xs text-slate-500">{{ application.scholarship || 'Scholarship program' }}</span>
+                                    </span>
+                                    <span class="hidden shrink-0 text-right sm:block">
+                                        <span class="block text-xs font-bold text-slate-700">{{ application.pending_documents }} file{{ application.pending_documents === 1 ? '' : 's' }} pending</span>
+                                        <span class="mt-0.5 block text-[11px] text-slate-500">{{ application.submitted_at }}</span>
+                                    </span>
+                                    <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 transition group-hover:text-slate-700" aria-hidden="true"></i>
+                                </a>
+                            </div>
+
+                            <div v-else class="flex items-center gap-3 px-5 py-6">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700">
+                                    <i class="fa-solid fa-check" aria-hidden="true"></i>
+                                </span>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-950">No recent pre-screening reviews are waiting</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">Use the workflow above to check active stages or recorded outcomes.</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="provider-panel h-full overflow-hidden">
+                            <header class="border-b border-slate-200 px-5 py-4">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Current activity</p>
+                                <h3 class="mt-1 text-lg font-bold text-slate-950">Operating picture</h3>
+                            </header>
+                            <dl class="divide-y divide-slate-200">
+                                <div class="flex items-center justify-between gap-4 px-5 py-3.5">
+                                    <dt class="text-sm font-semibold text-slate-600">Published programs</dt>
+                                    <dd class="text-sm font-bold text-slate-950">{{ publishedProgramCount }} of {{ scholarships.length }}</dd>
+                                </div>
+                                <div class="flex items-center justify-between gap-4 px-5 py-3.5">
+                                    <dt class="text-sm font-semibold text-slate-600">Applications received</dt>
+                                    <dd class="text-sm font-bold text-slate-950">{{ totalApplicationCount }}</dd>
+                                </div>
+                                <div class="flex items-center justify-between gap-4 px-5 py-3.5">
+                                    <dt class="text-sm font-semibold text-slate-600">Selected recipients</dt>
+                                    <dd class="text-sm font-bold text-slate-950">{{ selectedRecipientCount }}</dd>
+                                </div>
+                                <div class="flex items-center justify-between gap-4 px-5 py-3.5">
+                                    <dt class="text-sm font-semibold text-slate-600">Programs in admin review</dt>
+                                    <dd class="text-sm font-bold text-slate-950">{{ pendingPrograms.length }}</dd>
+                                </div>
+                            </dl>
+                        </section>
+                    </div>
+
+                    <section class="provider-panel overflow-hidden">
+                        <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program cycle</p>
+                                <h3 class="mt-1 text-lg font-bold text-slate-950">Programs in motion</h3>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Each row opens the next useful action for that program.</p>
+                            </div>
+                            <div class="flex gap-2">
+                                <a v-if="user?.can_post_scholarships && canManagePrograms" href="/provider/programs/create" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">New program</a>
+                                <a href="/provider/programs" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">View all programs</a>
+                            </div>
+                        </header>
+
+                        <div v-if="recentPrograms.length" class="divide-y divide-slate-200">
                             <a
-                                v-for="signal in programHealthSignals"
-                                :key="signal.label"
-                                :href="signal.href"
+                                v-for="program in recentPrograms"
+                                :key="program.id"
+                                :href="programActionHref(program)"
                                 class="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50"
                             >
-                                <span :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-md', signalClass(signal.tone)]">
-                                    <i :class="[signal.icon, 'text-xs']"></i>
-                                </span>
+                                <img :src="program.image_url || '/uploads/scholarship-default.jpg'" :alt="program.title" class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200">
                                 <span class="min-w-0 flex-1">
-                                    <span class="block text-sm font-bold text-slate-950">{{ signal.label }}</span>
-                                    <span class="mt-0.5 block text-sm text-slate-500">{{ signal.detail }}</span>
+                                    <span class="flex min-w-0 items-center gap-2">
+                                        <span class="truncate text-sm font-bold text-slate-950">{{ program.title }}</span>
+                                        <span :class="['hidden shrink-0 rounded px-2 py-1 text-[9px] font-bold uppercase sm:inline-flex', statusClass(program.status)]">{{ verificationLabel(program.status) }}</span>
+                                    </span>
+                                    <span class="mt-0.5 block text-xs text-slate-500">
+                                        {{ program.applications_count ?? 0 }} applicants
+                                        <span class="mx-1 text-slate-300">/</span>
+                                        Updated {{ program.updated_at || 'recently' }}
+                                    </span>
                                 </span>
-                                <span class="hidden text-xs font-bold text-slate-500 sm:block">{{ signal.action }}</span>
-                                <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 transition group-hover:text-slate-600"></i>
+                                <span class="hidden shrink-0 text-xs font-bold text-slate-600 sm:block">{{ programActionLabel(program) }}</span>
+                                <i class="fa-solid fa-arrow-right text-xs text-slate-300 transition group-hover:text-slate-700" aria-hidden="true"></i>
                             </a>
                         </div>
+                        <div v-else class="flex flex-col items-start gap-3 px-5 py-6 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p class="text-sm font-bold text-slate-950">No scholarship programs yet</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Complete organization verification, then create the first program.</p>
+                            </div>
+                            <a :href="verificationActionHref" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Start setup</a>
+                        </div>
                     </section>
-
-                    <section class="h-full">
-                        <article class="provider-panel h-full p-5">
-                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                        Recent Programs
-                                    </p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                        Latest scholarship records
-                                    </h3>
-                                </div>
-                                <a
-                                    href="/provider/programs"
-                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                                >
-                                    {{ canManagePrograms ? 'Manage programs' : 'View programs' }}
-                                </a>
-                            </div>
-
-                            <div v-if="recentPrograms.length" class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
-                                <a
-                                    v-for="program in recentPrograms"
-                                    :key="program.id"
-                                    :href="canManagePrograms ? `/provider/programs/${program.id}/edit` : '/provider/programs'"
-                                    class="flex flex-col gap-2 bg-white p-3 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
-                                >
-                                    <div class="min-w-0">
-                                        <p class="truncate text-sm font-bold text-slate-950">
-                                            {{ program.title }}
-                                        </p>
-                                        <p class="mt-1 text-xs text-slate-500">
-                                            Updated {{ program.updated_at || 'recently' }}
-                                        </p>
-                                    </div>
-                                    <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(program.status)]">
-                                        {{ verificationLabel(program.status) }}
-                                    </span>
-                                </a>
-
-                            </div>
-                            <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                                No programs yet. Create the first scholarship when your provider account is approved.
-                            </div>
-                        </article>
-                    </section>
-                    </div>
 
                 </div>
 

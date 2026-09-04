@@ -344,14 +344,14 @@ class ScholarshipEligibilityService
 
     public function matchesAnyOption(string $value, array $options): bool
     {
-        $normalizedValue = str($value)->lower()->squish()->toString();
+        $normalizedValue = $this->normalizeOption($value);
 
         if ($this->hasOpenOption($options)) {
             return true;
         }
 
         return collect($options)->contains(function (string $option) use ($normalizedValue) {
-            $normalizedOption = str($option)->lower()->squish()->toString();
+            $normalizedOption = $this->normalizeOption($option);
 
             return str_contains($normalizedValue, $normalizedOption) || str_contains($normalizedOption, $normalizedValue);
         });
@@ -368,7 +368,7 @@ class ScholarshipEligibilityService
             return false;
         }
 
-        $normalized = strtolower((string) preg_replace('/\s+/', ' ', trim(str_replace(['.', ';', ':'], '', $option))));
+        $normalized = $this->normalizeOption($option);
 
         return in_array($normalized, [
             'any',
@@ -429,6 +429,16 @@ class ScholarshipEligibilityService
             || str_contains($normalized, 'anywhere in the philippines')
             || str_contains($normalized, 'within the philippines')
             || str_contains($normalized, 'all over the philippines');
+    }
+
+    private function normalizeOption(string $option): string
+    {
+        return str($option)
+            ->lower()
+            ->replace(['_', '-', '/'], ' ')
+            ->replaceMatches('/[.;:]+/', '')
+            ->squish()
+            ->toString();
     }
 
     private function addOptionCriterion(

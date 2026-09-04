@@ -60,6 +60,10 @@ const documentRequirementSummary = computed(() => scholarship.value?.application
 const selectionPlan = computed(() => selectionPlanFor(scholarship.value));
 const canApply = computed(() => profileReadiness.value.complete);
 const isEligible = computed(() => scholarship.value?.eligibility_match?.is_eligible !== false);
+const eligibilityChecks = computed(() => new Map(
+    (scholarship.value?.eligibility_match?.criteria ?? [])
+        .map((criterion) => [criterion.key, criterion]),
+));
 const isAcceptingApplications = computed(() => scholarship.value?.is_accepting_applications !== false);
 const isUpcomingProgram = computed(() => Boolean(
     scholarship.value?.application_opens_date
@@ -184,18 +188,20 @@ const fitHighlights = computed(() => {
         return [];
     }
 
+    const yearLevelCheck = eligibilityChecks.value.get('year_level');
+
     return [
-        { icon: 'fa-solid fa-school', label: 'Education level', value: criteriaLabel(current.eligible_education_levels) },
-        { icon: 'fa-solid fa-building-columns', label: 'School type', value: criteriaLabel(current.eligible_school_types) },
-        { icon: 'fa-solid fa-book-open', label: 'Track, strand, course, or program', value: current.eligible_courses || 'Any' },
+        { icon: 'fa-solid fa-school', label: 'Education level', value: eligibilityRuleLabel('education_level', current.eligible_education_levels) },
+        { icon: 'fa-solid fa-building-columns', label: 'School type', value: eligibilityRuleLabel('school_type', current.eligible_school_types) },
+        { icon: 'fa-solid fa-book-open', label: 'Track, strand, course, or program', value: eligibilityRuleLabel('course', current.eligible_courses) },
         {
             icon: 'fa-solid fa-layer-group',
             label: 'Grade / year level',
-            value: current.eligible_year_levels || 'Any',
-            items: criteriaItems(current.eligible_year_levels),
+            value: eligibilityRuleLabel('year_level', current.eligible_year_levels),
+            items: yearLevelCheck?.status === 'info' ? [] : criteriaItems(current.eligible_year_levels),
         },
-        { icon: 'fa-solid fa-wallet', label: 'Household income', value: current.income_requirement || 'Any' },
-        { icon: 'fa-solid fa-location-dot', label: 'Location coverage', value: current.eligible_locations || current.location_name || 'Any' },
+        { icon: 'fa-solid fa-wallet', label: 'Household income', value: eligibilityRuleLabel('income', current.income_requirement) },
+        { icon: 'fa-solid fa-location-dot', label: 'Location coverage', value: eligibilityRuleLabel('location', current.eligible_locations) },
         { icon: 'fa-solid fa-chart-line', label: 'Academic requirement', value: academicRequirementLabel(current) },
     ];
 });
@@ -335,7 +341,15 @@ function programEventPlaceLabel(event) {
 function criteriaLabel(value) {
     const items = criteriaItems(value);
 
-    return items.length ? items.join(', ') : 'Any';
+    return items.length ? items.join(', ') : 'No restriction';
+}
+
+function eligibilityRuleLabel(key, value) {
+    if (eligibilityChecks.value.get(key)?.status === 'info') {
+        return 'No restriction';
+    }
+
+    return criteriaLabel(value);
 }
 
 function criteriaItems(value) {
@@ -424,20 +438,22 @@ function criterionClass(status) {
     return 'border-slate-200 bg-slate-50 text-slate-600';
 }
 
-function criterionStatusLabel(status) {
-    if (status === 'pass') {
+function criterionStatusLabel(criterion) {
+    if (criterion.status === 'pass') {
         return 'Matched';
     }
 
-    if (status === 'fail') {
+    if (criterion.status === 'fail') {
         return 'Not matched';
     }
 
-    if (status === 'missing') {
+    if (criterion.status === 'missing') {
         return 'Missing info';
     }
 
-    return 'Info';
+    return criterion.key === 'academic' && criterion.requirement
+        ? 'Provider review'
+        : 'No restriction';
 }
 
 async function loadScholarship() {
@@ -682,7 +698,7 @@ onMounted(loadScholarship);
                                     </span>
                                     <div>
                                         <p class="text-sm font-bold text-slate-950">
-                                            {{ canApply ? (scholarship.eligibility_match?.label || eligibilityState.title) : eligibilityState.title }}
+                                            {{ canApply && isEligible ? (scholarship.eligibility_match?.label || eligibilityState.title) : eligibilityState.title }}
                                         </p>
                                         <p class="mt-1 text-sm leading-6 text-slate-600">
                                             <template v-if="scholarship.eligibility_match?.applicable">
@@ -693,6 +709,7 @@ onMounted(loadScholarship);
                                             </template>
                                             The provider still makes the final decision.
                                         </p>
+                                        <p v-if="canApply && !isEligible" class="mt-1 text-sm font-semibold text-rose-700">{{ applicationBlockedLabel }}</p>
                                     </div>
                                 </div>
 
@@ -746,12 +763,12 @@ onMounted(loadScholarship);
                                                 <p class="mt-1 text-xs leading-5 text-slate-500">
                                                     Your profile: {{ eligibilityCriterionText(criterion.student_value || criterion.studentValue, 'Not set') }}
                                                 </p>
-                                                <p v-if="criterion.requirement" class="mt-0.5 text-xs leading-5 text-slate-500">
-                                                    Provider rule: {{ eligibilityCriterionText(criterion.requirement) }}
+                                                <p v-if="criterion.requirement || criterion.status === 'info'" class="mt-0.5 text-xs leading-5 text-slate-500">
+                                                    Provider rule: {{ criterionStatusLabel(criterion) === 'No restriction' ? 'No restriction' : eligibilityCriterionText(criterion.requirement) }}
                                                 </p>
                                             </div>
                                             <span :class="['w-fit rounded-md border px-2.5 py-1 text-xs font-bold', criterionClass(criterion.status)]">
-                                                {{ criterionStatusLabel(criterion.status) }}
+                                                {{ criterionStatusLabel(criterion) }}
                                             </span>
                                         </div>
                                     </div>

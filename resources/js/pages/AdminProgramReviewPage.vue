@@ -16,10 +16,10 @@ const reviewStatus = ref('pending_review');
 const reviewNotes = ref('');
 const requestedSection = new URLSearchParams(window.location.search).get('section');
 const reviewSections = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'offer', label: 'Offer & eligibility' },
-    { key: 'process', label: 'Process & requirements' },
-    { key: 'decision', label: 'Decision' },
+    { key: 'overview', label: 'Review summary', icon: 'fa-solid fa-list-check' },
+    { key: 'offer', label: 'Offer & eligibility', icon: 'fa-solid fa-gift' },
+    { key: 'process', label: 'Process & requirements', icon: 'fa-solid fa-route' },
+    { key: 'decision', label: 'Decision', icon: 'fa-solid fa-gavel' },
 ];
 const activeReviewSection = ref(reviewSections.some((section) => section.key === requestedSection) ? requestedSection : 'overview');
 const activeReviewSectionIndex = computed(() => reviewSections.findIndex((section) => section.key === activeReviewSection.value));
@@ -237,6 +237,51 @@ const readinessChecks = computed(() => {
     return checks;
 });
 const attentionCount = computed(() => readinessChecks.value.filter((check) => check.tone === 'warn').length);
+const programReviewFocus = computed(() => {
+    const status = scholarship.value?.status ?? 'pending_review';
+
+    if (status === 'published') {
+        return {
+            eyebrow: 'Publication complete',
+            title: 'This program is visible to applicants',
+            description: 'The current program record has an approved publication decision.',
+            icon: 'fa-solid fa-check',
+            section: 'decision',
+            action: 'View decision',
+        };
+    }
+
+    if (status === 'rejected') {
+        return {
+            eyebrow: 'Provider action needed',
+            title: 'Program corrections were requested',
+            description: 'Review the decision note and program record while the provider prepares an update.',
+            icon: 'fa-solid fa-rotate',
+            section: 'decision',
+            action: 'View decision',
+        };
+    }
+
+    if (attentionCount.value) {
+        return {
+            eyebrow: 'Review needed',
+            title: `${attentionCount.value} readiness item${attentionCount.value === 1 ? '' : 's'} need attention`,
+            description: 'Open the review summary to identify missing or unclear information before deciding.',
+            icon: 'fa-solid fa-triangle-exclamation',
+            section: 'overview',
+            action: 'Review checklist',
+        };
+    }
+
+    return {
+        eyebrow: 'Ready for decision',
+        title: 'The publication checks are complete',
+        description: 'Review the offer and process once more, then record the publication decision.',
+        icon: 'fa-solid fa-arrow-right',
+        section: 'decision',
+        action: 'Record decision',
+    };
+});
 
 function hasText(value) {
     return value !== null && value !== undefined && String(value).trim() !== '';
@@ -421,11 +466,9 @@ onMounted(loadScholarship);
                 <header class="admin-hero">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Program Review</p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">Program review details</h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Confirm that applicants will see complete, accurate, and understandable scholarship information.
-                            </p>
+                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Program review</p>
+                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">Review scholarship program</h2>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Confirm the offer, eligibility, and applicant process before publishing the program.</p>
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <a
@@ -462,23 +505,85 @@ onMounted(loadScholarship);
                     <p class="mt-1 text-sm leading-6 text-rose-700">{{ loadError }}</p>
                 </div>
 
-                <div v-else class="mt-6 space-y-5">
+                <div v-else class="mt-6 space-y-4">
                     <section class="admin-panel overflow-hidden">
-                        <nav class="grid gap-1 p-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="Program review steps">
+                        <div class="flex flex-col gap-4 border-l-4 border-l-amber-400 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                            <div class="flex min-w-0 items-center gap-3">
+                                <img
+                                    :src="scholarship.image_url || '/uploads/scholarship-default.jpg'"
+                                    :alt="scholarship.title"
+                                    class="h-12 w-12 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
+                                >
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">{{ scholarship.category || 'Scholarship program' }}</p>
+                                    <h3 class="mt-1 truncate text-lg font-bold text-slate-950">{{ scholarship.title }}</h3>
+                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+                                        <span>{{ scholarship.provider || 'Provider' }}</span>
+                                        <span :class="['rounded-md px-2 py-0.5 text-[10px] font-bold uppercase', statusClass(scholarship.provider_verification_status)]">
+                                            {{ isProviderVerified ? 'Provider verified' : 'Provider needs review' }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <span :class="['w-fit shrink-0 rounded-md px-3 py-1.5 text-xs font-bold uppercase', statusClass(scholarship.status)]">
+                                {{ statusLabel(scholarship.status) }}
+                            </span>
+                        </div>
+
+                        <dl class="grid border-t border-slate-200 bg-slate-50/80 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                            <div
+                                v-for="(fact, index) in summaryFacts"
+                                :key="fact.label"
+                                :class="[
+                                    'p-3 lg:border-b-0',
+                                    index < summaryFacts.length - 1 ? 'border-b border-slate-200' : '',
+                                    index >= summaryFacts.length - 2 ? 'sm:border-b-0' : '',
+                                    index % 2 === 0 ? 'sm:border-r sm:border-slate-200' : '',
+                                    index < summaryFacts.length - 1 ? 'lg:border-r lg:border-slate-200' : '',
+                                ]"
+                            >
+                                <dt class="text-xs font-semibold text-slate-500">{{ fact.label }}</dt>
+                                <dd class="mt-1 line-clamp-2 break-words font-bold text-slate-950">{{ fact.value }}</dd>
+                            </div>
+                        </dl>
+
+                        <div class="flex flex-col gap-4 border-t border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                            <div class="flex min-w-0 items-start gap-3">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-amber-300">
+                                    <i :class="programReviewFocus.icon" aria-hidden="true"></i>
+                                </span>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{{ programReviewFocus.eyebrow }}</p>
+                                    <p class="mt-1 text-sm font-bold text-slate-950">{{ programReviewFocus.title }}</p>
+                                    <p class="mt-1 max-w-3xl text-xs leading-5 text-slate-500">{{ programReviewFocus.description }}</p>
+                                </div>
+                            </div>
                             <button
-                                v-for="(section, index) in reviewSections"
+                                type="button"
+                                class="w-fit shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800"
+                                @click="selectReviewSection(programReviewFocus.section)"
+                            >
+                                {{ programReviewFocus.action }}
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="admin-panel overflow-hidden">
+                        <nav class="grid gap-1 p-1 sm:grid-cols-2 xl:grid-cols-4" aria-label="Program review sections">
+                            <button
+                                v-for="section in reviewSections"
                                 :key="section.key"
                                 type="button"
                                 :aria-current="activeReviewSection === section.key ? 'step' : undefined"
                                 :class="[
-                                    'flex min-w-0 items-center gap-3 rounded-md px-3 py-3 text-left transition',
+                                    'flex min-w-0 items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
                                     activeReviewSection === section.key
                                         ? 'bg-slate-950 text-white'
                                         : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
                                 ]"
                                 @click="selectReviewSection(section.key)"
                             >
-                                <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold', activeReviewSection === section.key ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">{{ index + 1 }}</span>
+                                <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', activeReviewSection === section.key ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-600']"><i :class="section.icon" aria-hidden="true"></i></span>
                                 <span class="min-w-0">
                                     <span class="block truncate text-sm font-bold">{{ section.label }}</span>
                                     <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
@@ -492,59 +597,16 @@ onMounted(loadScholarship);
                         </nav>
                     </section>
 
-                    <div v-if="activeReviewSection !== 'decision'" class="space-y-5">
-                        <article v-if="activeReviewSection === 'overview'" class="admin-panel overflow-hidden">
-                            <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
-                                <img
-                                    :src="scholarship.image_url || '/uploads/scholarship-default.jpg'"
-                                    :alt="scholarship.title"
-                                    class="h-16 w-16 shrink-0 rounded-md bg-slate-50 object-contain p-2 ring-1 ring-slate-200"
-                                >
-                                <div class="min-w-0 flex-1">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                        <div class="min-w-0">
-                                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
-                                                {{ scholarship.category || 'Scholarship program' }}
-                                            </p>
-                                            <h1 class="mt-1 text-xl font-bold text-slate-950">{{ scholarship.title }}</h1>
-                                            <p class="mt-1 text-sm text-slate-500">
-                                                {{ scholarship.provider || 'Provider' }} - Updated {{ scholarship.updated_at || 'recently' }}
-                                            </p>
-                                        </div>
-                                        <span :class="['w-fit shrink-0 rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(scholarship.status)]">
-                                            {{ statusLabel(scholarship.status) }}
-                                        </span>
-                                    </div>
-                                    <p class="mt-3 whitespace-pre-line text-sm leading-6 text-slate-700">
-                                        {{ scholarship.description || 'No program description provided.' }}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-2 lg:grid-cols-4">
-                                <div
-                                    v-for="(fact, index) in summaryFacts"
-                                    :key="fact.label"
-                                    :class="[
-                                        'p-4 lg:border-b-0',
-                                        index < summaryFacts.length - 1 ? 'border-b border-slate-200' : '',
-                                        index >= summaryFacts.length - 2 ? 'sm:border-b-0' : '',
-                                        index % 2 === 0 ? 'sm:border-r sm:border-slate-200' : '',
-                                        index < summaryFacts.length - 1 ? 'lg:border-r lg:border-slate-200' : '',
-                                    ]"
-                                >
-                                    <dt class="text-xs font-semibold text-slate-500">{{ fact.label }}</dt>
-                                    <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ fact.value }}</dd>
-                                </div>
-                            </dl>
-                        </article>
-
+                    <div v-if="activeReviewSection !== 'decision'" class="space-y-4">
                         <article v-if="activeReviewSection === 'overview'" class="admin-panel p-5">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Publication readiness</p>
-                                    <h3 class="mt-1 text-xl font-bold text-slate-950">Review checklist</h3>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">Check the important items before choosing a review outcome.</p>
+                                <div class="flex items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span>
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Publication readiness</p>
+                                        <h3 class="mt-1 text-xl font-bold text-slate-950">Review checklist</h3>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">Check the applicant-facing record before choosing a review outcome.</p>
+                                    </div>
                                 </div>
                                 <span
                                     :class="[
@@ -555,6 +617,11 @@ onMounted(loadScholarship);
                                     {{ attentionCount ? `${attentionCount} need attention` : 'Ready to review' }}
                                 </span>
                             </div>
+
+                            <section class="mt-4 border-l-4 border-slate-300 bg-slate-50 px-4 py-3">
+                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Program description</p>
+                                <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ scholarship.description || 'No program description provided.' }}</p>
+                            </section>
 
                             <div class="mt-4 grid overflow-hidden rounded-md border border-slate-200 md:grid-cols-2">
                                 <div
@@ -860,10 +927,14 @@ onMounted(loadScholarship);
 
                     <aside v-if="['overview', 'decision'].includes(activeReviewSection)" class="space-y-4">
                         <section v-if="activeReviewSection === 'decision'" class="admin-panel w-full p-5">
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>
-                                    <h3 class="mt-1 text-xl font-bold text-slate-950">Review outcome</h3>
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="flex items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-gavel" aria-hidden="true"></i></span>
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>
+                                        <h3 class="mt-1 text-xl font-bold text-slate-950">Publication decision</h3>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">Publish the program, return it for correction, or keep it in review.</p>
+                                    </div>
                                 </div>
                                 <span :class="['rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(scholarship.status)]">
                                     {{ statusLabel(scholarship.status) }}
@@ -875,7 +946,7 @@ onMounted(loadScholarship);
                                 Confirm them before publishing or explain the required correction in your note.
                             </div>
 
-                            <div class="mt-4 grid gap-2">
+                            <div class="mt-4 grid gap-2 md:grid-cols-3">
                                 <button
                                     v-for="option in reviewStatusOptions"
                                     :key="option.value"
@@ -919,30 +990,35 @@ onMounted(loadScholarship);
                             </button>
                         </section>
 
-                        <section v-if="activeReviewSection === 'overview'" class="admin-panel max-w-3xl p-5">
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Provider</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">{{ scholarship.provider || 'Provider' }}</h3>
+                        <section v-if="activeReviewSection === 'overview'" class="admin-panel w-full overflow-hidden">
+                            <div class="flex flex-col gap-3 p-5 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="flex items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-building-shield" aria-hidden="true"></i></span>
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Submitting provider</p>
+                                        <h3 class="mt-1 text-lg font-bold text-slate-950">{{ scholarship.provider || 'Provider' }}</h3>
+                                        <p class="mt-1 text-sm text-slate-600">Confirm the organization behind this program.</p>
+                                    </div>
                                 </div>
                                 <span :class="['rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(scholarship.provider_verification_status)]">
                                     {{ isProviderVerified ? 'Verified' : statusLabel(scholarship.provider_verification_status) }}
                                 </span>
                             </div>
 
-                            <dl class="mt-4 space-y-3 text-sm">
-                                <div>
+                            <dl class="grid border-t border-slate-200 bg-slate-50/80 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                <div class="border-b border-slate-200 p-4 sm:border-r lg:border-b-0">
                                     <dt class="text-xs font-semibold text-slate-500">Type</dt>
                                     <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(scholarship.provider_type || 'provider') }}</dd>
                                 </div>
-                                <div>
+                                <div class="border-b border-slate-200 p-4 lg:border-b-0 lg:border-r">
                                     <dt class="text-xs font-semibold text-slate-500">Email</dt>
                                     <dd class="mt-1 break-words font-bold text-slate-950">{{ scholarship.provider_email || 'Not provided' }}</dd>
                                 </div>
-                                <div v-if="scholarship.provider_website">
+                                <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
                                     <dt class="text-xs font-semibold text-slate-500">Website</dt>
                                     <dd class="mt-1 break-words font-bold">
                                         <a
+                                            v-if="scholarship.provider_website"
                                             :href="providerWebsiteUrl(scholarship.provider_website)"
                                             target="_blank"
                                             rel="noopener"
@@ -950,21 +1026,24 @@ onMounted(loadScholarship);
                                         >
                                             {{ scholarship.provider_website }}
                                         </a>
+                                        <span v-else class="text-slate-950">Not provided</span>
                                     </dd>
                                 </div>
-                                <div v-if="scholarship.provider_address">
+                                <div class="p-4">
                                     <dt class="text-xs font-semibold text-slate-500">Address</dt>
-                                    <dd class="mt-1 font-bold leading-6 text-slate-950">{{ scholarship.provider_address }}</dd>
+                                    <dd class="mt-1 font-bold leading-6 text-slate-950">{{ scholarship.provider_address || 'Not provided' }}</dd>
                                 </div>
                             </dl>
 
-                            <a
-                                v-if="scholarship.provider_id"
-                                :href="`/admin/providers/${scholarship.provider_id}/review`"
-                                class="mt-4 inline-flex w-full justify-center rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                            >
-                                Review provider
-                            </a>
+                            <div v-if="scholarship.provider_id" class="border-t border-slate-200 p-4">
+                                <a
+                                    :href="`/admin/providers/${scholarship.provider_id}/review`"
+                                    class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                                >
+                                    Open provider record
+                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                </a>
+                            </div>
                         </section>
                     </aside>
 

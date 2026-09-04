@@ -155,9 +155,8 @@ const filteredScholarships = computed(() => scholarships.value
     })
     .sort((first, second) => {
         const scoreDifference = Number(second.eligibility_match?.score ?? 0) - Number(first.eligibility_match?.score ?? 0);
-        const preferenceDifference = Number(second.preference_match?.score ?? 0) - Number(first.preference_match?.score ?? 0);
 
-        return scoreDifference || preferenceDifference || deadlineValue(first) - deadlineValue(second);
+        return scoreDifference || deadlineValue(first) - deadlineValue(second);
     }));
 
 function formatAmount(amount) {

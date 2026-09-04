@@ -131,8 +131,17 @@ async function requestLogout() {
                                 class="absolute inset-y-2 left-0 w-1 rounded-r-full bg-amber-500"
                             ></span>
                             <span class="flex items-center gap-2 pl-2">
-                                <i :class="[link.icon, 'w-4 text-center text-xs']"></i>
-                                {{ link.label }}
+                                <span
+                                    v-if="link.step"
+                                    :class="[
+                                        'grid h-5 w-5 shrink-0 place-items-center rounded text-[10px] font-black',
+                                        isActive(link) ? 'bg-slate-950 text-amber-300' : 'bg-white/10 text-slate-300',
+                                    ]"
+                                >
+                                    {{ link.step }}
+                                </span>
+                                <i v-else :class="[link.icon, 'w-4 text-center text-xs']"></i>
+                                <span class="min-w-0 truncate">{{ link.label }}</span>
                             </span>
                         </a>
                     </div>

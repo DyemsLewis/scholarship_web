@@ -120,9 +120,15 @@ const handoffRequiresOriginalDocuments = computed(() => formalApplicationHandoff
 const applicantNextActionDetails = computed(() => workflow.value.next_action
     ?? application.value?.status_progress?.next_action_details
     ?? {});
-const applicantNextStep = computed(() => workflow.value.next_action?.label ?? applicantNextAction(application.value));
-const applicantNextActor = computed(() => applicantNextActionDetails.value.actor_label ?? 'Check application');
-const applicantNextDescription = computed(() => applicantNextActionDetails.value.description ?? 'Open the application for the latest instructions.');
+const applicantNextStep = computed(() => application.value?.correction_status === 'requested'
+    ? 'Update the information requested by the provider'
+    : (workflow.value.next_action?.label ?? applicantNextAction(application.value)));
+const applicantNextActor = computed(() => application.value?.correction_status === 'requested'
+    ? 'You'
+    : (applicantNextActionDetails.value.actor_label ?? 'Check application'));
+const applicantNextDescription = computed(() => application.value?.correction_status === 'requested'
+    ? (application.value.correction_message || 'Review the provider request, update the affected profile details or files, then send your response.')
+    : (applicantNextActionDetails.value.description ?? 'Open the application for the latest instructions.'));
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
 const currentSchedule = computed(() => schedules.value.find((schedule) => (
@@ -133,15 +139,36 @@ const scheduleHistory = computed(() => schedules.value.filter((schedule) => sche
 const currentScheduleDate = computed(() => formatScheduleDate(currentSchedule.value));
 const filesNeedingAction = computed(() => applicationFileRows.value.filter((row) => row.required
     && (!row.document || ['needs_replacement', 'rejected'].includes(row.document.status))));
+const requiredFileRows = computed(() => applicationFileRows.value.filter((row) => row.required));
+const fileStatusLabel = computed(() => {
+    if (!requiredFileRows.value.length) {
+        return 'No files required';
+    }
+
+    if (filesNeedingAction.value.length) {
+        return `${filesNeedingAction.value.length} need attention`;
+    }
+
+    return `${requiredFileRows.value.length} uploaded`;
+});
+const hasProviderUpdate = computed(() => Boolean(
+    application.value?.review_notes
+    || application.value?.decision_reason
+    || application.value?.outcome_notes,
+));
 const applicationIsClosed = computed(() => Boolean(workflow.value.is_closed));
 const applicationSections = computed(() => [
-    { key: 'overview', label: 'Status & next step' },
-    { key: 'schedule', label: 'Schedule', count: currentSchedule.value ? 1 : 0 },
-    { key: 'files', label: 'Required files', count: filesNeedingAction.value.length },
-    { key: 'program', label: 'Program & match' },
-    { key: 'history', label: 'History', count: timeline.value.length },
+    { key: 'overview', label: 'Overview', icon: 'fa-solid fa-route' },
+    { key: 'files', label: 'Files', icon: 'fa-solid fa-folder-open', count: filesNeedingAction.value.length },
+    { key: 'schedule', label: 'Schedule', icon: 'fa-regular fa-calendar', count: currentSchedule.value ? 1 : 0 },
+    { key: 'program', label: 'Program', icon: 'fa-solid fa-graduation-cap' },
+    { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
 ]);
 const nextActionButton = computed(() => {
+    if (application.value?.correction_status === 'requested') {
+        return { label: 'Review requested update', action: 'correction' };
+    }
+
     if (formalApplicationHandoff.value) {
         return { label: 'View formal application steps', section: 'overview', target: 'formal-application-handoff' };
     }
@@ -332,20 +359,22 @@ function criterionClass(status) {
     return 'border-slate-200 bg-slate-50 text-slate-600';
 }
 
-function stepClass(state) {
-    if (state === 'complete') {
-        return 'bg-slate-900 text-white';
+function eligibilityCriterionLabel(criterion) {
+    if (criterion.status === 'pass') {
+        return 'Matched';
     }
 
-    if (state === 'current') {
-        return 'bg-slate-100 text-slate-950 ring-1 ring-slate-300';
+    if (criterion.status === 'fail') {
+        return 'Not matched';
     }
 
-    if (['stopped', 'skipped'].includes(state)) {
-        return 'bg-rose-50 text-rose-700 ring-1 ring-rose-100';
+    if (criterion.status === 'missing') {
+        return 'Needs information';
     }
 
-    return 'bg-white text-slate-500 ring-1 ring-slate-200';
+    return criterion.key === 'academic' && criterion.requirement
+        ? 'Provider review'
+        : 'No restriction';
 }
 
 function labelFromKey(value) {
@@ -501,6 +530,17 @@ async function openSection(section, target = null) {
     }
 }
 
+async function followNextAction() {
+    if (nextActionButton.value?.action === 'correction') {
+        showCorrectionModal.value = true;
+        return;
+    }
+
+    if (nextActionButton.value?.section) {
+        await openSection(nextActionButton.value.section, nextActionButton.value.target);
+    }
+}
+
 async function loadApplication() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -638,9 +678,9 @@ onMounted(loadApplication);
         <section class="student-page">
             <div class="student-container">
                 <ApplicantPageHeader
-                    eyebrow="Pre-screening Details"
-                    title="Track your submission"
-                    :description="application ? `${application.scholarship?.title || 'Scholarship'} - ${application.scholarship?.provider?.name || 'Scholarship provider'}` : 'See your status, next step, and required files.'"
+                    eyebrow="My application"
+                    title="Application details"
+                    description="Check your status, next required action, files, and provider updates."
                     icon="fa-solid fa-file-circle-check"
                     action-href="/dashboard/applications"
                     action-label="Back to submissions"
@@ -663,76 +703,84 @@ onMounted(loadApplication);
                         {{ errorMessage }}
                     </div>
 
-                    <section class="relative overflow-hidden rounded-lg bg-slate-950 text-white shadow-sm">
-                        <div class="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,_rgba(251,191,36,0.18),_transparent_62%)]"></div>
-                        <div class="relative flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between">
+                    <section class="student-card overflow-hidden border-l-4 border-l-amber-400">
+                        <div class="flex flex-col gap-5 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                             <div class="flex min-w-0 gap-4">
                                 <img
                                     :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
                                     :alt="application.scholarship?.title || 'Scholarship'"
-                                    class="h-16 w-16 shrink-0 rounded-md bg-white object-contain p-2 ring-1 ring-white/20"
+                                    class="h-14 w-14 shrink-0 rounded-md bg-slate-50 object-contain p-2 ring-1 ring-slate-200"
                                 >
                                 <div class="min-w-0">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">
-                                        Submission #{{ application.id }}
+                                    <p class="student-kicker">
+                                        Application #{{ application.id }}
                                     </p>
-                                    <h3 class="mt-1 font-display text-xl font-bold text-white sm:text-2xl">
+                                    <h2 class="mt-1 text-lg font-bold text-slate-950 sm:text-xl">
                                         {{ application.scholarship?.title || 'Scholarship' }}
-                                    </h3>
-                                    <p class="mt-1 text-sm text-slate-300">
+                                    </h2>
+                                    <p class="mt-1 text-sm text-slate-500">
                                         {{ application.scholarship?.provider?.name || 'Scholarship provider' }}
                                     </p>
                                 </div>
                             </div>
 
-                            <div class="shrink-0 lg:text-right">
-                                <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Current status</p>
+                            <div class="shrink-0 sm:text-right">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Current status</p>
                                 <span :class="['mt-2 inline-flex w-fit rounded-md px-3 py-1.5 text-xs font-bold uppercase', statusClass(application.status)]">
                                     {{ workflow.final_outcome_label || workflow.application_state_label || statusLabel(application.status) }}
                                 </span>
                             </div>
                         </div>
 
-                        <div class="relative grid border-t border-white/10 bg-white/5 text-sm sm:grid-cols-3">
-                            <div class="border-b border-white/10 px-5 py-3 sm:border-b-0 sm:border-r sm:border-white/10">
-                                <p class="text-xs font-semibold text-slate-400">Submitted</p>
-                                <p class="mt-1 font-bold text-white">{{ application.submitted_at || 'Recently' }}</p>
+                        <dl class="grid border-t border-slate-200 bg-slate-50/80 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                            <div class="border-b border-slate-200 px-4 py-3 sm:border-r lg:border-b-0">
+                                <dt class="text-xs font-semibold text-slate-500">Submitted</dt>
+                                <dd class="mt-1 font-bold text-slate-900">{{ application.submitted_at || 'Recently' }}</dd>
                             </div>
-                            <div class="border-b border-white/10 px-5 py-3 sm:border-b-0 sm:border-r sm:border-white/10">
-                                <p class="text-xs font-semibold text-slate-400">Current stage</p>
-                                <p class="mt-1 font-bold text-white">{{ application.status_progress?.current_stage_label || statusLabel(application.status) }}</p>
+                            <div class="border-b border-slate-200 px-4 py-3 lg:border-b-0 lg:border-r">
+                                <dt class="text-xs font-semibold text-slate-500">Current stage</dt>
+                                <dd class="mt-1 font-bold text-slate-900">{{ application.status_progress?.current_stage_label || statusLabel(application.status) }}</dd>
                             </div>
-                            <div class="px-5 py-3">
-                                <p class="text-xs font-semibold text-slate-400">Program deadline</p>
-                                <p class="mt-1 font-bold text-white">{{ application.scholarship?.deadline || 'Not listed' }}</p>
+                            <div class="border-b border-slate-200 px-4 py-3 sm:border-b-0 sm:border-r">
+                                <dt class="text-xs font-semibold text-slate-500">Required files</dt>
+                                <dd :class="['mt-1 font-bold', filesNeedingAction.length ? 'text-amber-800' : 'text-slate-900']">{{ fileStatusLabel }}</dd>
                             </div>
-                        </div>
+                            <div class="px-4 py-3">
+                                <dt class="text-xs font-semibold text-slate-500">Program deadline</dt>
+                                <dd class="mt-1 font-bold text-slate-900">{{ application.scholarship?.deadline || 'Not listed' }}</dd>
+                            </div>
+                        </dl>
                     </section>
 
-                    <section class="flex flex-col gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <section class="student-card flex flex-col gap-4 border-l-4 border-l-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                         <div class="flex items-start gap-3">
-                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
-                                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
+                                <i :class="applicationIsClosed ? 'fa-solid fa-flag-checkered' : 'fa-solid fa-arrow-right'" aria-hidden="true"></i>
                             </span>
-                            <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">What to do now</p>
-                                <p class="mt-1 text-sm font-semibold leading-6 text-slate-800">{{ applicantNextStep }}</p>
-                                <p class="mt-1 text-xs font-bold text-amber-900">Who acts next: {{ applicantNextActor }}</p>
-                                <p class="mt-1 max-w-3xl text-xs leading-5 text-slate-600">{{ applicantNextDescription }}</p>
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <p class="student-kicker">{{ applicationIsClosed ? 'Final update' : 'What happens next' }}</p>
+                                    <span class="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">{{ applicantNextActor }}</span>
+                                </div>
+                                <h3 class="mt-1 text-base font-bold leading-6 text-slate-950">{{ applicantNextStep }}</h3>
+                                <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ applicantNextDescription }}</p>
                             </div>
                         </div>
                         <button
                             v-if="nextActionButton"
                             type="button"
                             class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                            @click="openSection(nextActionButton.section, nextActionButton.target)"
+                            @click="followNextAction"
                         >
                             {{ nextActionButton.label }}
                         </button>
+                        <span v-else class="w-fit shrink-0 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+                            {{ applicationIsClosed ? 'Process complete' : 'No action needed now' }}
+                        </span>
                     </section>
 
-                    <nav class="overflow-x-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Application details sections">
-                        <div class="flex min-w-max gap-1" role="tablist">
+                    <nav class="overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm" aria-label="Application details sections">
+                        <div class="flex min-w-max gap-1 sm:min-w-0" role="tablist">
                             <button
                                 v-for="section in applicationSections"
                                 :key="section.key"
@@ -740,13 +788,14 @@ onMounted(loadApplication);
                                 role="tab"
                                 :aria-selected="activeSection === section.key"
                                 :class="[
-                                    'flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition',
+                                    'flex items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-bold transition sm:flex-1',
                                     activeSection === section.key
                                         ? 'bg-slate-950 text-white'
                                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
                                 ]"
                                 @click="openSection(section.key)"
                             >
+                                <i :class="section.icon" class="text-xs" aria-hidden="true"></i>
                                 {{ section.label }}
                                 <span
                                     v-if="section.count"
@@ -761,33 +810,41 @@ onMounted(loadApplication);
                         </div>
                     </nav>
 
-                    <div :class="['grid gap-4', ['overview', 'files', 'schedule', 'program', 'history'].includes(activeSection) ? '' : 'lg:grid-cols-[minmax(0,1fr)_21rem]']">
-                        <div class="space-y-4">
+                    <div class="space-y-4">
+                        <div class="flex flex-col gap-4">
                             <section v-if="activeSection === 'overview' && application.status_progress" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="flex flex-col gap-3 bg-slate-950 px-4 py-4 text-white sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">Application flow</p>
-                                        <h3 class="mt-1 text-lg font-bold text-white">
+                                <div class="student-section-head p-4 sm:p-5">
+                                    <div class="flex items-start gap-3">
+                                        <span class="student-section-mark">
+                                            <i class="fa-solid fa-route" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="student-kicker">Application flow</p>
+                                            <h3 class="mt-1 text-lg font-bold text-slate-950">
                                             {{ application.status_progress.current_stage_label }}
-                                        </h3>
-                                        <p class="mt-1 text-sm leading-5 text-slate-300">Follow each provider stage from pre-screening through the final outcome.</p>
+                                            </h3>
+                                            <p class="mt-1 text-sm leading-5 text-slate-500">See what is complete, where you are now, and what remains.</p>
+                                        </div>
                                     </div>
                                     <div class="w-full sm:w-44">
-                                        <div class="flex items-center justify-between text-xs font-bold text-slate-300">
+                                        <div class="flex items-center justify-between text-xs font-bold text-slate-600">
                                             <span>Progress</span>
                                             <span>{{ application.status_progress.percent }}%</span>
                                         </div>
-                                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-white/15">
-                                            <div class="h-full rounded-full bg-amber-400 transition-all" :style="{ width: `${application.status_progress.percent}%` }"></div>
+                                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                            <div class="h-full rounded-full bg-slate-950 transition-all" :style="{ width: `${application.status_progress.percent}%` }"></div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="overflow-x-auto bg-slate-50/70">
-                                    <ol class="flex min-w-max divide-x divide-slate-200">
+                                <div class="border-t border-slate-200 bg-slate-50/70 p-3 sm:p-4">
+                                    <ol class="grid gap-2 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">
                                         <li
                                             v-for="(step, index) in application.status_progress.steps"
                                             :key="step.key"
-                                            :class="['flex min-w-[11rem] flex-1 items-center gap-3 px-4 py-4 text-xs', stepClass(step.state)]"
+                                            :class="[
+                                                'flex min-w-0 items-center gap-3 rounded-md border px-3 py-3 text-xs',
+                                                step.state === 'current' ? 'border-amber-300 bg-amber-50 text-slate-950' : step.state === 'complete' ? 'border-slate-200 bg-white text-slate-800' : ['stopped', 'skipped'].includes(step.state) ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-500',
+                                            ]"
                                         >
                                             <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold', step.state === 'complete' ? 'bg-slate-900 text-white' : step.state === 'current' ? 'bg-amber-400 text-slate-950 ring-4 ring-amber-100' : ['stopped', 'skipped'].includes(step.state) ? 'bg-rose-100 text-rose-700' : 'border border-slate-300 bg-white text-slate-500']">
                                                 <i v-if="step.state === 'complete'" class="fa-solid fa-check" aria-hidden="true"></i>
@@ -800,36 +857,27 @@ onMounted(loadApplication);
                                         </li>
                                     </ol>
                                 </div>
-                                <div class="flex items-start gap-3 border-t border-slate-200 bg-white px-4 py-3.5">
-                                    <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-900 text-xs text-amber-300">
-                                        <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
-                                    </span>
-                                    <div>
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Next step</p>
-                                        <p class="mt-0.5 text-sm font-semibold leading-5 text-slate-700">{{ applicantNextStep }}</p>
-                                    </div>
-                                </div>
                             </section>
 
                             <details
                                 v-if="activeSection === 'overview' && formalApplicationHandoff"
                                 id="formal-application-handoff"
                                 :open="formalHandoffOpen"
-                                class="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                                class="scroll-mt-4 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm"
                                 @toggle="formalHandoffOpen = $event.currentTarget.open"
                             >
-                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 bg-slate-950 p-3 text-white [&::-webkit-details-marker]:hidden">
+                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-4 hover:bg-amber-50/60 [&::-webkit-details-marker]:hidden">
                                     <div class="flex min-w-0 items-center gap-3">
-                                        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-300 text-xs text-slate-950">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-amber-300">
                                             <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i>
                                         </span>
                                         <div class="min-w-0">
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">Pre-screening passed</p>
-                                            <h3 class="mt-0.5 text-base font-bold">Continue with the provider</h3>
-                                            <p class="mt-0.5 truncate text-xs text-slate-300">{{ formalApplicationHandoff.notice }}</p>
+                                            <p class="student-kicker">Pre-screening passed</p>
+                                            <h3 class="mt-0.5 text-base font-bold text-slate-950">Continue with the provider</h3>
+                                            <p class="mt-0.5 line-clamp-1 text-xs text-slate-500">{{ formalApplicationHandoff.notice }}</p>
                                         </div>
                                     </div>
-                                    <span class="flex shrink-0 items-center gap-2 text-xs font-bold text-slate-300">
+                                    <span class="flex shrink-0 items-center gap-2 text-xs font-bold text-slate-600">
                                         <span class="hidden sm:inline">{{ formalHandoffOpen ? 'Hide details' : 'View details' }}</span>
                                         <i :class="['fa-solid fa-chevron-down transition-transform', formalHandoffOpen ? 'rotate-180' : '']" aria-hidden="true"></i>
                                     </span>
@@ -916,22 +964,25 @@ onMounted(loadApplication);
                                 </div>
                             </details>
 
-                            <section v-if="activeSection === 'overview' && rubricReview" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="flex flex-col gap-3 bg-slate-950 px-4 py-4 text-white sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">Provider assessment</p>
-                                        <h3 class="mt-1 text-lg font-bold text-white">Review rubric score</h3>
-                                        <p class="mt-1 text-sm leading-5 text-slate-300">
+                            <section v-if="activeSection === 'program' && rubricReview" class="order-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="student-section-head p-4 sm:p-5">
+                                    <div class="flex items-start gap-3">
+                                        <span class="student-section-mark"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span>
+                                        <div>
+                                            <p class="student-kicker">Provider assessment</p>
+                                            <h3 class="mt-1 text-lg font-bold text-slate-950">Review rubric score</h3>
+                                            <p class="mt-1 text-sm leading-5 text-slate-500">
                                             This is how the provider scored your submitted application against its review criteria.
-                                        </p>
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div class="flex w-fit items-baseline gap-1 rounded-md bg-white/10 px-4 py-2 text-white ring-1 ring-white/15">
+                                    <div class="flex w-fit items-baseline gap-1 rounded-md bg-slate-950 px-4 py-2 text-white">
                                         <span class="text-2xl font-bold">{{ rubricReview.total_score }}</span>
                                         <span class="text-xs font-semibold text-slate-300">/ 100</span>
                                     </div>
                                 </div>
 
-                                <div class="grid gap-3 bg-slate-50/70 p-4 sm:grid-cols-2">
+                                <div class="grid gap-3 border-t border-slate-200 bg-slate-50/70 p-4 sm:grid-cols-2">
                                     <div
                                         v-for="criterion in rubricCriteria"
                                         :key="criterion.key"
@@ -962,20 +1013,23 @@ onMounted(loadApplication);
                             </section>
 
                             <section v-if="activeSection === 'schedule' && schedules.length" id="application-schedules" class="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="flex flex-col gap-2 bg-slate-950 p-4 text-white sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">Schedule</p>
-                                        <h3 class="mt-1 text-lg font-bold text-white">{{ currentSchedule ? 'Your next activity' : 'No upcoming activity' }}</h3>
-                                        <p class="mt-1 text-sm leading-6 text-slate-300">
+                                <div class="student-section-head p-4 sm:p-5">
+                                    <div class="flex items-start gap-3">
+                                        <span class="student-section-mark"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span>
+                                        <div>
+                                            <p class="student-kicker">Schedule</p>
+                                            <h3 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule ? 'Your next activity' : 'No upcoming activity' }}</h3>
+                                            <p class="mt-1 text-sm leading-6 text-slate-500">
                                             {{ currentSchedule ? 'Check when, where, and what you need to prepare.' : 'Previous activities are kept below for reference.' }}
-                                        </p>
+                                            </p>
+                                        </div>
                                     </div>
                                     <span v-if="currentSchedule" class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
                                         Upcoming
                                     </span>
                                 </div>
 
-                                <div v-if="currentSchedule" class="p-4">
+                                <div v-if="currentSchedule" class="border-t border-slate-200 p-4">
                                     <article class="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
                                         <div class="flex flex-col gap-4 bg-white p-4 sm:flex-row sm:items-center">
                                             <div class="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-md bg-slate-950 text-white shadow-sm">
@@ -1131,32 +1185,32 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'program'" class="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-                                <div class="-m-3 mb-0 flex flex-col gap-3 bg-slate-950 p-3 text-white sm:flex-row sm:items-center sm:justify-between">
+                            <section v-if="activeSection === 'program'" class="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                                     <div class="flex min-w-0 items-center gap-3">
                                         <img
                                             :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
                                             :alt="application.scholarship?.title || 'Scholarship program'"
-                                            class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1"
+                                            class="h-11 w-11 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
                                         >
                                         <div class="min-w-0">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300">Program</p>
-                                            <h3 class="mt-0.5 text-base font-bold leading-tight text-white">{{ application.scholarship?.title || 'Scholarship program' }}</h3>
-                                            <p class="mt-0.5 truncate text-xs font-semibold text-slate-300">{{ application.scholarship?.provider?.name || 'Scholarship provider' }}</p>
+                                            <p class="student-kicker">Program</p>
+                                            <h3 class="mt-0.5 text-base font-bold leading-tight text-slate-950">{{ application.scholarship?.title || 'Scholarship program' }}</h3>
+                                            <p class="mt-0.5 truncate text-xs font-semibold text-slate-500">{{ application.scholarship?.provider?.name || 'Scholarship provider' }}</p>
                                         </div>
                                     </div>
                                     <a
                                         :href="`/dashboard/scholarships/${application.scholarship?.id}`"
-                                        class="inline-flex w-fit shrink-0 items-center gap-2 rounded-md border border-white/20 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-white/10"
+                                        class="inline-flex w-fit shrink-0 items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                                     >
                                         Full details
                                         <i class="fa-solid fa-arrow-up-right-from-square text-[10px]" aria-hidden="true"></i>
                                     </a>
                                 </div>
 
-                                <p class="line-clamp-2 py-3 text-sm leading-5 text-slate-600">{{ application.scholarship?.description || 'No program description was provided.' }}</p>
+                                <p class="line-clamp-2 border-t border-slate-200 px-4 py-3 text-sm leading-5 text-slate-600 sm:px-5">{{ application.scholarship?.description || 'No program description was provided.' }}</p>
 
-                                <dl class="grid border-y border-slate-200 sm:grid-cols-3">
+                                <dl class="mx-4 grid border-y border-slate-200 sm:mx-5 sm:grid-cols-3">
                                     <div class="border-b border-slate-200 py-3 sm:border-b-0 sm:border-r sm:pr-3">
                                         <dt class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Deadline</dt>
                                         <dd class="mt-1 text-sm font-bold text-slate-950">{{ application.scholarship?.deadline || 'Not listed' }}</dd>
@@ -1173,7 +1227,7 @@ onMounted(loadApplication);
 
                                 <div
                                     v-if="application.scholarship?.benefits?.length || application.scholarship?.benefit_summary || application.scholarship?.award_amount != null"
-                                    class="py-4"
+                                    class="px-4 py-4 sm:px-5"
                                 >
                                     <p class="student-kicker">Support package</p>
                                     <h4 class="mt-0.5 text-sm font-bold text-slate-950">What the program provides</h4>
@@ -1197,7 +1251,7 @@ onMounted(loadApplication);
                                     </p>
                                 </div>
 
-                                <div class="border-t border-slate-200">
+                                <div class="mx-4 border-t border-slate-200 sm:mx-5">
                                     <div class="flex items-start gap-2.5 py-3">
                                         <i class="fa-solid fa-location-dot mt-1 text-amber-700" aria-hidden="true"></i>
                                         <div class="min-w-0 flex-1">
@@ -1225,20 +1279,23 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'program'" class="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-                                <div class="-m-3 mb-0 flex flex-col gap-2 bg-slate-950 p-3 text-white sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300">Profile match</p>
-                                        <h3 class="mt-0.5 text-base font-bold text-white">How your profile fits this program</h3>
-                                        <p class="mt-0.5 text-xs text-slate-300">Based on your profile and the provider's criteria.</p>
+                            <section v-if="activeSection === 'program'" class="order-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                                    <div class="flex items-start gap-3">
+                                        <span class="student-section-mark"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i></span>
+                                        <div>
+                                            <p class="student-kicker">Profile match</p>
+                                            <h3 class="mt-0.5 text-base font-bold text-slate-950">How your profile fits this program</h3>
+                                            <p class="mt-0.5 text-xs text-slate-500">A guide based on your submitted profile, not the provider's final decision.</p>
+                                        </div>
                                     </div>
-                                    <div class="flex w-fit items-baseline gap-2">
-                                        <span class="text-xl font-bold text-white">{{ application.dss_score ?? 0 }}%</span>
+                                    <div class="flex w-fit items-baseline gap-2 rounded-md bg-slate-950 px-3 py-2 text-white">
+                                        <span class="text-xl font-bold">{{ application.dss_score ?? 0 }}%</span>
                                         <span class="text-xs font-semibold text-slate-300">{{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}</span>
                                     </div>
                                 </div>
 
-                                <div class="py-3">
+                                <div class="border-t border-slate-200 px-4 py-3 sm:px-5">
                                     <p class="text-sm font-bold leading-5 text-slate-950">{{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'Your saved profile was compared with this program.' }}</p>
                                     <p class="mt-1 text-xs leading-5 text-slate-600">{{ application.dss_explanation?.next_action || 'Review the eligibility checks and keep your profile information current.' }}</p>
                                     <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
@@ -1246,7 +1303,7 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <div class="border-t border-slate-200 py-3">
+                                <div class="border-t border-slate-200 px-4 py-3 sm:px-5">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                         <div>
                                             <p class="text-sm font-bold text-slate-950">Eligibility checks</p>
@@ -1257,13 +1314,13 @@ onMounted(loadApplication);
                                     <div v-if="application.eligibility_breakdown?.criteria?.length" class="mt-2 divide-y divide-slate-200 border-y border-slate-200">
                                         <div v-for="criterion in application.eligibility_breakdown.criteria" :key="criterion.key" class="flex items-center justify-between gap-4 py-2.5 text-sm">
                                             <span class="font-semibold text-slate-700">{{ criterion.label }}</span>
-                                            <span :class="['shrink-0 rounded-md px-2 py-1 text-xs font-bold', criterionClass(criterion.status)]">{{ labelFromKey(criterion.status) }}</span>
+                                            <span :class="['shrink-0 rounded-md px-2 py-1 text-xs font-bold', criterionClass(criterion.status)]">{{ eligibilityCriterionLabel(criterion) }}</span>
                                         </div>
                                     </div>
                                     <p v-else class="mt-3 text-sm leading-5 text-slate-500">{{ application.eligibility_breakdown?.summary || 'No individual eligibility checks are available.' }}</p>
                                 </div>
 
-                                <div v-if="application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length" class="border-t border-slate-200">
+                                <div v-if="application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length" class="border-t border-slate-200 px-4 sm:px-5">
                                     <div v-if="application.dss_explanation?.strengths?.length" class="py-3">
                                         <p class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-circle-check text-emerald-600" aria-hidden="true"></i> Where your profile aligns</p>
                                         <ul class="mt-2 space-y-1.5">
@@ -1278,7 +1335,7 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <details v-if="dssCriteria.length" class="border-t border-slate-200">
+                                <details v-if="dssCriteria.length" class="border-t border-slate-200 px-4 sm:px-5">
                                     <summary class="flex cursor-pointer items-center justify-between gap-3 py-3 text-sm font-bold text-slate-800">
                                         <span>View suitability score breakdown</span>
                                         <i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i>
@@ -1295,19 +1352,18 @@ onMounted(loadApplication);
                                     </div>
                                 </details>
 
-                                <p class="border-t border-slate-200 pt-3 text-xs font-semibold leading-5 text-slate-500">{{ dssDecisionNotice }}</p>
+                                <p class="border-t border-slate-200 px-4 py-3 text-xs font-semibold leading-5 text-slate-500 sm:px-5">{{ dssDecisionNotice }}</p>
                             </section>
 
-                            <section v-if="activeSection === 'files'" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                                <div class="-m-4 mb-4 flex flex-col gap-2 bg-slate-950 p-4 text-white sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">Documents</p>
-                                        <h3 class="mt-1 text-lg font-bold text-white">
-                                            Application files
-                                        </h3>
-                                        <p class="mt-1 text-sm leading-6 text-slate-300">
-                                            Upload each file beside the requirement it belongs to.
-                                        </p>
+                            <section v-if="activeSection === 'files'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <div class="student-section-head p-4 sm:p-5">
+                                    <div class="flex items-start gap-3">
+                                        <span class="student-section-mark"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span>
+                                        <div>
+                                            <p class="student-kicker">Documents</p>
+                                            <h3 class="mt-1 text-lg font-bold text-slate-950">Application files</h3>
+                                            <p class="mt-1 text-sm leading-6 text-slate-500">Upload or replace a file beside the requirement it belongs to.</p>
+                                        </div>
                                     </div>
                                     <span
                                         :class="[
@@ -1315,11 +1371,12 @@ onMounted(loadApplication);
                                             filesNeedingAction.length ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800',
                                         ]"
                                     >
-                                        {{ filesNeedingAction.length ? `${filesNeedingAction.length} need attention` : 'Files ready' }}
+                                        {{ filesNeedingAction.length ? `${filesNeedingAction.length} need attention` : fileStatusLabel }}
                                     </span>
                                 </div>
 
-                                <div v-if="requiresOriginalVerification" class="mt-4 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                                <div class="border-t border-slate-200 p-4 sm:p-5">
+                                <div v-if="requiresOriginalVerification" class="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
                                     <i class="fa-solid fa-circle-info mt-1 text-amber-700" aria-hidden="true"></i>
                                     <p><span class="font-bold">Originals are not needed yet.</span> Keep them ready and bring them only when the provider sends an in-person verification schedule or formal application instructions.</p>
                                 </div>
@@ -1421,12 +1478,17 @@ onMounted(loadApplication);
                                 <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
                                     This program does not have any document requirements yet.
                                 </div>
+                                </div>
                             </section>
 
                             <section v-if="activeSection === 'history' && timeline.length" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                                <div class="-m-4 mb-4 bg-slate-950 p-4 text-white">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">Timeline</p>
-                                    <h3 class="mt-1 text-lg font-bold text-white">Application history</h3>
+                                <div class="flex items-start gap-3">
+                                    <span class="student-section-mark"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span>
+                                    <div>
+                                        <p class="student-kicker">Timeline</p>
+                                        <h3 class="mt-1 text-lg font-bold text-slate-950">Application history</h3>
+                                        <p class="mt-1 text-sm text-slate-500">A record of changes made to this application.</p>
+                                    </div>
                                 </div>
                                 <div class="mt-4 grid gap-2">
                                     <div
@@ -1458,47 +1520,40 @@ onMounted(loadApplication);
                                     The submitted application will appear here when the provider records a review update.
                                 </p>
                             </section>
+
+                            <details v-if="activeSection === 'history' && application.application_answers?.length" class="group rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                                    <span>Your submitted answers</span>
+                                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                </summary>
+                                <dl class="divide-y divide-slate-200 border-t border-slate-200">
+                                    <div v-for="(answer, index) in application.application_answers" :key="answer.question_id || index" class="px-4 py-3">
+                                        <dt class="text-xs font-bold leading-5 text-slate-500">{{ answer.prompt }}</dt>
+                                        <dd class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ answer.answer || 'No response provided' }}</dd>
+                                    </div>
+                                </dl>
+                            </details>
+
+                            <details v-if="activeSection === 'history' && application.notes" class="group rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                                    <span>Your submitted note</span>
+                                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                </summary>
+                                <p class="border-t border-slate-200 px-4 py-3 text-sm leading-6 text-slate-600">{{ application.notes }}</p>
+                            </details>
                         </div>
 
-                        <aside v-if="['overview', 'history'].includes(activeSection)" class="space-y-4">
-                            <section v-if="activeSection === 'history'" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                                <p class="student-kicker">Application</p>
-                                <div class="mt-3 grid gap-3 text-sm">
-                                    <div>
-                                        <p class="font-semibold text-slate-500">Applicant</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ user?.name || 'Applicant' }}</p>
-                                    </div>
-                                    <div>
-                                        <p class="font-semibold text-slate-500">Submitted</p>
-                                        <p class="mt-1 font-bold text-slate-950">{{ application.submitted_at || 'Recently' }}</p>
-                                    </div>
-                                    <div>
-                                        <p class="font-semibold text-slate-500">Application mode</p>
-                                        <p class="mt-1 font-bold text-slate-950">
-                                            {{ applicationModeLabel(application.scholarship?.application_mode) }}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p class="font-semibold text-slate-500">Record number</p>
-                                        <p class="mt-1 font-bold text-slate-950">#{{ application.id }}</p>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <section v-if="activeSection === 'overview'" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                        <aside v-if="activeSection === 'overview'" class="flex flex-col gap-4">
+                            <section v-if="hasProviderUpdate" class="order-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                                 <p class="student-kicker">Provider update</p>
                                 <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                    {{ application.review_notes || application.decision_reason || application.outcome_notes ? 'Review feedback' : 'No new message' }}
+                                    {{ application.review_notes || application.decision_reason || application.outcome_notes ? 'Review feedback' : 'Your submitted note' }}
                                 </h3>
 
                                 <div v-if="application.review_notes" class="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
                                     <p class="font-semibold text-amber-900">Message from the provider</p>
                                     <p class="mt-1 leading-6 text-slate-700">{{ application.review_notes }}</p>
                                 </div>
-                                <p v-else class="mt-2 text-sm leading-6 text-slate-600">
-                                    The provider has not added a review message. Important changes will also appear in your notifications.
-                                </p>
-
                                 <div v-if="application.outcome_notes" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
                                     <p class="font-semibold text-slate-800">Outcome details</p>
                                     <p class="mt-1 leading-6 text-slate-600">{{ application.outcome_notes }}</p>
@@ -1509,16 +1564,12 @@ onMounted(loadApplication);
                                     <p class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.decision_reason) }}</p>
                                 </div>
 
-                                <details v-if="application.notes" class="mt-3 border-t border-slate-200 pt-3">
-                                    <summary class="cursor-pointer text-sm font-bold text-slate-700">Your submitted note</summary>
-                                    <p class="mt-2 text-sm leading-6 text-slate-600">{{ application.notes }}</p>
-                                </details>
                             </section>
 
                             <section
                                 v-if="activeSection === 'overview' && application.correction_status"
                                 :class="[
-                                    'rounded-lg border p-4 shadow-sm',
+                                    'order-1 rounded-lg border p-4 shadow-sm',
                                     application.correction_status === 'requested'
                                         ? 'border-amber-200 bg-amber-50'
                                         : application.correction_status === 'submitted'
@@ -1545,12 +1596,15 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'overview'" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <details v-if="application.can_withdraw || application.status === 'withdrawn'" class="group order-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                                    <span class="flex items-center gap-2"><i class="fa-solid fa-gear text-slate-400" aria-hidden="true"></i> Application options</span>
+                                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                </summary>
+                                <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
-                                        <p class="student-kicker">Application options</p>
-                                        <h3 class="mt-1 text-base font-bold text-slate-950">Need to stop this application?</h3>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">Withdrawal ends provider review but keeps the application history for your records.</p>
+                                        <h3 class="text-sm font-bold text-slate-950">Withdraw this application</h3>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">This stops provider review and keeps the record in your history.</p>
                                     </div>
                                     <button
                                         v-if="application.can_withdraw"
@@ -1562,7 +1616,7 @@ onMounted(loadApplication);
                                     </button>
                                     <span v-else-if="application.status === 'withdrawn'" class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Withdrawn {{ application.withdrawn_at }}</span>
                                 </div>
-                            </section>
+                            </details>
 
                         </aside>
                     </div>

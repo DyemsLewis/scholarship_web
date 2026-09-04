@@ -66,13 +66,13 @@ const currentLocalDateTime = new Date(Date.now() - new Date().getTimezoneOffset(
     .toISOString();
 const todayDate = currentLocalDateTime.slice(0, 10);
 const formSections = [
-    { id: 'details', label: 'Details', help: 'Name, category, cycle, description, and program logo.' },
-    { id: 'support', label: 'Support', help: 'Benefits, recipient slots, and the pre-screening timeline.' },
-    { id: 'eligibility', label: 'Eligibility', help: 'Who can apply and how applicants are matched.' },
-    { id: 'application', label: 'Application', help: 'Verification method, required files, and what happens after qualification.' },
-    { id: 'selection', label: 'Selection', help: 'Pre-screening flow, later stages, and provider scoring.' },
-    { id: 'contact', label: 'Contact', help: 'Program location and the public contact applicants can reach.' },
-    { id: 'review', label: 'Review', help: 'Preview the listing, choose how to save it, and submit.' },
+    { id: 'details', label: 'Program basics', help: 'Name, category, cycle, description, and program logo.' },
+    { id: 'support', label: 'Benefits & dates', help: 'Define the support, recipient slots, and application timeline.' },
+    { id: 'eligibility', label: 'Eligible applicants', help: 'Set who can apply and how the portal checks profile fit.' },
+    { id: 'application', label: 'Application files', help: 'Choose the initial files and originals applicants may need to present later.' },
+    { id: 'selection', label: 'Selection flow', help: 'Arrange pre-screening, later provider stages, and review scoring.' },
+    { id: 'contact', label: 'Public contact', help: 'Add the program location and contact applicants can reach.' },
+    { id: 'review', label: 'Review & submit', help: 'Preview the listing, save a draft, or send it for admin review.' },
 ];
 const categoryOptions = ['Academic merit', 'Financial assistance', 'Community grant', 'STEM scholarship', 'Leadership grant', 'Athletic scholarship'];
 const customEligibilityOption = '__custom__';
@@ -1095,6 +1095,7 @@ function emptyScholarshipForm() {
         handoffLocationAddress: '',
         handoffUrl: '',
         reviewRubric: defaultReviewRubric(),
+        applicationQuestions: [],
         benefits: [],
         minimumGwa: '',
         minimumGradeScale: '',
@@ -1528,6 +1529,13 @@ function fillScholarshipForm(scholarship) {
         reviewRubric: Array.isArray(scholarship.review_rubric) && scholarship.review_rubric.length
             ? scholarship.review_rubric.map((criterion) => ({ ...criterion }))
             : defaultReviewRubric(),
+        applicationQuestions: Array.isArray(scholarship.application_questions)
+            ? scholarship.application_questions.map((question, index) => ({
+                id: question.id || `question_${Date.now()}_${index + 1}`,
+                prompt: question.prompt ?? '',
+                required: Boolean(question.required),
+            }))
+            : [],
         benefits: normalizeBenefits(scholarship),
         minimumGwa: scholarship.minimum_gwa ?? '',
         minimumGradeScale: scholarship.minimum_grade_scale ?? inferGradeScale(scholarship.minimum_gwa),
@@ -1592,6 +1600,22 @@ function clearRequirements() {
     scholarshipForm.value.customRequirements = '';
     scholarshipForm.value.optionalRequirements = [];
     scholarshipForm.value.customOptionalRequirements = '';
+}
+
+function addApplicationQuestion() {
+    if (scholarshipForm.value.applicationQuestions.length >= 5) {
+        return;
+    }
+
+    scholarshipForm.value.applicationQuestions.push({
+        id: `question_${Date.now()}_${scholarshipForm.value.applicationQuestions.length + 1}`,
+        prompt: '',
+        required: true,
+    });
+}
+
+function removeApplicationQuestion(index) {
+    scholarshipForm.value.applicationQuestions.splice(index, 1);
 }
 
 function useProgramLocationForHandoff() {
@@ -1848,6 +1872,15 @@ async function saveScholarship() {
         return;
     }
 
+    if (
+        termsRequiredForSave.value
+        && scholarshipForm.value.applicationQuestions.some((question) => !hasText(question.prompt))
+    ) {
+        await openFormSection('application');
+        formError.value = 'Complete or remove each applicant question before submitting this program.';
+        return;
+    }
+
     if (termsRequiredForSave.value && !scholarshipForm.value.termsAccepted) {
         await openFormSection('review');
         formError.value = 'Accept the provider scholarship terms before submitting or updating this program.';
@@ -1919,6 +1952,7 @@ async function saveScholarship() {
         handoff_location_address: scholarshipForm.value.handoffLocationAddress || '',
         handoff_url: scholarshipForm.value.handoffUrl || '',
         review_rubric: JSON.stringify(scholarshipForm.value.reviewRubric),
+        application_questions: JSON.stringify(scholarshipForm.value.applicationQuestions),
         benefits: JSON.stringify(scholarshipForm.value.benefits),
         award_amount: cashGrantAmount(scholarshipForm.value.benefits),
         minimum_gwa: academicRequirementNeedsValue.value ? scholarshipForm.value.minimumGwa || '' : '',
@@ -2099,7 +2133,7 @@ onBeforeUnmount(() => {
                                         type="button"
                                         :aria-current="activeFormSection === section.id ? 'step' : undefined"
                                         :class="[
-                                            'flex min-w-[8rem] flex-1 items-center justify-center gap-2 border-b-2 px-3 py-3 text-center transition',
+                                            'flex min-w-[9.5rem] flex-1 items-center justify-center gap-2 border-b-2 px-3 py-3 text-center transition',
                                             activeFormSection === section.id
                                                 ? 'border-amber-500 bg-amber-50/60 text-slate-950'
                                                 : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900',
@@ -3208,6 +3242,66 @@ onBeforeUnmount(() => {
                                 </template>
 
                                 <section class="mt-6 border-t border-slate-200 pt-6">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <p class="text-base font-bold text-slate-950">Short applicant questions</p>
+                                                <span class="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Optional</span>
+                                            </div>
+                                            <p class="mt-1 max-w-3xl text-xs leading-5 text-slate-500">
+                                                Ask only for program-specific context that is not already in the applicant profile or document list. Applicants answer before submission.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="inline-flex w-fit shrink-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                            :disabled="scholarshipForm.applicationQuestions.length >= 5"
+                                            @click="addApplicationQuestion"
+                                        >
+                                            <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                                            Add question
+                                        </button>
+                                    </div>
+
+                                    <div v-if="scholarshipForm.applicationQuestions.length" class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200 bg-white">
+                                        <article
+                                            v-for="(question, index) in scholarshipForm.applicationQuestions"
+                                            :key="question.id"
+                                            class="grid gap-3 p-4 md:grid-cols-[2rem_minmax(0,1fr)_auto] md:items-start"
+                                        >
+                                            <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-950 text-xs font-bold text-white">{{ index + 1 }}</span>
+                                            <div>
+                                                <label :for="`application-question-${index}`" class="sr-only">Applicant question {{ index + 1 }}</label>
+                                                <input
+                                                    :id="`application-question-${index}`"
+                                                    v-model="question.prompt"
+                                                    type="text"
+                                                    maxlength="300"
+                                                    placeholder="Example: Briefly explain why this support would help your studies."
+                                                    :class="inputClass"
+                                                >
+                                                <label class="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
+                                                    <input v-model="question.required" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900">
+                                                    Applicant must answer
+                                                </label>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                class="inline-flex h-10 w-fit items-center justify-center gap-2 rounded-md border border-rose-200 bg-white px-3 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
+                                                @click="removeApplicationQuestion(index)"
+                                            >
+                                                <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+                                                Remove
+                                            </button>
+                                        </article>
+                                    </div>
+                                    <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">
+                                        No extra questions. The standard applicant profile and selected files will be used for review.
+                                    </div>
+                                    <p class="mt-2 text-right text-[11px] font-semibold text-slate-400">{{ scholarshipForm.applicationQuestions.length }} of 5 questions</p>
+                                </section>
+
+                                <section class="mt-6 border-t border-slate-200 pt-6">
                                     <div class="flex items-start gap-3">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
                                             <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i>
@@ -3566,6 +3660,9 @@ onBeforeUnmount(() => {
                                             {{ isProfileReviewOnly ? 'Profile review only' : `${selectedRequirementCount} required document${selectedRequirementCount === 1 ? '' : 's'}` }}
                                         </p>
                                         <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ isProfileReviewOnly ? 'No program files are collected during initial submission.' : (allDocumentRequirements.join(', ') || 'No required documents selected.') }}</p>
+                                        <p v-if="scholarshipForm.applicationQuestions.length" class="mt-2 text-xs font-semibold text-slate-700">
+                                            {{ scholarshipForm.applicationQuestions.length }} short applicant question{{ scholarshipForm.applicationQuestions.length === 1 ? '' : 's' }}
+                                        </p>
                                     </div>
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Optional supporting files</p>

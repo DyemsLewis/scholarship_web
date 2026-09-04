@@ -110,14 +110,21 @@ class ApplicationWorkflowService
                 'name' => $application->applicant?->name,
                 'email' => $application->applicant?->email,
                 'contact_number' => $application->applicant?->contact_number,
+                'citizenship_status' => $profile?->citizenship_status,
                 'education_level' => $profile?->education_level,
                 'school' => $profile?->school,
                 'school_type' => $profile?->school_type,
                 'course_or_strand' => $profile?->course_or_strand,
                 'year_level' => $profile?->year_level,
+                'academic_year' => $profile?->academic_year,
+                'academic_term' => $profile?->academic_term,
                 'gwa' => $profile?->gwa,
                 'grading_scale' => $profile?->grading_scale,
                 'income_bracket' => $profile?->income_bracket,
+                'household_size' => $profile?->household_size,
+                'support_needs' => $profile?->support_needs,
+                'current_scholarship_status' => $profile?->current_scholarship_status,
+                'current_scholarship_details' => $profile?->current_scholarship_details,
                 'location' => collect([
                     $profile?->barangay,
                     $profile?->city,
@@ -130,9 +137,11 @@ class ApplicationWorkflowService
                 'deadline' => $application->scholarship?->deadline?->toDateString(),
                 'requirements' => $application->document_checklist ?? [],
                 'optional_requirements' => $application->optional_document_checklist ?? [],
+                'application_questions' => $application->scholarship?->application_questions ?? [],
                 // Keep the submitted process stable when a provider edits the program later.
                 'selection_stages' => $selectionStages,
             ],
+            'application_answers' => $application->application_answers ?? [],
             'documents' => $application->documents
                 ->sortBy('id')
                 ->map(fn ($document): array => [

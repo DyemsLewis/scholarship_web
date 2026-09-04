@@ -7,6 +7,7 @@ use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Services\DecisionSupportService;
+use App\Services\ScholarshipEligibilityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -16,20 +17,41 @@ class DecisionSupportServiceTest extends TestCase
 
     public function test_open_criteria_do_not_penalize_an_applicant(): void
     {
-        [$application] = $this->application([
+        [$application, $applicant, $scholarship] = $this->application([
             'eligible_education_levels' => 'Any',
             'eligible_courses' => 'Any course',
             'eligible_school_types' => 'Open to all',
-            'eligible_year_levels' => 'Any',
+            'eligible_year_levels' => 'Any grade or year level',
             'eligible_locations' => 'Nationwide',
             'income_requirement' => 'No income requirement',
         ]);
 
+        $eligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship, $applicant);
         $score = app(DecisionSupportService::class)->scoreApplication($application);
 
+        $this->assertTrue($eligibility['is_eligible']);
+        $this->assertSame([], $eligibility['blocking_criteria']);
+        $this->assertSame(100, $eligibility['score']);
+        $this->assertTrue(collect($eligibility['criteria'])
+            ->whereIn('key', ['education_level', 'course', 'school_type', 'year_level', 'location', 'income'])
+            ->every(fn (array $criterion): bool => $criterion['status'] === 'info'));
         $this->assertSame(DecisionSupportService::METHODOLOGY_VERSION, $score['methodology_version']);
         $this->assertSame(100, $score['suitability_score']);
         $this->assertSame('Strong match', $score['label']);
+    }
+
+    public function test_equivalent_key_and_display_formats_do_not_create_a_false_mismatch(): void
+    {
+        [, $applicant, $scholarship] = $this->application([
+            'eligible_education_levels' => 'senior_high_school',
+        ]);
+
+        $eligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship, $applicant);
+        $education = collect($eligibility['criteria'])->firstWhere('key', 'education_level');
+
+        $this->assertSame('pass', $education['status']);
+        $this->assertTrue($eligibility['is_eligible']);
+        $this->assertSame([], $eligibility['blocking_criteria']);
     }
 
     public function test_provider_progress_and_documents_do_not_change_suitability(): void

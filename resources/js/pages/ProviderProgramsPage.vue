@@ -4,6 +4,7 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import ProviderWorkflowNav from '../components/ProviderWorkflowNav.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { labelFromKey } from '../support/display';
 
@@ -15,7 +16,9 @@ const selectedPreviewScholarship = ref(null);
 const selectedMapScholarship = ref(null);
 const duplicatingId = ref(null);
 const searchQuery = ref('');
-const statusFilter = ref('all');
+const requestedStatusFilter = new URLSearchParams(window.location.search).get('status');
+const programStatusFilters = ['all', 'published', 'pending_review', 'draft', 'rejected', 'closed'];
+const statusFilter = ref(programStatusFilters.includes(requestedStatusFilter) ? requestedStatusFilter : 'all');
 const {
     confirmation,
     requestConfirmation,
@@ -292,6 +295,8 @@ onMounted(loadProviderData);
                         </a>
                     </div>
                 </header>
+
+                <ProviderWorkflowNav active="programs" class="mt-5" />
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading scholarship programs...

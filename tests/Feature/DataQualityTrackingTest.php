@@ -136,6 +136,8 @@ class DataQualityTrackingTest extends TestCase
             'school' => 'Sample University',
             'course_or_strand' => 'BS Information Technology',
             'year_level' => '1st year',
+            'academic_year' => '2026-2027',
+            'academic_term' => 'first_semester',
             'gwa' => 90,
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',

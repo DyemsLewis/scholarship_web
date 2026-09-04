@@ -1284,6 +1284,14 @@ class _ProfileCard extends StatelessWidget {
       _Detail('Suffix', stringValue(user['suffix'], fallback: 'Not provided')),
       _Detail('Gender', profileLabelFromKey(user['gender'])),
       _Detail(
+        'Account managed by',
+        profileLabelFromKey(user['account_managed_by']),
+      ),
+      _Detail(
+        'Citizenship declaration',
+        profileLabelFromKey(user['citizenship_status']),
+      ),
+      _Detail(
         'Contact',
         stringValue(user['contact_number'], fallback: 'Not provided'),
       ),
@@ -1306,6 +1314,11 @@ class _ProfileCard extends StatelessWidget {
         stringValue(user['year_level'], fallback: 'Not provided'),
       ),
       _Detail(
+        'Academic year',
+        stringValue(user['academic_year'], fallback: 'Not provided'),
+      ),
+      _Detail('Academic period', profileLabelFromKey(user['academic_term'])),
+      _Detail(
         'GWA / general average',
         stringValue(user['gwa'], fallback: 'Not provided'),
       ),
@@ -1319,24 +1332,19 @@ class _ProfileCard extends StatelessWidget {
         stringValue(user['household_size'], fallback: 'Not provided'),
       ),
       _Detail(
-        'Preferred scholarship categories',
-        stringValue(user['preferred_categories'], fallback: 'Not provided'),
-      ),
-      _Detail(
-        'Preferred locations',
-        stringValue(user['preferred_locations'], fallback: 'Not provided'),
-      ),
-      _Detail(
-        'Willing to relocate',
-        profileLabelFromKey(user['willing_to_relocate']),
-      ),
-      _Detail(
         'Support needs',
         stringValue(user['support_needs'], fallback: 'Not provided'),
       ),
       _Detail(
-        'Scholarship goal',
-        stringValue(user['scholarship_goal'], fallback: 'Not provided'),
+        'Current scholarship support',
+        profileLabelFromKey(user['current_scholarship_status']),
+      ),
+      _Detail(
+        'Scholarship support details',
+        stringValue(
+          user['current_scholarship_details'],
+          fallback: 'Not provided',
+        ),
       ),
       _Detail(
         'Location',
@@ -1356,8 +1364,16 @@ class _ProfileCard extends StatelessWidget {
         stringValue(user['guardian_name'], fallback: 'Not provided'),
       ),
       _Detail(
+        'Guardian relationship',
+        stringValue(user['guardian_relationship'], fallback: 'Not provided'),
+      ),
+      _Detail(
         'Guardian contact',
         stringValue(user['guardian_contact'], fallback: 'Not provided'),
+      ),
+      _Detail(
+        'Guardian email',
+        stringValue(user['guardian_email'], fallback: 'Not provided'),
       ),
     ];
 
@@ -3098,10 +3114,7 @@ class _FormalApplicationHandoffCard extends StatelessWidget {
                     fallback:
                         'Portal qualification is not a final scholarship award.',
                   ),
-                  style: const TextStyle(
-                    color: Color(0xFF475569),
-                    height: 1.4,
-                  ),
+                  style: const TextStyle(color: Color(0xFF475569), height: 1.4),
                 ),
                 if (deadline.isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -3149,9 +3162,10 @@ class _FormalApplicationHandoffCard extends StatelessWidget {
                 if (locationName.isNotEmpty || locationAddress.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Text(
-                    [locationName, locationAddress]
-                        .where((value) => value.isNotEmpty)
-                        .join('\n'),
+                    [
+                      locationName,
+                      locationAddress,
+                    ].where((value) => value.isNotEmpty).join('\n'),
                     style: const TextStyle(
                       color: Color(0xFF334155),
                       fontWeight: FontWeight.w700,
@@ -3618,6 +3632,8 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
   final notesController = TextEditingController();
   late final List<String> requirements;
   late final List<String> preparedMatches;
+  late final List<Map<String, dynamic>> questions;
+  final Map<String, TextEditingController> questionControllers = {};
   final Set<String> selected = {};
   bool isSubmitting = false;
 
@@ -3628,12 +3644,27 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
     preparedMatches = stringList(
       asMap(widget.scholarship['prepared_documents'])['matched'],
     );
+    questions = asMapList(widget.scholarship['application_questions'])
+        .where(
+          (question) =>
+              stringValue(question['id']).isNotEmpty &&
+              stringValue(question['prompt']).isNotEmpty,
+        )
+        .take(5)
+        .toList();
+    for (final question in questions) {
+      questionControllers[stringValue(question['id'])] =
+          TextEditingController();
+    }
     selected.addAll(preparedMatches);
   }
 
   @override
   void dispose() {
     notesController.dispose();
+    for (final controller in questionControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -3647,12 +3678,38 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
       return;
     }
 
+    final hasMissingRequiredAnswer = questions.any((question) {
+      if (question['required'] != true) {
+        return false;
+      }
+
+      return questionControllers[stringValue(question['id'])]!.text
+          .trim()
+          .isEmpty;
+    });
+
+    if (hasMissingRequiredAnswer) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Answer every required question.')),
+      );
+      return;
+    }
+
     setState(() => isSubmitting = true);
 
     try {
       await widget.apiClient.submitApplication(
         scholarshipId: intValue(widget.scholarship['id']),
         documentChecklist: selected.toList(),
+        applicationAnswers: questions
+            .map(
+              (question) => {
+                'question_id': stringValue(question['id']),
+                'answer': questionControllers[stringValue(question['id'])]!.text
+                    .trim(),
+              },
+            )
+            .toList(),
         notes: notesController.text.trim(),
       );
 
@@ -3735,6 +3792,35 @@ class _ApplicationSheetState extends State<_ApplicationSheet> {
                   ),
                   contentPadding: EdgeInsets.zero,
                 ),
+            if (questions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Provider questions',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Share only the short information requested for this program.',
+                style: TextStyle(color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 12),
+              for (final question in questions)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextField(
+                    controller:
+                        questionControllers[stringValue(question['id'])],
+                    maxLines: 3,
+                    maxLength: 1500,
+                    decoration: InputDecoration(
+                      labelText:
+                          '${stringValue(question['prompt'])}${question['required'] == true ? ' *' : ' (optional)'}',
+                      alignLabelWithHint: true,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: notesController,
@@ -3783,6 +3869,14 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       'Gender (female / male / non_binary / prefer_not_to_say)',
     ),
     _ProfileField(
+      'account_managed_by',
+      'Account managed by (learner / parent_guardian / relative / school_representative / other)',
+    ),
+    _ProfileField(
+      'citizenship_status',
+      'Citizenship (filipino / dual_filipino / other)',
+    ),
+    _ProfileField(
       'contact_number',
       'Contact number',
       required: true,
@@ -3798,6 +3892,11 @@ class _ProfileEditorState extends State<_ProfileEditor> {
     _ProfileField('course_or_strand', 'Track / strand / course'),
     _ProfileField('year_level', 'Grade / year level'),
     _ProfileField('enrollment_status', 'Enrollment status'),
+    _ProfileField('academic_year', 'Academic year (for example 2026-2027)'),
+    _ProfileField(
+      'academic_term',
+      'Academic period (full_year / first_semester / second_semester / latest_completed_term)',
+    ),
     _ProfileField(
       'gwa',
       'GWA / general average',
@@ -3810,18 +3909,16 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       'Household size',
       keyboardType: TextInputType.number,
     ),
-    _ProfileField('preferred_categories', 'Preferred categories', maxLines: 2),
+    _ProfileField('support_needs', 'Support needs', maxLines: 3),
     _ProfileField(
-      'preferred_locations',
-      'Preferred scholarship locations',
+      'current_scholarship_status',
+      'Current scholarship support (none / receiving / pending / completed / prefer_not_to_say)',
+    ),
+    _ProfileField(
+      'current_scholarship_details',
+      'Current scholarship details (only when receiving or pending)',
       maxLines: 2,
     ),
-    _ProfileField(
-      'willing_to_relocate',
-      'Willing to relocate (yes / no / depends)',
-    ),
-    _ProfileField('support_needs', 'Support needs', maxLines: 3),
-    _ProfileField('scholarship_goal', 'Scholarship goal', maxLines: 3),
     _ProfileField('barangay', 'Barangay'),
     _ProfileField('city', 'City / municipality'),
     _ProfileField('province', 'Province'),
@@ -3831,11 +3928,13 @@ class _ProfileEditorState extends State<_ProfileEditor> {
     _ProfileField('address', 'Address'),
     _ProfileField('birthdate', 'Birthdate YYYY-MM-DD'),
     _ProfileField('guardian_name', 'Guardian name'),
+    _ProfileField('guardian_relationship', 'Guardian relationship'),
     _ProfileField(
       'guardian_contact',
       'Guardian contact',
       keyboardType: TextInputType.phone,
     ),
+    _ProfileField('guardian_email', 'Guardian email'),
   ];
 
   @override
@@ -3871,10 +3970,45 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       payload['grading_scale'] = normalizeGradingScale(
         payload['grading_scale'],
       );
-      payload['willing_to_relocate'] = normalizeRelocationChoice(
-        payload['willing_to_relocate'],
-      );
       payload['gender'] = normalizeGenderChoice(payload['gender']);
+      payload['account_managed_by'] = normalizeProfileChoice(
+        payload['account_managed_by'],
+        const {
+          'learner',
+          'parent_guardian',
+          'relative',
+          'school_representative',
+          'other',
+        },
+      );
+      payload['citizenship_status'] = normalizeProfileChoice(
+        payload['citizenship_status'],
+        const {'filipino', 'dual_filipino', 'other'},
+      );
+      payload['academic_term'] =
+          normalizeProfileChoice(payload['academic_term'], const {
+            'full_year',
+            'first_grading_period',
+            'second_grading_period',
+            'third_grading_period',
+            'fourth_grading_period',
+            'first_semester',
+            'second_semester',
+            'third_term',
+            'summer_term',
+            'latest_completed_term',
+            'not_applicable',
+          });
+      payload['current_scholarship_status'] = normalizeProfileChoice(
+        payload['current_scholarship_status'],
+        const {
+          'none',
+          'receiving',
+          'pending',
+          'completed',
+          'prefer_not_to_say',
+        },
+      );
 
       await widget.apiClient.updateProfile(payload);
 
@@ -3933,16 +4067,9 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                       }
 
                       if (field.key == 'middle_initial' &&
+                          stringValue(value).isNotEmpty &&
                           !RegExp(r'^[A-Za-z]$').hasMatch(stringValue(value))) {
                         return 'Use 1 letter';
-                      }
-
-                      if (field.key == 'willing_to_relocate') {
-                        final normalized = normalizeRelocationChoice(value);
-                        if (stringValue(value).isNotEmpty &&
-                            normalized.isEmpty) {
-                          return 'Use yes, no, or depends';
-                        }
                       }
 
                       if (field.key == 'gender') {
@@ -3951,6 +4078,16 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                             normalized.isEmpty) {
                           return 'Use female, male, non_binary, or prefer_not_to_say';
                         }
+                      }
+
+                      final profileChoices = profileFieldChoices(field.key);
+                      if (profileChoices != null &&
+                          stringValue(value).isNotEmpty &&
+                          normalizeProfileChoice(
+                            value,
+                            profileChoices,
+                          ).isEmpty) {
+                        return 'Choose one of the listed values';
                       }
 
                       return null;
@@ -4876,20 +5013,6 @@ String normalizeGradingScale(Object? value) {
   return '';
 }
 
-String normalizeRelocationChoice(Object? value) {
-  final choice = stringValue(value).toLowerCase().trim();
-
-  if (choice.isEmpty) {
-    return '';
-  }
-
-  if (choice == 'yes' || choice == 'no' || choice == 'depends') {
-    return choice;
-  }
-
-  return '';
-}
-
 String normalizeGenderChoice(Object? value) {
   final choice = stringValue(
     value,
@@ -4908,6 +5031,48 @@ String normalizeGenderChoice(Object? value) {
   }
 
   return '';
+}
+
+String normalizeProfileChoice(Object? value, Set<String> allowed) {
+  final choice = stringValue(
+    value,
+  ).toLowerCase().trim().replaceAll(RegExp(r'[\s-]+'), '_');
+
+  return allowed.contains(choice) ? choice : '';
+}
+
+Set<String>? profileFieldChoices(String key) {
+  return switch (key) {
+    'account_managed_by' => const {
+      'learner',
+      'parent_guardian',
+      'relative',
+      'school_representative',
+      'other',
+    },
+    'citizenship_status' => const {'filipino', 'dual_filipino', 'other'},
+    'academic_term' => const {
+      'full_year',
+      'first_grading_period',
+      'second_grading_period',
+      'third_grading_period',
+      'fourth_grading_period',
+      'first_semester',
+      'second_semester',
+      'third_term',
+      'summer_term',
+      'latest_completed_term',
+      'not_applicable',
+    },
+    'current_scholarship_status' => const {
+      'none',
+      'receiving',
+      'pending',
+      'completed',
+      'prefer_not_to_say',
+    },
+    _ => null,
+  };
 }
 
 String moneyValue(Object? value) {

@@ -795,6 +795,7 @@ class ApplicantDashboardController extends Controller
             'gender' => ['nullable', Rule::in(['female', 'male', 'non_binary', 'prefer_not_to_say'])],
             'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
             'account_managed_by' => ['nullable', Rule::in(['learner', 'parent_guardian', 'relative', 'school_representative', 'other'])],
+            'citizenship_status' => ['nullable', Rule::in(['filipino', 'dual_filipino', 'other'])],
             'education_level' => ['nullable', 'string', 'max:100'],
             'school' => ['nullable', 'string', 'max:255'],
             'school_type' => ['nullable', 'string', 'max:100'],
@@ -802,6 +803,8 @@ class ApplicantDashboardController extends Controller
             'course_or_strand' => ['nullable', 'string', 'max:255'],
             'year_level' => ['nullable', 'string', 'max:100'],
             'enrollment_status' => ['nullable', 'string', 'max:100'],
+            'academic_year' => ['nullable', 'string', 'max:20'],
+            'academic_term' => ['nullable', Rule::in(['full_year', 'first_grading_period', 'second_grading_period', 'third_grading_period', 'fourth_grading_period', 'first_semester', 'second_semester', 'third_term', 'summer_term', 'latest_completed_term', 'not_applicable'])],
             'gwa' => ['nullable', 'numeric', 'min:0', "max:{$gradeMaximum}"],
             'grading_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
             'income_bracket' => ['nullable', 'string', 'max:100'],
@@ -810,6 +813,8 @@ class ApplicantDashboardController extends Controller
             'preferred_locations' => ['nullable', 'string', 'max:1000'],
             'willing_to_relocate' => ['nullable', Rule::in(['yes', 'no', 'depends'])],
             'support_needs' => ['nullable', 'string', 'max:1500'],
+            'current_scholarship_status' => ['nullable', Rule::in(['none', 'receiving', 'pending', 'completed', 'prefer_not_to_say'])],
+            'current_scholarship_details' => ['nullable', 'string', 'max:1000'],
             'scholarship_goal' => ['nullable', 'string', 'max:1500'],
             'address' => ['nullable', 'string', 'max:500'],
             'barangay' => ['nullable', 'string', 'max:255'],
@@ -830,6 +835,10 @@ class ApplicantDashboardController extends Controller
             $validated['gwa'] = null;
         }
 
+        if (! in_array($validated['current_scholarship_status'] ?? null, ['receiving', 'pending'], true)) {
+            $validated['current_scholarship_details'] = null;
+        }
+
         $user = $request->user();
         $profileValues = [
             ...$validated,
@@ -846,6 +855,8 @@ class ApplicantDashboardController extends Controller
             'course_or_strand',
             'year_level',
             'enrollment_status',
+            'academic_year',
+            'academic_term',
             'gwa',
             'grading_scale',
         ];
@@ -957,6 +968,9 @@ class ApplicantDashboardController extends Controller
             ],
             'document_checklist' => ['sometimes', 'array'],
             'document_checklist.*' => ['string', 'max:255'],
+            'application_answers' => ['sometimes', 'array', 'max:5'],
+            'application_answers.*.question_id' => ['required', 'string', 'max:80'],
+            'application_answers.*.answer' => ['nullable', 'string', 'max:1500'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'terms_accepted' => ['accepted'],
         ]);
@@ -983,6 +997,11 @@ class ApplicantDashboardController extends Controller
                     : 'This scholarship is no longer accepting applications.',
             ], 422);
         }
+
+        $applicationAnswers = $this->normalizeApplicationAnswers(
+            $scholarship,
+            $validated['application_answers'] ?? [],
+        );
 
         $eligibilityMatch = $this->eligibilityMatch($scholarship, $request->user());
         $eligibilityBlockers = $this->applicationEligibilityBlockers($eligibilityMatch);
@@ -1033,6 +1052,7 @@ class ApplicantDashboardController extends Controller
                 $requiredDocuments,
                 $optionalDocuments,
                 $eligibilityMatch,
+                $applicationAnswers,
                 $validated,
                 $acceptedAt,
                 &$copiedDocumentPaths,
@@ -1046,6 +1066,7 @@ class ApplicantDashboardController extends Controller
                     'eligibility_score' => $eligibilityMatch['score'],
                     'eligibility_breakdown' => $eligibilityMatch,
                     'review_rubric_snapshot' => $scholarship->review_rubric ?? [],
+                    'application_answers' => $applicationAnswers,
                     'notes' => $validated['notes'] ?? null,
                     'submitted_at' => $acceptedAt,
                     'terms_accepted_at' => $acceptedAt,
@@ -1614,6 +1635,7 @@ class ApplicantDashboardController extends Controller
             'requirements' => $scholarship->requirements,
             'optional_requirements' => $scholarship->optional_requirements,
             'post_qualification_requirements' => $scholarship->post_qualification_requirements,
+            'application_questions' => $scholarship->application_questions ?? [],
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),
             'award_amount' => $scholarship->award_amount,
@@ -1772,6 +1794,7 @@ class ApplicantDashboardController extends Controller
             'eligibility_score' => $application->eligibility_score,
             'eligibility_breakdown' => $application->eligibility_breakdown,
             'documents' => $application->documents->map(fn (ApplicationDocument $document) => $this->documentPayload($document))->values(),
+            'application_answers' => $application->application_answers ?? [],
             'notes' => $application->notes,
             'review_notes' => $application->review_notes,
             'correction_status' => $application->correction_status,
@@ -1818,6 +1841,43 @@ class ApplicantDashboardController extends Controller
                 : null,
             'exam' => $exam,
         ];
+    }
+
+    private function normalizeApplicationAnswers(Scholarship $scholarship, array $submittedAnswers): array
+    {
+        $answersByQuestion = collect($submittedAnswers)
+            ->filter(fn (mixed $answer): bool => is_array($answer) && filled($answer['question_id'] ?? null))
+            ->keyBy(fn (array $answer): string => (string) $answer['question_id']);
+        $missingRequired = [];
+
+        $answers = collect($scholarship->application_questions ?? [])
+            ->filter(fn (mixed $question): bool => is_array($question) && filled($question['id'] ?? null) && filled($question['prompt'] ?? null))
+            ->map(function (array $question) use ($answersByQuestion, &$missingRequired): array {
+                $questionId = (string) $question['id'];
+                $answer = trim((string) data_get($answersByQuestion->get($questionId), 'answer', ''));
+                $required = (bool) ($question['required'] ?? false);
+
+                if ($required && $answer === '') {
+                    $missingRequired[] = (string) $question['prompt'];
+                }
+
+                return [
+                    'question_id' => $questionId,
+                    'prompt' => (string) $question['prompt'],
+                    'required' => $required,
+                    'answer' => $answer,
+                ];
+            })
+            ->values()
+            ->all();
+
+        if ($missingRequired !== []) {
+            throw ValidationException::withMessages([
+                'application_answers' => 'Answer every required provider question before submitting.',
+            ]);
+        }
+
+        return $answers;
     }
 
     private function examPayload(Scholarship $scholarship): array

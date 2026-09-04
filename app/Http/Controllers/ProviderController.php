@@ -3093,6 +3093,7 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipProgramPaths($validated);
         $validated = $this->normalizeScholarshipRequirements($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
+        $validated = $this->normalizeScholarshipApplicationQuestions($validated, $request);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
         $validated = $this->normalizeScholarshipExamDetails($validated);
         $validated = $this->applyProviderProgramContactDefaults($validated, $request->user());
@@ -3164,6 +3165,7 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipProgramPaths($validated);
         $validated = $this->normalizeScholarshipRequirements($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
+        $validated = $this->normalizeScholarshipApplicationQuestions($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipExamDetails($validated);
         $validated = $this->applyProviderProgramContactDefaults($validated, $request->user(), $scholarship);
@@ -3478,6 +3480,7 @@ class ProviderController extends Controller
             'image_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'terms_accepted' => $requiresCompleteSubmission ? ['accepted'] : ['nullable'],
             'review_rubric' => ['nullable', 'string', 'max:8000', 'json'],
+            'application_questions' => ['nullable', 'string', 'max:10000', 'json'],
         ]);
 
         return $validated;
@@ -3568,6 +3571,53 @@ class ProviderController extends Controller
         }
 
         $validated['review_rubric'] = ReviewRubric::fromJson($validated['review_rubric'] ?? null);
+
+        return $validated;
+    }
+
+    private function normalizeScholarshipApplicationQuestions(
+        array $validated,
+        Request $request,
+        ?Scholarship $scholarship = null,
+    ): array {
+        if (! $request->has('application_questions')) {
+            $validated['application_questions'] = $scholarship?->application_questions;
+
+            return $validated;
+        }
+
+        $decoded = json_decode((string) ($validated['application_questions'] ?? '[]'), true);
+        $questions = collect(is_array($decoded) ? $decoded : [])
+            ->filter(fn (mixed $question): bool => is_array($question) && filled($question['prompt'] ?? null))
+            ->values()
+            ->all();
+        $questions = validator(['questions' => $questions], [
+            'questions' => ['array', 'max:5'],
+            'questions.*.id' => ['nullable', 'string', 'max:80', 'regex:/^[A-Za-z0-9_-]+$/'],
+            'questions.*.prompt' => ['required', 'string', 'max:300'],
+            'questions.*.required' => ['nullable', 'boolean'],
+        ])->validate()['questions'] ?? [];
+        $usedIds = [];
+
+        $validated['application_questions'] = collect($questions)
+            ->map(function (array $question, int $index) use (&$usedIds): array {
+                $prompt = Str::squish($question['prompt']);
+                $id = $question['id'] ?? null;
+
+                if (blank($id) || in_array($id, $usedIds, true)) {
+                    $id = 'question_'.($index + 1).'_'.substr(sha1($prompt), 0, 8);
+                }
+
+                $usedIds[] = $id;
+
+                return [
+                    'id' => $id,
+                    'prompt' => $prompt,
+                    'required' => (bool) ($question['required'] ?? false),
+                ];
+            })
+            ->values()
+            ->all();
 
         return $validated;
     }
@@ -3844,6 +3894,7 @@ class ProviderController extends Controller
             'handoff_location_address',
             'handoff_url',
             'review_rubric',
+            'application_questions',
             'award_amount',
             'minimum_gwa',
             'minimum_grade_scale',
@@ -4027,6 +4078,7 @@ class ProviderController extends Controller
             'document_readiness' => $readiness,
             'bulk_advance_targets' => $this->bulkAdvanceTargets($application, $readiness),
             'documents' => $application->documents->map(fn (ApplicationDocument $document) => $this->documentPayload($document))->values(),
+            'application_answers' => $application->application_answers ?? [],
             'eligibility_score' => $application->eligibility_score,
             'eligibility_breakdown' => $application->eligibility_breakdown,
             'dss_score' => $dss['score'],
@@ -4114,12 +4166,15 @@ class ProviderController extends Controller
             'email' => $applicant?->email,
             'username' => $applicant?->username,
             'contact_number' => $applicant?->contact_number,
+            'citizenship_status' => $profile?->citizenship_status,
             'education_level' => $profile?->education_level,
             'school' => $profile?->school,
             'school_type' => $profile?->school_type,
             'learner_reference_number' => $profile?->learner_reference_number,
             'course_or_strand' => $profile?->course_or_strand,
             'year_level' => $profile?->year_level,
+            'academic_year' => $profile?->academic_year,
+            'academic_term' => $profile?->academic_term,
             'gwa' => $profile?->gwa,
             'grading_scale' => $profile?->grading_scale,
             'income_bracket' => $profile?->income_bracket,
@@ -4128,6 +4183,8 @@ class ProviderController extends Controller
             'preferred_locations' => $profile?->preferred_locations,
             'willing_to_relocate' => $profile?->willing_to_relocate,
             'support_needs' => $profile?->support_needs,
+            'current_scholarship_status' => $profile?->current_scholarship_status,
+            'current_scholarship_details' => $profile?->current_scholarship_details,
             'scholarship_goal' => $profile?->scholarship_goal,
             'location' => collect([
                 $profile?->barangay,
@@ -4243,6 +4300,7 @@ class ProviderController extends Controller
             'handoff_url' => $scholarship->handoff_url,
             'handoff_map_url' => $this->handoffMapUrl($scholarship),
             'review_rubric' => $scholarship->review_rubric ?? [],
+            'application_questions' => $scholarship->application_questions ?? [],
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),
             'award_amount' => $scholarship->award_amount,

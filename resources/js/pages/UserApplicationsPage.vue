@@ -34,6 +34,7 @@ const currentStep = ref(0);
 const activeWorkspace = ref('applications');
 const selectedScholarshipId = ref('');
 const documentChecklist = ref([]);
+const applicationAnswers = ref({});
 const notes = ref('');
 const applicationTermsAccepted = ref(false);
 const documentTermsAccepted = ref(false);
@@ -43,7 +44,7 @@ const activeUploadRequirement = ref('');
 const steps = [
     { label: 'Program', detail: 'Review the program', icon: 'fa-solid fa-graduation-cap' },
     { label: 'Eligibility', detail: 'Check the criteria', icon: 'fa-solid fa-user-check' },
-    { label: 'Documents', detail: 'Prepare your files', icon: 'fa-solid fa-folder-open' },
+    { label: 'Requirements', detail: 'Files and questions', icon: 'fa-solid fa-folder-open' },
     { label: 'Confirm', detail: 'Check and submit', icon: 'fa-solid fa-paper-plane' },
 ];
 const applicationModeOptions = [
@@ -59,6 +60,17 @@ const selectedOptionalRequirements = computed(() => selectedScholarship.value?.a
     ? []
     : documentRequirements(selectedScholarship.value?.optional_requirements)
         .filter((requirement) => !selectedRequirements.value.includes(requirement)));
+const selectedApplicationQuestions = computed(() => (
+    Array.isArray(selectedScholarship.value?.application_questions)
+        ? selectedScholarship.value.application_questions
+        : []
+).filter((question) => question?.id && question?.prompt));
+const requiredApplicationQuestionsAnswered = computed(() => selectedApplicationQuestions.value
+    .filter((question) => question.required)
+    .every((question) => String(applicationAnswers.value[question.id] ?? '').trim() !== ''));
+const answeredApplicationQuestionCount = computed(() => selectedApplicationQuestions.value
+    .filter((question) => String(applicationAnswers.value[question.id] ?? '').trim() !== '')
+    .length);
 const selectedContractSections = computed(() => {
     const scholarship = selectedScholarship.value;
 
@@ -126,15 +138,28 @@ const selectedEligibilityCriteria = computed(() => {
         return [];
     }
 
-    return [
-        { label: 'Education level', value: criteriaLabel(scholarship.eligible_education_levels), icon: 'fa-solid fa-school' },
-        { label: 'Grade / year level', value: criteriaLabel(scholarship.eligible_year_levels), icon: 'fa-solid fa-layer-group' },
-        { label: 'Track, strand, or course', value: criteriaLabel(scholarship.eligible_courses), icon: 'fa-solid fa-book-open' },
-        { label: 'School type', value: criteriaLabel(scholarship.eligible_school_types), icon: 'fa-solid fa-building-columns' },
-        { label: 'Location coverage', value: criteriaLabel(scholarship.eligible_locations || scholarship.location_name), icon: 'fa-solid fa-location-dot' },
-        { label: 'Household income', value: scholarship.income_requirement || 'Any', icon: 'fa-solid fa-wallet' },
-        { label: 'Academic requirement', value: academicRequirementLabel(scholarship), icon: 'fa-solid fa-chart-line' },
+    const checks = new Map((scholarship.eligibility_match?.criteria ?? [])
+        .map((criterion) => [criterion.key, criterion]));
+    const rules = [
+        { key: 'education_level', label: 'Education level', value: scholarship.eligible_education_levels, icon: 'fa-solid fa-school' },
+        { key: 'year_level', label: 'Grade / year level', value: scholarship.eligible_year_levels, icon: 'fa-solid fa-layer-group' },
+        { key: 'course', label: 'Track, strand, or course', value: scholarship.eligible_courses, icon: 'fa-solid fa-book-open' },
+        { key: 'school_type', label: 'School type', value: scholarship.eligible_school_types, icon: 'fa-solid fa-building-columns' },
+        { key: 'location', label: 'Location coverage', value: scholarship.eligible_locations, icon: 'fa-solid fa-location-dot' },
+        { key: 'income', label: 'Household income', value: scholarship.income_requirement, icon: 'fa-solid fa-wallet' },
+        { key: 'academic', label: 'Academic requirement', value: academicRequirementLabel(scholarship), icon: 'fa-solid fa-chart-line', formatted: true },
     ];
+
+    return rules.map((rule) => {
+        const check = checks.get(rule.key);
+
+        return {
+            ...rule,
+            value: rule.formatted ? rule.value : eligibilityRuleLabel(rule.value, check),
+            status: check?.status ?? 'info',
+            statusLabel: eligibilityCriterionStatusLabel(check),
+        };
+    });
 });
 const readyApplicationCount = computed(() => applications.value.filter((application) => Number(application.document_readiness?.accepted_percent ?? application.document_readiness?.uploaded_percent ?? 0) >= 100).length);
 const activeApplicationCount = computed(() => applications.value.filter((application) => !application.workflow?.is_closed).length);
@@ -182,12 +207,15 @@ const canGoNext = computed(() => {
     }
 
     if (currentStep.value === 2) {
-        return allDocumentsChecked.value;
+        return allDocumentsChecked.value && requiredApplicationQuestionsAnswered.value;
     }
 
     return true;
 });
-const canSubmitApplication = computed(() => allDocumentsChecked.value && selectedCanStartApplication.value && applicationTermsAccepted.value);
+const canSubmitApplication = computed(() => allDocumentsChecked.value
+    && requiredApplicationQuestionsAnswered.value
+    && selectedCanStartApplication.value
+    && applicationTermsAccepted.value);
 
 function canOpenWizardStep(index) {
     if (index === 0) {
@@ -207,7 +235,7 @@ function canOpenWizardStep(index) {
     }
 
     if (index === 3) {
-        return allDocumentsChecked.value;
+        return allDocumentsChecked.value && requiredApplicationQuestionsAnswered.value;
     }
 
     return false;
@@ -465,7 +493,33 @@ function criteriaLabel(value) {
         .filter(Boolean)
         .map(labelFromKey);
 
-    return labels.length ? labels.join(', ') : 'Any';
+    return labels.length ? labels.join(', ') : 'No restriction';
+}
+
+function eligibilityRuleLabel(value, criterion) {
+    if (criterion?.status === 'info') {
+        return 'No restriction';
+    }
+
+    return criteriaLabel(value);
+}
+
+function eligibilityCriterionStatusLabel(criterion) {
+    if (criterion?.status === 'pass') {
+        return 'Matched';
+    }
+
+    if (criterion?.status === 'fail') {
+        return 'Not matched';
+    }
+
+    if (criterion?.status === 'missing') {
+        return 'Profile needed';
+    }
+
+    return criterion?.key === 'academic' && criterion?.requirement
+        ? 'Provider review'
+        : 'No restriction';
 }
 
 function documentRequirements(requirements) {
@@ -516,6 +570,7 @@ function previousStep() {
 function resetWizard() {
     selectedScholarshipId.value = '';
     documentChecklist.value = [];
+    applicationAnswers.value = {};
     notes.value = '';
     applicationTermsAccepted.value = false;
     documentTermsAccepted.value = false;
@@ -618,6 +673,7 @@ async function loadApplications() {
             if (requestedScholarship) {
                 selectedScholarshipId.value = String(requestedScholarship.id);
                 documentChecklist.value = [];
+                applicationAnswers.value = {};
                 notes.value = '';
                 currentStep.value = 0;
 
@@ -663,6 +719,12 @@ async function submitApplication() {
         return;
     }
 
+    if (!requiredApplicationQuestionsAnswered.value) {
+        errorMessage.value = 'Answer every required provider question before submitting.';
+        currentStep.value = 2;
+        return;
+    }
+
     if (!applicationTermsAccepted.value) {
         errorMessage.value = 'Please accept the application terms before submitting.';
         return;
@@ -675,6 +737,10 @@ async function submitApplication() {
         await window.axios.post('/dashboard/applications', {
             scholarship_id: selectedScholarship.value.id,
             document_checklist: documentChecklist.value,
+            application_answers: selectedApplicationQuestions.value.map((question) => ({
+                question_id: question.id,
+                answer: String(applicationAnswers.value[question.id] ?? '').trim(),
+            })),
             notes: notes.value,
             terms_accepted: applicationTermsAccepted.value ? '1' : '',
         });
@@ -706,6 +772,8 @@ async function trackApplicationStart(scholarship) {
 onMounted(loadApplications);
 
 watch(selectedScholarship, (scholarship) => {
+    applicationAnswers.value = {};
+
     if (!scholarship) {
         documentChecklist.value = [];
         return;
@@ -934,9 +1002,20 @@ watch(selectedScholarship, (scholarship) => {
                                     </header>
 
                                     <dl class="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">
-                                        <div v-for="criterion in selectedEligibilityCriteria" :key="criterion.label" class="flex items-start gap-3 rounded-md border border-white/80 bg-white p-3 shadow-sm last:lg:col-span-2">
-                                            <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', selectedIsEligible ? 'bg-slate-100 text-slate-700' : 'bg-rose-100 text-rose-700']"><i :class="criterion.icon" aria-hidden="true"></i></span>
-                                            <div class="min-w-0"><dt class="text-[11px] font-semibold text-slate-500">{{ criterion.label }}</dt><dd class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ criterion.value }}</dd></div>
+                                        <div
+                                            v-for="criterion in selectedEligibilityCriteria"
+                                            :key="criterion.key"
+                                            :class="[
+                                                'flex items-start gap-3 rounded-md border bg-white p-3',
+                                                criterion.status === 'fail' ? 'border-rose-300' : criterion.status === 'missing' ? 'border-amber-300' : 'border-slate-200',
+                                            ]"
+                                        >
+                                            <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', criterion.status === 'fail' ? 'bg-rose-100 text-rose-700' : criterion.status === 'missing' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700']"><i :class="criterion.icon" aria-hidden="true"></i></span>
+                                            <div class="min-w-0">
+                                                <dt class="text-[11px] font-semibold text-slate-500">{{ criterion.label }}</dt>
+                                                <dd class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ criterion.value }}</dd>
+                                                <span :class="['mt-2 inline-flex rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', criterion.status === 'fail' ? 'bg-rose-100 text-rose-700' : criterion.status === 'missing' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">{{ criterion.statusLabel }}</span>
+                                            </div>
                                         </div>
                                     </dl>
                                 </section>
@@ -1012,6 +1091,39 @@ watch(selectedScholarship, (scholarship) => {
                                     </details>
                                 </section>
 
+                                <section v-if="selectedApplicationQuestions.length" class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                    <header class="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p class="student-kicker">From the provider</p>
+                                            <h3 class="mt-1 text-lg font-bold text-slate-950">Short application questions</h3>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">Answer using brief, accurate information. These responses are shared only with this program's reviewers.</p>
+                                        </div>
+                                        <span class="w-fit rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                                            {{ answeredApplicationQuestionCount }} / {{ selectedApplicationQuestions.length }} answered
+                                        </span>
+                                    </header>
+                                    <div class="divide-y divide-slate-200">
+                                        <div v-for="(question, index) in selectedApplicationQuestions" :key="question.id" class="grid gap-3 p-4 sm:grid-cols-[2rem_minmax(0,1fr)] sm:p-5">
+                                            <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-950 text-xs font-bold text-white">{{ index + 1 }}</span>
+                                            <div>
+                                                <label :for="`application-answer-${question.id}`" class="text-sm font-bold leading-6 text-slate-900">
+                                                    {{ question.prompt }}
+                                                    <span v-if="question.required" class="ml-1 text-rose-600">*</span>
+                                                    <span v-else class="ml-1 font-normal text-slate-400">(optional)</span>
+                                                </label>
+                                                <textarea
+                                                    :id="`application-answer-${question.id}`"
+                                                    v-model="applicationAnswers[question.id]"
+                                                    rows="3"
+                                                    maxlength="1500"
+                                                    placeholder="Type a short answer"
+                                                    class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                                                ></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
                                 <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
                                     <div v-if="selectedNeedsOriginalVerification" class="border-b border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-950">
                                         <p class="font-bold"><i class="fa-solid fa-file-shield mr-2 text-amber-700" aria-hidden="true"></i>Keep originals ready</p>
@@ -1056,6 +1168,22 @@ watch(selectedScholarship, (scholarship) => {
                                             <div class="flex items-start gap-3 p-4">
                                                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
                                                 <div><p class="text-xs font-semibold text-slate-500">Application files</p><p class="mt-1 font-bold text-slate-950">{{ selectedRequirements.length ? `${documentChecklist.length} of ${selectedRequirements.length} required files attached` : 'No initial files required' }}</p><p v-if="selectedPreparedOptionalDocuments.length" class="mt-1 text-xs text-slate-500">{{ selectedPreparedOptionalDocuments.length }} optional supporting file{{ selectedPreparedOptionalDocuments.length === 1 ? '' : 's' }} included</p></div>
+                                            </div>
+                                            <div v-if="selectedApplicationQuestions.length" class="flex items-start gap-3 p-4">
+                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
+                                                <div class="min-w-0 flex-1">
+                                                    <p class="text-xs font-semibold text-slate-500">Provider questions</p>
+                                                    <p class="mt-1 font-bold text-slate-950">{{ answeredApplicationQuestionCount }} of {{ selectedApplicationQuestions.length }} answered</p>
+                                                    <details class="mt-2">
+                                                        <summary class="cursor-pointer text-xs font-bold text-slate-600">Review answers</summary>
+                                                        <dl class="mt-2 space-y-3 rounded-md bg-slate-50 p-3">
+                                                            <div v-for="question in selectedApplicationQuestions" :key="`confirm-${question.id}`">
+                                                                <dt class="text-xs font-semibold text-slate-500">{{ question.prompt }}</dt>
+                                                                <dd class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ applicationAnswers[question.id] || 'No answer provided' }}</dd>
+                                                            </div>
+                                                        </dl>
+                                                    </details>
+                                                </div>
                                             </div>
                                             <div class="flex items-start gap-3 p-4">
                                                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-regular fa-message" aria-hidden="true"></i></span>

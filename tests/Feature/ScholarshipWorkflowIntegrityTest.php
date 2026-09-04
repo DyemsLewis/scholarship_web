@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\MobileApiToken;
 use App\Models\Scholarship;
+use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Support\ReviewRubric;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -135,6 +136,48 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
         $this->assertDatabaseCount('scholarship_applications', 0);
     }
 
+    public function test_mobile_app_enforces_and_snapshots_provider_questions(): void
+    {
+        $applicant = $this->completeApplicant();
+        [, $scholarship] = $this->publishedScholarship([
+            'application_questions' => [[
+                'id' => 'support_use',
+                'prompt' => 'How would this support help your studies?',
+                'required' => true,
+            ]],
+        ]);
+        $token = $this->mobileToken($applicant);
+
+        $this->withToken($token)
+            ->getJson('/api/mobile/profile')
+            ->assertOk()
+            ->assertJsonPath('scholarships.0.application_questions.0.id', 'support_use');
+
+        $this->withToken($token)
+            ->postJson('/api/mobile/applications', ['scholarship_id' => $scholarship->id])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('application_answers');
+
+        $this->withToken($token)
+            ->postJson('/api/mobile/applications', [
+                'scholarship_id' => $scholarship->id,
+                'application_answers' => [[
+                    'question_id' => 'support_use',
+                    'answer' => 'It would help me obtain learning materials.',
+                ]],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('application.application_answers.0.question_id', 'support_use')
+            ->assertJsonPath('application.application_answers.0.answer', 'It would help me obtain learning materials.');
+
+        $application = ScholarshipApplication::query()->sole();
+
+        $this->assertSame(
+            'How would this support help your studies?',
+            data_get($application->submission_snapshot, 'current.application_answers.0.prompt'),
+        );
+    }
+
     private function publishedScholarship(array $attributes = []): array
     {
         $provider = User::factory()->create(['role' => 'provider']);
@@ -177,6 +220,8 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
             'school' => 'Test University',
             'course_or_strand' => 'BS Information Technology',
             'year_level' => '1st year',
+            'academic_year' => '2026-2027',
+            'academic_term' => 'first_semester',
             'gwa' => 90,
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',

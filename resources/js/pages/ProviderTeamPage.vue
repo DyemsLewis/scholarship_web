@@ -4,6 +4,7 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import ProviderWorkflowNav from '../components/ProviderWorkflowNav.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const isLoading = ref(true);
@@ -107,6 +108,8 @@ onMounted(loadTeam);
                         </a>
                     </div>
                 </header>
+
+                <ProviderWorkflowNav active="organization" class="mt-5" />
 
                 <ProviderSectionNav section="organization" />
 

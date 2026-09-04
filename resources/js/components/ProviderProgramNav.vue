@@ -31,6 +31,12 @@ const links = computed(() => [
         icon: 'fa-solid fa-table-columns',
         href: `/provider/programs/${props.programId}`,
     },
+    ...(props.canManage ? [{
+        key: 'settings',
+        label: 'Program setup',
+        icon: 'fa-solid fa-pen-to-square',
+        href: `/provider/programs/${props.programId}/edit`,
+    }] : []),
     ...(canReviewApplications.value ? [{
         key: 'applicants',
         label: 'Applicants',
@@ -38,22 +44,16 @@ const links = computed(() => [
         href: `/provider/programs/${props.programId}/applications?workspace=applications`,
     }, {
         key: 'schedule',
-        label: 'Schedule',
+        label: 'Activities',
         icon: 'fa-regular fa-calendar',
         href: `/provider/programs/${props.programId}/applications?workspace=schedule`,
     }] : []),
     {
         key: 'announcements',
-        label: 'Announcements',
+        label: 'Updates',
         icon: 'fa-solid fa-bullhorn',
         href: `/provider/programs/${props.programId}#announcements`,
     },
-    ...(props.canManage ? [{
-        key: 'settings',
-        label: 'Settings',
-        icon: 'fa-solid fa-sliders',
-        href: `/provider/programs/${props.programId}/edit`,
-    }] : []),
 ]);
 
 const activeKey = computed(() => {

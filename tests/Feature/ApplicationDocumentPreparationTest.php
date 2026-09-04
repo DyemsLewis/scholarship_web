@@ -183,6 +183,56 @@ class ApplicationDocumentPreparationTest extends TestCase
         $this->assertSame([], $application->document_checklist);
     }
 
+    public function test_required_provider_questions_are_answered_and_frozen_with_the_submission(): void
+    {
+        Mail::fake();
+        Storage::fake('local');
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = $this->completeApplicant();
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Applicant Context Scholarship',
+            'description' => 'Collects one program-specific answer during pre-screening.',
+            'application_mode' => 'provider_review',
+            'application_questions' => [[
+                'id' => 'support_use',
+                'prompt' => 'How would this support help your studies?',
+                'required' => true,
+            ]],
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+
+        $this->actingAs($applicant)
+            ->postJson('/dashboard/applications', [
+                'scholarship_id' => $scholarship->id,
+                'terms_accepted' => true,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('application_answers');
+
+        $response = $this->actingAs($applicant)
+            ->postJson('/dashboard/applications', [
+                'scholarship_id' => $scholarship->id,
+                'application_answers' => [[
+                    'question_id' => 'support_use',
+                    'answer' => 'It would help pay for learning materials.',
+                ]],
+                'terms_accepted' => true,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('application.application_answers.0.question_id', 'support_use')
+            ->assertJsonPath('application.application_answers.0.answer', 'It would help pay for learning materials.');
+
+        $application = ScholarshipApplication::findOrFail($response->json('application.id'));
+
+        $this->assertSame(
+            'How would this support help your studies?',
+            data_get($application->submission_snapshot, 'current.application_answers.0.prompt'),
+        );
+    }
+
     private function completeApplicant(): User
     {
         $applicant = User::factory()->create();
@@ -194,6 +244,8 @@ class ApplicationDocumentPreparationTest extends TestCase
             'course_or_strand' => 'BS Information Technology',
             'year_level' => '1st year',
             'enrollment_status' => 'Enrolled',
+            'academic_year' => '2026-2027',
+            'academic_term' => 'first_semester',
             'gwa' => 90,
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',

@@ -57,7 +57,10 @@ class UserFactory extends Factory
 
             $user->studentProfile()->firstOrCreate([
                 'user_id' => $user->id,
-            ], $profile);
+            ], [
+                ...$profile,
+                'citizenship_status' => 'filipino',
+            ]);
         });
     }
 
