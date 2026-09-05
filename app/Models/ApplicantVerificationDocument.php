@@ -20,6 +20,13 @@ class ApplicantVerificationDocument extends Model
         'uploaded_at',
         'terms_accepted_at',
         'terms_version',
+        'ocr_status',
+        'ocr_provider',
+        'ocr_grade',
+        'ocr_grading_scale',
+        'ocr_label',
+        'ocr_message',
+        'ocr_processed_at',
     ];
 
     protected function casts(): array
@@ -27,6 +34,8 @@ class ApplicantVerificationDocument extends Model
         return [
             'uploaded_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
+            'ocr_grade' => 'decimal:2',
+            'ocr_processed_at' => 'datetime',
         ];
     }
 

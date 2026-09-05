@@ -10,12 +10,114 @@ use App\Models\StudentDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ApplicantProfileVerificationTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_cloud_scan_sets_the_academic_result_and_applicant_cannot_overwrite_it(): void
+    {
+        Storage::fake('local');
+        $this->enableAcademicOcr();
+        Http::fake([
+            'https://api.ocr.space/parse/image' => Http::response([
+                'ParsedResults' => [[
+                    'ParsedText' => "Learner report card\nGWA:\n89\nSchool year 2026-2027",
+                ]],
+                'OCRExitCode' => 1,
+                'IsErroredOnProcessing' => false,
+            ]),
+        ]);
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('report-card.pdf', 120, 'application/pdf'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('user.gwa', '89.00')
+            ->assertJsonPath('user.grading_scale', 'percentage')
+            ->assertJsonPath('user.academic_result_source', 'ocr')
+            ->assertJsonPath('verification_documents.0.ocr_status', 'succeeded')
+            ->assertJsonPath('verification_documents.0.ocr_grade', '89.00');
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', [
+                'first_name' => $applicant->first_name,
+                'last_name' => $applicant->last_name,
+                'contact_number' => $applicant->contact_number,
+                'grading_scale' => 'percentage',
+                'gwa' => 55,
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.gwa', '89.00');
+
+        $this->assertDatabaseHas('student_profiles', [
+            'user_id' => $applicant->id,
+            'gwa' => 89,
+            'grading_scale' => 'percentage',
+            'academic_result_source' => 'ocr',
+        ]);
+
+        $this->actingAs($admin)
+            ->getJson("/admin/applicants/{$applicant->id}/review/data")
+            ->assertOk()
+            ->assertJsonPath('applicant.academic_scan_required', true)
+            ->assertJsonPath('applicant.verification_documents.0.ocr_status', 'succeeded');
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+                'verification_status' => 'approved',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.applicant_verification_status', 'approved');
+
+        Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+            && $request->url() === 'https://api.ocr.space/parse/image'
+            && $request->hasHeader('apikey', 'test-key'));
+        Http::assertSentCount(1);
+    }
+
+    public function test_reviewer_cannot_verify_when_cloud_scan_did_not_find_an_academic_result(): void
+    {
+        Storage::fake('local');
+        $this->enableAcademicOcr();
+        Http::fake([
+            'https://api.ocr.space/parse/image' => Http::response([
+                'ParsedResults' => [[
+                    'ParsedText' => 'School year 2026-2027 subject grades only',
+                ]],
+                'OCRExitCode' => 1,
+                'IsErroredOnProcessing' => false,
+            ]),
+        ]);
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('unclear-record.pdf', 120, 'application/pdf'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('verification_documents.0.ocr_status', 'needs_review');
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+                'verification_status' => 'approved',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'The academic record must have a successful scan before its result can be verified.');
+    }
 
     public function test_applicant_can_submit_private_academic_record_for_admin_review(): void
     {
@@ -671,5 +773,17 @@ class ApplicantProfileVerificationTest extends TestCase
             ])
             ->assertUnprocessable()
             ->assertJsonPath('message', 'The applicant must upload an academic record before the academic result can be verified.');
+    }
+
+    private function enableAcademicOcr(): void
+    {
+        config([
+            'services.academic_ocr.enabled' => true,
+            'services.academic_ocr.endpoint' => 'https://api.ocr.space/parse/image',
+            'services.academic_ocr.key' => 'test-key',
+            'services.academic_ocr.engine' => 2,
+            'services.academic_ocr.language' => 'eng',
+            'services.academic_ocr.max_file_size_kb' => 1024,
+        ]);
     }
 }

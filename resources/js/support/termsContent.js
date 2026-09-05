@@ -35,7 +35,7 @@ export const termsContent = {
     privacy: {
         eyebrow: 'Privacy Notice',
         title: 'How we handle personal information',
-        effectiveDate: 'Effective August 10, 2026',
+        effectiveDate: 'Effective September 5, 2026',
         summary: 'This notice explains what the scholarship portal collects, why it is needed, who may review it, and how applicants, parents or guardians, providers, and staff can raise a privacy request.',
         details: [
             'Personal information is used only to operate accounts, scholarship matching, verification, applications, notifications, reviews, support, and platform security. It is not displayed publicly or sold for advertising.',
@@ -61,7 +61,7 @@ export const termsContent = {
             },
             {
                 title: 'External services',
-                text: 'Email delivery services process addresses and message content. OpenStreetMap, Nominatim, and map delivery services may receive location searches and network information when maps are used. PayMongo processes optional provider service payments when billing is enabled; applicant scholarship applications are not payment transactions.',
+                text: 'Email delivery services process addresses and message content. OpenStreetMap, Nominatim, and map delivery services may receive location searches and network information when maps are used. OCR.space receives the selected academic image or PDF when automatic result extraction is enabled. PayMongo processes optional provider service payments when billing is enabled; applicant scholarship applications are not payment transactions.',
                 icon: 'fa-solid fa-arrow-up-right-from-square',
             },
             {
@@ -115,6 +115,7 @@ export const termsContent = {
         details: [
             'Each file should be correct, readable, and related to the applicant or an authorized organization. Do not upload unrelated files or personal information that is not needed for scholarship or verification purposes.',
             'Profile verification asks only for a relevant academic record, such as a report card, grade report, transcript, or assessment. Do not upload a birth certificate, government ID, proof of income, or unrelated sensitive record for this step. A provider may request a separate document later only when its published program requirements explain why it is needed.',
+            'When automatic academic scanning is enabled, the selected academic image or PDF is sent securely from the portal server to OCR.space for text extraction. The portal keeps the extracted overall result and scan status, while an authorized reviewer still compares the result with the original file before verification.',
             'An academic verification record may be reviewed by administrators and by a provider after an application is submitted to that provider program. Replacing an approved academic record requires the updated file and saved result to be reviewed again.',
             'False, altered, expired, misleading, or unauthorized documents may delay processing and may affect account, verification, or application status. The portal may keep review notes and document status changes as part of the audit record.',
         ],

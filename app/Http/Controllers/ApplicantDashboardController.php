@@ -15,6 +15,7 @@ use App\Models\ScholarshipFunnelEvent;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Rules\PhoneNumber;
+use App\Services\AcademicRecordOcrService;
 use App\Services\ApplicantDocumentLibraryService;
 use App\Services\ApplicationWorkflowService;
 use App\Services\DecisionSupportService;
@@ -42,6 +43,7 @@ class ApplicantDashboardController extends Controller
         private readonly ScholarshipEligibilityService $eligibilityService,
         private readonly ApplicantDocumentLibraryService $documentLibraryService,
         private readonly ApplicationWorkflowService $workflowService,
+        private readonly AcademicRecordOcrService $academicRecordOcrService,
     ) {}
 
     public function index(Request $request): View|RedirectResponse
@@ -195,6 +197,7 @@ class ApplicantDashboardController extends Controller
             'profile_readiness' => $user->applicantProfileReadiness(),
             'match_summary' => $this->profileMatchSummary($user),
             'prepared_documents_count' => $user->studentDocuments()->count(),
+            'academic_ocr' => $this->academicRecordOcrService->publicConfiguration(),
             'verification_documents' => $verificationDocuments
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
                 ->values(),
@@ -468,12 +471,18 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
 
+        $usesAcademicOcr = $this->academicRecordOcrService->configured()
+            && $request->input('document_type') === 'academic_record';
+        $maximumFileSize = $usesAcademicOcr
+            ? max(1, (int) config('services.academic_ocr.max_file_size_kb', 1024))
+            : 5120;
+        $allowedFileTypes = $usesAcademicOcr ? 'pdf,jpg,jpeg,png' : 'pdf,jpg,jpeg,png,doc,docx';
         $validated = $request->validate([
             'document_type' => ['required', Rule::in([
                 'academic_record',
                 'school_record',
             ])],
-            'document_file' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
+            'document_file' => ['required', 'file', "max:{$maximumFileSize}", "mimes:{$allowedFileTypes}"],
             'terms_accepted' => ['accepted'],
         ]);
 
@@ -510,15 +519,31 @@ class ApplicantDashboardController extends Controller
                     'uploaded_at' => now(),
                     'terms_accepted_at' => now(),
                     'terms_version' => Terms::VERSION,
+                    'ocr_status' => AcademicRecordOcrService::STATUS_NOT_REQUESTED,
+                    'ocr_provider' => null,
+                    'ocr_grade' => null,
+                    'ocr_grading_scale' => null,
+                    'ocr_label' => null,
+                    'ocr_message' => null,
+                    'ocr_processed_at' => null,
                 ]);
 
                 if ($isAcademicRecord) {
-                    $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
+                    $profileValues = [
                         'verification_status' => 'pending',
                         'verification_notes' => null,
                         'verified_at' => null,
                         'verified_by' => null,
-                    ]);
+                        'academic_result_source' => null,
+                        'academic_result_extracted_at' => null,
+                    ];
+
+                    if ($this->academicRecordOcrService->configured()) {
+                        $profileValues['gwa'] = null;
+                        $profileValues['grading_scale'] = null;
+                    }
+
+                    $user->studentProfile()->updateOrCreate(['user_id' => $user->id], $profileValues);
                     $user->applicantVerificationDocuments()
                         ->where('document_type', 'academic_record')
                         ->update([
@@ -538,6 +563,10 @@ class ApplicantDashboardController extends Controller
         if ($oldPath && $oldPath !== $path) {
             Storage::disk('local')->delete($oldPath);
         }
+
+        $ocrResult = $isAcademicRecord
+            ? $this->processAcademicRecordScan($user, $document)
+            : null;
 
         try {
             $preparedDocument = $this->documentLibraryService->ensureVerificationCopy($user, $document);
@@ -573,6 +602,7 @@ class ApplicantDashboardController extends Controller
                 'document_id' => $document->id,
                 'document_type' => $document->document_type,
                 'prepared_document_id' => $preparedDocument?->id,
+                'ocr_status' => $ocrResult['status'] ?? AcademicRecordOcrService::STATUS_NOT_REQUESTED,
             ],
         );
 
@@ -581,7 +611,13 @@ class ApplicantDashboardController extends Controller
             : str($documentLabel)->title().' uploaded.';
 
         if ($isAcademicRecord) {
-            $message .= ' It was sent for admin review.';
+            if (($ocrResult['status'] ?? null) === AcademicRecordOcrService::STATUS_SUCCEEDED) {
+                $message .= ' The academic result was extracted and sent for review.';
+            } elseif ($this->academicRecordOcrService->configured()) {
+                $message .= ' The file was saved, but its academic result still needs a successful scan before verification.';
+            } else {
+                $message .= ' It was sent for admin review.';
+            }
         }
 
         if ($preparedDocument) {
@@ -594,7 +630,41 @@ class ApplicantDashboardController extends Controller
             'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
             'prepared_document' => $preparedDocument ? $this->studentDocumentPayload($preparedDocument) : null,
             'prepared_documents_count' => $user->studentDocuments()->count(),
+            'academic_ocr' => $this->academicRecordOcrService->publicConfiguration(),
         ], $existing ? 200 : 201);
+    }
+
+    public function rescanApplicantVerificationDocument(Request $request, ApplicantVerificationDocument $document): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($document->applicant_id === $request->user()->id, 403);
+        abort_unless($document->document_type === 'academic_record', 404);
+
+        if (! $this->academicRecordOcrService->enabled()) {
+            return response()->json([
+                'message' => 'Automatic academic scanning is not enabled.',
+            ], 422);
+        }
+
+        $result = $this->processAcademicRecordScan($request->user(), $document);
+
+        ActivityLog::record(
+            $request->user(),
+            'applicant_academic_record_rescanned',
+            "{$request->user()->name} retried academic record scanning.",
+            $request,
+            [
+                'document_id' => $document->id,
+                'ocr_status' => $result['status'],
+            ],
+        );
+
+        return response()->json([
+            'message' => $result['message'],
+            'user' => $request->user()->fresh(['studentProfile'])->publicPayload(),
+            'verification_documents' => $this->applicantVerificationDocumentsPayload($request->user()),
+            'academic_ocr' => $this->academicRecordOcrService->publicConfiguration(),
+        ]);
     }
 
     public function deleteApplicantVerificationDocument(Request $request, ApplicantVerificationDocument $document): JsonResponse
@@ -613,12 +683,24 @@ class ApplicantDashboardController extends Controller
                 ->exists();
 
             if ($removedAcademicRecord) {
-                $user->studentProfile()->update([
+                $profileValues = [
                     'verification_status' => $hasAcademicRecord ? 'pending' : 'unsubmitted',
                     'verification_notes' => null,
                     'verified_at' => null,
                     'verified_by' => null,
-                ]);
+                ];
+
+                if ($user->studentProfile?->academic_result_source === 'ocr') {
+                    $profileValues = [
+                        ...$profileValues,
+                        'gwa' => null,
+                        'grading_scale' => null,
+                        'academic_result_source' => null,
+                        'academic_result_extracted_at' => null,
+                    ];
+                }
+
+                $user->studentProfile()->update($profileValues);
 
                 if ($hasAcademicRecord) {
                     $user->applicantVerificationDocuments()
@@ -653,6 +735,7 @@ class ApplicantDashboardController extends Controller
             'user' => $user->fresh(['studentProfile'])->publicPayload(),
             'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
             'prepared_documents_count' => $user->studentDocuments()->count(),
+            'academic_ocr' => $this->academicRecordOcrService->publicConfiguration(),
         ]);
     }
 
@@ -785,6 +868,7 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
 
+        $ocrManagedGrades = $this->academicRecordOcrService->configured();
         $gradeMaximum = $request->input('grading_scale') === AcademicRequirement::SCALE_GRADE_POINT ? 5 : 100;
 
         $validated = $request->validate([
@@ -805,8 +889,8 @@ class ApplicantDashboardController extends Controller
             'enrollment_status' => ['nullable', 'string', 'max:100'],
             'academic_year' => ['nullable', 'string', 'max:20'],
             'academic_term' => ['nullable', Rule::in(['full_year', 'first_grading_period', 'second_grading_period', 'third_grading_period', 'fourth_grading_period', 'first_semester', 'second_semester', 'third_term', 'summer_term', 'latest_completed_term', 'not_applicable'])],
-            'gwa' => ['nullable', 'numeric', 'min:0', "max:{$gradeMaximum}"],
-            'grading_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
+            'gwa' => $ocrManagedGrades ? ['nullable'] : ['nullable', 'numeric', 'min:0', "max:{$gradeMaximum}"],
+            'grading_scale' => $ocrManagedGrades ? ['nullable'] : ['nullable', Rule::in(AcademicRequirement::SCALES)],
             'income_bracket' => ['nullable', 'string', 'max:100'],
             'household_size' => ['nullable', 'integer', 'min:1', 'max:30'],
             'preferred_categories' => ['nullable', 'string', 'max:1000'],
@@ -831,7 +915,9 @@ class ApplicantDashboardController extends Controller
             'guardian_is_account_owner' => ['nullable', 'boolean'],
         ]);
 
-        if (! AcademicRequirement::requiresNumeric($validated['grading_scale'] ?? null)) {
+        if ($ocrManagedGrades) {
+            unset($validated['gwa'], $validated['grading_scale']);
+        } elseif (! AcademicRequirement::requiresNumeric($validated['grading_scale'] ?? null)) {
             $validated['gwa'] = null;
         }
 
@@ -2111,9 +2197,67 @@ class ApplicantDashboardController extends Controller
             'size' => $document->size,
             'status' => $document->status,
             'review_notes' => $document->review_notes,
+            'ocr_status' => $document->ocr_status ?? AcademicRecordOcrService::STATUS_NOT_REQUESTED,
+            'ocr_provider' => $document->ocr_provider,
+            'ocr_grade' => $document->ocr_grade,
+            'ocr_grading_scale' => $document->ocr_grading_scale,
+            'ocr_label' => $document->ocr_label,
+            'ocr_message' => $document->ocr_message,
+            'ocr_processed_at' => $document->ocr_processed_at?->format('M d, Y h:i A'),
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'view_url' => route('dashboard.applicant-verification-documents.view', $document),
         ];
+    }
+
+    private function processAcademicRecordScan(User $user, ApplicantVerificationDocument $document): array
+    {
+        if (! Storage::disk('local')->exists($document->path)) {
+            $result = [
+                'status' => AcademicRecordOcrService::STATUS_FAILED,
+                'provider' => 'ocr_space',
+                'grade' => null,
+                'grading_scale' => null,
+                'label' => null,
+                'message' => 'The stored academic record could not be opened for scanning.',
+            ];
+        } else {
+            $result = $this->academicRecordOcrService->scan(
+                Storage::disk('local')->get($document->path),
+                $document->original_name,
+                $document->mime_type,
+            );
+        }
+
+        DB::transaction(function () use ($user, $document, $result): void {
+            $document->update([
+                'ocr_status' => $result['status'],
+                'ocr_provider' => $result['provider'],
+                'ocr_grade' => $result['grade'],
+                'ocr_grading_scale' => $result['grading_scale'],
+                'ocr_label' => $result['label'],
+                'ocr_message' => $result['message'],
+                'ocr_processed_at' => now(),
+            ]);
+
+            if ($result['status'] !== AcademicRecordOcrService::STATUS_SUCCEEDED) {
+                return;
+            }
+
+            $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
+                'gwa' => $result['grade'],
+                'grading_scale' => $result['grading_scale'],
+                'academic_result_source' => 'ocr',
+                'academic_result_extracted_at' => now(),
+                'verification_status' => 'pending',
+                'verification_notes' => null,
+                'verified_at' => null,
+                'verified_by' => null,
+            ]);
+        });
+
+        $user->unsetRelation('studentProfile');
+
+        return $result;
     }
 
     private function timelinePayload(ScholarshipApplication $application): array

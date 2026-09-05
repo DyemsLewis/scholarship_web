@@ -217,6 +217,8 @@ const applicantProfileProofs = computed(() => application.value?.applicant?.prof
 const academicProfileProof = computed(() => applicantProfileProofs.value.find(
     (proof) => proof.document_type === 'academic_record',
 ) ?? null);
+const academicScanRequired = computed(() => Boolean(application.value?.applicant?.academic_scan_required));
+const academicScanReady = computed(() => !academicScanRequired.value || academicProfileProof.value?.ocr_status === 'succeeded');
 const applicantApplicationAnswers = computed(() => (
     Array.isArray(application.value?.application_answers)
         ? application.value.application_answers
@@ -238,6 +240,7 @@ const academicEvidenceState = computed(() => {
 const canVerifyAcademicRecord = computed(() => (
     application.value?.applicant?.profile_verification_status === 'pending'
         && Boolean(academicProfileProof.value)
+        && academicScanReady.value
 ));
 const applicantInitials = computed(() => String(application.value?.applicant?.name ?? 'Applicant')
     .split(/\s+/)
@@ -727,6 +730,42 @@ function profileVerificationLabel(status) {
         pending: 'Academic review pending',
         unsubmitted: 'Academic record not verified',
     }[status] ?? labelFromKey(status || 'unsubmitted');
+}
+
+function academicScanStatusLabel(status) {
+    return {
+        succeeded: 'Result extracted',
+        needs_review: 'Result not found',
+        failed: 'Scan failed',
+        unavailable: 'Scanner unavailable',
+        not_requested: 'Not scanned',
+    }[status] ?? 'Not scanned';
+}
+
+function academicScanStatusClass(status) {
+    if (status === 'succeeded') {
+        return 'bg-sky-100 text-sky-800';
+    }
+
+    if (['failed', 'needs_review'].includes(status)) {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
+function extractedAcademicResult(proof) {
+    if (proof?.ocr_grading_scale === 'pass_fail') {
+        return 'Pass / competency result';
+    }
+
+    if (proof?.ocr_grade !== null && proof?.ocr_grade !== undefined) {
+        return proof.ocr_grading_scale === 'percentage'
+            ? `${proof.ocr_grade}%`
+            : `${proof.ocr_grade} GWA / GPA`;
+    }
+
+    return 'No result extracted';
 }
 
 function evidenceLabel(status) {
@@ -2292,6 +2331,10 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
+                                <p v-if="academicScanRequired && academicProfileProof && !academicScanReady" class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm leading-6 text-amber-900">
+                                    The academic result was not extracted successfully. Ask the applicant to retry or upload a clearer record before verification.
+                                </p>
+
                                 <div v-if="applicantProfileProofs.length" class="divide-y divide-slate-200">
                                     <article v-for="proof in applicantProfileProofs" :key="proof.id" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                                         <div class="flex min-w-0 items-start gap-3">
@@ -2307,6 +2350,15 @@ onMounted(loadApplication);
                                                 </div>
                                                 <p class="mt-1 truncate text-xs text-slate-500">{{ proof.original_name }}</p>
                                                 <p class="mt-1 text-xs text-slate-500">{{ formatFileSize(proof.size) }} - {{ proof.uploaded_at || 'Date unavailable' }}</p>
+                                                <div v-if="academicScanRequired && proof.document_type === 'academic_record'" class="mt-2 flex flex-wrap items-center gap-2">
+                                                    <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', academicScanStatusClass(proof.ocr_status)]">
+                                                        {{ academicScanStatusLabel(proof.ocr_status) }}
+                                                    </span>
+                                                    <strong v-if="proof.ocr_status === 'succeeded'" class="text-xs text-slate-900">
+                                                        {{ extractedAcademicResult(proof) }}
+                                                    </strong>
+                                                    <p v-if="proof.ocr_message" class="basis-full text-xs leading-5 text-slate-500">{{ proof.ocr_message }}</p>
+                                                </div>
                                             </div>
                                         </div>
                                         <button

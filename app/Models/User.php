@@ -384,6 +384,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'academic_term' => $this->studentProfile?->academic_term,
             'gwa' => $this->studentProfile?->gwa,
             'grading_scale' => $this->studentProfile?->grading_scale,
+            'academic_result_source' => $this->studentProfile?->academic_result_source,
+            'academic_result_extracted_at' => $this->studentProfile?->academic_result_extracted_at?->format('M d, Y h:i A'),
             'income_bracket' => $this->studentProfile?->income_bracket,
             'household_size' => $this->studentProfile?->household_size,
             'preferred_categories' => $this->studentProfile?->preferred_categories,

@@ -26,18 +26,19 @@ const activeKey = computed(() => {
     return props.active === 'users' ? 'accounts' : props.active;
 });
 const navLinks = [
-    { key: 'dashboard', href: '/admin', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
-    { key: 'reviews', href: '/admin/reviews', label: 'Reviews', icon: 'fa-solid fa-clipboard-check', permission: 'manage_reviews' },
-    { key: 'accounts', href: '/admin/manage-users', label: 'Accounts', icon: 'fa-solid fa-users-gear', permission: 'manage_accounts' },
+    { key: 'dashboard', href: '/admin', label: 'Dashboard', icon: 'fa-solid fa-gauge-high', section: 'Workspace' },
+    { key: 'reviews', href: '/admin/reviews', label: 'Reviews', icon: 'fa-solid fa-clipboard-check', permission: 'manage_reviews', section: 'Administration' },
+    { key: 'accounts', href: '/admin/manage-users', label: 'Accounts', icon: 'fa-solid fa-users-gear', permission: 'manage_accounts', section: 'Administration' },
     {
         key: 'operations',
         href: operationsHref,
         label: 'Operations',
         icon: 'fa-solid fa-list-check',
+        section: 'Administration',
         anyPermission: ['manage_reports', 'manage_billing', 'view_logs'],
         activePaths: ['/admin/reports', '/admin/billing', '/admin/logs'],
     },
-    { key: 'profile', href: '/admin/profile', label: 'Profile', icon: 'fa-solid fa-id-badge' },
+    { key: 'profile', href: '/admin/profile', label: 'Profile', icon: 'fa-solid fa-id-badge', section: 'Account' },
 ];
 
 const visibleNavLinks = computed(() => navLinks.filter((link) => (

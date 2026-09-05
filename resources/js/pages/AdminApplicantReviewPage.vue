@@ -27,6 +27,8 @@ const previousReviewSection = computed(() => reviewSections[activeReviewSectionI
 const nextReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value + 1] ?? null);
 const academicRecord = computed(() => academicVerificationDocument(applicant.value));
 const savedAcademicResult = computed(() => academicResultLabel(applicant.value));
+const academicScanRequired = computed(() => Boolean(applicant.value?.academic_scan_required));
+const academicScanReady = computed(() => !academicScanRequired.value || academicRecord.value?.ocr_status === 'succeeded');
 const hasGuardianDetails = computed(() => Boolean(
     applicant.value?.guardian_name
     || applicant.value?.guardian_relationship
@@ -162,6 +164,42 @@ function documentStatusClass(status) {
     return 'bg-slate-100 text-slate-700';
 }
 
+function academicScanStatusLabel(status) {
+    return {
+        succeeded: 'Result extracted',
+        needs_review: 'Result not found',
+        failed: 'Scan failed',
+        unavailable: 'Scanner unavailable',
+        not_requested: 'Not scanned',
+    }[status] ?? 'Not scanned';
+}
+
+function academicScanStatusClass(status) {
+    if (status === 'succeeded') {
+        return 'bg-sky-100 text-sky-800';
+    }
+
+    if (['failed', 'needs_review'].includes(status)) {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
+function extractedAcademicResult(document) {
+    if (document?.ocr_grading_scale === 'pass_fail') {
+        return 'Pass / competency result';
+    }
+
+    if (document?.ocr_grade !== null && document?.ocr_grade !== undefined) {
+        return document.ocr_grading_scale === 'percentage'
+            ? `${document.ocr_grade}%`
+            : `${document.ocr_grade} GWA / GPA`;
+    }
+
+    return 'No result extracted';
+}
+
 function documentTypeLabel(type) {
     return {
         academic_record: 'Academic record',
@@ -195,7 +233,7 @@ function applicantActionOptions(currentApplicant) {
     const status = applicantReviewStatus(currentApplicant);
     const actions = [];
 
-    if (status !== 'approved') {
+    if (status !== 'approved' && academicScanReady.value) {
         actions.push({
             status: 'approved',
             label: 'Verify academic result',
@@ -598,6 +636,15 @@ onMounted(loadApplicant);
                                             <p class="truncate text-sm font-bold text-slate-950">{{ documentTypeLabel(document.document_type) }}</p>
                                             <p class="mt-1 truncate text-xs text-slate-500">{{ document.original_name }} - {{ formatFileSize(document.size) }}</p>
                                             <p class="mt-1 text-xs text-slate-500">Uploaded {{ document.uploaded_at || 'recently' }}</p>
+                                            <div v-if="academicScanRequired && document.document_type === 'academic_record'" class="mt-2 flex flex-wrap items-center gap-2">
+                                                <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', academicScanStatusClass(document.ocr_status)]">
+                                                    {{ academicScanStatusLabel(document.ocr_status) }}
+                                                </span>
+                                                <strong v-if="document.ocr_status === 'succeeded'" class="text-xs text-slate-900">
+                                                    {{ extractedAcademicResult(document) }}
+                                                </strong>
+                                                <p v-if="document.ocr_message" class="basis-full text-xs leading-5 text-slate-500">{{ document.ocr_message }}</p>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="flex shrink-0 items-center gap-2">
@@ -745,6 +792,10 @@ onMounted(loadApplicant);
                                 </div>
                                 <button type="button" class="w-fit shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="openDocumentPreview(academicRecord)">View academic record</button>
                             </div>
+
+                            <p v-if="academicScanRequired && !academicScanReady" class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+                                The portal could not extract a usable academic result. Ask the applicant to upload a clearer record or retry the scan before verification.
+                            </p>
 
                             <label class="mt-5 block text-xs font-bold text-slate-700">
                                 Review note <span class="font-normal text-slate-500">(required for reopening or replacement)</span>

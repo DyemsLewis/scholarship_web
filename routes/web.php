@@ -40,6 +40,7 @@ Route::post('/dashboard/profile/photo', [ApplicantDashboardController::class, 'u
 Route::get('/dashboard/profile/photo', [ApplicantDashboardController::class, 'viewProfilePhoto'])->middleware('auth')->name('dashboard.profile.photo');
 Route::delete('/dashboard/profile/photo', [ApplicantDashboardController::class, 'deleteProfilePhoto'])->middleware('auth')->name('dashboard.profile.photo.destroy');
 Route::post('/dashboard/profile/verification-documents', [ApplicantDashboardController::class, 'uploadApplicantVerificationDocument'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applicant-verification-documents.store');
+Route::post('/dashboard/profile/verification-documents/{document}/scan', [ApplicantDashboardController::class, 'rescanApplicantVerificationDocument'])->middleware(['auth', 'throttle:6,1'])->name('dashboard.applicant-verification-documents.scan');
 Route::get('/dashboard/profile/verification-documents/{document}/view', [ApplicantDashboardController::class, 'viewApplicantVerificationDocument'])->middleware('auth')->name('dashboard.applicant-verification-documents.view');
 Route::delete('/dashboard/profile/verification-documents/{document}', [ApplicantDashboardController::class, 'deleteApplicantVerificationDocument'])->middleware('auth')->name('dashboard.applicant-verification-documents.destroy');
 Route::get('/dashboard/data', [ApplicantDashboardController::class, 'data'])->middleware('auth')->name('dashboard.data');

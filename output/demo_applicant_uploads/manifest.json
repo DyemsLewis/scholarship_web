@@ -1,0 +1,122 @@
+[
+  {
+    "upload_label": "Latest report card or grades",
+    "filename": "01_Latest_Report_Card_or_Grades.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3924,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Certificate of enrollment",
+    "filename": "02_Certificate_of_Enrollment.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3361,
+    "sample_only": true
+  },
+  {
+    "upload_label": "School ID",
+    "filename": "03_School_ID.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3405,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Proof of income",
+    "filename": "04_Proof_of_Income.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3551,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Certificate of indigency",
+    "filename": "05_Certificate_of_Indigency.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3331,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Birth certificate",
+    "filename": "06_Birth_Certificate_Test_Placeholder.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3350,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Parent or guardian valid ID",
+    "filename": "07_Parent_or_Guardian_Valid_ID.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3436,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Transcript of records",
+    "filename": "08_Transcript_of_Records.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3761,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Good moral certificate",
+    "filename": "09_Good_Moral_Certificate.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3307,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Barangay certificate of residency",
+    "filename": "10_Barangay_Certificate_of_Residency.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3264,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Government-issued ID",
+    "filename": "11_Government_ID_Test_Placeholder.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3437,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Recent 2x2 ID photo",
+    "filename": "12_Recent_2x2_ID_Photo.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3194,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Admission or acceptance letter",
+    "filename": "13_Admission_or_Acceptance_Letter.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3351,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Other identity or school proof",
+    "filename": "14_Other_Identity_or_School_Proof.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3246,
+    "sample_only": true
+  },
+  {
+    "upload_label": "Recommendation letter",
+    "filename": "15_Recommendation_Letter.pdf",
+    "format": "PDF",
+    "pages": 1,
+    "size_bytes": 3531,
+    "sample_only": true
+  }
+]

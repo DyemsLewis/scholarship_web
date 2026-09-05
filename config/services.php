@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'academic_ocr' => [
+        'enabled' => env('ACADEMIC_OCR_ENABLED', false),
+        'endpoint' => env('OCR_SPACE_ENDPOINT', 'https://api.ocr.space/parse/image'),
+        'key' => env('OCR_SPACE_API_KEY'),
+        'engine' => env('OCR_SPACE_ENGINE', 2),
+        'language' => env('OCR_SPACE_LANGUAGE', 'eng'),
+        'max_file_size_kb' => env('OCR_SPACE_MAX_FILE_SIZE_KB', 1024),
+        'timeout_seconds' => env('ACADEMIC_OCR_TIMEOUT_SECONDS', 30),
+    ],
+
 ];

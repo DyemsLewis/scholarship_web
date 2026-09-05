@@ -17,6 +17,7 @@ use App\Models\ScholarshipFunnelEvent;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\ApplicationWorkflowService;
+use App\Services\AcademicRecordOcrService;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipBenefitService as SB;
 use App\Services\ScholarshipEligibilityService;
@@ -46,7 +47,10 @@ use Throwable;
 
 class ProviderController extends Controller
 {
-    public function __construct(private readonly ApplicationWorkflowService $workflowService) {}
+    public function __construct(
+        private readonly ApplicationWorkflowService $workflowService,
+        private readonly AcademicRecordOcrService $academicRecordOcrService,
+    ) {}
 
     private const PROVIDER_TEAM_ROLES = [
         'manager' => 'Manager',
@@ -2216,6 +2220,17 @@ class ProviderController extends Controller
             ]);
         }
 
+        if ($this->academicRecordOcrService->configured()) {
+            $academicRecord = $applicant->applicantVerificationDocuments
+                ->firstWhere('document_type', 'academic_record');
+
+            if ($academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED) {
+                throw ValidationException::withMessages([
+                    'verification' => 'The academic record must have a successful scan before its result can be verified.',
+                ]);
+            }
+        }
+
         DB::transaction(function () use ($applicant, $request): void {
             $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
                 'verification_status' => 'approved',
@@ -4177,6 +4192,9 @@ class ProviderController extends Controller
             'academic_term' => $profile?->academic_term,
             'gwa' => $profile?->gwa,
             'grading_scale' => $profile?->grading_scale,
+            'academic_result_source' => $profile?->academic_result_source,
+            'academic_result_extracted_at' => $profile?->academic_result_extracted_at?->format('M d, Y h:i A'),
+            'academic_scan_required' => $this->academicRecordOcrService->configured(),
             'income_bracket' => $profile?->income_bracket,
             'household_size' => $profile?->household_size,
             'preferred_categories' => $profile?->preferred_categories,
@@ -4695,6 +4713,13 @@ class ProviderController extends Controller
             'size' => $document->size,
             'status' => $document->status,
             'review_notes' => $document->review_notes,
+            'ocr_status' => $document->ocr_status ?? AcademicRecordOcrService::STATUS_NOT_REQUESTED,
+            'ocr_provider' => $document->ocr_provider,
+            'ocr_grade' => $document->ocr_grade,
+            'ocr_grading_scale' => $document->ocr_grading_scale,
+            'ocr_label' => $document->ocr_label,
+            'ocr_message' => $document->ocr_message,
+            'ocr_processed_at' => $document->ocr_processed_at?->format('M d, Y h:i A'),
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'view_url' => route('provider.verification-documents.view', $document),
             'download_url' => route('provider.verification-documents.download', $document),

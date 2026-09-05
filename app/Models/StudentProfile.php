@@ -28,6 +28,8 @@ class StudentProfile extends Model
         'academic_term',
         'gwa',
         'grading_scale',
+        'academic_result_source',
+        'academic_result_extracted_at',
         'income_bracket',
         'household_size',
         'preferred_categories',
@@ -66,6 +68,7 @@ class StudentProfile extends Model
         return [
             'birthdate' => 'date',
             'gwa' => 'decimal:2',
+            'academic_result_extracted_at' => 'datetime',
             'household_size' => 'integer',
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',

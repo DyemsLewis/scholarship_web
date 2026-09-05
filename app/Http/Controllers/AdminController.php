@@ -12,6 +12,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\DecisionSupportService;
+use App\Services\AcademicRecordOcrService;
 use App\Services\PasswordResetLinkService;
 use App\Services\ScholarshipPublicationGuard;
 use App\Support\AcademicRequirement;
@@ -31,6 +32,8 @@ use Throwable;
 
 class AdminController extends Controller
 {
+    public function __construct(private readonly AcademicRecordOcrService $academicRecordOcrService) {}
+
     private const ADMIN_ROLE_PERMISSION_PRESETS = [
         'Account manager' => ['manage_accounts'],
         'Review officer' => ['manage_reviews'],
@@ -653,6 +656,17 @@ class AdminController extends Controller
             return response()->json([
                 'message' => 'The applicant must upload an academic record before the academic result can be verified.',
             ], 422);
+        }
+
+        if ($validated['verification_status'] === 'approved' && $this->academicRecordOcrService->configured()) {
+            $academicRecord = $applicant->applicantVerificationDocuments
+                ->firstWhere('document_type', 'academic_record');
+
+            if ($academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED) {
+                return response()->json([
+                    'message' => 'The academic record must have a successful scan before its result can be verified.',
+                ], 422);
+            }
         }
 
         $documentStatus = match ($validated['verification_status']) {
@@ -1533,6 +1547,7 @@ class AdminController extends Controller
     {
         return [
             ...$applicant->publicPayload(),
+            'academic_scan_required' => $this->academicRecordOcrService->configured(),
             'verification_documents' => $applicant->applicantVerificationDocuments
                 ->whereIn('document_type', ['academic_record', 'school_record'])
                 ->sortByDesc('uploaded_at')
@@ -1677,6 +1692,13 @@ class AdminController extends Controller
             'size' => $document->size,
             'status' => $document->status,
             'review_notes' => $document->review_notes,
+            'ocr_status' => $document->ocr_status ?? AcademicRecordOcrService::STATUS_NOT_REQUESTED,
+            'ocr_provider' => $document->ocr_provider,
+            'ocr_grade' => $document->ocr_grade,
+            'ocr_grading_scale' => $document->ocr_grading_scale,
+            'ocr_label' => $document->ocr_label,
+            'ocr_message' => $document->ocr_message,
+            'ocr_processed_at' => $document->ocr_processed_at?->format('M d, Y h:i A'),
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'view_url' => route('admin.applicant-verification-documents.view', $document),
         ];

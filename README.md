@@ -168,6 +168,19 @@ https://your-domain.com/webhooks/paymongo
 
 Keep both secrets on the Laravel server. Do not place them in Vue, `VITE_*` variables, source control, or the mobile app. The signed webhook is the source of truth; returning to `/provider/billing` does not mark an order as paid.
 
+## Optional Academic Record Scanning
+
+The applicant profile can use OCR.space to read a clearly labeled general average, GWA/GPA, or overall pass result from an uploaded JPG, PNG, or PDF academic record. When configured, applicants cannot type or overwrite that value; an admin or the program provider must still compare it with the private file before verification.
+
+Create an OCR.space API key, then keep it only in the Laravel `.env` file:
+
+```text
+ACADEMIC_OCR_ENABLED=true
+OCR_SPACE_API_KEY=your-server-side-key
+```
+
+The default free API configuration accepts files up to 1 MB. Change `OCR_SPACE_MAX_FILE_SIZE_KB` only when the selected OCR.space plan supports a larger limit. Run `php artisan optimize:clear` after changing environment values. If the service is not configured, the existing manual grade workflow remains available for local development. The portal stores the extracted overall result and scan status, not the full OCR transcript.
+
 ## Build And Test
 
 Run these before pushing or deploying:

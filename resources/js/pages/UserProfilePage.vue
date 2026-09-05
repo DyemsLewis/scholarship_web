@@ -41,9 +41,17 @@ const matchSummary = ref({
     top_gaps: [],
 });
 const verificationDocuments = ref([]);
+const academicOcr = ref({
+    enabled: false,
+    configured: false,
+    provider: 'OCR.space',
+    max_file_size_mb: 1,
+    supported_extensions: ['pdf', 'jpg', 'jpeg', 'png'],
+});
 const verificationDocumentTermsAccepted = ref(false);
 const uploadingVerificationDocumentType = ref('');
 const deletingVerificationDocumentId = ref(null);
+const rescanningAcademicDocumentId = ref(null);
 const preparedDocumentsCount = ref(0);
 const {
     confirmation,
@@ -345,6 +353,10 @@ const profileComplete = computed(() => missingProfileFields.value.length === 0);
 const profileVerificationStatus = computed(() => user.value?.applicant_verification_status ?? 'unsubmitted');
 const academicVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'academic_record') ?? null);
+const academicOcrActive = computed(() => Boolean(academicOcr.value?.configured));
+const academicScanNeedsAttention = computed(() => academicOcrActive.value
+    && academicVerificationDocument.value
+    && ['failed', 'needs_review', 'unavailable'].includes(academicVerificationDocument.value.ocr_status));
 const schoolVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'school_record') ?? null);
 const legacyVerificationDocuments = computed(() => verificationDocuments.value
@@ -399,9 +411,18 @@ const verificationUploadCopy = computed(() => {
     }
 
     if (profileVerificationStatus.value === 'pending') {
+        if (academicScanNeedsAttention.value) {
+            return {
+                title: 'Academic result needs another scan',
+                detail: academicVerificationDocument.value?.ocr_message || 'Upload a clearer record or retry the saved file.',
+            };
+        }
+
         return {
             title: 'Files submitted',
-            detail: 'An authorized reviewer is checking your academic record.',
+            detail: academicOcrActive.value
+                ? 'The result was read from your academic record and is waiting for reviewer confirmation.'
+                : 'An authorized reviewer is checking your academic record.',
         };
     }
 
@@ -415,7 +436,9 @@ const verificationUploadCopy = computed(() => {
     return {
         title: 'Upload your records',
         detail: requiresGrades.value
-            ? 'Use records that support the result saved in Learning.'
+            ? academicOcrActive.value
+                ? 'Upload a clear academic record. The portal will read the result so you do not need to type it.'
+                : 'Use records that support the result saved in Learning.'
             : hasValue(form.value.education_level)
                 ? 'Use recent records for the selected education level.'
                 : 'Complete Learning first to see the correct record type.',
@@ -521,10 +544,16 @@ const profileRecommendedAction = computed(() => {
     const nextMissing = missingProfileFields.value[0];
 
     if (nextMissing) {
+        const gradeIsManaged = academicOcrActive.value && ['gwa', 'grading_scale'].includes(nextMissing.key);
+
         return {
-            label: `Add ${nextMissing.label}`,
-            section: profileSections.find((section) => sectionAllFields(section).includes(nextMissing.key))?.id || 'personal',
-            detail: 'This helps providers and matching rules read your profile correctly.',
+            label: gradeIsManaged ? 'Upload academic record' : `Add ${nextMissing.label}`,
+            section: gradeIsManaged
+                ? 'verification'
+                : profileSections.find((section) => sectionAllFields(section).includes(nextMissing.key))?.id || 'personal',
+            detail: gradeIsManaged
+                ? 'The portal reads your academic result from the file, then an authorized reviewer confirms it.'
+                : 'This helps providers and matching rules read your profile correctly.',
         };
     }
 
@@ -578,6 +607,10 @@ const profileNavigationSteps = computed(() => visibleProfileSections.value.map((
     };
 }));
 const recommendedSection = computed(() => {
+    if (academicOcrActive.value && missingProfileFields.value.some((field) => ['gwa', 'grading_scale'].includes(field.key))) {
+        return 'verification';
+    }
+
     const section = profileSections.find((item) => item.required && sectionProgress(item).complete === false);
 
     return section?.id ?? 'review';
@@ -822,6 +855,10 @@ function profileSection(sectionId) {
 }
 
 function sectionForField(field) {
+    if (academicOcrActive.value && ['gwa', 'grading_scale'].includes(field)) {
+        return 'verification';
+    }
+
     return profileSections.find((section) => section.fields.includes(field))?.id ?? 'personal';
 }
 
@@ -1444,6 +1481,62 @@ function verificationDocumentStatusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function academicScanStatusLabel(status) {
+    return {
+        succeeded: 'Result extracted',
+        needs_review: 'Result not found',
+        failed: 'Scan failed',
+        unavailable: 'Scanner unavailable',
+        not_requested: 'Waiting to scan',
+    }[status] ?? 'Waiting to scan';
+}
+
+function academicScanStatusClass(status) {
+    if (status === 'succeeded') {
+        return 'bg-sky-100 text-sky-800';
+    }
+
+    if (['failed', 'needs_review'].includes(status)) {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    return 'bg-amber-100 text-amber-800';
+}
+
+function extractedAcademicResult(document = academicVerificationDocument.value) {
+    if (!document) {
+        return 'Upload an academic record';
+    }
+
+    if (document.ocr_grading_scale === 'pass_fail') {
+        return 'Pass / competency result';
+    }
+
+    if (document.ocr_grade !== null && document.ocr_grade !== undefined) {
+        return document.ocr_grading_scale === 'percentage'
+            ? `${document.ocr_grade}%`
+            : `${document.ocr_grade} GWA / GPA`;
+    }
+
+    return 'No result extracted yet';
+}
+
+function verificationFileAccept(documentType) {
+    if (academicOcrActive.value && documentType === 'academic_record') {
+        return '.pdf,.jpg,.jpeg,.png';
+    }
+
+    return '.pdf,.jpg,.jpeg,.png,.doc,.docx';
+}
+
+function applyAcademicResponse(payload) {
+    user.value = payload.user;
+    verificationDocuments.value = payload.verification_documents ?? [];
+    academicOcr.value = payload.academic_ocr ?? academicOcr.value;
+    form.value.gwa = payload.user?.gwa ?? '';
+    form.value.grading_scale = payload.user?.grading_scale ?? '';
+}
+
 async function uploadVerificationDocument(documentType, event) {
     const input = event.target;
     const file = input.files?.[0] ?? null;
@@ -1473,14 +1566,30 @@ async function uploadVerificationDocument(documentType, event) {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
 
-        user.value = response.data.user;
-        verificationDocuments.value = response.data.verification_documents ?? [];
+        applyAcademicResponse(response.data);
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
     } catch (handledError) {
         void handledError;
     } finally {
         uploadingVerificationDocumentType.value = '';
         input.value = '';
+    }
+}
+
+async function retryAcademicRecordScan(document) {
+    rescanningAcademicDocumentId.value = document.id;
+    errorMessage.value = '';
+
+    try {
+        const response = await window.axios.post(`/dashboard/profile/verification-documents/${document.id}/scan`);
+
+        applyAcademicResponse(response.data);
+    } catch (error) {
+        const message = error.response?.data?.message ?? 'Unable to scan the academic record right now.';
+        errorMessage.value = message;
+        showPortalToast({ type: 'error', message });
+    } finally {
+        rescanningAcademicDocumentId.value = null;
     }
 }
 
@@ -1504,8 +1613,7 @@ async function deleteVerificationDocument(document) {
     try {
         const response = await window.axios.delete(`/dashboard/profile/verification-documents/${document.id}`);
 
-        user.value = response.data.user;
-        verificationDocuments.value = response.data.verification_documents ?? [];
+        applyAcademicResponse(response.data);
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
     } catch (handledError) {
         void handledError;
@@ -1526,6 +1634,7 @@ async function loadProfile() {
         matchSummary.value = response.data.match_summary ?? matchSummary.value;
         verificationDocuments.value = response.data.verification_documents ?? [];
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? 0;
+        academicOcr.value = response.data.academic_ocr ?? academicOcr.value;
         markFormSaved();
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load applicant profile.';
@@ -2558,14 +2667,25 @@ watch(() => form.value.grading_scale, (scale) => {
                                             </select>
                                             <input v-else id="profile-year" v-model="form.year_level" :placeholder="yearPlaceholder" :class="inputClass">
                                         </div>
-                                        <div v-if="isFieldRelevant('grading_scale')">
+                                        <div v-if="academicOcrActive && isFieldRelevant('grading_scale')">
+                                            <label :class="labelClass">Academic result</label>
+                                            <button
+                                                type="button"
+                                                class="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-left text-sm font-semibold text-slate-900 transition hover:border-amber-400 hover:bg-amber-50/40"
+                                                @click="openSection('verification')"
+                                            >
+                                                <span class="truncate">{{ extractedAcademicResult() }}</span>
+                                                <i class="fa-solid fa-file-shield shrink-0 text-amber-700" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
+                                        <div v-else-if="isFieldRelevant('grading_scale')">
                                             <label :class="labelClass" for="profile-grading-scale">Grading scale</label>
                                             <select id="profile-grading-scale" v-model="form.grading_scale" :class="inputClass">
                                                 <option value="">Select grading scale</option>
                                                 <option v-for="option in gradingScaleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                                             </select>
                                         </div>
-                                        <div v-if="isFieldRelevant('gwa')">
+                                        <div v-if="!academicOcrActive && isFieldRelevant('gwa')">
                                             <label :class="labelClass" for="profile-gwa">{{ gwaLabel }}</label>
                                             <input
                                                 id="profile-gwa"
@@ -2580,7 +2700,9 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                     </div>
                                     <p v-if="isFieldRelevant('grading_scale')" class="mt-3 border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
-                                        Numeric scales are kept as entered. Pass/fail and other systems are checked using supporting records.
+                                        {{ academicOcrActive
+                                            ? 'Your academic result is read from the record in Verification and cannot be edited here. A reviewer still checks the file before marking it verified.'
+                                            : 'Numeric scales are kept as entered. Pass/fail and other systems are checked using supporting records.' }}
                                     </p>
                                 </div>
 
@@ -2819,10 +2941,32 @@ watch(() => form.value.grading_scale, (scale) => {
                                                         {{ row.document.original_name }} <span class="font-normal text-slate-400">- {{ formatFileSize(row.document.size) }}</span>
                                                     </p>
                                                     <p v-else class="mt-1 text-xs font-semibold text-slate-400">No file uploaded</p>
+                                                    <div
+                                                        v-if="academicOcrActive && row.value === 'academic_record' && row.document"
+                                                        class="mt-2 flex flex-wrap items-center gap-2 text-xs"
+                                                    >
+                                                        <span :class="['rounded px-2 py-1 font-bold', academicScanStatusClass(row.document.ocr_status)]">
+                                                            {{ academicScanStatusLabel(row.document.ocr_status) }}
+                                                        </span>
+                                                        <strong v-if="row.document.ocr_status === 'succeeded'" class="text-slate-900">
+                                                            {{ extractedAcademicResult(row.document) }}
+                                                        </strong>
+                                                        <span class="basis-full leading-5 text-slate-500">{{ row.document.ocr_message }}</span>
+                                                    </div>
                                                 </div>
                                             </div>
 
                                             <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                                                <button
+                                                    v-if="academicOcrActive && row.value === 'academic_record' && row.document && ['failed', 'needs_review', 'unavailable', 'not_requested'].includes(row.document.ocr_status)"
+                                                    type="button"
+                                                    :disabled="rescanningAcademicDocumentId === row.document.id"
+                                                    class="inline-flex h-9 items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    @click="retryAcademicRecordScan(row.document)"
+                                                >
+                                                    <i :class="rescanningAcademicDocumentId === row.document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate'" aria-hidden="true"></i>
+                                                    {{ rescanningAcademicDocumentId === row.document.id ? 'Scanning...' : 'Retry scan' }}
+                                                </button>
                                                 <a
                                                     v-if="row.document"
                                                     :href="row.document.view_url"
@@ -2842,7 +2986,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                                 >
                                                     <input
                                                     type="file"
-                                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                                    :accept="verificationFileAccept(row.value)"
                                                     class="sr-only"
                                                     :disabled="uploadingVerificationDocumentType !== ''"
                                                     @change="uploadVerificationDocument(row.value, $event)"
@@ -2876,7 +3020,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <ul class="mt-4 grid gap-4 text-sm text-slate-600">
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
-                                            <span>Report card, transcript, grade report, or assessment with a readable result.</span>
+                                            <span>Report card, transcript, grade report, or assessment with a readable overall result.</span>
                                         </li>
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
@@ -2885,6 +3029,10 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <li class="flex items-start gap-3">
                                             <i class="fa-solid fa-shield-halved mt-1 text-emerald-700" aria-hidden="true"></i>
                                             <span>Do not upload IDs, birth certificates, income proof, or unrelated files.</span>
+                                        </li>
+                                        <li v-if="academicOcrActive" class="flex items-start gap-3">
+                                            <i class="fa-solid fa-wand-magic-sparkles mt-1 text-sky-700" aria-hidden="true"></i>
+                                            <span>Use a clear file up to {{ academicOcr.max_file_size_mb }} MB. Only the extracted overall result is saved for matching.</span>
                                         </li>
                                     </ul>
                                 </aside>
