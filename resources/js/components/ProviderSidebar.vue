@@ -8,28 +8,22 @@ const hasPermission = (permission) => Boolean(
 );
 const supportHref = hasPermission('manage_billing') ? '/provider/billing' : '/provider/reports';
 const navLinks = [
-    { href: '/provider', label: 'Overview', icon: 'fa-solid fa-gauge-high', exact: true, section: 'Workspace' },
+    { href: '/provider', label: 'Dashboard', icon: 'fa-solid fa-gauge-high', exact: true },
     {
         href: '/provider/profile',
-        label: 'Organization setup',
+        label: 'Profile',
         icon: 'fa-solid fa-building-user',
-        step: 1,
-        section: 'Provider workflow',
         activePaths: ['/provider/profile', '/provider/team'],
     },
     {
         href: '/provider/programs',
         label: 'Programs',
         icon: 'fa-solid fa-graduation-cap',
-        step: 2,
-        section: 'Provider workflow',
     },
     {
         href: '/provider/applications',
-        label: 'Applicant workflow',
+        label: 'Applications',
         icon: 'fa-solid fa-user-check',
-        step: 3,
-        section: 'Provider workflow',
         permission: 'review_applications',
         requiresApproval: true,
     },
@@ -37,7 +31,6 @@ const navLinks = [
         href: supportHref,
         label: 'Support',
         icon: 'fa-solid fa-headset',
-        section: 'Support tools',
         anyPermission: ['manage_billing', 'manage_reports'],
         requiresApproval: true,
         activePaths: ['/provider/billing', '/provider/reports'],

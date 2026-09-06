@@ -7,6 +7,7 @@ use App\Models\PortalNotification;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipEvent;
 use App\Support\ScholarshipSelectionPlan;
+use Illuminate\Support\Facades\DB;
 
 class ScholarshipEventService
 {
@@ -47,46 +48,62 @@ class ScholarshipEventService
             return null;
         }
 
-        $application = $this->workflowService->initialize($application);
-        $application->loadMissing(['schedules', 'applicant', 'scholarship']);
-        $schedule = $application->schedules->firstWhere('type', $event->type);
-        $isAtStage = $application->workflow_stage === $event->type;
+        [$schedule, $announcementChanged, $lockedApplication] = DB::transaction(function () use ($event, $application): array {
+            $lockedApplication = ScholarshipApplication::query()
+                ->whereKey($application->id)
+                ->lockForUpdate()
+                ->first();
 
-        if (! $isAtStage || ($schedule && $schedule->status !== 'scheduled')) {
-            return null;
-        }
-
-        $announcementData = [
-            'title' => $event->title,
-            'scheduled_at' => $event->scheduled_at,
-            'mode' => $event->mode,
-            'venue' => $event->venue,
-            'location_address' => $event->location_address,
-            'latitude' => $event->latitude,
-            'longitude' => $event->longitude,
-            'online_url' => $event->online_url,
-            'instructions' => $event->instructions,
-            'attendance_status' => 'not_required',
-            'updated_by' => $event->updated_by ?? $event->created_by,
-        ];
-
-        if ($schedule) {
-            $schedule->fill($announcementData);
-            $announcementChanged = $schedule->isDirty(array_keys($announcementData));
-
-            if ($announcementChanged) {
-                $schedule->save();
+            if (! $lockedApplication) {
+                return [null, false, null];
             }
-        } else {
-            $schedule = $application->schedules()->create([
-                ...$announcementData,
-                'type' => $event->type,
-                'status' => 'scheduled',
+
+            $lockedApplication = $this->workflowService->initialize($lockedApplication);
+            $lockedApplication->loadMissing(['schedules', 'applicant', 'scholarship']);
+            $schedule = $lockedApplication->schedules->firstWhere('type', $event->type);
+            $isAtStage = $lockedApplication->workflow_stage === $event->type;
+
+            if (! $isAtStage || ($schedule && $schedule->status !== 'scheduled')) {
+                return [null, false, $lockedApplication];
+            }
+
+            $announcementData = [
+                'title' => $event->title,
+                'scheduled_at' => $event->scheduled_at,
+                'mode' => $event->mode,
+                'venue' => $event->venue,
+                'location_address' => $event->location_address,
+                'latitude' => $event->latitude,
+                'longitude' => $event->longitude,
+                'online_url' => $event->online_url,
+                'instructions' => $event->instructions,
                 'attendance_status' => 'not_required',
-                'created_by' => $event->created_by,
-            ]);
-            $application->schedules->push($schedule);
-            $announcementChanged = true;
+                'updated_by' => $event->updated_by ?? $event->created_by,
+            ];
+
+            if ($schedule) {
+                $schedule->fill($announcementData);
+                $announcementChanged = $schedule->isDirty(array_keys($announcementData));
+
+                if ($announcementChanged) {
+                    $schedule->save();
+                }
+            } else {
+                $schedule = $lockedApplication->schedules()->create([
+                    ...$announcementData,
+                    'type' => $event->type,
+                    'status' => 'scheduled',
+                    'attendance_status' => 'not_required',
+                    'created_by' => $event->created_by,
+                ]);
+                $announcementChanged = true;
+            }
+
+            return [$schedule, $announcementChanged, $lockedApplication];
+        });
+
+        if (! $schedule || ! $lockedApplication) {
+            return null;
         }
 
         if ($announcementChanged) {
@@ -96,11 +113,11 @@ class ScholarshipEventService
                 : ' at '.($event->venue ?: $event->location_address ?: 'the provider location');
 
             PortalNotification::create([
-                'user_id' => $application->applicant_id,
+                'user_id' => $lockedApplication->applicant_id,
                 'type' => 'application_schedule',
                 'title' => ucfirst($eventLabel).' schedule posted',
-                'message' => "Your {$eventLabel} for {$application->scholarship?->title} is scheduled for {$event->scheduled_at?->format('M d, Y h:i A')}{$destination}. Open the application to review the details.",
-                'action_url' => route('dashboard.applications.show', $application, false),
+                'message' => "Your {$eventLabel} for {$lockedApplication->scholarship?->title} is scheduled for {$event->scheduled_at?->format('M d, Y h:i A')}{$destination}. Open the application to review the details.",
+                'action_url' => route('dashboard.applications.show', $lockedApplication, false),
             ]);
         }
 

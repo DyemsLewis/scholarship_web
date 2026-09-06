@@ -16,8 +16,8 @@ use App\Models\ScholarshipEvent;
 use App\Models\ScholarshipFunnelEvent;
 use App\Models\User;
 use App\Rules\PhoneNumber;
-use App\Services\ApplicationWorkflowService;
 use App\Services\AcademicRecordOcrService;
+use App\Services\ApplicationWorkflowService;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipBenefitService as SB;
 use App\Services\ScholarshipEligibilityService;
@@ -2003,12 +2003,18 @@ class ProviderController extends Controller
             $validated,
             $scheduleData,
         ): array {
-            $schedule = $application->schedules()->where('type', $validated['type'])->first();
+            $lockedApplication = ScholarshipApplication::query()
+                ->with(['scholarship', 'stageProgresses'])
+                ->whereKey($application->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $this->ensureScheduleCanBePublished($lockedApplication, $validated['type']);
+            $schedule = $lockedApplication->schedules()->where('type', $validated['type'])->first();
 
             if ($schedule) {
                 $schedule->update($scheduleData);
             } else {
-                $schedule = $application->schedules()->create([
+                $schedule = $lockedApplication->schedules()->create([
                     ...$scheduleData,
                     'type' => $validated['type'],
                     'created_by' => $request->user()->id,
@@ -2286,43 +2292,16 @@ class ProviderController extends Controller
             'action' => ['required', Rule::in(['request', 'resolve'])],
             'message' => [Rule::requiredIf($request->input('action') === 'request'), 'nullable', 'string', 'min:5', 'max:1500'],
         ]);
-        $workflow = $this->workflowService->payload($application);
-
-        if ($workflow['is_closed']) {
-            throw ValidationException::withMessages([
-                'action' => 'A correction cannot be requested after this application has been closed.',
-            ]);
-        }
-
-        if ($validated['action'] === 'resolve' && ! in_array($application->correction_status, ['requested', 'submitted'], true)) {
-            throw ValidationException::withMessages([
-                'action' => 'There is no open correction request to resolve.',
-            ]);
-        }
-
-        $application->update($validated['action'] === 'request'
-            ? [
-                'correction_status' => 'requested',
-                'correction_message' => $validated['message'],
-                'correction_response' => null,
-                'correction_requested_by' => $request->user()->id,
-                'correction_requested_at' => now(),
-                'correction_responded_at' => null,
-                'correction_resolved_at' => null,
-                'application_state' => 'needs_correction',
-            ]
-            : [
-                'correction_status' => 'resolved',
-                'correction_resolved_at' => now(),
-                'application_state' => match ($workflow['current_stage']) {
-                    'screening' => 'under_review',
-                    'decision' => 'awaiting_decision',
-                    default => 'in_provider_process',
-                },
-            ]);
+        $isRequest = $validated['action'] === 'request';
+        $application = $isRequest
+            ? $this->workflowService->requestCorrection(
+                $application,
+                $request->user(),
+                $validated['message'],
+            )
+            : $this->workflowService->resolveCorrection($application);
 
         $application->loadMissing(['applicant', 'scholarship']);
-        $isRequest = $validated['action'] === 'request';
         PortalNotification::create([
             'user_id' => $application->applicant_id,
             'type' => 'application_correction',
@@ -2381,24 +2360,11 @@ class ProviderController extends Controller
         }
 
         if ($validated['action'] === 'restore') {
-            $application->stageProgresses()->where('stage_key', 'decision')->update([
-                'status' => 'current',
-                'result' => null,
-                'completed_at' => null,
-                'decided_at' => null,
-                'decided_by' => null,
-            ]);
-            $application->update([
-                'status' => 'approved',
-                'application_state' => 'awaiting_decision',
-                'workflow_stage' => 'decision',
-                'final_outcome' => null,
-                'decision_reason' => null,
-                'review_notes' => $validated['note'] ?? $application->review_notes,
-                'waitlist_position' => null,
-                'waitlisted_at' => null,
-            ]);
-            $updated = $application->fresh();
+            $updated = $this->workflowService->restoreWaitlistedForDecision(
+                $application,
+                $request->user(),
+                $validated['note'] ?? null,
+            );
             $message = 'Applicant returned to final decision review.';
         } else {
             if ($validated['action'] === 'promote') {
@@ -2423,6 +2389,18 @@ class ProviderController extends Controller
             'message' => $message,
             'action_url' => route('dashboard.applications.show', $updated, false),
         ]);
+        ActivityLog::record(
+            $request->user(),
+            'application_waitlist_updated',
+            "{$request->user()->name} completed {$validated['action']} for application #{$updated->id}.",
+            $request,
+            [
+                'application_id' => $updated->id,
+                'action' => $validated['action'],
+                'final_outcome' => $updated->final_outcome,
+            ],
+        );
+        app(DecisionSupportService::class)->syncApplication($updated, 'provider_waitlist_updated');
 
         return response()->json([
             'message' => $message,
@@ -2801,13 +2779,35 @@ class ProviderController extends Controller
             'review_notes' => [Rule::requiredIf(in_array($request->input('status'), ['rejected', 'needs_replacement'], true)), 'nullable', 'string', 'max:1000'],
         ]);
 
-        $previousStatus = $document->status;
-        $document->update([
-            'status' => $validated['status'],
-            'review_notes' => $validated['review_notes'] ?? null,
-            'reviewed_by' => $request->user()->id,
-            'reviewed_at' => now(),
-        ]);
+        [$document, $previousStatus] = DB::transaction(function () use ($document, $validated, $request): array {
+            $lockedApplication = ScholarshipApplication::query()
+                ->with(['applicant', 'scholarship', 'stageProgresses'])
+                ->whereKey($document->scholarship_application_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($this->workflowService->payload($lockedApplication)['is_closed']) {
+                throw ValidationException::withMessages([
+                    'status' => 'Document decisions are locked after the application is closed.',
+                ]);
+            }
+
+            $lockedDocument = ApplicationDocument::query()
+                ->whereKey($document->id)
+                ->where('scholarship_application_id', $lockedApplication->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $previousStatus = $lockedDocument->status;
+            $lockedDocument->update([
+                'status' => $validated['status'],
+                'review_notes' => $validated['review_notes'] ?? null,
+                'reviewed_by' => $request->user()->id,
+                'reviewed_at' => now(),
+            ]);
+            $lockedDocument->setRelation('application', $lockedApplication);
+
+            return [$lockedDocument, $previousStatus];
+        });
 
         if ($previousStatus !== $validated['status']) {
             ScholarshipFunnelEvent::record(

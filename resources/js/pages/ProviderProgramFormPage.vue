@@ -597,6 +597,12 @@ const reviewRubricReady = computed(() => scholarshipForm.value.reviewRubric.leng
     && rubricWeightTotal.value === 100);
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 const selectionPlanLocked = computed(() => isEditMode.value && existingApplicationCount.value > 0);
+const schedulableSelectionStages = computed(() => scholarshipForm.value.selectionStages
+    .filter((stage) => ['exam', 'interview'].includes(stage)));
+const hasSchedulableSelectionStage = computed(() => schedulableSelectionStages.value.length > 0);
+const schedulableSelectionStageLabel = computed(() => schedulableSelectionStages.value
+    .map((stage) => stage === 'exam' ? 'exam' : 'interview')
+    .join(' and '));
 const minimumAwardSlots = computed(() => Math.max(1, awardedSlotsCount.value));
 const scholarshipImagePreview = computed(() => imagePreviewUrl.value || scholarshipForm.value.imageUrl || '/uploads/scholarship-default.jpg');
 const officialProgramPreviewUrl = computed(() => {
@@ -2059,13 +2065,15 @@ onBeforeUnmount(() => {
                         </h2>
                     </div>
 
-                    <a
-                        href="/provider/programs"
-                        class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                    >
-                        <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-                        Back to programs
-                    </a>
+                    <div class="flex justify-start sm:justify-end">
+                        <a
+                            href="/provider/programs"
+                            class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                        >
+                            <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
+                            Back to programs
+                        </a>
+                    </div>
                 </header>
 
                 <ProviderProgramNav v-if="isEditMode" :program-id="scholarshipId" active="settings" can-manage />
@@ -2100,7 +2108,14 @@ onBeforeUnmount(() => {
                             <div>
                                 <p class="font-bold text-slate-950">Existing applicant process protected</p>
                                 <p class="mt-1 leading-6">
-                                    {{ existingApplicationCount }} applicant{{ existingApplicationCount === 1 ? '' : 's' }} already use this review path. You can update schedules and other details, but exam and interview stages are locked. Duplicate the program for a different process.
+                                    {{ existingApplicationCount }} applicant{{ existingApplicationCount === 1 ? '' : 's' }} already {{ existingApplicationCount === 1 ? 'uses' : 'use' }} this review path, so its stages are locked.
+                                    <template v-if="hasSchedulableSelectionStage">
+                                        You can still publish or update the {{ schedulableSelectionStageLabel }} schedule from Activities.
+                                    </template>
+                                    <template v-else>
+                                        This plan has no exam or interview, so no activity schedule is needed; formal application instructions can still be updated.
+                                    </template>
+                                    Duplicate the program to use a different selection flow.
                                 </p>
                             </div>
                         </div>
@@ -2662,22 +2677,30 @@ onBeforeUnmount(() => {
                                             <i class="fa-solid fa-calendar-check" aria-hidden="true"></i>
                                         </span>
                                         <div>
-                                            <p class="text-sm font-bold">Add dates only when applicants reach the stage</p>
-                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-300">
+                                            <p class="text-sm font-bold">
+                                                {{ hasSchedulableSelectionStage ? 'Publish activity dates when confirmed' : 'No exam or interview schedule required' }}
+                                            </p>
+                                            <p v-if="hasSchedulableSelectionStage" class="mt-1 max-w-2xl text-xs leading-5 text-slate-300">
                                                 Pre-screening and formal application do not need a portal schedule. Publish a shared exam or interview schedule later; only applicants currently at that stage will receive it.
+                                            </p>
+                                            <p v-else class="mt-1 max-w-2xl text-xs leading-5 text-slate-300">
+                                                This program proceeds from portal pre-screening to the provider's formal application. Use the formal application instructions, deadline, and location instead.
                                             </p>
                                         </div>
                                     </div>
                                     <a
-                                        v-if="isEditMode"
+                                        v-if="isEditMode && hasSchedulableSelectionStage"
                                         :href="`/provider/programs/${scholarshipId}/applications?workspace=schedule`"
                                         class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-white px-3 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-amber-100"
                                     >
                                         Open schedule workspace
                                         <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
                                     </a>
-                                    <span v-else class="shrink-0 rounded-md bg-white/10 px-3 py-2 text-xs font-bold text-slate-200">
+                                    <span v-else-if="hasSchedulableSelectionStage" class="shrink-0 rounded-md bg-white/10 px-3 py-2 text-xs font-bold text-slate-200">
                                         Available after saving
+                                    </span>
+                                    <span v-else class="shrink-0 rounded-md bg-white/10 px-3 py-2 text-xs font-bold text-slate-200">
+                                        Formal handoff only
                                     </span>
                                 </div>
 

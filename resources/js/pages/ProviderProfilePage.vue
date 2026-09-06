@@ -5,7 +5,6 @@ import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import ProviderWorkflowNav from '../components/ProviderWorkflowNav.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
@@ -388,8 +387,6 @@ onMounted(loadProviderProfile);
                         Update public organization details or manage the proof used for provider verification.
                     </p>
                 </header>
-
-                <ProviderWorkflowNav active="organization" class="mt-5" />
 
                 <ProviderSectionNav section="organization" />
 

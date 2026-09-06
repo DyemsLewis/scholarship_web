@@ -4,7 +4,6 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import ProviderWorkflowNav from '../components/ProviderWorkflowNav.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { labelFromKey } from '../support/display';
 
@@ -296,8 +295,6 @@ onMounted(loadProviderData);
                     </div>
                 </header>
 
-                <ProviderWorkflowNav active="programs" class="mt-5" />
-
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading scholarship programs...
                 </div>
@@ -401,19 +398,24 @@ onMounted(loadProviderData);
                                                 {{ programStatusLabel(scholarship.status) }}
                                             </span>
                                         </div>
-                                        <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
-                                            {{ scholarship.description || 'No program description provided.' }}
+                                        <p class="mt-1 truncate text-xs leading-5 text-slate-500">
+                                            {{ scholarship.category || 'Uncategorized' }}
+                                            <span class="mx-1 text-slate-300">&middot;</span>
+                                            {{ targetApplicantLabel(scholarship) }}
+                                            <span class="mx-1 text-slate-300">&middot;</span>
+                                            {{ scholarship.applications_count ?? 0 }} applicant{{ Number(scholarship.applications_count ?? 0) === 1 ? '' : 's' }}
+                                            <template v-if="scholarship.deadline">
+                                                <span class="mx-1 text-slate-300">&middot;</span>
+                                                {{ programDeadlineLabel(scholarship.deadline) }}
+                                            </template>
                                         </p>
-                                        <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
-                                            <span>{{ scholarship.category || 'Uncategorized' }} - {{ targetApplicantLabel(scholarship) }}</span>
-                                            <span>{{ programDeadlineLabel(scholarship.deadline) }}</span>
-                                            <span>{{ scholarship.applications_count ?? 0 }} applicants</span>
-                                            <span v-if="Number(scholarship.pending_review_applications_count ?? 0) > 0" class="text-amber-700">
-                                                {{ scholarship.pending_review_applications_count }} to review
-                                            </span>
-                                            <span>{{ programSlotLabel(scholarship) }}</span>
-                                        </div>
                                     </div>
+                                    <span
+                                        v-if="Number(scholarship.pending_review_applications_count ?? 0) > 0"
+                                        class="hidden shrink-0 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800 md:inline-flex"
+                                    >
+                                        {{ scholarship.pending_review_applications_count }} to review
+                                    </span>
                                     <a
                                         :href="`/provider/programs/${scholarship.id}`"
                                         class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"

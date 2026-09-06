@@ -279,12 +279,15 @@ onMounted(loadAdminData);
                                         </span>
                                     </div>
                                     <p class="mt-1 truncate text-xs leading-5 text-slate-500">
-                                        {{ user.email }} &middot; @{{ user.username || 'no-username' }}
-                                        <template v-if="user.contact_number"> &middot; {{ user.contact_number }}</template>
-                                    </p>
-                                    <p class="mt-1 text-xs text-slate-400">
-                                        <template v-if="user.account_title">{{ roleLabel(user.account_title) }} - </template>
-                                        Registered {{ user.created_at }}
+                                        {{ user.email }}
+                                        <template v-if="user.username">
+                                            <span class="mx-1 text-slate-300">&middot;</span>
+                                            @{{ user.username }}
+                                        </template>
+                                        <template v-if="user.created_at">
+                                            <span class="mx-1 text-slate-300">&middot;</span>
+                                            Joined {{ user.created_at }}
+                                        </template>
                                     </p>
                                 </div>
                             </div>

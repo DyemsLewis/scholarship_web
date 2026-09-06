@@ -31,10 +31,15 @@ const unreadCount = ref(0);
 const root = ref(null);
 const selectedNotification = ref(null);
 
-const isSidebar = computed(() => props.mode === 'sidebar');
+const isSidebar = computed(() => ['sidebar', 'sidebar-compact'].includes(props.mode));
+const isCompactSidebar = computed(() => props.mode === 'sidebar-compact');
 const isCentered = computed(() => props.centered);
 const panelAlignment = computed(() => (props.align === 'left' ? 'left-0' : 'right-0'));
 const buttonClasses = computed(() => {
+    if (isCompactSidebar.value) {
+        return 'relative flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-semibold text-slate-400 transition hover:bg-white/5 hover:text-white';
+    }
+
     if (isSidebar.value) {
         return 'relative flex w-full items-center justify-between rounded-md border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300 transition hover:border-amber-300/40 hover:bg-white/5 hover:text-white';
     }
@@ -253,8 +258,11 @@ onBeforeUnmount(() => {
             :title="label"
             @click="toggleDropdown"
         >
-            <span class="flex items-center gap-2">
-                <i class="fa-solid fa-bell text-xs" aria-hidden="true"></i>
+            <span :class="['flex items-center', isCompactSidebar ? 'gap-3' : 'gap-2']">
+                <span v-if="isCompactSidebar" class="grid h-6 w-6 shrink-0 place-items-center text-xs text-slate-500">
+                    <i class="fa-solid fa-bell" aria-hidden="true"></i>
+                </span>
+                <i v-else class="fa-solid fa-bell text-xs" aria-hidden="true"></i>
                 <span v-if="isSidebar">
                     {{ label }}
                 </span>
@@ -263,7 +271,7 @@ onBeforeUnmount(() => {
                 v-if="unreadCount > 0"
                 :class="[
                     'flex items-center justify-center rounded-full bg-amber-300 font-black text-slate-950',
-                    isSidebar ? 'min-w-6 px-2 py-0.5 text-[11px]' : 'absolute -right-1 -top-1 h-5 min-w-5 px-1 text-[10px]',
+                    isSidebar ? 'min-w-5 px-1.5 py-0.5 text-[10px]' : 'absolute -right-1 -top-1 h-5 min-w-5 px-1 text-[10px]',
                 ]"
             >
                 {{ unreadCount > 9 ? '9+' : unreadCount }}

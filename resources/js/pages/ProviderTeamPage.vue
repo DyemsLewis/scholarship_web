@@ -4,7 +4,6 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import ProviderWorkflowNav from '../components/ProviderWorkflowNav.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const isLoading = ref(true);
@@ -109,8 +108,6 @@ onMounted(loadTeam);
                     </div>
                 </header>
 
-                <ProviderWorkflowNav active="organization" class="mt-5" />
-
                 <ProviderSectionNav section="organization" />
 
                 <div v-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">
@@ -141,28 +138,42 @@ onMounted(loadTeam);
                         <p class="mt-1 text-sm text-slate-500">Create one when another staff member needs provider access.</p>
                     </div>
                     <div v-else class="divide-y divide-slate-200">
-                        <article v-for="account in accounts" :key="account.id" class="grid gap-4 p-4 transition hover:bg-slate-50 sm:p-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] lg:items-center">
+                        <article v-for="account in accounts" :key="account.id" class="grid gap-3 p-4 transition hover:bg-slate-50 sm:p-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_auto] lg:items-center">
                             <div class="flex min-w-0 items-center gap-3">
                                 <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-900 text-xs font-black text-amber-200">
                                     {{ accountInitials(account.name) }}
                                 </span>
                                 <div class="min-w-0">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <h3 class="truncate text-sm font-bold text-slate-950">{{ account.name }}</h3>
-                                    <span :class="['rounded px-2 py-1 text-[0.68rem] font-bold uppercase tracking-wide', account.account_status === 'suspended' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800']">
-                                        {{ account.account_status === 'suspended' ? 'Suspended' : 'Active' }}
-                                    </span>
-                                </div>
-                                <p class="mt-1 truncate text-sm text-slate-500">{{ account.email }} - @{{ account.username }}</p>
-                                <p class="mt-1 text-xs font-semibold text-amber-700">{{ account.team_role_label }}</p>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h3 class="truncate text-sm font-bold text-slate-950">{{ account.name }}</h3>
+                                        <span class="rounded bg-amber-100 px-2 py-1 text-[0.68rem] font-bold text-amber-800">
+                                            {{ account.team_role_label }}
+                                        </span>
+                                        <span :class="['rounded px-2 py-1 text-[0.68rem] font-bold uppercase tracking-wide', account.account_status === 'suspended' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800']">
+                                            {{ account.account_status === 'suspended' ? 'Suspended' : 'Active' }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 truncate text-xs text-slate-500">
+                                        {{ account.email }}
+                                        <template v-if="account.username">
+                                            <span class="mx-1 text-slate-300">&middot;</span>
+                                            @{{ account.username }}
+                                        </template>
+                                    </p>
                                 </div>
                             </div>
 
                             <div>
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Permissions</p>
                                 <div class="mt-2 flex flex-wrap gap-1.5">
-                                    <span v-for="permission in account.permissions" :key="permission" class="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">
+                                    <span v-for="permission in (account.permissions || []).slice(0, 2)" :key="permission" class="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">
                                         {{ permissionLabels[permission] ?? permission }}
+                                    </span>
+                                    <span v-if="(account.permissions || []).length > 2" class="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">
+                                        +{{ account.permissions.length - 2 }} more
+                                    </span>
+                                    <span v-if="(account.permissions || []).length === 0" class="text-xs font-semibold text-slate-500">
+                                        No delegated access
                                     </span>
                                 </div>
                             </div>

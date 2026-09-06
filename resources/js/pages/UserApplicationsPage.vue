@@ -177,8 +177,8 @@ const applicationQueue = computed(() => [...applications.value].sort((first, sec
         return secondNeedsCorrection - firstNeedsCorrection;
     }
 
-    const firstActiveSchedule = Number(Boolean(primarySchedule(first)?.status === 'scheduled'));
-    const secondActiveSchedule = Number(Boolean(primarySchedule(second)?.status === 'scheduled'));
+    const firstActiveSchedule = Number(Boolean(!first.workflow?.is_closed && primarySchedule(first)?.status === 'scheduled'));
+    const secondActiveSchedule = Number(Boolean(!second.workflow?.is_closed && primarySchedule(second)?.status === 'scheduled'));
 
     if (firstActiveSchedule !== secondActiveSchedule) {
         return secondActiveSchedule - firstActiveSchedule;

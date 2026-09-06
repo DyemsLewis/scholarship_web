@@ -131,11 +131,16 @@ const applicantNextDescription = computed(() => application.value?.correction_st
     : (applicantNextActionDetails.value.description ?? 'Open the application for the latest instructions.'));
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
-const currentSchedule = computed(() => schedules.value.find((schedule) => (
-    schedule.status === 'scheduled'
-    && ['exam', 'interview'].includes(schedule.type)
-)) ?? null);
-const scheduleHistory = computed(() => schedules.value.filter((schedule) => schedule.status !== 'scheduled'));
+const applicationIsClosed = computed(() => Boolean(workflow.value.is_closed));
+const currentSchedule = computed(() => applicationIsClosed.value
+    ? null
+    : (schedules.value.find((schedule) => (
+        schedule.status === 'scheduled'
+        && ['exam', 'interview'].includes(schedule.type)
+    )) ?? null));
+const scheduleHistory = computed(() => schedules.value.filter(
+    (schedule) => applicationIsClosed.value || schedule.status !== 'scheduled',
+));
 const currentScheduleDate = computed(() => formatScheduleDate(currentSchedule.value));
 const filesNeedingAction = computed(() => applicationFileRows.value.filter((row) => row.required
     && (!row.document || ['needs_replacement', 'rejected'].includes(row.document.status))));
@@ -156,7 +161,6 @@ const hasProviderUpdate = computed(() => Boolean(
     || application.value?.decision_reason
     || application.value?.outcome_notes,
 ));
-const applicationIsClosed = computed(() => Boolean(workflow.value.is_closed));
 const applicationSections = computed(() => [
     { key: 'overview', label: 'Overview', icon: 'fa-solid fa-route' },
     { key: 'files', label: 'Files', icon: 'fa-solid fa-folder-open', count: filesNeedingAction.value.length },
@@ -167,6 +171,10 @@ const applicationSections = computed(() => [
 const nextActionButton = computed(() => {
     if (application.value?.correction_status === 'requested') {
         return { label: 'Review requested update', action: 'correction' };
+    }
+
+    if (applicationIsClosed.value) {
+        return null;
     }
 
     if (formalApplicationHandoff.value) {
@@ -410,6 +418,10 @@ function applicantNextAction(current) {
         return 'Wait for provider review and document feedback.';
     }
 
+    if (current.workflow?.is_closed) {
+        return 'Review the final provider result and notes for this application.';
+    }
+
     const activeSchedule = current.schedules?.find((schedule) => schedule.status === 'scheduled');
 
     if (activeSchedule) {
@@ -418,10 +430,6 @@ function applicantNextAction(current) {
 
     if (current.formal_application_handoff) {
         return 'You passed portal pre-screening. Review what to bring and continue directly with the provider.';
-    }
-
-    if (current.workflow?.is_closed) {
-        return 'Review the final provider result and notes for this application.';
     }
 
     const missing = current.document_readiness?.missing ?? [];

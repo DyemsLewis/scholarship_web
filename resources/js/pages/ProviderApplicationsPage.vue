@@ -5,7 +5,6 @@ import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import ProviderWorkflowNav from '../components/ProviderWorkflowNav.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 
 const appElement = document.getElementById('app');
@@ -174,18 +173,6 @@ const reviewFilterOptions = computed(() => [
     },
     { value: 'all', label: 'All applicants', count: Number(queueFilterCounts.value.all ?? 0) },
 ]);
-const activeProviderWorkflowStage = computed(() => {
-    if (selectedQueueFilter.value === 'decided') {
-        return 'outcomes';
-    }
-
-    if (['active_stages', 'formal_application'].includes(selectedQueueFilter.value)
-        || activeWorkspaceSection.value === 'schedule') {
-        return 'stages';
-    }
-
-    return 'screening';
-});
 const emptyQueueMessage = computed(() => ({
     pending_review: 'No applicants currently need an initial review.',
     document_issues: 'No applicants currently have missing or unresolved document issues.',
@@ -702,12 +689,6 @@ onMounted(loadProviderData);
                         </div>
                     </div>
                 </header>
-
-                <ProviderWorkflowNav
-                    v-if="!hasProgramContext"
-                    :active="activeProviderWorkflowStage"
-                    class="mt-5"
-                />
 
                 <ProviderProgramNav
                     v-if="hasProgramContext"

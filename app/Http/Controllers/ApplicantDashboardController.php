@@ -1326,7 +1326,6 @@ class ApplicantDashboardController extends Controller
             ->where('document_name', $validated['document_name'])
             ->first();
         $this->ensureApplicationDocumentsEditable($application, $existing);
-        $oldPath = $existing?->path;
         $path = $file->store("application-documents/{$application->id}", 'local');
 
         if (! is_string($path)) {
@@ -1336,23 +1335,45 @@ class ApplicantDashboardController extends Controller
         }
 
         try {
-            $document = DB::transaction(fn () => ApplicationDocument::query()->updateOrCreate([
-                'scholarship_application_id' => $application->id,
-                'document_name' => $validated['document_name'],
-            ], [
-                'uploaded_by' => $request->user()->id,
-                'original_name' => $file->getClientOriginalName(),
-                'path' => $path,
-                'mime_type' => $file->getClientMimeType(),
-                'size' => $file->getSize(),
-                'status' => 'pending',
-                'review_notes' => null,
-                'reviewed_by' => null,
-                'reviewed_at' => null,
-                'uploaded_at' => now(),
-                'terms_accepted_at' => now(),
-                'terms_version' => Terms::VERSION,
-            ]));
+            [$document, $oldPath] = DB::transaction(function () use (
+                $application,
+                $validated,
+                $request,
+                $file,
+                $path,
+            ): array {
+                $lockedApplication = ScholarshipApplication::query()
+                    ->with(['scholarship', 'stageProgresses'])
+                    ->whereKey($application->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $lockedExisting = ApplicationDocument::query()
+                    ->where('scholarship_application_id', $lockedApplication->id)
+                    ->where('document_name', $validated['document_name'])
+                    ->lockForUpdate()
+                    ->first();
+                $this->ensureApplicationDocumentsEditable($lockedApplication, $lockedExisting);
+                $oldPath = $lockedExisting?->path;
+                $document = ApplicationDocument::query()->updateOrCreate([
+                    'scholarship_application_id' => $lockedApplication->id,
+                    'document_name' => $validated['document_name'],
+                ], [
+                    'uploaded_by' => $request->user()->id,
+                    'original_name' => $file->getClientOriginalName(),
+                    'path' => $path,
+                    'mime_type' => $file->getClientMimeType(),
+                    'size' => $file->getSize(),
+                    'status' => 'pending',
+                    'review_notes' => null,
+                    'reviewed_by' => null,
+                    'reviewed_at' => null,
+                    'uploaded_at' => now(),
+                    'terms_accepted_at' => now(),
+                    'terms_version' => Terms::VERSION,
+                ]);
+
+                return [$document, $oldPath];
+            });
         } catch (Throwable $error) {
             Storage::disk('local')->delete($path);
 
@@ -1404,10 +1425,24 @@ class ApplicantDashboardController extends Controller
         abort_unless($document->application?->applicant_id === $request->user()->id, 403);
         $this->ensureApplicationDocumentsEditable($document->application, null, false);
 
-        $path = $document->path;
-        $application = $document->application;
-        $documentName = $document->document_name;
-        $document->delete();
+        [$application, $path, $documentName] = DB::transaction(function () use ($document): array {
+            $lockedApplication = ScholarshipApplication::query()
+                ->with(['scholarship', 'stageProgresses'])
+                ->whereKey($document->scholarship_application_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $this->ensureApplicationDocumentsEditable($lockedApplication, null, false);
+            $lockedDocument = ApplicationDocument::query()
+                ->whereKey($document->id)
+                ->where('scholarship_application_id', $lockedApplication->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $path = $lockedDocument->path;
+            $documentName = $lockedDocument->document_name;
+            $lockedDocument->delete();
+
+            return [$lockedApplication, $path, $documentName];
+        });
         Storage::disk('local')->delete($path);
 
         ActivityLog::record(
@@ -1526,20 +1561,10 @@ class ApplicantDashboardController extends Controller
             'response' => ['required', 'string', 'min:3', 'max:1500'],
         ]);
 
-        if ($application->correction_status !== 'requested') {
-            throw ValidationException::withMessages([
-                'response' => 'There is no open correction request for this application.',
-            ]);
-        }
-
-        $application->update([
-            'correction_status' => 'submitted',
-            'correction_response' => $validated['response'],
-            'correction_responded_at' => now(),
-            'correction_resolved_at' => null,
-            'application_state' => 'needs_correction',
-        ]);
-        $application = $this->workflowService->captureSubmissionSnapshot($application);
+        $application = $this->workflowService->submitCorrection(
+            $application,
+            $validated['response'],
+        );
         $application->loadMissing('scholarship');
 
         PortalNotification::create([
@@ -2068,6 +2093,12 @@ class ApplicantDashboardController extends Controller
         ?ApplicationDocument $document = null,
         bool $allowRequestedReplacement = true,
     ): void {
+        if ($this->workflowService->payload($application)['is_closed']) {
+            throw ValidationException::withMessages([
+                'document_file' => 'Application files are locked after the application is closed.',
+            ]);
+        }
+
         if ($application->correction_status === 'requested') {
             return;
         }

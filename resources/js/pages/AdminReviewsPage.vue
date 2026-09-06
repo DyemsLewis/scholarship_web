@@ -404,8 +404,12 @@ onMounted(loadReviewData);
                                             {{ statusLabel(provider.verification_status) }}
                                         </span>
                                     </div>
-                                    <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
-                                        {{ provider.provider_description || provider.provider_address || 'No organization description provided.' }}
+                                    <p class="mt-1 truncate text-xs leading-5 text-slate-500">
+                                        {{ provider.provider_type ? statusLabel(provider.provider_type) : 'Provider organization' }}
+                                        <template v-if="provider.provider_address">
+                                            <span class="mx-1 text-slate-300">&middot;</span>
+                                            {{ provider.provider_address }}
+                                        </template>
                                     </p>
                                 </div>
                                 <a
@@ -479,8 +483,10 @@ onMounted(loadReviewData);
                                             {{ statusLabel(scholarship.status) }}
                                         </span>
                                     </div>
-                                    <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
-                                        {{ scholarship.description || 'No program description provided.' }}
+                                    <p class="mt-1 truncate text-xs leading-5 text-slate-500">
+                                        {{ scholarship.provider || 'Provider' }}
+                                        <span class="mx-1 text-slate-300">&middot;</span>
+                                        {{ scholarship.category || 'Uncategorized' }}
                                     </p>
                                 </div>
                                 <a

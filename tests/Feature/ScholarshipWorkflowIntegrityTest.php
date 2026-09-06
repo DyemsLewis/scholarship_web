@@ -6,6 +6,7 @@ use App\Models\MobileApiToken;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Services\ApplicationWorkflowService;
 use App\Support\ReviewRubric;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -168,7 +169,10 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('application.application_answers.0.question_id', 'support_use')
-            ->assertJsonPath('application.application_answers.0.answer', 'It would help me obtain learning materials.');
+            ->assertJsonPath('application.application_answers.0.answer', 'It would help me obtain learning materials.')
+            ->assertJsonPath('application.application_state', 'submitted')
+            ->assertJsonPath('application.workflow.current_stage', 'screening')
+            ->assertJsonPath('application.can_withdraw', true);
 
         $application = ScholarshipApplication::query()->sole();
 
@@ -176,6 +180,57 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
             'How would this support help your studies?',
             data_get($application->submission_snapshot, 'current.application_answers.0.prompt'),
         );
+    }
+
+    public function test_mobile_app_cannot_bypass_required_prepared_documents(): void
+    {
+        $applicant = $this->completeApplicant();
+        [, $scholarship] = $this->publishedScholarship([
+            'requirements' => 'School ID',
+        ]);
+        $token = $this->mobileToken($applicant);
+
+        $this->withToken($token)
+            ->postJson('/api/mobile/applications', [
+                'scholarship_id' => $scholarship->id,
+                'document_checklist' => ['School ID'],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('missing_documents.0', 'School ID');
+
+        $this->assertDatabaseCount('scholarship_applications', 0);
+    }
+
+    public function test_mobile_application_payload_uses_the_canonical_stage_history(): void
+    {
+        $applicant = $this->completeApplicant();
+        [$provider, $scholarship] = $this->publishedScholarship([
+            'selection_stages' => ['screening', 'formal_application', 'exam', 'decision'],
+            'handoff_mode' => 'provider_contact',
+            'handoff_instructions' => 'Contact the provider to complete the formal application.',
+        ]);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'document_checklist' => [],
+            'submitted_at' => now(),
+        ]);
+        $application = $workflow->start($application);
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $provider);
+        $workflow->recordStageResult($application, 'formal_application', 'passed', $provider);
+        $token = $this->mobileToken($applicant);
+
+        $this->withToken($token)
+            ->getJson('/api/mobile/profile')
+            ->assertOk()
+            ->assertJsonPath('applications.0.status', 'exam_qualified')
+            ->assertJsonPath('applications.0.workflow.current_stage', 'exam')
+            ->assertJsonPath(
+                'applications.0.formal_application_handoff.instructions',
+                'Contact the provider to complete the formal application.',
+            );
     }
 
     private function publishedScholarship(array $attributes = []): array

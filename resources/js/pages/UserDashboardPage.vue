@@ -34,6 +34,7 @@ const recommendedScholarships = computed(() => scholarships.value
     .slice(0, 3));
 
 const scheduledActivities = computed(() => applications.value
+    .filter((application) => !isClosedApplication(application))
     .flatMap((application) => applicationSchedules(application)
         .filter((schedule) => schedule.status === 'scheduled')
         .map((schedule) => ({ application, schedule })))
@@ -441,6 +442,10 @@ function latestApplicationUpdate(application) {
 }
 
 function activeSchedule(application) {
+    if (isClosedApplication(application)) {
+        return null;
+    }
+
     return applicationSchedules(application)
         .filter((schedule) => schedule.status === 'scheduled')
         .sort((first, second) => scheduleTimestamp(first) - scheduleTimestamp(second))[0] ?? null;

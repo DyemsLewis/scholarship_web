@@ -29,12 +29,14 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class MobileAuthController extends Controller
 {
-    public function __construct(private readonly ScholarshipEligibilityService $eligibilityService)
-    {
-    }
+    public function __construct(
+        private readonly ScholarshipEligibilityService $eligibilityService,
+        private readonly ApplicationWorkflowService $workflowService,
+    ) {}
 
     public function register(Request $request): JsonResponse
     {
@@ -573,31 +575,99 @@ class MobileAuthController extends Controller
             ], 422);
         }
 
-        $application = ScholarshipApplication::create([
-            'scholarship_id' => $scholarship->id,
-            'applicant_id' => $user->id,
-            'status' => 'submitted',
-            'document_checklist' => $validated['document_checklist'] ?? [],
-            'eligibility_score' => $eligibilityMatch['score'],
-            'eligibility_breakdown' => $eligibilityMatch,
-            'review_rubric_snapshot' => $scholarship->review_rubric ?? [],
-            'application_answers' => $applicationAnswers,
-            'notes' => $validated['notes'] ?? null,
-            'submitted_at' => now(),
-        ]);
+        $requiredDocuments = collect($scholarship->application_mode === 'provider_review'
+            ? []
+            : $this->documentRequirements($scholarship))
+            ->unique()
+            ->values()
+            ->all();
+        $optionalDocuments = $scholarship->application_mode === 'provider_review'
+            ? []
+            : $this->eligibilityService->optionalDocumentRequirements($scholarship);
+        $preparedDocumentNames = $requiredDocuments === []
+            ? collect()
+            : StudentDocument::query()
+                ->where('user_id', $user->id)
+                ->whereIn('document_name', $requiredDocuments)
+                ->get()
+                ->filter(fn (StudentDocument $document): bool => Storage::disk('local')->exists($document->path))
+                ->pluck('document_name');
+        $missingDocuments = collect($requiredDocuments)
+            ->reject(fn (string $requirement): bool => $preparedDocumentNames->contains($requirement))
+            ->values()
+            ->all();
 
-        ApplicationStatusHistory::create([
-            'scholarship_application_id' => $application->id,
-            'changed_by' => $user->id,
-            'from_status' => null,
-            'to_status' => 'submitted',
-            'review_notes' => 'Application submitted from the mobile app.',
-            'changed_at' => now(),
-        ]);
+        if ($missingDocuments !== []) {
+            return response()->json([
+                'message' => 'Upload every required document before continuing with your application.',
+                'missing_documents' => $missingDocuments,
+            ], 422);
+        }
 
-        $this->attachPreparedDocumentsToApplication($user, $application, $validated['document_checklist'] ?? []);
-        $application = app(ApplicationWorkflowService::class)->start($application);
-        app(DecisionSupportService::class)->syncApplication($application, 'mobile_application_submitted');
+        $copiedDocumentPaths = [];
+
+        try {
+            $application = DB::transaction(function () use (
+                $scholarship,
+                $user,
+                $requiredDocuments,
+                $optionalDocuments,
+                $eligibilityMatch,
+                $applicationAnswers,
+                $validated,
+                &$copiedDocumentPaths,
+            ): ScholarshipApplication {
+                $application = ScholarshipApplication::create([
+                    'scholarship_id' => $scholarship->id,
+                    'applicant_id' => $user->id,
+                    'status' => 'submitted',
+                    'document_checklist' => $requiredDocuments,
+                    'optional_document_checklist' => $optionalDocuments,
+                    'eligibility_score' => $eligibilityMatch['score'],
+                    'eligibility_breakdown' => $eligibilityMatch,
+                    'review_rubric_snapshot' => $scholarship->review_rubric ?? [],
+                    'application_answers' => $applicationAnswers,
+                    'notes' => $validated['notes'] ?? null,
+                    'submitted_at' => now(),
+                ]);
+
+                ApplicationStatusHistory::create([
+                    'scholarship_application_id' => $application->id,
+                    'changed_by' => $user->id,
+                    'from_status' => null,
+                    'to_status' => 'submitted',
+                    'review_notes' => 'Application submitted from the mobile app.',
+                    'changed_at' => now(),
+                ]);
+
+                $this->attachPreparedDocumentsToApplication(
+                    $user,
+                    $application,
+                    $requiredDocuments,
+                    $optionalDocuments,
+                    $copiedDocumentPaths,
+                );
+                $application = $this->workflowService->start($application);
+                app(DecisionSupportService::class)->syncApplication($application, 'mobile_application_submitted');
+
+                return $application;
+            });
+        } catch (Throwable $error) {
+            foreach ($copiedDocumentPaths as $copiedPath) {
+                Storage::disk('local')->delete($copiedPath);
+            }
+
+            if (ScholarshipApplication::query()
+                ->where('scholarship_id', $scholarship->id)
+                ->where('applicant_id', $user->id)
+                ->exists()) {
+                return response()->json([
+                    'message' => 'You already submitted an application for this scholarship.',
+                ], 422);
+            }
+
+            throw $error;
+        }
 
         $application->refresh();
         ScholarshipFunnelEvent::record(
@@ -627,6 +697,13 @@ class MobileAuthController extends Controller
             'title' => 'New scholarship application',
             'message' => "{$user->name} submitted an application for {$scholarship->title}.",
             'action_url' => '/provider/applications',
+        ]);
+        PortalNotification::create([
+            'user_id' => $user->id,
+            'type' => 'application_submitted',
+            'title' => 'Application submitted',
+            'message' => "Your application for {$scholarship->title} was submitted successfully.",
+            'action_url' => '/dashboard/applications',
         ]);
 
         return response()->json([
@@ -1048,13 +1125,20 @@ class MobileAuthController extends Controller
 
     private function applicationPayload(ScholarshipApplication $application): array
     {
+        $workflow = $this->workflowService->payload($application);
         $dss = app(DecisionSupportService::class)->scoreApplication($application);
         $application->loadMissing('schedules');
 
         return [
             'id' => $application->id,
             'status' => $application->status,
+            'application_state' => $workflow['application_state'],
+            'workflow_stage' => $workflow['current_stage'],
+            'final_outcome' => $workflow['final_outcome'],
+            'workflow' => $workflow,
             'document_checklist' => $application->document_checklist ?? [],
+            'optional_document_checklist' => $application->optional_document_checklist
+                ?? $this->eligibilityService->optionalDocumentRequirements($application->scholarship),
             'application_answers' => $application->application_answers ?? [],
             'document_readiness' => $this->documentReadiness($application),
             'eligibility_score' => $application->eligibility_score,
@@ -1073,6 +1157,17 @@ class MobileAuthController extends Controller
             ])->values(),
             'notes' => $application->notes,
             'review_notes' => $application->review_notes,
+            'correction_status' => $application->correction_status,
+            'correction_message' => $application->correction_message,
+            'correction_response' => $application->correction_response,
+            'correction_requested_at' => $application->correction_requested_at?->format('M d, Y h:i A'),
+            'correction_responded_at' => $application->correction_responded_at?->format('M d, Y h:i A'),
+            'correction_resolved_at' => $application->correction_resolved_at?->format('M d, Y h:i A'),
+            'withdrawal_reason' => $application->withdrawal_reason,
+            'withdrawn_at' => $application->withdrawn_at?->format('M d, Y h:i A'),
+            'waitlist_position' => $application->waitlist_position,
+            'waitlisted_at' => $application->waitlisted_at?->format('M d, Y h:i A'),
+            'can_withdraw' => ! $workflow['is_closed'],
             'decision_reason' => $application->decision_reason,
             'awarded_amount' => $application->awarded_amount,
             'display_award_amount' => $application->awarded_amount ?? $application->scholarship?->award_amount,
@@ -1081,7 +1176,7 @@ class MobileAuthController extends Controller
                 : ($application->scholarship?->award_amount !== null ? 'program' : null),
             'outcome_notes' => $application->outcome_notes,
             'outcome_at' => $application->outcome_at?->format('M d, Y'),
-            'formal_application_handoff' => $this->formalApplicationHandoffPayload($application),
+            'formal_application_handoff' => $this->formalApplicationHandoffPayload($application, $workflow),
             'distribution_scheduled_for' => $application->distribution_scheduled_for?->format('M d, Y'),
             'distribution_instructions' => $application->distribution_instructions,
             'schedules' => $application->schedules
@@ -1133,15 +1228,17 @@ class MobileAuthController extends Controller
         return $answers;
     }
 
-    private function formalApplicationHandoffPayload(ScholarshipApplication $application): ?array
-    {
-        if (! in_array($application->status, [
-            'approved',
-            'awarded',
-            'distribution_scheduled',
-            'disbursed',
-            'renewed',
-        ], true)) {
+    private function formalApplicationHandoffPayload(
+        ScholarshipApplication $application,
+        ?array $workflow = null,
+    ): ?array {
+        $workflow ??= $this->workflowService->payload($application);
+        $formalApplicationStatus = data_get(
+            collect($workflow['steps'])->firstWhere('key', 'formal_application'),
+            'status',
+        );
+
+        if (! in_array($formalApplicationStatus, ['current', 'passed'], true)) {
             return null;
         }
 
@@ -1213,7 +1310,6 @@ class MobileAuthController extends Controller
     {
         return $this->eligibilityService->blockers($eligibilityMatch);
     }
-
 
     private function splitOptions(?string $value): array
     {
@@ -1349,12 +1445,24 @@ class MobileAuthController extends Controller
         ];
     }
 
-    private function attachPreparedDocumentsToApplication(User $user, ScholarshipApplication $application, array $confirmedDocuments): void
-    {
+    private function attachPreparedDocumentsToApplication(
+        User $user,
+        ScholarshipApplication $application,
+        array $confirmedDocuments,
+        array $optionalDocuments,
+        array &$copiedPaths,
+    ): void {
         $application->loadMissing('scholarship');
         $requirements = $confirmedDocuments !== []
             ? collect($confirmedDocuments)->map(fn (string $document) => trim($document))->filter()->values()->all()
             : $this->documentRequirements($application->scholarship);
+        $requirements = collect($requirements)
+            ->merge($optionalDocuments)
+            ->map(fn (string $document) => trim($document))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
 
         if ($requirements === []) {
             return;
@@ -1374,7 +1482,11 @@ class MobileAuthController extends Controller
             Storage::disk('local')->makeDirectory("application-documents/{$application->id}");
             $targetPath = 'application-documents/'.$application->id.'/'.(string) Str::uuid().($extension ? ".{$extension}" : '');
 
-            Storage::disk('local')->copy($studentDocument->path, $targetPath);
+            if (! Storage::disk('local')->copy($studentDocument->path, $targetPath)) {
+                throw new \RuntimeException("Unable to copy {$studentDocument->document_name} into the application.");
+            }
+
+            $copiedPaths[] = $targetPath;
             ApplicationDocument::query()->updateOrCreate([
                 'scholarship_application_id' => $application->id,
                 'document_name' => $studentDocument->document_name,
@@ -1392,5 +1504,4 @@ class MobileAuthController extends Controller
             ]);
         }
     }
-
 }

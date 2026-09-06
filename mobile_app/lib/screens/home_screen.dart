@@ -2760,6 +2760,8 @@ class _ApplicationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scholarship = asMap(application['scholarship']);
+    final workflow = asMap(application['workflow']);
+    final workflowNextAction = asMap(workflow['next_action']);
     final dss = asMap(application['dss_breakdown']);
     final dssCriteria = asMapList(dss['criteria']);
     final readiness = asMap(application['document_readiness']);
@@ -2817,7 +2819,13 @@ class _ApplicationCard extends StatelessWidget {
                   ),
                 ),
                 _StatusPill(
-                  label: applicationStatusLabel(status),
+                  label: stringValue(
+                    workflow['final_outcome_label'],
+                    fallback: stringValue(
+                      workflow['current_stage_label'],
+                      fallback: applicationStatusLabel(status),
+                    ),
+                  ),
                   status: status,
                 ),
               ],
@@ -2832,7 +2840,10 @@ class _ApplicationCard extends StatelessWidget {
                 border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: Text(
-                statusDescription(status),
+                stringValue(
+                  workflowNextAction['description'],
+                  fallback: statusDescription(status),
+                ),
                 style: const TextStyle(color: Color(0xFF475569), height: 1.35),
               ),
             ),
@@ -4889,7 +4900,7 @@ String statusDescription(Object? value) {
     'exam_qualified' =>
       'You passed initial screening. Wait for the provider to publish the exam schedule.',
     'exam_scheduled' =>
-      'Review and confirm the exam announcement below before the scheduled time.',
+      'Review the exam announcement below before the scheduled time.',
     'exam_taken' =>
       'Your exam attendance is recorded. Wait for the provider to post the result.',
     'exam_passed' =>

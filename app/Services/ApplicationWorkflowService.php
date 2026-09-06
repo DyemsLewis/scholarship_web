@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ApplicationStageProgress;
 use App\Models\ApplicationStatusHistory;
+use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Support\ScholarshipSelectionPlan;
@@ -15,6 +16,15 @@ class ApplicationWorkflowService
     public const RESULTS = ['passed', 'not_passed'];
 
     public const FINAL_OUTCOMES = ['selected', 'waitlisted', 'not_selected'];
+
+    private const ACTIVE_CORRECTION_STATUSES = ['requested', 'submitted'];
+
+    private const AWARD_SLOT_STATUSES = [
+        'awarded',
+        'distribution_scheduled',
+        'disbursed',
+        'renewed',
+    ];
 
     public function initialize(ScholarshipApplication $application): ScholarshipApplication
     {
@@ -193,7 +203,7 @@ class ApplicationWorkflowService
                 ]);
             }
 
-            if (in_array($locked->correction_status, ['requested', 'submitted'], true)) {
+            if (in_array($locked->correction_status, self::ACTIVE_CORRECTION_STATUSES, true)) {
                 throw ValidationException::withMessages([
                     'result' => 'Resolve the correction request before recording a stage result.',
                 ]);
@@ -303,12 +313,24 @@ class ApplicationWorkflowService
         $application = $this->initialize($application);
 
         return DB::transaction(function () use ($application, $outcome, $actor, $notes, $decisionReason): ScholarshipApplication {
+            // Lock the program first so concurrent final decisions cannot overfill its award slots
+            // or receive the same waitlist position.
+            $scholarship = Scholarship::query()
+                ->whereKey($application->scholarship_id)
+                ->lockForUpdate()
+                ->firstOrFail();
             $locked = ScholarshipApplication::query()
                 ->with(['scholarship', 'stageProgresses'])
                 ->lockForUpdate()
                 ->findOrFail($application->id);
 
-            if (in_array($locked->correction_status, ['requested', 'submitted'], true)) {
+            if (in_array($locked->application_state, ['closed', 'withdrawn'], true)) {
+                throw ValidationException::withMessages([
+                    'outcome' => 'This application is already closed.',
+                ]);
+            }
+
+            if (in_array($locked->correction_status, self::ACTIVE_CORRECTION_STATUSES, true)) {
                 throw ValidationException::withMessages([
                     'outcome' => 'Resolve the correction request before recording the final outcome.',
                 ]);
@@ -318,6 +340,26 @@ class ApplicationWorkflowService
                 throw ValidationException::withMessages([
                     'outcome' => 'Complete the configured provider stages before recording the final outcome.',
                 ]);
+            }
+
+            if ($outcome === 'waitlisted' && $locked->final_outcome === 'waitlisted') {
+                throw ValidationException::withMessages([
+                    'outcome' => 'This applicant is already on the waitlist.',
+                ]);
+            }
+
+            if ($outcome === 'selected' && $scholarship->slots_available !== null) {
+                $occupiedSlots = ScholarshipApplication::query()
+                    ->where('scholarship_id', $scholarship->id)
+                    ->where('id', '!=', $locked->id)
+                    ->whereIn('status', self::AWARD_SLOT_STATUSES)
+                    ->count();
+
+                if ($occupiedSlots >= $scholarship->slots_available) {
+                    throw ValidationException::withMessages([
+                        'outcome' => 'All available award slots have already been filled.',
+                    ]);
+                }
             }
 
             $previousStatus = $locked->status;
@@ -377,25 +419,224 @@ class ApplicationWorkflowService
         });
     }
 
+    public function requestCorrection(
+        ScholarshipApplication $application,
+        User $actor,
+        string $message,
+    ): ScholarshipApplication {
+        $application = $this->initialize($application);
+
+        return DB::transaction(function () use ($application, $actor, $message): ScholarshipApplication {
+            $locked = ScholarshipApplication::query()
+                ->with(['scholarship', 'stageProgresses'])
+                ->lockForUpdate()
+                ->findOrFail($application->id);
+
+            if (in_array($locked->application_state, ['closed', 'withdrawn'], true)) {
+                throw ValidationException::withMessages([
+                    'action' => 'A correction cannot be requested after this application has been closed.',
+                ]);
+            }
+
+            if (in_array($locked->correction_status, self::ACTIVE_CORRECTION_STATUSES, true)) {
+                throw ValidationException::withMessages([
+                    'action' => 'Finish the current correction request before starting another one.',
+                ]);
+            }
+
+            $locked->update([
+                'correction_status' => 'requested',
+                'correction_message' => $message,
+                'correction_response' => null,
+                'correction_requested_by' => $actor->id,
+                'correction_requested_at' => now(),
+                'correction_responded_at' => null,
+                'correction_resolved_at' => null,
+                'application_state' => 'needs_correction',
+            ]);
+
+            return $locked->fresh()->load(['scholarship', 'stageProgresses']);
+        });
+    }
+
+    public function submitCorrection(
+        ScholarshipApplication $application,
+        string $response,
+    ): ScholarshipApplication {
+        $application = $this->initialize($application);
+
+        return DB::transaction(function () use ($application, $response): ScholarshipApplication {
+            $locked = ScholarshipApplication::query()
+                ->with(['applicant.studentProfile', 'documents', 'scholarship', 'stageProgresses'])
+                ->lockForUpdate()
+                ->findOrFail($application->id);
+
+            if (in_array($locked->application_state, ['closed', 'withdrawn'], true)) {
+                throw ValidationException::withMessages([
+                    'response' => 'This application is already closed.',
+                ]);
+            }
+
+            if ($locked->correction_status !== 'requested') {
+                throw ValidationException::withMessages([
+                    'response' => 'There is no open correction request for this application.',
+                ]);
+            }
+
+            $locked->update([
+                'correction_status' => 'submitted',
+                'correction_response' => $response,
+                'correction_responded_at' => now(),
+                'correction_resolved_at' => null,
+                'application_state' => 'needs_correction',
+            ]);
+
+            return $this->captureSubmissionSnapshot($locked, 'correction_resubmitted');
+        });
+    }
+
+    public function resolveCorrection(ScholarshipApplication $application): ScholarshipApplication
+    {
+        $application = $this->initialize($application);
+
+        return DB::transaction(function () use ($application): ScholarshipApplication {
+            $locked = ScholarshipApplication::query()
+                ->with(['scholarship', 'stageProgresses'])
+                ->lockForUpdate()
+                ->findOrFail($application->id);
+
+            if (in_array($locked->application_state, ['closed', 'withdrawn'], true)) {
+                throw ValidationException::withMessages([
+                    'action' => 'This application is already closed.',
+                ]);
+            }
+
+            if ($locked->correction_status !== 'submitted') {
+                throw ValidationException::withMessages([
+                    'action' => 'Wait for the applicant to submit the requested correction before resolving it.',
+                ]);
+            }
+
+            $locked->update([
+                'correction_status' => 'resolved',
+                'correction_resolved_at' => now(),
+                'application_state' => match ($locked->workflow_stage) {
+                    'screening' => 'under_review',
+                    'decision' => 'awaiting_decision',
+                    default => 'in_provider_process',
+                },
+            ]);
+
+            return $locked->fresh()->load(['scholarship', 'stageProgresses']);
+        });
+    }
+
+    public function restoreWaitlistedForDecision(
+        ScholarshipApplication $application,
+        User $actor,
+        ?string $notes = null,
+    ): ScholarshipApplication {
+        $application = $this->initialize($application);
+
+        return DB::transaction(function () use ($application, $actor, $notes): ScholarshipApplication {
+            $locked = ScholarshipApplication::query()
+                ->with(['scholarship', 'stageProgresses'])
+                ->lockForUpdate()
+                ->findOrFail($application->id);
+
+            if ($locked->final_outcome !== 'waitlisted'
+                || $locked->application_state !== 'awaiting_decision'
+                || $locked->workflow_stage !== 'decision') {
+                throw ValidationException::withMessages([
+                    'action' => 'Only a waitlisted applicant can be returned to final decision review.',
+                ]);
+            }
+
+            if (in_array($locked->correction_status, self::ACTIVE_CORRECTION_STATUSES, true)) {
+                throw ValidationException::withMessages([
+                    'action' => 'Resolve the correction request before changing the waitlist outcome.',
+                ]);
+            }
+
+            $previousStatus = $locked->status;
+            $now = now();
+            $decision = $locked->stageProgresses->firstWhere('stage_key', 'decision');
+            $decision?->update([
+                'status' => 'current',
+                'result' => null,
+                'notes' => $notes,
+                'completed_at' => null,
+                'decided_at' => null,
+                'decided_by' => null,
+            ]);
+            $locked->update([
+                'status' => 'approved',
+                'application_state' => 'awaiting_decision',
+                'workflow_stage' => 'decision',
+                'final_outcome' => null,
+                'decision_reason' => null,
+                'outcome_notes' => null,
+                'outcome_at' => null,
+                'review_notes' => $notes ?: $locked->review_notes,
+                'waitlist_position' => null,
+                'waitlisted_at' => null,
+                'reviewed_by' => $actor->id,
+                'reviewed_at' => $now,
+            ]);
+
+            ApplicationStatusHistory::create([
+                'scholarship_application_id' => $locked->id,
+                'changed_by' => $actor->id,
+                'from_status' => $previousStatus,
+                'to_status' => 'approved',
+                'decision_reason' => 'waitlist_restored',
+                'review_notes' => $notes ?: 'Applicant returned to final decision review.',
+                'changed_at' => $now,
+            ]);
+
+            return $locked->fresh()->load(['scholarship', 'stageProgresses']);
+        });
+    }
+
     public function withdraw(ScholarshipApplication $application, User $actor, ?string $reason): ScholarshipApplication
     {
         $application = $this->initialize($application);
 
         return DB::transaction(function () use ($application, $actor, $reason): ScholarshipApplication {
             $locked = ScholarshipApplication::query()->lockForUpdate()->findOrFail($application->id);
+
+            if (in_array($locked->application_state, ['closed', 'withdrawn'], true)) {
+                throw ValidationException::withMessages([
+                    'reason' => 'This application can no longer be withdrawn.',
+                ]);
+            }
+
             $previousStatus = $locked->status;
             $now = now();
             $locked->stageProgresses()
                 ->whereIn('status', ['pending', 'current'])
                 ->update(['status' => 'skipped', 'updated_at' => $now]);
-            $locked->update([
+            $updates = [
                 'status' => 'withdrawn',
                 'application_state' => 'withdrawn',
                 'workflow_stage' => 'complete',
+                'final_outcome' => null,
+                'decision_reason' => 'applicant_withdrawal',
+                'outcome_notes' => null,
+                'outcome_at' => null,
                 'withdrawal_reason' => $reason,
                 'withdrawn_by' => $actor->id,
                 'withdrawn_at' => $now,
-            ]);
+                'waitlist_position' => null,
+                'waitlisted_at' => null,
+            ];
+
+            if (in_array($locked->correction_status, self::ACTIVE_CORRECTION_STATUSES, true)) {
+                $updates['correction_status'] = null;
+                $updates['correction_resolved_at'] = $now;
+            }
+
+            $locked->update($updates);
             ApplicationStatusHistory::create([
                 'scholarship_application_id' => $locked->id,
                 'changed_by' => $actor->id,
