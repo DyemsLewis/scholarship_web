@@ -137,6 +137,32 @@ class DecisionSupportServiceTest extends TestCase
         $this->assertStringContainsString('not an applicant ranking', $explanation['score_interpretation']);
     }
 
+    public function test_sync_removes_a_stale_mismatch_after_the_program_is_opened_to_all(): void
+    {
+        [$application, $applicant, $scholarship] = $this->application([
+            'eligible_courses' => 'ABM',
+        ]);
+        $service = app(DecisionSupportService::class);
+        $initialEligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship, $applicant);
+        $application->update([
+            'eligibility_score' => $initialEligibility['score'],
+            'eligibility_breakdown' => $initialEligibility,
+        ]);
+
+        $this->assertSame('fail', collect($application->eligibility_breakdown['criteria'])->firstWhere('key', 'course')['status']);
+
+        $scholarship->update(['eligible_courses' => 'Any']);
+        $service->syncApplication($application->fresh(), 'criteria_updated');
+
+        $refreshed = $application->fresh();
+        $course = collect($refreshed->eligibility_breakdown['criteria'])->firstWhere('key', 'course');
+
+        $this->assertSame('info', $course['status']);
+        $this->assertSame(100, (int) $refreshed->eligibility_score);
+        $this->assertSame([], app(ScholarshipEligibilityService::class)->blockers($refreshed->eligibility_breakdown));
+        $this->assertSame(100, collect($refreshed->dss_breakdown['criteria'])->firstWhere('key', 'eligibility')['score']);
+    }
+
     private function application(array $scholarshipAttributes = []): array
     {
         $applicant = User::factory()->create();

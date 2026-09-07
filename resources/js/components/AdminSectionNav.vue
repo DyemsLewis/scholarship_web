@@ -30,6 +30,13 @@ const catalog = {
             permission: 'manage_billing',
         },
         {
+            href: '/admin/finance',
+            label: 'Platform finance',
+            description: 'Revenue totals and payment receipts',
+            icon: 'fa-solid fa-chart-line',
+            permission: 'view_finance',
+        },
+        {
             href: '/admin/logs',
             label: 'Activity logs',
             description: 'Security and account activity',

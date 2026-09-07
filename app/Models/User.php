@@ -23,6 +23,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'manage_reviews',
         'manage_reports',
         'manage_billing',
+        'view_finance',
         'view_logs',
         'export_data',
     ];
@@ -171,6 +172,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function providerServicePurchases(): HasMany
     {
         return $this->hasMany(ProviderServicePurchase::class, 'provider_id');
+    }
+
+    public function providerScholarships(): HasMany
+    {
+        return $this->hasMany(Scholarship::class, 'provider_id');
     }
 
     public function initiatedProviderServicePurchases(): HasMany
@@ -395,6 +401,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'current_scholarship_status' => $this->studentProfile?->current_scholarship_status,
             'current_scholarship_details' => $this->studentProfile?->current_scholarship_details,
             'scholarship_goal' => $this->studentProfile?->scholarship_goal,
+            'achievements' => $this->studentProfile?->achievements,
+            'activities_and_responsibilities' => $this->studentProfile?->activities_and_responsibilities,
             'address' => $this->studentProfile?->address,
             'barangay' => $this->studentProfile?->barangay,
             'city' => $this->studentProfile?->city,

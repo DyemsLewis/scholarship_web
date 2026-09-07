@@ -17,6 +17,7 @@ const previewDocument = ref(null);
 const requestedSection = new URLSearchParams(window.location.search).get('section');
 const reviewSections = [
     { key: 'organization', label: 'Provider record', icon: 'fa-solid fa-building' },
+    { key: 'representative', label: 'Representative', icon: 'fa-solid fa-user-tie' },
     { key: 'proof', label: 'Evidence', icon: 'fa-solid fa-file-shield' },
     { key: 'decision', label: 'Decision', icon: 'fa-solid fa-gavel' },
 ];
@@ -25,6 +26,50 @@ const activeReviewSectionIndex = computed(() => reviewSections.findIndex((sectio
 const previousReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value - 1] ?? null);
 const nextReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value + 1] ?? null);
 const providerProofCount = computed(() => provider.value?.verification_documents?.length ?? 0);
+const representativeName = computed(() => {
+    const current = provider.value ?? {};
+
+    return [
+        current.first_name,
+        current.middle_initial ? `${current.middle_initial}.` : '',
+        current.last_name,
+    ].filter(Boolean).join(' ') || current.username || 'Not provided';
+});
+const providerReviewChecks = computed(() => {
+    const current = provider.value ?? {};
+
+    return [
+        {
+            label: 'Organization profile',
+            detail: current.provider_name && current.provider_type && current.provider_description
+                ? 'Name, type, and organization description are provided.'
+                : 'Confirm the organization name, type, and description.',
+            ready: Boolean(current.provider_name && current.provider_type && current.provider_description),
+        },
+        {
+            label: 'Public contact',
+            detail: current.provider_contact_email || current.provider_contact_number
+                ? 'Applicants have an organization contact channel.'
+                : 'No public provider email or contact number is saved.',
+            ready: Boolean(current.provider_contact_email || current.provider_contact_number),
+        },
+        {
+            label: 'Representative account',
+            detail: current.email_verified
+                ? 'The representative email address is verified.'
+                : 'The representative email address is not verified.',
+            ready: Boolean(current.email_verified),
+        },
+        {
+            label: 'Organization evidence',
+            detail: providerProofCount.value
+                ? `${providerProofCount.value} verification file${providerProofCount.value === 1 ? '' : 's'} submitted.`
+                : 'No organization proof has been submitted.',
+            ready: providerProofCount.value > 0,
+        },
+    ];
+});
+const providerAttentionCount = computed(() => providerReviewChecks.value.filter((check) => !check.ready).length);
 const reviewFocus = computed(() => {
     const status = provider.value?.verification_status ?? 'pending';
 
@@ -111,6 +156,12 @@ function documentStatusClass(status) {
     }
 
     return 'bg-slate-100 text-slate-700';
+}
+
+function readinessStatusClass(ready) {
+    return ready
+        ? 'bg-emerald-100 text-emerald-800'
+        : 'bg-amber-100 text-amber-900';
 }
 
 function documentTypeLabel(type) {
@@ -304,22 +355,30 @@ onMounted(loadProvider);
                             </span>
                         </div>
 
-                        <dl class="grid border-t border-slate-200 bg-slate-50/80 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                            <div class="border-b border-slate-200 p-3 sm:border-r lg:border-b-0">
+                        <dl class="grid border-t border-slate-200 bg-slate-50/80 text-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                            <div class="border-b border-slate-200 p-3 sm:border-r xl:border-b-0">
                                 <dt class="text-xs font-semibold text-slate-500">Provider type</dt>
                                 <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(provider.provider_type || 'not provided') }}</dd>
                             </div>
-                            <div class="border-b border-slate-200 p-3 lg:border-b-0 lg:border-r">
+                            <div class="border-b border-slate-200 p-3 lg:border-r xl:border-b-0">
                                 <dt class="text-xs font-semibold text-slate-500">Representative</dt>
-                                <dd class="mt-1 truncate font-bold text-slate-950">{{ provider.name || 'Not provided' }}</dd>
+                                <dd class="mt-1 truncate font-bold text-slate-950">{{ representativeName }}</dd>
                             </div>
-                            <div class="border-b border-slate-200 p-3 sm:border-b-0 sm:border-r">
+                            <div class="border-b border-slate-200 p-3 sm:border-r lg:border-r-0 xl:border-b-0 xl:border-r">
+                                <dt class="text-xs font-semibold text-slate-500">Email account</dt>
+                                <dd class="mt-1 font-bold text-slate-950">{{ provider.email_verified ? 'Verified' : 'Not verified' }}</dd>
+                            </div>
+                            <div class="border-b border-slate-200 p-3 lg:border-b-0 lg:border-r">
                                 <dt class="text-xs font-semibold text-slate-500">Evidence</dt>
                                 <dd class="mt-1 font-bold text-slate-950">{{ providerProofCount ? `${providerProofCount} file${providerProofCount === 1 ? '' : 's'}` : 'Not submitted' }}</dd>
                             </div>
+                            <div class="border-b border-slate-200 p-3 sm:border-b-0 sm:border-r">
+                                <dt class="text-xs font-semibold text-slate-500">Programs</dt>
+                                <dd class="mt-1 font-bold text-slate-950">{{ provider.programs_count || 0 }} total</dd>
+                            </div>
                             <div class="p-3">
-                                <dt class="text-xs font-semibold text-slate-500">Registered</dt>
-                                <dd class="mt-1 font-bold text-slate-950">{{ provider.created_at || 'Not provided' }}</dd>
+                                <dt class="text-xs font-semibold text-slate-500">Team accounts</dt>
+                                <dd class="mt-1 font-bold text-slate-950">{{ provider.team_members_count || 0 }}</dd>
                             </div>
                         </dl>
 
@@ -345,7 +404,7 @@ onMounted(loadProvider);
                     </section>
 
                     <section class="admin-panel overflow-hidden">
-                        <nav class="grid gap-1 p-1 sm:grid-cols-3" aria-label="Provider verification sections">
+                        <nav class="grid gap-1 p-1 sm:grid-cols-2 xl:grid-cols-4" aria-label="Provider verification sections">
                             <button
                                 v-for="section in reviewSections"
                                 :key="section.key"
@@ -364,6 +423,7 @@ onMounted(loadProvider);
                                     <span class="block text-sm font-bold">{{ section.label }}</span>
                                     <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
                                         <template v-if="section.key === 'organization'">Identity and contact</template>
+                                        <template v-else-if="section.key === 'representative'">Account and access</template>
                                         <template v-else-if="section.key === 'proof'">{{ providerProofCount ? `${providerProofCount} submitted` : 'No evidence' }}</template>
                                         <template v-else>{{ statusLabel(provider.verification_status) }}</template>
                                     </span>
@@ -398,7 +458,7 @@ onMounted(loadProvider);
                             </section>
 
                             <dl class="mt-4 grid overflow-hidden rounded-md border border-slate-200 text-sm md:grid-cols-2">
-                                <div class="border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+                                <div class="border-b border-slate-200 p-4 md:border-r">
                                     <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
                                         <i class="fa-solid fa-globe" aria-hidden="true"></i>
                                         Website
@@ -416,14 +476,81 @@ onMounted(loadProvider);
                                         <span v-else>Not provided</span>
                                     </dd>
                                 </div>
-                                <div class="p-4">
+                                <div class="border-b border-slate-200 p-4">
                                     <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
                                         <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
                                         Address
                                     </dt>
                                     <dd class="mt-2 font-bold leading-6 text-slate-950">{{ provider.provider_address || 'Not provided' }}</dd>
                                 </div>
+                                <div class="border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+                                    <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                        <i class="fa-solid fa-envelope" aria-hidden="true"></i>
+                                        Provider email
+                                    </dt>
+                                    <dd class="mt-2 break-words font-bold text-slate-950">{{ provider.provider_contact_email || 'Not provided' }}</dd>
+                                </div>
+                                <div class="p-4">
+                                    <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                        <i class="fa-solid fa-phone" aria-hidden="true"></i>
+                                        Provider contact number
+                                    </dt>
+                                    <dd class="mt-2 font-bold text-slate-950">{{ provider.provider_contact_number || 'Not provided' }}</dd>
+                                </div>
                             </dl>
+                        </article>
+
+                        <article v-if="activeReviewSection === 'representative'" class="admin-panel overflow-hidden">
+                            <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="flex items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-user-tie" aria-hidden="true"></i></span>
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Account representative</p>
+                                        <h3 class="mt-1 text-xl font-bold text-slate-950">Representative and account access</h3>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">Confirm who controls the provider account. These sign-in details are separate from the public organization contact.</p>
+                                    </div>
+                                </div>
+                                <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold', readinessStatusClass(provider.email_verified)]">
+                                    {{ provider.email_verified ? 'Email verified' : 'Email not verified' }}
+                                </span>
+                            </div>
+
+                            <dl class="grid text-sm sm:grid-cols-2 lg:grid-cols-3">
+                                <div class="border-b border-slate-200 p-4 sm:border-r">
+                                    <dt class="font-semibold text-slate-500">Representative name</dt>
+                                    <dd class="mt-1 font-bold text-slate-950">{{ representativeName }}</dd>
+                                </div>
+                                <div class="border-b border-slate-200 p-4 lg:border-r">
+                                    <dt class="font-semibold text-slate-500">Sign-in email</dt>
+                                    <dd class="mt-1 break-words font-bold text-slate-950">{{ provider.email || 'Not provided' }}</dd>
+                                </div>
+                                <div class="border-b border-slate-200 p-4 sm:border-r lg:border-r-0">
+                                    <dt class="font-semibold text-slate-500">Username</dt>
+                                    <dd class="mt-1 break-words font-bold text-slate-950">{{ provider.username || 'Not provided' }}</dd>
+                                </div>
+                                <div class="border-b border-slate-200 p-4 lg:border-b-0 lg:border-r">
+                                    <dt class="font-semibold text-slate-500">Representative contact</dt>
+                                    <dd class="mt-1 font-bold text-slate-950">{{ provider.contact_number || 'Not provided' }}</dd>
+                                </div>
+                                <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
+                                    <dt class="font-semibold text-slate-500">Account status</dt>
+                                    <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(provider.account_status || 'active') }}</dd>
+                                </div>
+                                <div class="p-4">
+                                    <dt class="font-semibold text-slate-500">Registered</dt>
+                                    <dd class="mt-1 font-bold text-slate-950">{{ provider.created_at || 'Not provided' }}</dd>
+                                </div>
+                            </dl>
+
+                            <div class="border-t border-slate-200 bg-slate-50 px-5 py-4">
+                                <p class="text-sm font-bold text-slate-950">Organization activity</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">
+                                    {{ provider.programs_count || 0 }} program{{ provider.programs_count === 1 ? '' : 's' }},
+                                    {{ provider.published_programs_count || 0 }} published,
+                                    {{ provider.programs_in_review_count || 0 }} in review, and
+                                    {{ provider.team_members_count || 0 }} team account{{ provider.team_members_count === 1 ? '' : 's' }}.
+                                </p>
+                            </div>
                         </article>
 
                         <article v-if="activeReviewSection === 'proof'" class="admin-panel p-5">
@@ -491,6 +618,36 @@ onMounted(loadProvider);
                                 {{ statusLabel(provider.verification_status) }}
                             </span>
                         </div>
+
+                        <div class="mt-4 overflow-hidden rounded-md border border-slate-200">
+                            <div class="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                                <div>
+                                    <p class="text-sm font-bold text-slate-950">Decision checklist</p>
+                                    <p class="mt-0.5 text-xs text-slate-500">Summary of the organization, account, and evidence reviewed above.</p>
+                                </div>
+                                <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', readinessStatusClass(providerAttentionCount === 0)]">
+                                    {{ providerAttentionCount ? `${providerAttentionCount} need attention` : 'Review complete' }}
+                                </span>
+                            </div>
+                            <div class="grid md:grid-cols-2">
+                                <div
+                                    v-for="(check, index) in providerReviewChecks"
+                                    :key="check.label"
+                                    :class="[
+                                        'flex items-start gap-3 p-3.5',
+                                        index < providerReviewChecks.length - 2 ? 'border-b border-slate-200' : '',
+                                        index % 2 === 0 ? 'md:border-r md:border-slate-200' : '',
+                                    ]"
+                                >
+                                    <i :class="[check.ready ? 'fa-solid fa-circle-check text-emerald-600' : 'fa-solid fa-circle-exclamation text-amber-600', 'mt-0.5']" aria-hidden="true"></i>
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-950">{{ check.label }}</p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ check.detail }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div
                             v-if="providerProofCount"
                             class="mt-4 flex items-center gap-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700 ring-1 ring-slate-200"

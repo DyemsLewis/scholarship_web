@@ -217,6 +217,32 @@ class ApplicantProfileWorkflowTest extends TestCase
             ->assertJsonStructure(['profile_readiness', 'match_summary']);
     }
 
+    public function test_applicant_can_save_optional_background_without_affecting_readiness(): void
+    {
+        $applicant = $this->completeAdultApplicant();
+
+        $response = $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', [
+                ...$applicant->publicPayload(),
+                'scholarship_goal' => 'Complete my studies and support my community.',
+                'achievements' => 'Improved my grades and completed a school research project.',
+                'activities_and_responsibilities' => 'Student club member and helps care for younger siblings.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.scholarship_goal', 'Complete my studies and support my community.')
+            ->assertJsonPath('user.achievements', 'Improved my grades and completed a school research project.')
+            ->assertJsonPath('user.activities_and_responsibilities', 'Student club member and helps care for younger siblings.')
+            ->assertJsonPath('profile_readiness.complete', true);
+
+        $this->assertTrue($response->json('profile_readiness.complete'));
+        $this->assertDatabaseHas('student_profiles', [
+            'user_id' => $applicant->id,
+            'scholarship_goal' => 'Complete my studies and support my community.',
+            'achievements' => 'Improved my grades and completed a school research project.',
+            'activities_and_responsibilities' => 'Student club member and helps care for younger siblings.',
+        ]);
+    }
+
     private function completeAdultApplicant(): User
     {
         $applicant = User::factory()->create();

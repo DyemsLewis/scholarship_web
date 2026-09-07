@@ -164,7 +164,7 @@ const reviewFilterOptions = computed(() => [
         value: 'waiting_activity',
         label: 'Waiting for activity',
         description: 'Applicants awaiting an exam or interview.',
-        icon: 'fa-solid fa-calendar-clock',
+        icon: 'fa-regular fa-calendar',
         count: Number(queueFilterCounts.value.waiting_activity ?? 0),
     },
     {

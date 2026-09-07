@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Scholarship Finder Platform System Limits and Service Boundaries</title>
+<style>
+@page { size: 8.27in 11.69in; margin: 0.82in 0.82in 0.78in; }
+body { font-family: Calibri, sans-serif; font-size: 11pt; line-height: 1.30; color: #111827; }
+h1 { font-size: 25pt; line-height: 1.12; color: #000; margin: 0 0 16pt; font-weight: 700; }
+h2 { font-size: 17pt; line-height: 1.2; color: #000; margin: 22pt 0 8pt; page-break-after: avoid; }
+h3 { font-size: 12.5pt; color: #000; margin: 14pt 0 5pt; page-break-after: avoid; }
+p { margin: 0 0 8pt; text-align: left; }
+.subtitle { font-size: 13pt; color: #4b5563; margin-bottom: 22pt; }
+.lead { font-size: 12pt; line-height: 1.5; }
+table { border-collapse: collapse; width: 100%; margin: 10pt 0 14pt; page-break-inside: auto; }
+tr { page-break-inside: avoid; }
+th, td { border: 1px solid #d9d9d9; padding: 7pt 8pt; vertical-align: middle; }
+th { background: #172033; color: white; font-weight: 700; text-align: left; }
+tr:nth-child(even) td { background: #f5f7fa; }
+.small { font-size: 9.5pt; color: #4b5563; }
+.page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+<h1>Scholarship Finder Platform System Limits and Service Boundaries</h1>
+<p class="subtitle">Complete scope reference for applicants providers administrators and project evaluators</p>
+
+<p class="lead">This document explains what the web and mobile based Scholarship Finder and Eligibility Platform can do, what it cannot do, and why those boundaries are necessary. The platform is designed to help Filipino learners discover scholarship opportunities, assess likely eligibility through a decision support system, prepare reusable information and documents, submit a prescreening application, and receive updates from scholarship providers. It also helps providers publish programs, organize applicants, verify submitted evidence, and identify applicants who may proceed to their formal selection process.</p>
+
+<p>The most important limitation is that the platform performs discovery, guidance, document preparation, and prescreening. It does not replace the legal authority, scholarship committee, school, foundation, donor, or government agency that owns a scholarship. A high match score, a complete profile, verified evidence, or a passed portal review does not automatically create a scholarship entitlement. The provider still makes the final decision and may require original documents, a separate formal form, an examination, an interview, school validation, or another process outside the portal.</p>
+
+<p>The platform should therefore be presented as a trusted coordination and prescreening system rather than as an automatic awarding system. Its limits protect applicants from false promises, protect providers from losing control over their programs, and protect administrators from taking responsibility for decisions that belong to the scholarship owner.</p>
+
+<h2>Meaning of a System Limit</h2>
+
+<p>A system limit is a defined boundary on functionality, authority, capacity, data use, or expected results. Some limits are intentional. For example, providers keep final decision authority because the platform should not award private or public funds on their behalf. Some limits are technical. Email delivery, online payments, maps, and optical character recognition depend on external services and internet access. Some limits are operational. A provider can review applicants in the portal, but the platform cannot force the provider to respond by a particular date unless a formal service-level agreement is established.</p>
+
+<p>A limitation is not automatically a defect. A well-designed platform states its boundaries clearly and gives users an appropriate next step. A problem exists when a user reasonably expects the system to perform an action, but the system neither performs it nor explains that the action belongs to someone else.</p>
+
+<h2>Core Scope of the Platform</h2>
+
+<p>The platform supports three principal roles. Applicants use the scholarship finder, profile, prepared documents, matching guidance, applications, schedules, notifications, and application history. Providers maintain an organization profile, create scholarship programs, submit programs for administrative review, review prescreening applications, request corrections, evaluate documents, manage selection stages, publish announcements, and use optional support services. Administrators verify applicants and providers when appropriate, review scholarship postings before publication, manage authorized accounts, resolve reports, oversee provider verification decisions, maintain logs, support paid service requests, and view restricted platform finance records when permission is granted.</p>
+
+<p>The mobile application is intended for applicants. Provider and administrator functions remain web based because they involve larger review workspaces, document inspection, program configuration, account permissions, operational oversight, and finance controls that are safer and easier to manage in a full web interface.</p>
+
+<h2>Applicant Limits</h2>
+
+<h3>Account ownership and younger applicants</h3>
+<p>An applicant account represents one learner and should contain accurate information about that learner. When the learner is a child or cannot independently provide informed consent, a parent or guardian should create or support the account and provide only the information necessary for matching and application. The account must not be used to impersonate another learner, create several identities for the same person, or submit documents without authority.</p>
+
+<p>The system can collect guardian details and establish a reasonable minimum age for profile data, but it cannot independently prove that a person claiming to be a guardian has legal custody or authority. Providers or administrators may request additional confirmation only when justified by the scholarship and privacy rules. Sensitive documents such as birth certificates should not be collected by default merely to create trust; they should be requested only when a specific program legitimately requires them.</p>
+
+<h3>Exploration before profile completion</h3>
+<p>Applicants may explore published scholarships before completing every profile field. This reduces the pressure to disclose information before understanding the value of the platform. However, the ability to apply is limited until required profile information and program-specific requirements are complete. This is necessary because the decision support system and provider review cannot work responsibly with missing education, location, contact, or eligibility information.</p>
+
+<p>Profile completion is not the same as eligibility. Completion means that the required fields contain data. Eligibility means that those values satisfy the rules of a particular scholarship. Verification means that selected claims have supporting evidence reviewed by an authorized person. These three states must remain distinct.</p>
+
+<h3>Accuracy of profile information</h3>
+<p>The system can apply validation rules to age, phone number length, email format, grade level, school type, household information, location, and academic values. These checks reduce accidental errors but cannot guarantee that every entered value is true. Applicants remain responsible for truthful information. Providers and administrators should rely on verified evidence when a claim materially affects eligibility.</p>
+
+<p>If an applicant changes a verified academic value or replaces the proof supporting that value, the affected verification should return to a pending state. The system should preserve an activity record so reviewers can understand what changed. Verification should never continue to appear valid when its supporting evidence has been removed or materially replaced.</p>
+
+<h3>Prepared files and application documents</h3>
+<p>The document library allows applicants to upload common reusable school-related files before applying. It improves readiness but is not a universal document vault. Providers may require a different document, a newer copy, a certified copy, a document with a specific school year, or an original presented in person. A prepared file is reusable only when it matches the program requirement and is still current.</p>
+
+<p>Uploading a file does not prove that it is authentic. File type, size, malware protection, readability, expiration, completeness, and ownership remain relevant. The portal can record whether a reviewer accepted, rejected, or requested replacement of a file, but the provider may still inspect the original during the formal application stage. The platform should avoid collecting highly sensitive documents before they are necessary.</p>
+
+<h3>Academic text extraction</h3>
+<p>Optical character recognition may extract grades or an average from a report card image or PDF to reduce manual typing. The extracted result is only a draft. Blurred images, handwriting, unusual grading systems, tables, shadows, low contrast, multiple subjects, or an unfamiliar language can produce incorrect text. Applicants must be able to review the extracted value, and authorized reviewers must compare it with the uploaded evidence before verification.</p>
+
+<p>OCR does not detect document forgery and must not automatically approve an academic claim. If the external OCR service is unavailable or the internet connection fails, manual entry and human verification remain necessary.</p>
+
+<h3>Scholarship matching and decision support</h3>
+<p>The decision support system compares available profile data with provider-defined criteria such as education level, grade or year level, strand or course, school type, academic requirement, household income, age, and geographic coverage. A result marked as eligible or recommended means the current profile appears to satisfy the encoded rules. It does not mean the applicant will receive the scholarship.</p>
+
+<p>The match result is limited by the quality of both sides of the data. If the provider selects Any, that criterion should not create a mismatch. Equivalent course labels such as BSIT and BS Information Technology should be normalized where the system supports them. Even with normalization, uncommon abbreviations and newly introduced programs may require manual review. Missing applicant data should be reported as incomplete or unknown rather than treated as a confirmed failure whenever possible.</p>
+
+<p>The matching score is guidance, not a ranking of human worth and not a final selection score. Providers may use additional rubrics after prescreening, including essays, interviews, examinations, community involvement, financial context, or mission alignment. The platform should explain why each criterion matched or did not match so applicants can correct data and providers can audit the result.</p>
+
+<h3>Location and distance</h3>
+<p>Addresses and map pins help users visualize coverage and approximate distance. Geocoding may return an imprecise location, especially for barangays, rural areas, new roads, or incomplete addresses. A map pin should be confirmed by the user. Displayed distance may be straight-line distance rather than travel distance and does not account for traffic, transportation availability, islands, road closures, travel cost, or accessibility.</p>
+
+<p>Location coverage can be an eligibility rule only when the provider states it. A scholarship marked for a particular city or province may exclude applicants outside that area, while a nationwide or Any setting should not. The provider is responsible for defining whether residence, school location, place of origin, or event attendance controls the coverage rule.</p>
+
+<h3>Application submission and withdrawal</h3>
+<p>A submitted portal application is a request for prescreening. It is not necessarily the provider's final legal application. Applicants may upload required files before submission and update files when correction is allowed. Once review reaches a protected stage, some information may be locked to preserve the integrity of the decision. The applicant may request correction or withdraw according to the available workflow, but withdrawal does not require the provider to erase audit records that must be retained for security, dispute handling, or lawful reporting.</p>
+
+<p>Applicants cannot force a provider to reverse a rejection, add a missing slot, extend a deadline, repeat an examination, or accept a late document. They may report a technical problem, misleading program, privacy concern, or inappropriate provider action to platform administrators. A report begins an investigation; it does not automatically prove misconduct.</p>
+
+<h3>Schedules results and formal application</h3>
+<p>Schedules shown in the portal communicate activities such as an examination, interview, orientation, formal document submission, or award release. The provider manages the activity and may conduct it outside the portal. The platform can notify applicants and record results, but it does not automatically host, proctor, grade, or validate an external examination or interview.</p>
+
+<p>Passing portal prescreening means the applicant may proceed to the provider's next stage. If a formal application is required, the provider may direct the applicant to an official form, office, website, or meeting and may ask the applicant to bring original documents. The provider must describe the next action, deadline, contact channel, event mode, and address or private link where appropriate. Private links should be limited to applicants who reach the relevant stage.</p>
+
+<h3>Notifications and email</h3>
+<p>In-platform notifications and email reduce the chance of missed updates, but delivery is not guaranteed. Messages may be delayed, rejected, placed in spam, blocked by a full mailbox, or sent to an outdated address. Applicants remain responsible for keeping contact details current and checking the application page. A notification is not proof that the recipient read or understood the message.</p>
+
+<h2 class="page-break">Provider Limits</h2>
+
+<h3>Provider identity and verification</h3>
+<p>A provider account represents an organization, while a representative account identifies the person operating the account. Organization contact details should be separate from a representative's login email and phone number. This allows applicants to receive an official public contact while staff credentials remain private.</p>
+
+<p>Providers may be required to complete their organization profile and upload proportionate proof before publishing programs. Administrative approval confirms that the available evidence was reviewed at a point in time. It is not a permanent government accreditation, guarantee of financial capacity, endorsement of every future activity, or substitute for due diligence. Material changes to identity, ownership, contact details, or proof may require another review.</p>
+
+<h3>Program creation and publication</h3>
+<p>Providers can configure title, description, target applicants, eligibility, benefits, dates, slots, document requirements, contact information, selection stages, schedules, possible commitments, and applicant questions. The form supports consistency but cannot know every condition used by every scholarship. Custom values are therefore necessary, but excessive free text can reduce matching accuracy and should be used carefully.</p>
+
+<p>Creating a program does not publish it immediately. Administrative review checks whether the posting is sufficiently complete, understandable, non-deceptive, and consistent with platform policy. Administrators may approve, reject, or request correction. Publication approval is not a promise that the provider has unlimited funds, that every statement will remain unchanged, or that the program is suitable for every applicant.</p>
+
+<p>Providers cannot use payment, sponsorship, or optional services to bypass review. They cannot buy a higher match score, favorable applicant ranking, applicant verification, publication approval, or access to data unrelated to their own programs.</p>
+
+<h3>Target criteria and fairness</h3>
+<p>Providers may target legitimate groups such as elementary learners, junior high school learners, senior high school learners, college students, vocational learners, or postgraduate students. Forms and criteria should adapt to the selected education level so an elementary applicant is not asked for a college course and a college applicant is not evaluated using an irrelevant grade-level field.</p>
+
+<p>The platform does not automatically determine whether every eligibility restriction is lawful, ethical, or aligned with the provider's mandate. Providers are responsible for using necessary, proportionate, and non-discriminatory criteria. Administrators may reject a program that requests excessive personal information or includes harmful, misleading, or unrelated restrictions.</p>
+
+<h3>Applicant access and data minimization</h3>
+<p>A provider may view applicants to its own programs and only the information needed for prescreening and the next selection stage. Team members should see only programs belonging to their organization and only functions allowed by their role permissions. Providers must not use applicant information for unrelated marketing, sell it, copy it into unprotected personal storage, or contact applicants for purposes not disclosed in the program.</p>
+
+<p>The platform cannot fully prevent an authorized reviewer from taking an external photograph, screenshot, or handwritten note. Role-based access, protected file routes, activity logs, account suspension, privacy terms, and staff training reduce the risk but do not eliminate human misuse. Providers remain accountable for their representatives and team members.</p>
+
+<h3>Prescreening and final decisions</h3>
+<p>The provider reviews eligibility, profile evidence, required documents, and the program rubric. It may request a correction, reject an applicant, place an applicant on a waitlist, or allow the applicant to proceed. A portal decision should have a reason and should follow the configured selection flow.</p>
+
+<p>The platform can prevent obvious sequence errors, but it cannot determine the correct outcome for every real-world case. Providers must use professional judgment. Bulk actions may reduce repetitive work, but they should be limited to applicants who are already eligible for the same next stage and should require confirmation. High-impact decisions should remain traceable to a reviewer.</p>
+
+<h3>Schedules and external activities</h3>
+<p>The selection plan may contain examination, interview, orientation, formal application, or distribution activities. Providers can announce a schedule before or after applications as appropriate, but only relevant applicants should receive private instructions. Adding another activity after some applicants have already passed a stage must not incorrectly move those applicants backward or erase completed results.</p>
+
+<p>Program-level schedules are efficient for large applicant groups, but the provider may still need individual exceptions. The portal does not manage venue capacity, invigilators, video conferencing licenses, transportation, accessibility arrangements, examination security, or emergency rescheduling unless a specific feature is later added.</p>
+
+<h3>Benefits awards and commitments</h3>
+<p>A scholarship is not limited to cash. Providers may offer tuition coverage, allowances, school supplies, devices, mentoring, training, transportation support, accommodation, internships, review materials, or other services. The platform can display multiple benefits, frequency, amount where applicable, and coverage period. It cannot guarantee delivery of a promised benefit; providers must maintain the resources and authority to provide what they publish.</p>
+
+<p>Possible commitments such as maintaining academic standing, attending activities, reporting progress, community service, or complying with a provider's rules should be disclosed before submission in simple language. Detailed contracts may be explained and signed after acceptance. The portal should not imply that a brief program field is a complete legal contract.</p>
+
+<h3>Provider response and capacity</h3>
+<p>The platform can organize a large applicant queue through filters, rows, pagination, document review, bulk actions, and status tracking. It does not create additional provider staff or guarantee a fast response. Providers should publish realistic deadlines, review capacity, slots, and contact channels. Administrators may monitor unresolved reports or prolonged inactivity, but they should not make scholarship decisions for the provider.</p>
+
+<h2>Administrative Limits</h2>
+
+<p>Administrators protect platform integrity by managing accounts, reviews, reports, logs, services, and financial oversight according to assigned permissions. Role-based access control limits staff to authorized functions. Super administrators have broader access and must use separate accounts, strong credentials, email verification, and careful permission delegation.</p>
+
+<p>Administrator verification is a review of submitted evidence, not a legal certification of identity, grades, income, or institutional status. Administrators should record reasons, request corrections when evidence is insufficient, and avoid collecting unnecessary documents. Provider verification does not transfer the provider's obligations to the platform.</p>
+
+<p>Administrators cannot award a scholarship owned by a provider, guarantee a provider's response, change an applicant's actual academic record, or treat a DSS score as a final decision. Logs provide accountability but may not capture actions taken outside the portal. Reports allow investigation but require evidence and fair review.</p>
+
+<h2>Limits of Scholarship Discovery and Content</h2>
+
+<p>The finder shows programs that have been entered, reviewed, and published in the platform. It cannot show every scholarship available in the Philippines unless the relevant providers participate or an authorized data integration is established. Search results may therefore be incomplete. A lack of results does not mean no scholarship exists.</p>
+
+<p>Program information can become outdated when providers change funding, deadlines, slots, eligibility, or selection activities. The system can record updates and notify affected applicants, but providers must maintain their postings. Archived or closed programs should remain visible only where needed for application history and accountability.</p>
+
+<p>Comparison tools help applicants compare eligible programs using available fields such as benefits, deadline, location, requirements, and process. Comparison does not decide which scholarship is personally best. Travel cost, family circumstances, contract obligations, school compatibility, personal goals, and provider reputation may require human judgment beyond the displayed fields.</p>
+
+<h2>Technical and Operational Limits</h2>
+
+<h3>Internet and external services</h3>
+<p>The Laravel application and a local SQLite database can operate on a local machine without internet for basic development and stored data. A deployed web or mobile service requires connectivity for remote users. Email delivery, map tiles, address search, OCR, payment checkout, payment webhooks, content delivery networks, and some images or icons depend on internet access and third-party availability.</p>
+
+<p>When an external service fails, the platform should fail safely. A payment must not be marked paid merely because a user returned from a checkout page. A signed webhook or verified gateway lookup should confirm it. An OCR failure must not invent a grade. A map failure must not erase the stored address. An email failure must not erase the in-platform notification.</p>
+
+<h3>Local testing and webhooks</h3>
+<p>Localhost is suitable for ordinary application testing on the same computer. An external payment provider cannot normally send a webhook to a private localhost address. A secure public tunnel or deployed HTTPS endpoint is needed for realistic webhook testing. Temporary tunnel addresses may change, while permanent tunnel hostnames generally require a controlled domain.</p>
+
+<h3>Database and scale</h3>
+<p>SQLite is appropriate for development, demonstrations, offline local use, and modest single-server workloads. It has more limited concurrent write capacity than a production database server. A heavily used deployment with many simultaneous uploads, reviews, notifications, schedules, and payments should use a managed production database such as MySQL or PostgreSQL, reliable backups, tested restoration, and storage monitoring.</p>
+
+<p>Pagination reduces the amount of data shown at once but does not by itself guarantee scalability. Large deployments require database indexes, background queues for email and OCR, object storage for documents, caching, monitoring, rate limits, and retention policies. File storage must not rely solely on an unbacked local disk.</p>
+
+<h3>Browser mobile and accessibility limits</h3>
+<p>The responsive web interface supports common desktop and mobile screen sizes, while the applicant mobile app offers applicant-focused functions. Differences may exist while mobile updates are being synchronized with the web platform. Provider and administrator workflows are not promised in the mobile app.</p>
+
+<p>Icons, maps, modals, file previews, and forms must remain keyboard accessible and understandable without color alone. Some uploaded file formats may not preview consistently in every browser and may require download or conversion. Accessibility support should be tested with actual users and assistive technologies rather than assumed from responsive design.</p>
+
+<h2>Privacy Security and Data Limits</h2>
+
+<p>The platform collects personal, academic, household, contact, location, guardian, and application information because those data may be necessary for matching and prescreening. Collection must follow data minimization: do not ask for a field merely because it might be useful someday. Each field should have a stated purpose, authorized viewer, retention period, and correction process.</p>
+
+<p>No online system can promise zero security risk. Authentication, verified email, role permissions, protected document routes, validation, rate limiting, activity logs, backups, encryption in transit, secure hosting, dependency updates, and incident procedures reduce risk. They do not eliminate stolen credentials, malicious insiders, phishing, vulnerable devices, third-party outages, or previously unknown software flaws.</p>
+
+<p>Applicants should be able to understand what providers can see. Providers should access only applicants connected to their programs. Finance information should be restricted to the super administrator or staff with a specific finance permission. Payment secrets, webhook secrets, passwords, and private document paths must never be displayed in the interface, committed to public source control, or sent through ordinary notifications.</p>
+
+<p>Deletion requests may be limited by active applications, disputes, security investigations, financial recordkeeping, or lawful retention obligations. The platform should explain when data can be deleted, anonymized, archived, or retained. Backups may preserve deleted information temporarily until their normal expiration cycle.</p>
+
+<h2>Payment and Financial Limits</h2>
+
+<p>Payments in the platform apply to optional provider support services, not to scholarship applications and not to applicant awards. Applicants should not be charged to search, match, prepare a profile, or submit a standard prescreening application unless a lawful and clearly disclosed policy is introduced after formal review. Charging applicants would create an access barrier and conflict with the platform's inclusion goal.</p>
+
+<p>Payment status must come from the payment gateway through a verified process. Pending and failed checkouts are not revenue. The restricted Platform Finance page may show daily, monthly, and lifetime confirmed service payments, payment counts, service breakdowns, and internal transaction receipts. These platform receipts are operational records and may not replace a tax invoice or official receipt required under applicable accounting and tax rules.</p>
+
+<p>Refunds, disputes, chargebacks, gateway fees, taxes, settlement timing, currency conversion, and reconciliation require policies and accounting support if the platform moves beyond test transactions. Revenue shown by the application may be gross confirmed payments unless deductions are explicitly modeled. Finance access does not authorize a staff member to change payment gateway credentials or transfer funds.</p>
+
+<h2>Are Provider Limits Related to Optional Services</h2>
+
+<p>Most provider limitations are not caused by the service module and must not be removed through payment. Identity verification, program review, privacy safeguards, access control, honest eligibility rules, applicant consent, final decision accountability, and secure document handling apply equally to paying and non-paying providers. These are governance requirements, not premium restrictions.</p>
+
+<p>Optional services are appropriate when they provide additional labor, guidance, configuration assistance, training, data preparation, or operational support that the provider could otherwise perform itself. A service may help a small organization prepare a clearer program, organize criteria, configure a selection flow, train reviewers, clean an applicant list, or prepare communication templates. The service supports the provider's work; it does not change the truth of applicant data or the fairness rules of the platform.</p>
+
+<table>
+<tr><th>Provider limitation or need</th><th>Can an optional service help</th><th>Boundary that remains</th></tr>
+<tr><td>Limited experience configuring an online scholarship</td><td>Yes. Setup assistance and guided program configuration can reduce errors.</td><td>The provider remains responsible for the program, funding, criteria, and final approval.</td></tr>
+<tr><td>Difficulty writing clear eligibility and document requirements</td><td>Yes. Staff may help structure and clarify the posting.</td><td>Staff must not invent eligibility rules or approve discriminatory requirements.</td></tr>
+<tr><td>Need to train several reviewers</td><td>Yes. Onboarding and workflow training may be offered.</td><td>Training does not grant broader applicant access than each reviewer needs.</td></tr>
+<tr><td>Large applicant volume</td><td>Partly. Queue setup, templates, filters, and process consultation can help.</td><td>The platform cannot make responsible final decisions in place of the provider.</td></tr>
+<tr><td>Provider is not yet verified</td><td>No paid bypass. Support may explain missing evidence.</td><td>Verification must be based on sufficient proof, not payment.</td></tr>
+<tr><td>Program was rejected by an administrator</td><td>Support may explain corrections.</td><td>Payment cannot force publication or override policy.</td></tr>
+<tr><td>Desire for more applicant data</td><td>No service should sell broader access.</td><td>Data minimization and purpose limitation always apply.</td></tr>
+<tr><td>Need to conduct an examination or interview</td><td>Planning support may be offered.</td><td>The provider conducts and validates the activity unless a separate authorized tool is developed.</td></tr>
+<tr><td>Need guaranteed applicants or recipients</td><td>No.</td><td>The platform cannot guarantee applicant volume, quality, acceptance, or scholarship outcomes.</td></tr>
+<tr><td>Need accounting documents</td><td>Transaction records may be provided.</td><td>Official tax documents and legal accounting duties still require proper accounting processes.</td></tr>
+</table>
+
+<h3>Services must not create pay to win behavior</h3>
+<p>A provider that does not purchase a service should still be able to complete its profile, undergo verification, create and submit a program, receive fair administrative review, view authorized applicants, make decisions, publish necessary updates, and use the core prescreening workflow. Optional services should improve convenience or supply human assistance, not disable basic platform value for non-paying providers.</p>
+
+<p>Sponsors may support the platform because broader scholarship discovery, safer prescreening, reduced duplicated paperwork, and better coordination create public or institutional value. Sponsorship should not give the sponsor ownership of applicant decisions, unrestricted personal data, or hidden preference in matching. Sponsored visibility must be labeled if offered, and it must not be confused with eligibility recommendations.</p>
+
+<h2>Limits by Role Summary</h2>
+
+<table>
+<tr><th>Role</th><th>What the role can do</th><th>What the role cannot assume</th></tr>
+<tr><td>Applicant</td><td>Discover, compare, prepare, apply for prescreening, correct allowed data, withdraw, and follow updates.</td><td>A match, verification, or submission guarantees acceptance or an award.</td></tr>
+<tr><td>Parent or guardian</td><td>Support a younger learner and provide authorized necessary information.</td><td>The platform independently proves guardianship or permits unnecessary disclosure.</td></tr>
+<tr><td>Provider owner</td><td>Maintain the organization, programs, team, prescreening decisions, schedules, and public contact.</td><td>Publication approval transfers responsibility to the platform.</td></tr>
+<tr><td>Provider team member</td><td>Use only assigned provider functions and authorized organization records.</td><td>A team account can view other providers or exercise owner permissions automatically.</td></tr>
+<tr><td>Administrator</td><td>Perform assigned verification, moderation, reports, account, service, log, or finance work.</td><td>Administrative access authorizes unnecessary viewing or provider-owned award decisions.</td></tr>
+<tr><td>Super administrator</td><td>Manage broad configuration and delegate permissions.</td><td>Full access removes privacy, accountability, or security obligations.</td></tr>
+</table>
+
+<h2>Actions the Platform Does Not Perform</h2>
+
+<p>The platform does not guarantee that every scholarship in the country is listed. It does not automatically certify applicant identity, document authenticity, household income, residency, school enrollment, or grades. It does not award provider funds, create a legal entitlement, force a provider to accept an applicant, or replace a scholarship committee.</p>
+
+<p>It does not automatically conduct or proctor external examinations and interviews. It does not guarantee that emails are delivered, that maps are exact, that OCR is correct, that a provider responds on time, or that every uploaded file previews in every browser. It does not provide legal, tax, accounting, accreditation, or cybersecurity certification merely because related records appear in the portal.</p>
+
+<p>It does not allow payment to override verification, moderation, access control, matching rules, applicant consent, or final decision responsibility. It should not sell applicant personal information or require payment from applicants for ordinary scholarship discovery and prescreening.</p>
+
+<h2>Recommended Usage and Policy Limits Before Hosting</h2>
+
+<p>Before public deployment, the platform owner should approve a privacy notice, applicant terms, provider terms, service terms, acceptable use policy, document retention schedule, incident response process, provider verification standard, program moderation standard, payment and refund policy, and complaint escalation process. These documents should identify the responsible organization and contact channel rather than relying on placeholder information.</p>
+
+<p>Production hosting should use HTTPS, a production database, private file storage, automated backups, queue workers, email authentication, monitoring, error reporting, rate limits, secret management, and recovery testing. Test payment credentials and test receipts must be clearly separated from live financial records. Demo accounts and synthetic data must not be mixed with real applicants.</p>
+
+<p>Operational limits should be transparent. Examples include supported file types and sizes, maximum attachment count, response targets, correction periods, application deadlines, account suspension grounds, schedule change rules, and support service scope. These values may be configurable, but users should see the applicable rule before committing an action.</p>
+
+<h2>Future Improvements That Address Current Limits</h2>
+
+<p>Future development may add stronger duplicate-account detection, configurable retention and anonymization, provider service-level targets, structured appeals, improved synonym mapping for courses and strands, travel-time distance calculation, accessibility testing, multilingual guidance, storage scanning, digital signature support, accounting reconciliation, refund and chargeback records, more mature sponsorship disclosure, and integrations with authorized school or government data sources.</p>
+
+<p>These improvements should be prioritized according to risk and demonstrated user need. Features that process more sensitive information should not be added merely because they are technically possible. Each addition should have a clear purpose, minimum data requirement, authorized user, fallback when unavailable, audit record, and explanation visible to affected users.</p>
+
+<h2>Final Scope Statement</h2>
+
+<p>The Scholarship Finder and Eligibility Platform is a discovery, readiness, matching guidance, and prescreening system. It reduces fragmented searching, repeated data entry, unclear eligibility, disorganized document submission, and difficult communication between applicants and providers. It supports better decisions by organizing evidence and explaining rules, but it does not replace human judgment, provider authority, formal scholarship requirements, or legal responsibility.</p>
+
+<p>Applicants are limited to truthful, authorized use of their own profile and applications. Providers are limited to their organization, programs, legitimate criteria, and authorized applicant data. Administrators are limited by role permissions, purpose, and accountability. External services are limited by connectivity and third-party reliability. Optional provider services may improve convenience and capacity, but they do not remove verification, privacy, fairness, moderation, or decision-making boundaries.</p>
+
+<p>A successful deployment should not hide these limits. It should present them as part of the platform's trust model so every user understands what the portal can decide, what a provider must decide, what evidence still requires human review, and what happens when technology or external processes cannot complete a task.</p>
+</body>
+</html>

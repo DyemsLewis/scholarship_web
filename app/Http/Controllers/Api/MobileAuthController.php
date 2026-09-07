@@ -225,6 +225,8 @@ class MobileAuthController extends Controller
             'current_scholarship_status' => ['nullable', Rule::in(['none', 'receiving', 'pending', 'completed', 'prefer_not_to_say'])],
             'current_scholarship_details' => ['nullable', 'string', 'max:1000'],
             'scholarship_goal' => ['nullable', 'string', 'max:1500'],
+            'achievements' => ['nullable', 'string', 'max:1500'],
+            'activities_and_responsibilities' => ['nullable', 'string', 'max:1500'],
             'address' => ['nullable', 'string', 'max:500'],
             'barangay' => ['nullable', 'string', 'max:255'],
             'city' => ['nullable', 'string', 'max:255'],

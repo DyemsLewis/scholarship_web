@@ -63,6 +63,9 @@ const reviewStatusOptions = [
 const documentItems = computed(() => splitItems(scholarship.value?.requirements));
 const optionalDocumentItems = computed(() => splitItems(scholarship.value?.optional_requirements));
 const postQualificationDocumentItems = computed(() => splitItems(scholarship.value?.post_qualification_requirements));
+const applicationQuestions = computed(() => Array.isArray(scholarship.value?.application_questions)
+    ? scholarship.value.application_questions
+    : []);
 const selectionStages = computed(() => scholarship.value?.selection_stages?.length
     ? scholarship.value.selection_stages
     : ['screening']);
@@ -100,6 +103,32 @@ const summaryFacts = computed(() => {
         { label: 'Program cycle', value: current.program_cycle || 'Not specified' },
         { label: 'Deadline', value: current.deadline || 'Not specified' },
         { label: 'Available slots', value: current.slots_available ?? 'Not specified' },
+    ];
+});
+const decisionSummary = computed(() => {
+    const current = scholarship.value ?? {};
+
+    return [
+        {
+            label: 'Provider',
+            value: isProviderVerified.value ? 'Verified organization' : 'Provider needs review',
+            ready: isProviderVerified.value,
+        },
+        {
+            label: 'Offer',
+            value: `${current.benefits?.length || 0} benefit${current.benefits?.length === 1 ? '' : 's'} and ${current.slots_available ?? 'unspecified'} slots`,
+            ready: Boolean(current.benefits?.length && hasText(current.slots_available)),
+        },
+        {
+            label: 'Applicant submission',
+            value: `${documentItems.value.length} required file${documentItems.value.length === 1 ? '' : 's'} and ${applicationQuestions.value.length} question${applicationQuestions.value.length === 1 ? '' : 's'}`,
+            ready: documentItems.value.length > 0,
+        },
+        {
+            label: 'Selection flow',
+            value: `${workflowSteps.value.length} stage${workflowSteps.value.length === 1 ? '' : 's'} with formal handoff details`,
+            ready: workflowSteps.value.length > 0 && hasText(current.handoff_instructions),
+        },
     ];
 });
 const eligibilityRules = computed(() => {
@@ -204,6 +233,15 @@ const readinessChecks = computed(() => {
             status: hasText(current.contact_email) || hasText(current.contact_number) ? 'Provided' : 'Missing',
             tone: hasText(current.contact_email) || hasText(current.contact_number) ? 'good' : 'warn',
             icon: 'fa-regular fa-envelope',
+        },
+        {
+            label: 'Program terms',
+            detail: hasText(current.provider_terms_accepted_at)
+                ? `Accepted ${current.provider_terms_accepted_at}${current.provider_terms_version ? ` (${current.provider_terms_version})` : ''}.`
+                : 'The provider terms acceptance was not recorded for this submission.',
+            status: hasText(current.provider_terms_accepted_at) ? 'Accepted' : 'Missing',
+            tone: hasText(current.provider_terms_accepted_at) ? 'good' : 'warn',
+            icon: 'fa-solid fa-file-signature',
         },
     ];
 
@@ -589,7 +627,7 @@ onMounted(loadScholarship);
                                     <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
                                         <template v-if="section.key === 'overview'">{{ attentionCount ? `${attentionCount} checks need attention` : 'Ready to review' }}</template>
                                         <template v-else-if="section.key === 'offer'">{{ scholarship.benefits?.length || 0 }} benefits</template>
-                                        <template v-else-if="section.key === 'process'">{{ documentItems.length }} required files</template>
+                                        <template v-else-if="section.key === 'process'">{{ documentItems.length }} files / {{ applicationQuestions.length }} questions</template>
                                         <template v-else>{{ statusLabel(scholarship.status) }}</template>
                                     </span>
                                 </span>
@@ -795,6 +833,28 @@ onMounted(loadScholarship);
                                     </section>
                                 </div>
 
+                                <section class="mt-4 overflow-hidden rounded-md border border-slate-200">
+                                    <div class="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <h5 class="font-bold text-slate-950">Applicant questions</h5>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">Review the extra information applicants must provide specifically for this program.</p>
+                                        </div>
+                                        <span class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                                            {{ applicationQuestions.length }} of 5 used
+                                        </span>
+                                    </div>
+                                    <ol v-if="applicationQuestions.length" class="divide-y divide-slate-200 bg-white">
+                                        <li v-for="(question, index) in applicationQuestions" :key="question.id || index" class="flex items-start gap-3 px-4 py-3.5">
+                                            <span class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold text-white">{{ index + 1 }}</span>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-sm font-bold leading-6 text-slate-950">{{ question.prompt }}</p>
+                                                <p class="mt-0.5 text-xs font-semibold text-slate-500">{{ question.required ? 'Required response' : 'Optional response' }}</p>
+                                            </div>
+                                        </li>
+                                    </ol>
+                                    <p v-else class="px-4 py-4 text-sm leading-6 text-slate-500">No extra questions. Reviewers will use the standard applicant profile and required files.</p>
+                                </section>
+
                                 <section class="mt-4 rounded-md border border-amber-200 bg-amber-50/60 p-4">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
@@ -946,6 +1006,30 @@ onMounted(loadScholarship);
                                 Confirm them before publishing or explain the required correction in your note.
                             </div>
 
+                            <div class="mt-4 overflow-hidden rounded-md border border-slate-200">
+                                <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                                    <p class="text-sm font-bold text-slate-950">Decision summary</p>
+                                    <p class="mt-0.5 text-xs text-slate-500">Key information from the provider, offer, applicant submission, and selection flow.</p>
+                                </div>
+                                <div class="grid sm:grid-cols-2">
+                                    <div
+                                        v-for="(item, index) in decisionSummary"
+                                        :key="item.label"
+                                        :class="[
+                                            'flex items-start gap-3 p-3.5',
+                                            index < decisionSummary.length - 2 ? 'border-b border-slate-200' : '',
+                                            index % 2 === 0 ? 'sm:border-r sm:border-slate-200' : '',
+                                        ]"
+                                    >
+                                        <i :class="[item.ready ? 'fa-solid fa-circle-check text-emerald-600' : 'fa-solid fa-circle-exclamation text-amber-600', 'mt-0.5']" aria-hidden="true"></i>
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">{{ item.label }}</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">{{ item.value }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="mt-4 grid gap-2 md:grid-cols-3">
                                 <button
                                     v-for="option in reviewStatusOptions"
@@ -997,7 +1081,7 @@ onMounted(loadScholarship);
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Submitting provider</p>
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">{{ scholarship.provider || 'Provider' }}</h3>
-                                        <p class="mt-1 text-sm text-slate-600">Confirm the organization behind this program.</p>
+                                    <p class="mt-1 text-sm text-slate-600">Confirm the verified organization and the public contact applicants will receive.</p>
                                     </div>
                                 </div>
                                 <span :class="['rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(scholarship.provider_verification_status)]">
@@ -1011,8 +1095,8 @@ onMounted(loadScholarship);
                                     <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(scholarship.provider_type || 'provider') }}</dd>
                                 </div>
                                 <div class="border-b border-slate-200 p-4 lg:border-b-0 lg:border-r">
-                                    <dt class="text-xs font-semibold text-slate-500">Email</dt>
-                                    <dd class="mt-1 break-words font-bold text-slate-950">{{ scholarship.provider_email || 'Not provided' }}</dd>
+                                    <dt class="text-xs font-semibold text-slate-500">Provider email</dt>
+                                    <dd class="mt-1 break-words font-bold text-slate-950">{{ scholarship.provider_contact_email || scholarship.provider_email || 'Not provided' }}</dd>
                                 </div>
                                 <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
                                     <dt class="text-xs font-semibold text-slate-500">Website</dt>
@@ -1034,6 +1118,22 @@ onMounted(loadScholarship);
                                     <dd class="mt-1 font-bold leading-6 text-slate-950">{{ scholarship.provider_address || 'Not provided' }}</dd>
                                 </div>
                             </dl>
+
+                            <div class="grid border-t border-slate-200 text-sm sm:grid-cols-2">
+                                <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
+                                    <p class="text-xs font-semibold text-slate-500">Provider contact number</p>
+                                    <p class="mt-1 font-bold text-slate-950">{{ scholarship.provider_contact_number || 'Not provided' }}</p>
+                                </div>
+                                <div class="p-4">
+                                    <p class="text-xs font-semibold text-slate-500">Program terms</p>
+                                    <p class="mt-1 font-bold text-slate-950">{{ scholarship.provider_terms_accepted_at ? `Accepted ${scholarship.provider_terms_accepted_at}` : 'Not recorded' }}</p>
+                                </div>
+                            </div>
+
+                            <div v-if="scholarship.provider_description" class="border-t border-slate-200 px-4 py-3">
+                                <p class="text-xs font-semibold text-slate-500">Organization summary</p>
+                                <p class="mt-1 line-clamp-3 whitespace-pre-line text-sm leading-6 text-slate-700">{{ scholarship.provider_description }}</p>
+                            </div>
 
                             <div v-if="scholarship.provider_id" class="border-t border-slate-200 p-4">
                                 <a

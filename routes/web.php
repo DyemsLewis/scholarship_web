@@ -5,6 +5,7 @@ use App\Http\Controllers\ApplicantDashboardController;
 use App\Http\Controllers\ApplicationDocumentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BillingController;
+use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProviderController;
@@ -97,6 +98,8 @@ Route::middleware(['auth', 'admin'])
         Route::patch('/billing/{purchase}/meeting', [BillingController::class, 'decideProviderMeeting'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.meeting.decide');
         Route::post('/billing/{purchase}/updates', [BillingController::class, 'storeAdminUpdate'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.updates.store');
         Route::post('/billing/{purchase}/deliverables', [BillingController::class, 'uploadAdminDeliverable'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.deliverables.store');
+        Route::get('/finance', [FinanceController::class, 'page'])->middleware('permission:view_finance')->name('finance');
+        Route::get('/finance/data', [FinanceController::class, 'data'])->middleware('permission:view_finance')->name('finance.data');
         Route::get('/users', [AdminController::class, 'users'])->middleware('permission:manage_accounts')->name('users');
         Route::post('/users', [AdminController::class, 'storeUser'])->middleware('permission:manage_accounts')->name('users.store');
         Route::get('/users/{user}', [AdminController::class, 'showUser'])->middleware('permission:manage_accounts')->name('users.show');

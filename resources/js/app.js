@@ -23,6 +23,7 @@ const pages = {
     adminAccountForm: () => import('./pages/AdminAccountFormPage.vue'),
     adminApplicantReview: () => import('./pages/AdminApplicantReviewPage.vue'),
     adminBilling: () => import('./pages/AdminBillingPage.vue'),
+    adminFinance: () => import('./pages/AdminFinancePage.vue'),
     adminServiceWorkspace: () => import('./pages/AdminServiceWorkspacePage.vue'),
     adminLogs: () => import('./pages/AdminLogsPage.vue'),
     adminProfile: () => import('./pages/AdminProfilePage.vue'),

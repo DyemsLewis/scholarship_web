@@ -27,6 +27,9 @@ const locationFilter = ref('');
 const savedOnly = ref(false);
 const showAdvancedFilters = ref(false);
 const previewScholarship = ref(null);
+const showComparisonModal = ref(false);
+const comparisonStep = ref('select');
+const comparisonSelection = ref([]);
 const dssGuideItems = [
     { label: 'Profile', icon: 'fa-solid fa-user-check', description: 'Your saved learner details.' },
     { label: 'Rules', icon: 'fa-solid fa-list-check', description: 'Provider eligibility settings.' },
@@ -158,6 +161,28 @@ const filteredScholarships = computed(() => scholarships.value
 
         return scoreDifference || deadlineValue(first) - deadlineValue(second);
     }));
+const eligibleScholarships = computed(() => scholarships.value
+    .filter((scholarship) => scholarship.eligibility_match?.is_eligible === true)
+    .sort((first, second) => {
+        const scoreDifference = Number(second.eligibility_match?.score ?? 0) - Number(first.eligibility_match?.score ?? 0);
+
+        return scoreDifference || deadlineValue(first) - deadlineValue(second);
+    }));
+const selectedComparisonScholarships = computed(() => comparisonSelection.value
+    .map((id) => scholarships.value.find((scholarship) => scholarship.id === id))
+    .filter(Boolean));
+const canStartComparison = computed(() => selectedComparisonScholarships.value.length === 2);
+const comparisonRows = [
+    { key: 'match', label: 'Profile match', icon: 'fa-solid fa-gauge-high' },
+    { key: 'benefits', label: 'Benefits', icon: 'fa-solid fa-gift' },
+    { key: 'deadline', label: 'Application dates', icon: 'fa-regular fa-calendar' },
+    { key: 'target', label: 'Eligible learners', icon: 'fa-solid fa-user-graduate' },
+    { key: 'academic', label: 'Academic rule', icon: 'fa-solid fa-chart-line' },
+    { key: 'documents', label: 'Document readiness', icon: 'fa-solid fa-folder-open' },
+    { key: 'location', label: 'Coverage and distance', icon: 'fa-solid fa-location-dot' },
+    { key: 'slots', label: 'Available slots', icon: 'fa-solid fa-users' },
+    { key: 'process', label: 'Selection process', icon: 'fa-solid fa-list-check' },
+];
 
 function formatAmount(amount) {
     if (amount === null || amount === undefined || amount === '') {
@@ -219,6 +244,48 @@ function hiddenPreviewBenefitCount(scholarship) {
 
 function remainingBenefitCount(scholarship) {
     return Math.max((scholarship?.benefits?.length ?? 0) - 1, 0);
+}
+
+function comparisonBenefitSummary(scholarship) {
+    const benefits = Array.isArray(scholarship?.benefits) ? scholarship.benefits : [];
+
+    if (benefits.length === 0) {
+        return scholarship?.benefit_summary || formatAmount(scholarship?.award_amount);
+    }
+
+    const summary = benefits
+        .slice(0, 2)
+        .map((benefit) => `${benefit.title}: ${benefitDetailLine(benefit)}`)
+        .join(' / ');
+
+    return `${summary}${benefits.length > 2 ? ` / +${benefits.length - 2} more` : ''}`;
+}
+
+function comparisonValue(scholarship, key) {
+    if (key === 'match') {
+        return `${scholarship.eligibility_match?.score ?? 0}% - ${scholarship.eligibility_match?.label || 'Eligible'}`;
+    }
+
+    if (key === 'benefits') return comparisonBenefitSummary(scholarship);
+    if (key === 'deadline') {
+        const opening = scholarship.application_opens_at ? `Opens ${scholarship.application_opens_at}` : 'Open now';
+
+        return `${opening} / ${deadlineLabel(scholarship)}`;
+    }
+    if (key === 'target') return targetApplicantLabel(scholarship);
+    if (key === 'academic') return academicRequirementLabel(scholarship);
+    if (key === 'documents') return `${requirementSummary(scholarship)}. ${documentReadinessHint(scholarship)}`;
+    if (key === 'location') {
+        return `${coverageLabel(scholarship)}${scholarship.distance_label ? ` / ${scholarship.distance_label}` : ''}`;
+    }
+    if (key === 'slots') {
+        return scholarship.slots_available !== null && scholarship.slots_available !== undefined
+            ? `${scholarship.slots_available} slot${Number(scholarship.slots_available) === 1 ? '' : 's'}`
+            : 'Not specified';
+    }
+    if (key === 'process') return selectionProcessLabel(scholarship);
+
+    return 'Not specified';
 }
 
 function benefitIcon(benefit) {
@@ -739,8 +806,57 @@ function closeScholarshipPreview() {
     previewScholarship.value = null;
 }
 
+function openComparisonModal() {
+    comparisonSelection.value = [];
+    comparisonStep.value = 'select';
+    showComparisonModal.value = true;
+}
+
+function closeComparisonModal() {
+    showComparisonModal.value = false;
+    comparisonStep.value = 'select';
+    comparisonSelection.value = [];
+}
+
+function isComparisonSelected(scholarshipId) {
+    return comparisonSelection.value.includes(scholarshipId);
+}
+
+function toggleComparisonSelection(scholarshipId) {
+    if (isComparisonSelected(scholarshipId)) {
+        comparisonSelection.value = comparisonSelection.value.filter((id) => id !== scholarshipId);
+        return;
+    }
+
+    if (comparisonSelection.value.length < 2) {
+        comparisonSelection.value = [...comparisonSelection.value, scholarshipId];
+    }
+}
+
+function showComparison() {
+    if (canStartComparison.value) {
+        comparisonStep.value = 'compare';
+    }
+}
+
+function returnToComparisonSelection() {
+    if (comparisonStep.value === 'compare') {
+        comparisonStep.value = 'select';
+        return;
+    }
+
+    closeComparisonModal();
+}
+
 function handlePreviewKeydown(event) {
-    if (event.key === 'Escape' && previewScholarship.value) {
+    if (event.key !== 'Escape') return;
+
+    if (showComparisonModal.value) {
+        closeComparisonModal();
+        return;
+    }
+
+    if (previewScholarship.value) {
         closeScholarshipPreview();
     }
 }
@@ -794,6 +910,14 @@ onBeforeUnmount(() => {
                                 </h3>
                             </div>
                             <div class="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-2 rounded-md border border-amber-300/40 bg-amber-300 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-amber-200"
+                                    @click="openComparisonModal"
+                                >
+                                    <i class="fa-solid fa-code-compare" aria-hidden="true"></i>
+                                    Compare scholarships
+                                </button>
                                 <p class="rounded-md bg-white/10 px-3 py-2 text-xs font-bold text-slate-200">
                                     {{ filteredScholarships.length }} program{{ filteredScholarships.length === 1 ? '' : 's' }} matched
                                 </p>
@@ -1303,6 +1427,183 @@ onBeforeUnmount(() => {
                             More details
                             <i class="fa-solid fa-arrow-right ml-2 text-xs"></i>
                         </a>
+                    </footer>
+                </section>
+            </div>
+        </div>
+    </Teleport>
+
+    <Teleport to="body">
+        <div
+            v-if="showComparisonModal"
+            class="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/75 px-3 py-5 sm:px-5"
+            @click.self="closeComparisonModal"
+        >
+            <div class="flex min-h-full items-center justify-center" @click.self="closeComparisonModal">
+                <section
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="scholarship-comparison-title"
+                    class="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
+                >
+                    <header class="shrink-0 bg-slate-950 px-5 py-4 text-white sm:px-6">
+                        <div class="flex items-start justify-between gap-4">
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">
+                                    Scholarship comparison
+                                </p>
+                                <h2 id="scholarship-comparison-title" class="mt-1 font-display text-2xl font-bold">
+                                    {{ comparisonStep === 'select' ? 'Choose two eligible programs' : 'Compare your options' }}
+                                </h2>
+                                <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-300">
+                                    {{ comparisonStep === 'select'
+                                        ? 'Only scholarships that match your required eligibility criteria are shown.'
+                                        : 'Use this summary as a guide, then open the full program before applying.' }}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                aria-label="Close scholarship comparison"
+                                class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+                                @click="closeComparisonModal"
+                            >
+                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </header>
+
+                    <div v-if="comparisonStep === 'select'" class="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+                        <div class="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p class="text-sm font-bold text-slate-950">
+                                    {{ comparisonSelection.length }} of 2 selected
+                                </p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">
+                                    Select the two programs you want to place side by side.
+                                </p>
+                            </div>
+                            <span class="w-fit rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-800">
+                                {{ eligibleScholarships.length }} eligible program{{ eligibleScholarships.length === 1 ? '' : 's' }}
+                            </span>
+                        </div>
+
+                        <div v-if="eligibleScholarships.length >= 2" class="mt-4 grid gap-3 md:grid-cols-2">
+                            <button
+                                v-for="scholarship in eligibleScholarships"
+                                :key="scholarship.id"
+                                type="button"
+                                :disabled="comparisonSelection.length === 2 && !isComparisonSelected(scholarship.id)"
+                                :class="[
+                                    'flex min-h-32 items-start gap-3 rounded-md border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-45',
+                                    isComparisonSelected(scholarship.id)
+                                        ? 'border-slate-950 bg-slate-950 text-white shadow-sm'
+                                        : 'border-slate-200 bg-white text-slate-950 hover:border-slate-400 hover:bg-slate-50',
+                                ]"
+                                @click="toggleComparisonSelection(scholarship.id)"
+                            >
+                                <img
+                                    :src="scholarshipImage(scholarship)"
+                                    :alt="scholarship.title"
+                                    class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                    @error="handleScholarshipImageError"
+                                >
+                                <span class="min-w-0 flex-1">
+                                    <span class="flex items-start justify-between gap-3">
+                                        <span class="line-clamp-2 text-sm font-bold leading-5">{{ scholarship.title }}</span>
+                                        <span :class="['grid h-5 w-5 shrink-0 place-items-center rounded border text-[10px]', isComparisonSelected(scholarship.id) ? 'border-amber-300 bg-amber-300 text-slate-950' : 'border-slate-300 bg-white text-transparent']">
+                                            <i class="fa-solid fa-check" aria-hidden="true"></i>
+                                        </span>
+                                    </span>
+                                    <span :class="['mt-1 block truncate text-xs', isComparisonSelected(scholarship.id) ? 'text-slate-300' : 'text-slate-500']">
+                                        {{ scholarship.provider?.name || 'Scholarship provider' }}
+                                    </span>
+                                    <span class="mt-3 flex flex-wrap gap-2">
+                                        <span :class="['rounded px-2 py-1 text-[10px] font-bold', isComparisonSelected(scholarship.id) ? 'bg-white/10 text-amber-300' : 'bg-emerald-100 text-emerald-800']">
+                                            {{ scholarship.eligibility_match?.score ?? 0 }}% match
+                                        </span>
+                                        <span :class="['rounded px-2 py-1 text-[10px] font-bold', isComparisonSelected(scholarship.id) ? 'bg-white/10 text-slate-200' : 'bg-slate-100 text-slate-600']">
+                                            {{ compactDeadlineLabel(scholarship) }}
+                                        </span>
+                                    </span>
+                                </span>
+                            </button>
+                        </div>
+
+                        <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                            <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-200 text-slate-600">
+                                <i class="fa-solid fa-code-compare" aria-hidden="true"></i>
+                            </span>
+                            <p class="mt-3 text-sm font-bold text-slate-950">Two eligible programs are needed</p>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                                Complete your profile or wait for more matching scholarships before using comparison.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div v-else class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+                        <div class="overflow-hidden rounded-md border border-slate-200">
+                            <div class="grid grid-cols-2 gap-px bg-slate-200 sm:grid-cols-[10rem_repeat(2,minmax(0,1fr))]">
+                                <div class="hidden bg-slate-50 p-4 sm:block"></div>
+                                <article
+                                    v-for="scholarship in selectedComparisonScholarships"
+                                    :key="`heading-${scholarship.id}`"
+                                    class="bg-white p-4"
+                                >
+                                    <div class="flex items-center gap-3">
+                                        <img
+                                            :src="scholarshipImage(scholarship)"
+                                            :alt="scholarship.title"
+                                            class="h-11 w-11 shrink-0 rounded-md bg-white object-contain p-1 ring-1 ring-slate-200"
+                                            @error="handleScholarshipImageError"
+                                        >
+                                        <div class="min-w-0">
+                                            <h3 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ scholarship.title }}</h3>
+                                            <p class="mt-0.5 truncate text-[11px] text-slate-500">{{ scholarship.provider?.name || 'Scholarship provider' }}</p>
+                                        </div>
+                                    </div>
+                                    <a :href="`/dashboard/scholarships/${scholarship.id}`" class="mt-3 inline-flex items-center gap-1 text-xs font-bold text-slate-700 hover:text-slate-950">
+                                        View full details <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i>
+                                    </a>
+                                </article>
+
+                                <template v-for="row in comparisonRows" :key="row.key">
+                                    <div class="col-span-2 flex items-center gap-2 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700 sm:col-span-1 sm:items-start sm:py-4">
+                                        <i :class="[row.icon, 'mt-0.5 text-amber-700']" aria-hidden="true"></i>
+                                        {{ row.label }}
+                                    </div>
+                                    <div
+                                        v-for="scholarship in selectedComparisonScholarships"
+                                        :key="`${row.key}-${scholarship.id}`"
+                                        class="bg-white p-4 text-xs font-semibold leading-5 text-slate-700 sm:text-sm sm:leading-6"
+                                    >
+                                        {{ comparisonValue(scholarship, row.key) }}
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <footer class="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <button
+                            type="button"
+                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                            @click="returnToComparisonSelection"
+                        >
+                            {{ comparisonStep === 'compare' ? 'Choose different programs' : 'Cancel' }}
+                        </button>
+                        <button
+                            v-if="comparisonStep === 'select'"
+                            type="button"
+                            :disabled="!canStartComparison"
+                            class="rounded-md bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                            @click="showComparison"
+                        >
+                            Compare selected
+                            <i class="fa-solid fa-arrow-right ml-2 text-xs" aria-hidden="true"></i>
+                        </button>
+                        <p v-else class="text-xs font-semibold text-slate-500">
+                            Eligibility does not guarantee final provider approval.
+                        </p>
                     </footer>
                 </section>
             </div>

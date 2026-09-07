@@ -39,6 +39,8 @@ class StudentProfile extends Model
         'current_scholarship_status',
         'current_scholarship_details',
         'scholarship_goal',
+        'achievements',
+        'activities_and_responsibilities',
         'address',
         'barangay',
         'city',

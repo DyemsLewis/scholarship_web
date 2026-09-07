@@ -623,7 +623,7 @@ function eligibilityStatusLabel(criterion) {
         return 'Manual review';
     }
 
-    return 'Not applicable';
+    return 'No restriction';
 }
 
 function comparisonStateClass(state) {
@@ -1367,7 +1367,7 @@ onMounted(loadApplication);
                                     <span><strong class="text-rose-700">{{ dssComparison.not_met }}</strong> not met</span>
                                     <span><strong class="text-amber-700">{{ dssComparison.missing }}</strong> missing</span>
                                     <span><strong class="text-slate-700">{{ dssComparison.manual_review }}</strong> manual review</span>
-                                    <span><strong class="text-slate-700">{{ dssComparison.not_applicable }}</strong> not applicable</span>
+                                    <span><strong class="text-slate-700">{{ dssComparison.not_applicable }}</strong> unrestricted</span>
                                 </div>
 
                                 <div v-if="eligibilityCriteria.length" class="grid gap-px bg-slate-200 md:grid-cols-2">
@@ -2197,6 +2197,27 @@ onMounted(loadApplication);
                                     <div class="sm:col-span-2 rounded-md bg-slate-50 p-3">
                                         <dt class="font-semibold text-slate-500">Study support needed</dt>
                                         <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.support_needs || 'Not provided' }}</dd>
+                                    </div>
+                                </dl>
+                            </section>
+
+                            <section v-if="activeSection === 'applicant'" class="provider-panel overflow-hidden">
+                                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-4">
+                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Goals and involvement</p>
+                                    <span class="rounded bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">Applicant-declared</span>
+                                </div>
+                                <dl class="divide-y divide-slate-200 text-sm">
+                                    <div class="px-5 py-3.5">
+                                        <dt class="font-semibold text-slate-500">Applicant goal</dt>
+                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.scholarship_goal || 'Not provided' }}</dd>
+                                    </div>
+                                    <div class="px-5 py-3.5">
+                                        <dt class="font-semibold text-slate-500">Achievements or strengths</dt>
+                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.achievements || 'Not provided' }}</dd>
+                                    </div>
+                                    <div class="px-5 py-3.5">
+                                        <dt class="font-semibold text-slate-500">Activities and responsibilities</dt>
+                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.activities_and_responsibilities || 'Not provided' }}</dd>
                                     </div>
                                 </dl>
                             </section>

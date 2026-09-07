@@ -90,7 +90,7 @@ const workflowQueues = computed(() => [
         key: 'waiting_activity',
         label: 'Waiting for activity',
         description: 'Exam or interview is pending.',
-        icon: 'fa-solid fa-calendar-clock',
+        icon: 'fa-regular fa-calendar',
         count: Number(workflowCounts.value.waiting_activity ?? 0),
         href: `${applicantWorkspaceUrl.value}?filter=waiting_activity&workspace=schedule`,
     },

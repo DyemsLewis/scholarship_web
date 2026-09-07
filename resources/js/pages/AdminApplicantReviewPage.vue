@@ -517,6 +517,30 @@ onMounted(loadApplicant);
                                 <section class="border-t border-slate-200 pt-5">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                         <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Applicant background</p>
+                                            <h4 class="mt-1 text-base font-bold text-slate-950">Goals and involvement</h4>
+                                        </div>
+                                        <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Applicant-declared</span>
+                                    </div>
+                                    <dl class="mt-3 grid gap-4 text-sm lg:grid-cols-3">
+                                        <div>
+                                            <dt class="font-semibold text-slate-500">Applicant goal</dt>
+                                            <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ applicant.scholarship_goal || 'Not provided' }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt class="font-semibold text-slate-500">Achievements or strengths</dt>
+                                            <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ applicant.achievements || 'Not provided' }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt class="font-semibold text-slate-500">Activities and responsibilities</dt>
+                                            <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ applicant.activities_and_responsibilities || 'Not provided' }}</dd>
+                                        </div>
+                                    </dl>
+                                </section>
+
+                                <section class="border-t border-slate-200 pt-5">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <div>
                                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Academic details</p>
                                             <h4 class="mt-1 text-base font-bold text-slate-950">Record to compare with evidence</h4>
                                         </div>

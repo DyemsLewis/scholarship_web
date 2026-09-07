@@ -39,8 +39,9 @@ class AdminController extends Controller
         'Review officer' => ['manage_reviews'],
         'Support officer' => ['manage_reports'],
         'Billing officer' => ['manage_billing'],
+        'Finance officer' => ['view_finance'],
         'Records officer' => ['view_logs', 'export_data'],
-        'Portal manager' => ['manage_accounts', 'manage_reviews', 'manage_reports', 'manage_billing', 'view_logs', 'export_data'],
+        'Portal manager' => ['manage_accounts', 'manage_reviews', 'manage_reports', 'manage_billing', 'view_finance', 'view_logs', 'export_data'],
     ];
 
     public function index(Request $request): View|RedirectResponse
@@ -382,6 +383,12 @@ class AdminController extends Controller
         abort_unless($provider->isProvider() && ! $provider->isManagedAccount(), 404);
 
         $provider->loadMissing(['providerProfile', 'providerVerificationDocuments']);
+        $provider->loadCount([
+            'managedAccounts',
+            'providerScholarships',
+            'providerScholarships as published_programs_count' => fn ($query) => $query->where('status', 'published'),
+            'providerScholarships as programs_in_review_count' => fn ($query) => $query->where('status', 'pending_review'),
+        ]);
 
         return response()->json([
             'provider' => $this->providerReviewPayload($provider),
@@ -418,6 +425,12 @@ class AdminController extends Controller
 
         $providers = User::query()
             ->with(['providerProfile', 'providerVerificationDocuments'])
+            ->withCount([
+                'managedAccounts',
+                'providerScholarships',
+                'providerScholarships as published_programs_count' => fn ($query) => $query->where('status', 'published'),
+                'providerScholarships as programs_in_review_count' => fn ($query) => $query->where('status', 'pending_review'),
+            ])
             ->where('role', 'provider')
             ->whereNull('parent_account_id')
             ->latest()
@@ -1436,6 +1449,9 @@ class AdminController extends Controller
             'provider_type' => $scholarship->provider?->provider_type,
             'provider_website' => $scholarship->provider?->provider_website,
             'provider_address' => $scholarship->provider?->provider_address,
+            'provider_description' => $scholarship->provider?->provider_description,
+            'provider_contact_email' => $scholarship->provider?->providerProfile?->provider_contact_email,
+            'provider_contact_number' => $scholarship->provider?->providerProfile?->provider_contact_number,
             'provider_verification_status' => $scholarship->provider?->providerProfile?->verification_status,
             'status' => $scholarship->status,
             'image_url' => $this->scholarshipImageUrl($scholarship),
@@ -1459,6 +1475,7 @@ class AdminController extends Controller
             'handoff_location_address' => $scholarship->handoff_location_address,
             'handoff_url' => $scholarship->handoff_url,
             'review_rubric' => $scholarship->review_rubric ?? [],
+            'application_questions' => $scholarship->application_questions ?? [],
             'eligible_courses' => $scholarship->eligible_courses,
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,
@@ -1490,6 +1507,8 @@ class AdminController extends Controller
             'views_count' => $scholarship->views_count,
             'created_at' => $scholarship->created_at?->format('M d, Y h:i A'),
             'updated_at' => $scholarship->updated_at?->format('M d, Y h:i A'),
+            'provider_terms_accepted_at' => $scholarship->provider_terms_accepted_at?->format('M d, Y h:i A'),
+            'provider_terms_version' => $scholarship->provider_terms_version,
         ];
     }
 
@@ -1539,6 +1558,10 @@ class AdminController extends Controller
                 ->sortByDesc('created_at')
                 ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))
                 ->values(),
+            'team_members_count' => (int) ($provider->managed_accounts_count ?? 0),
+            'programs_count' => (int) ($provider->provider_scholarships_count ?? 0),
+            'published_programs_count' => (int) ($provider->published_programs_count ?? 0),
+            'programs_in_review_count' => (int) ($provider->programs_in_review_count ?? 0),
             'created_at' => $provider->created_at?->format('M d, Y'),
         ];
     }

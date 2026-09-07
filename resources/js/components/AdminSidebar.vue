@@ -17,9 +17,11 @@ const operationsHref = hasPermission('manage_reports')
     ? '/admin/reports'
     : hasPermission('manage_billing')
         ? '/admin/billing'
-        : '/admin/logs';
+        : hasPermission('view_finance')
+            ? '/admin/finance'
+            : '/admin/logs';
 const activeKey = computed(() => {
-    if (['reports', 'billing', 'logs'].includes(props.active)) {
+    if (['reports', 'billing', 'finance', 'logs'].includes(props.active)) {
         return 'operations';
     }
 
@@ -34,8 +36,8 @@ const navLinks = [
         href: operationsHref,
         label: 'Operations',
         icon: 'fa-solid fa-list-check',
-        anyPermission: ['manage_reports', 'manage_billing', 'view_logs'],
-        activePaths: ['/admin/reports', '/admin/billing', '/admin/logs'],
+        anyPermission: ['manage_reports', 'manage_billing', 'view_finance', 'view_logs'],
+        activePaths: ['/admin/reports', '/admin/billing', '/admin/finance', '/admin/logs'],
     },
     { key: 'profile', href: '/admin/profile', label: 'Profile', icon: 'fa-solid fa-id-badge' },
 ];

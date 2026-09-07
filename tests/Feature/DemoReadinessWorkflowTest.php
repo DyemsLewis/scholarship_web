@@ -78,6 +78,11 @@ class DemoReadinessWorkflowTest extends TestCase
                 'eligible_education_levels' => 'college',
                 'eligible_locations' => 'Metro Manila',
                 'requirements' => "Certificate of enrollment\nLatest report card or grades",
+                'application_questions' => json_encode([[
+                    'id' => 'support_goal',
+                    'prompt' => 'How would this scholarship support your studies?',
+                    'required' => true,
+                ]]),
                 'post_qualification_requirements' => "Original certificate of enrollment\nProvider formal application form",
                 'benefits' => json_encode([[
                     'type' => 'cash_grant',
@@ -114,14 +119,18 @@ class DemoReadinessWorkflowTest extends TestCase
 
         $scholarshipId = $scholarshipResponse->json('scholarship.id');
 
-        $this->actingAs($admin)
+        $adminReviewResponse = $this->actingAs($admin)
             ->getJson("/admin/scholarships/{$scholarshipId}/review/data")
             ->assertOk()
             ->assertJsonPath('scholarship.program_cycle', 'School Year 2026-2027')
             ->assertJsonPath('scholarship.application_opens_at', $applicationOpensAtLabel)
             ->assertJsonPath('scholarship.expected_results_at', $expectedResultsAtLabel)
             ->assertJsonPath('scholarship.contact_department', 'Scholarship Office')
+            ->assertJsonPath('scholarship.provider_contact_email', 'programs@example.test')
+            ->assertJsonPath('scholarship.application_questions.0.prompt', 'How would this scholarship support your studies?')
             ->assertJsonPath('scholarship.benefits.0.duration', 'Current program cycle');
+
+        $this->assertNotNull($adminReviewResponse->json('scholarship.provider_terms_accepted_at'));
 
         $this->actingAs($admin)
             ->patchJson("/admin/scholarships/{$scholarshipId}/review", [
@@ -162,6 +171,10 @@ class DemoReadinessWorkflowTest extends TestCase
         $applicationResponse = $this->actingAs($applicant)
             ->postJson('/dashboard/applications', [
                 'scholarship_id' => $scholarshipId,
+                'application_answers' => [[
+                    'question_id' => 'support_goal',
+                    'answer' => 'It would help me continue studying and prepare for my career.',
+                ]],
                 'terms_accepted' => true,
             ])
             ->assertCreated()

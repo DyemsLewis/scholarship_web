@@ -65,8 +65,16 @@ class DecisionSupportService
 
     public function syncApplication(ScholarshipApplication $application, string $source = 'system'): array
     {
-        $score = $this->scoreApplication($application);
         $eligibilitySnapshot = $this->currentEligibilitySnapshot($application);
+
+        // Program criteria and applicant profiles can change after submission. Refresh the
+        // in-memory values before scoring so a legacy mismatch cannot survive an open rule.
+        if ($eligibilitySnapshot !== null) {
+            $application->setAttribute('eligibility_score', $eligibilitySnapshot['score']);
+            $application->setAttribute('eligibility_breakdown', $eligibilitySnapshot);
+        }
+
+        $score = $this->scoreApplication($application);
 
         $updates = [
             'dss_score' => $score['score'],
@@ -74,8 +82,7 @@ class DecisionSupportService
             'dss_breakdown' => $score,
         ];
 
-        if ($eligibilitySnapshot !== null
-            && ($application->eligibility_score === null || blank($application->eligibility_breakdown))) {
+        if ($eligibilitySnapshot !== null) {
             $updates['eligibility_score'] = $eligibilitySnapshot['score'];
             $updates['eligibility_breakdown'] = $eligibilitySnapshot;
         }

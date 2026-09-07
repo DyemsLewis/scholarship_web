@@ -472,6 +472,8 @@ class ApplicantProfileVerificationTest extends TestCase
             'household_size' => 5,
             'support_needs' => "Books and supplies\nTransportation",
             'scholarship_goal' => 'Continue studying without interrupting enrollment.',
+            'achievements' => 'Completed a science project and improved academic standing.',
+            'activities_and_responsibilities' => 'Science club member and helps care for younger siblings.',
             'preferred_categories' => 'Financial assistance',
             'preferred_locations' => 'Near my home address',
             'city' => 'Manila',
@@ -528,6 +530,8 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertJsonPath('application.applicant.enrollment_status', 'enrolled')
             ->assertJsonPath('application.applicant.support_needs', "Books and supplies\nTransportation")
             ->assertJsonPath('application.applicant.scholarship_goal', 'Continue studying without interrupting enrollment.')
+            ->assertJsonPath('application.applicant.achievements', 'Completed a science project and improved academic standing.')
+            ->assertJsonPath('application.applicant.activities_and_responsibilities', 'Science club member and helps care for younger siblings.')
             ->assertJsonPath('application.applicant.profile_proofs.0.id', $proof->id)
             ->assertJsonPath('application.applicant.profile_proofs.0.view_url', $viewUrl);
 

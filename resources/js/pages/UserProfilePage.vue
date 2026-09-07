@@ -182,6 +182,9 @@ const fieldLabels = {
     support_needs: 'Support needs',
     current_scholarship_status: 'Current scholarship support',
     current_scholarship_details: 'Current scholarship details',
+    scholarship_goal: 'Applicant goal',
+    achievements: 'Achievements or strengths',
+    activities_and_responsibilities: 'Activities and responsibilities',
     address: 'Address',
     barangay: 'Barangay',
     city: 'City / municipality',
@@ -216,6 +219,15 @@ const profileSections = [
         requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'academic_year', 'academic_term', 'grading_scale', 'gwa'],
     },
     {
+        id: 'background',
+        label: 'Background',
+        detail: 'Goals and involvement',
+        icon: 'fa-solid fa-star',
+        impact: 'Optional context that helps reviewers understand the applicant beyond grades.',
+        required: false,
+        fields: ['scholarship_goal', 'achievements', 'activities_and_responsibilities'],
+    },
+    {
         id: 'location',
         label: 'Location',
         detail: 'Address and travel',
@@ -226,20 +238,20 @@ const profileSections = [
         requiredFields: ['city', 'province', 'region'],
     },
     {
-        id: 'verification',
-        label: 'Verification',
-        detail: 'Academic record',
-        icon: 'fa-solid fa-shield-check',
-        impact: 'Checks the academic result used for matching.',
-        required: false,
-        fields: [],
-    },
-    {
         id: 'review',
         label: 'Review',
         detail: 'Final check',
         icon: 'fa-solid fa-clipboard-check',
         impact: 'Check before applying.',
+        required: false,
+        fields: [],
+    },
+    {
+        id: 'verification',
+        label: 'Verification',
+        detail: 'Academic record',
+        icon: 'fa-solid fa-shield-check',
+        impact: 'Upload the academic or school record used to verify matching information.',
         required: false,
         fields: [],
     },
@@ -658,6 +670,9 @@ function emptyForm() {
         support_needs: '',
         current_scholarship_status: '',
         current_scholarship_details: '',
+        scholarship_goal: '',
+        achievements: '',
+        activities_and_responsibilities: '',
         address: '',
         barangay: '',
         city: '',
@@ -931,6 +946,11 @@ function overviewSectionSummary(sectionId) {
             [form.value.course_or_strand, form.value.year_level].filter(hasValue).join(' - '),
             form.value.academic_year ? `AY ${form.value.academic_year}` : '',
         ],
+        background: [
+            form.value.scholarship_goal ? 'Goal added' : '',
+            form.value.achievements ? 'Achievements added' : '',
+            form.value.activities_and_responsibilities ? 'Activities and responsibilities added' : '',
+        ],
         location: [form.value.city, form.value.province, form.value.region],
     };
 
@@ -1155,6 +1175,16 @@ const reviewGroups = computed(() => [
         ],
     },
     {
+        id: 'background',
+        title: 'Goals and involvement',
+        icon: 'fa-solid fa-star',
+        items: [
+            ['Applicant goal', form.value.scholarship_goal],
+            ['Achievements or strengths', form.value.achievements],
+            ['Activities and responsibilities', form.value.activities_and_responsibilities],
+        ],
+    },
+    {
         id: 'location',
         title: 'Location',
         icon: 'fa-solid fa-location-dot',
@@ -1294,6 +1324,9 @@ function fillForm(payload) {
         support_needs: payload?.support_needs ?? '',
         current_scholarship_status: payload?.current_scholarship_status ?? '',
         current_scholarship_details: payload?.current_scholarship_details ?? '',
+        scholarship_goal: payload?.scholarship_goal ?? '',
+        achievements: payload?.achievements ?? '',
+        activities_and_responsibilities: payload?.activities_and_responsibilities ?? '',
         address: payload?.address ?? '',
         barangay: payload?.barangay ?? '',
         city: payload?.city ?? '',
@@ -1902,6 +1935,27 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </p>
                             </section>
 
+                            <section class="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Goals and involvement</p>
+                                    <span class="rounded bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">Applicant-declared</span>
+                                </div>
+                                <dl class="mt-3 grid gap-4 text-sm lg:grid-cols-3">
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Applicant goal</dt>
+                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ form.scholarship_goal || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Achievements or strengths</dt>
+                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ form.achievements || 'Not provided' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="font-semibold text-slate-500">Activities and responsibilities</dt>
+                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ form.activities_and_responsibilities || 'Not provided' }}</dd>
+                                    </div>
+                                </dl>
+                            </section>
+
                             <section v-if="needsGuardianContext || hasGuardianDetails" class="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Parent or guardian</p>
                                 <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-3">
@@ -2214,7 +2268,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
 
                             <nav aria-label="Profile sections">
-                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
                                     <li v-for="step in profileNavigationSteps" :key="step.id" class="min-w-0">
                                         <button
                                             type="button"
@@ -2725,6 +2779,66 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        </section>
+
+                        <section v-if="activeSection === 'background'" id="profile-background" :class="sectionCardClass">
+                            <div :class="sectionHeaderClass">
+                                <div>
+                                    <p class="student-kicker">Optional context</p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Goals and involvement</h3>
+                                    <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                                        Help reviewers understand the applicant beyond grades. Short answers are enough.
+                                    </p>
+                                </div>
+                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('background'))]">
+                                    {{ sectionStatusLabel(profileSection('background')) }}
+                                </span>
+                            </div>
+
+                            <div :class="[sectionBodyClass, 'space-y-4']">
+                                <div :class="formPanelClass">
+                                    <div class="grid gap-5 lg:grid-cols-2">
+                                        <div class="lg:col-span-2">
+                                            <label :class="labelClass" for="profile-scholarship-goal">Applicant goal</label>
+                                            <textarea
+                                                id="profile-scholarship-goal"
+                                                v-model="form.scholarship_goal"
+                                                rows="3"
+                                                maxlength="1500"
+                                                placeholder="What does the learner hope to achieve, and how would scholarship support help?"
+                                                :class="inputClass"
+                                            ></textarea>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">Focus on the learner's education or future goal.</p>
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" for="profile-achievements">Achievements or strengths</label>
+                                            <textarea
+                                                id="profile-achievements"
+                                                v-model="form.achievements"
+                                                rows="4"
+                                                maxlength="1500"
+                                                placeholder="Recognition, skills, projects, improvement, or something the learner is proud of"
+                                                :class="inputClass"
+                                            ></textarea>
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass" for="profile-activities">Activities and responsibilities</label>
+                                            <textarea
+                                                id="profile-activities"
+                                                v-model="form.activities_and_responsibilities"
+                                                rows="4"
+                                                maxlength="1500"
+                                                placeholder="School activities, community service, leadership, work, caregiving, or household responsibilities"
+                                                :class="inputClass"
+                                            ></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p class="border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
+                                    These answers are applicant-declared and are shown only to authorized reviewers. Do not include document numbers or sensitive records here.
+                                </p>
                             </div>
                         </section>
 

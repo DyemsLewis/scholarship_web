@@ -4356,6 +4356,8 @@ class ProviderController extends Controller
             'current_scholarship_status' => $profile?->current_scholarship_status,
             'current_scholarship_details' => $profile?->current_scholarship_details,
             'scholarship_goal' => $profile?->scholarship_goal,
+            'achievements' => $profile?->achievements,
+            'activities_and_responsibilities' => $profile?->activities_and_responsibilities,
             'location' => collect([
                 $profile?->barangay,
                 $profile?->city,

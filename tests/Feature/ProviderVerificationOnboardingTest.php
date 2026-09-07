@@ -267,6 +267,8 @@ class ProviderVerificationOnboardingTest extends TestCase
         $this->actingAs($admin)
             ->getJson("/admin/providers/{$provider->id}/review/data")
             ->assertOk()
+            ->assertJsonPath('provider.team_members_count', 0)
+            ->assertJsonPath('provider.programs_count', 0)
             ->assertJsonPath('provider.verification_documents.0.mime_type', 'application/pdf')
             ->assertJsonPath('provider.verification_documents.0.view_url', $adminViewUrl);
 
