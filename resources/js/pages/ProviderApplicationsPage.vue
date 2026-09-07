@@ -15,7 +15,15 @@ const requestedWorkspaceSection = pageSearchParams.get('workspace');
 const requestedQueueFilter = pageSearchParams.get('filter');
 const requestedQueueSort = pageSearchParams.get('sort');
 const requestedApplicationPage = Number(pageSearchParams.get('page'));
-const queueFilterValues = ['pending_review', 'document_issues', 'active_stages', 'formal_application', 'decided', 'all'];
+const legacyQueueAliases = {
+    pending_review: 'needs_review',
+    document_issues: 'needs_review',
+    active_stages: 'waiting_activity',
+    formal_application: 'ready_result',
+    decided: 'all',
+};
+const normalizedRequestedQueueFilter = legacyQueueAliases[requestedQueueFilter] ?? requestedQueueFilter;
+const queueFilterValues = ['needs_review', 'waiting_activity', 'ready_result', 'final_decision', 'all'];
 const queueSortValues = ['priority', 'dss', 'documents', 'oldest'];
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -27,15 +35,14 @@ const selectedScholarshipContext = ref(initialScholarshipId ? {
     id: Number(initialScholarshipId),
     title: initialScholarshipTitle,
 } : null);
-const selectedQueueFilter = ref(queueFilterValues.includes(requestedQueueFilter) ? requestedQueueFilter : 'pending_review');
+const selectedQueueFilter = ref(queueFilterValues.includes(normalizedRequestedQueueFilter) ? normalizedRequestedQueueFilter : 'needs_review');
 const selectedQueueSort = ref(queueSortValues.includes(requestedQueueSort) ? requestedQueueSort : 'priority');
 const applicationSearch = ref(pageSearchParams.get('search') ?? '');
 const applicationPage = ref(Number.isInteger(requestedApplicationPage) && requestedApplicationPage > 0 ? requestedApplicationPage : 1);
 const applicationPagination = ref({ current_page: 1, last_page: 1, per_page: 10, total: 0, from: null, to: null });
-const queueFilterCounts = ref({ pending_review: 0, document_issues: 0, active_stages: 0, formal_application: 0, decided: 0, all: 0 });
-const applicationStageCounts = ref({});
+const queueFilterCounts = ref({ needs_review: 0, waiting_activity: 0, ready_result: 0, final_decision: 0, all: 0 });
+const activityWaitingCounts = ref({});
 const totalProviderApplications = ref(0);
-const selectedApplicationPreview = ref(null);
 const applicationsPerPage = 10;
 const activeWorkspaceSection = ref(['applications', 'schedule'].includes(requestedWorkspaceSection)
     ? requestedWorkspaceSection
@@ -94,11 +101,11 @@ const availableBulkAdvanceTargets = computed(() => {
         (application.bulk_advance_targets ?? []).includes(target.value)
     )));
 });
-const pendingReviewCount = computed(() => Number(queueFilterCounts.value.pending_review ?? 0));
+const pendingReviewCount = computed(() => Number(queueFilterCounts.value.needs_review ?? 0));
 const waitingScheduleTypes = computed(() => {
     return configuredScheduleTypes.value.filter((type) => (
         scheduleEvent(type.value)?.status !== 'scheduled'
-        && Number(applicationStageCounts.value[type.value] ?? 0) > 0
+        && Number(activityWaitingCounts.value[type.value] ?? 0) > 0
     ));
 });
 const workspaceTasks = computed(() => {
@@ -147,38 +154,39 @@ const pageDescription = computed(() => (hasProgramContext.value
     : 'Find applicants needing attention and review their profile, eligibility, and supporting files.'));
 const reviewFilterOptions = computed(() => [
     {
-        value: 'pending_review',
+        value: 'needs_review',
         label: 'Needs review',
-        count: Number(queueFilterCounts.value.pending_review ?? 0),
+        description: 'Check profile, eligibility, and files.',
+        icon: 'fa-solid fa-file-circle-check',
+        count: Number(queueFilterCounts.value.needs_review ?? 0),
     },
     {
-        value: 'document_issues',
-        label: 'Document issues',
-        count: Number(queueFilterCounts.value.document_issues ?? 0),
+        value: 'waiting_activity',
+        label: 'Waiting for activity',
+        description: 'Applicants awaiting an exam or interview.',
+        icon: 'fa-solid fa-calendar-clock',
+        count: Number(queueFilterCounts.value.waiting_activity ?? 0),
     },
     {
-        value: 'active_stages',
-        label: 'Active stages',
-        count: Number(queueFilterCounts.value.active_stages ?? 0),
+        value: 'ready_result',
+        label: 'Ready for result',
+        description: 'Record a completed stage result.',
+        icon: 'fa-solid fa-clipboard-check',
+        count: Number(queueFilterCounts.value.ready_result ?? 0),
     },
     {
-        value: 'formal_application',
-        label: 'Formal application',
-        count: Number(queueFilterCounts.value.formal_application ?? 0),
+        value: 'final_decision',
+        label: 'Final decision',
+        description: 'Select, waitlist, or decline.',
+        icon: 'fa-solid fa-gavel',
+        count: Number(queueFilterCounts.value.final_decision ?? 0),
     },
-    {
-        value: 'decided',
-        label: 'Decisions',
-        count: Number(queueFilterCounts.value.decided ?? 0),
-    },
-    { value: 'all', label: 'All applicants', count: Number(queueFilterCounts.value.all ?? 0) },
 ]);
 const emptyQueueMessage = computed(() => ({
-    pending_review: 'No applicants currently need an initial review.',
-    document_issues: 'No applicants currently have missing or unresolved document issues.',
-    active_stages: 'No applicants are currently in an exam or interview stage.',
-    formal_application: 'No applicants are currently completing the provider formal application process.',
-    decided: 'No applicant decisions have been recorded yet.',
+    needs_review: 'No applicants currently need pre-screening review.',
+    waiting_activity: 'No applicants are waiting for an exam or interview.',
+    ready_result: 'No completed activities or formal handoffs need a result.',
+    final_decision: 'No applicants are waiting for a final decision.',
     all: 'No applicants match this search.',
 }[selectedQueueFilter.value]));
 const rankedApplications = computed(() => {
@@ -246,14 +254,22 @@ function applicationQueueLabel(application) {
 
 function applicationActionLabel(application) {
     if (workflowClosed(application)) {
-        return 'View result';
+        return 'View record';
+    }
+
+    if (applicationWaitingForActivity(application)) {
+        return applicationHasActiveSchedule(application) ? 'View activity' : 'Set activity';
     }
 
     if (workflowStage(application) === 'decision') {
         return 'Record outcome';
     }
 
-    return 'Review stage';
+    if (workflowStage(application) === 'screening') {
+        return 'Review applicant';
+    }
+
+    return 'Record result';
 }
 
 function providerNextAction(application) {
@@ -326,18 +342,6 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
-function recommendationClass(recommendation) {
-    if (['highly_recommended', 'recommended'].includes(recommendation)) {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (['low_priority', 'not_recommended'].includes(recommendation)) {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
 function applicantInitials(application) {
     return String(application.applicant?.name || application.applicant?.email || 'Applicant')
         .split(/\s+/)
@@ -373,19 +377,42 @@ function showWaitingTime(application) {
         && !['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'disbursed', 'renewed'].includes(application.status);
 }
 
-function openApplicationPreview(application) {
-    selectedApplicationPreview.value = application;
+function applicationHasActiveSchedule(application) {
+    const stage = workflowStage(application);
+
+    return (application.schedules ?? []).some((schedule) => (
+        schedule.type === stage && schedule.status !== 'cancelled'
+    ));
 }
 
-function closeApplicationPreview() {
-    selectedApplicationPreview.value = null;
+function applicationWaitingForActivity(application) {
+    const stage = workflowStage(application);
+
+    if (workflowClosed(application) || !['exam', 'interview'].includes(stage)) {
+        return false;
+    }
+
+    return !(application.schedules ?? []).some((schedule) => (
+        schedule.type === stage && schedule.status === 'completed'
+    ));
 }
 
 function applicationDetailUrl(application) {
     const detailUrl = application.detail_url || `/provider/applications/${application.id}`;
     const url = new URL(detailUrl, window.location.origin);
 
+    if (applicationWaitingForActivity(application) && application.scholarship?.id) {
+        const workspaceUrl = new URL(`/provider/programs/${application.scholarship.id}/applications`, window.location.origin);
+        workspaceUrl.searchParams.set('workspace', 'schedule');
+        workspaceUrl.searchParams.set('filter', 'waiting_activity');
+
+        return `${workspaceUrl.pathname}${workspaceUrl.search}`;
+    }
+
     url.searchParams.set('return_to', `${window.location.pathname}${window.location.search}`);
+    url.searchParams.set('section', workflowClosed(application)
+        ? 'history'
+        : (workflowStage(application) === 'screening' ? 'applicant' : 'decision'));
 
     return `${url.pathname}${url.search}${url.hash}`;
 }
@@ -556,7 +583,7 @@ async function loadProviderData(showLoading = true) {
         programEvents.value = response.data.program_events ?? [];
         applicationPagination.value = response.data.pagination ?? applicationPagination.value;
         queueFilterCounts.value = response.data.filter_counts ?? queueFilterCounts.value;
-        applicationStageCounts.value = response.data.stage_counts ?? {};
+        activityWaitingCounts.value = response.data.activity_waiting_counts ?? {};
         totalProviderApplications.value = Number(response.data.stats?.applications ?? 0);
 
         if (!availableBulkAdvanceTargets.value.some((target) => target.value === bulkAdvanceTarget.value)) {
@@ -646,13 +673,8 @@ watch(totalApplicationPages, (totalPages) => {
     }
 });
 
-watch(selectedApplicationPreview, (application) => {
-    document.body.classList.toggle('overflow-hidden', Boolean(application));
-});
-
 onUnmounted(() => {
     window.clearTimeout(queueReloadTimer);
-    document.body.classList.remove('overflow-hidden');
 });
 
 onMounted(loadProviderData);
@@ -885,27 +907,36 @@ onMounted(loadProviderData);
 
                     <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="provider-panel p-5">
                         <div>
-                            <h3 class="text-xl font-bold text-slate-950">Review queue</h3>
+                            <h3 class="text-xl font-bold text-slate-950">What needs attention</h3>
                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
                                 {{ hasProgramContext
-                                    ? 'Open an applicant to review the profile, eligibility, documents, and decision in order.'
-                                    : 'Filter the list by the work you need to complete, then open an applicant review.' }}
+                                    ? 'Work through this program one task at a time. Applicants move automatically after each saved result.'
+                                    : 'Choose a queue to see only the applicants who need that action.' }}
                             </p>
 
-                            <div class="mt-4 flex flex-wrap gap-2">
+                            <div class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                                 <button
                                     v-for="filter in reviewFilterOptions"
                                     :key="filter.value"
                                     type="button"
                                     :class="[
-                                        'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
+                                        'flex min-h-24 items-start gap-3 rounded-md border p-3 text-left transition',
                                         selectedQueueFilter === filter.value
                                             ? 'border-slate-900 bg-slate-900 text-white'
-                                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50',
+                                            : 'border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-400 hover:bg-white',
                                     ]"
                                     @click="selectedQueueFilter = filter.value"
                                 >
-                                    {{ filter.label }} ({{ filter.count }})
+                                    <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', selectedQueueFilter === filter.value ? 'bg-white/10 text-amber-300' : 'bg-white text-slate-600 ring-1 ring-slate-200']">
+                                        <i :class="filter.icon" aria-hidden="true"></i>
+                                    </span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="flex items-center justify-between gap-2">
+                                            <span class="text-sm font-bold">{{ filter.label }}</span>
+                                            <span :class="['shrink-0 rounded px-2 py-0.5 text-xs font-bold', selectedQueueFilter === filter.value ? 'bg-white/10 text-white' : 'bg-white text-slate-800 ring-1 ring-slate-200']">{{ filter.count }}</span>
+                                        </span>
+                                        <span :class="['mt-1 block text-xs leading-5', selectedQueueFilter === filter.value ? 'text-slate-300' : 'text-slate-500']">{{ filter.description }}</span>
+                                    </span>
                                 </button>
                             </div>
                         </div>
@@ -922,6 +953,18 @@ onMounted(loadProviderData);
                                 >
                             </label>
                             <div class="flex flex-col gap-2 sm:flex-row">
+                                <button
+                                    type="button"
+                                    :class="[
+                                        'rounded-md border px-3 py-2.5 text-sm font-bold transition',
+                                        selectedQueueFilter === 'all'
+                                            ? 'border-slate-900 bg-slate-900 text-white'
+                                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100',
+                                    ]"
+                                    @click="selectedQueueFilter = 'all'"
+                                >
+                                    All records ({{ queueFilterCounts.all ?? 0 }})
+                                </button>
                                 <label>
                                     <span class="sr-only">Sort applications</span>
                                     <select
@@ -1064,13 +1107,13 @@ onMounted(loadProviderData);
                                             </option>
                                         </select>
                                     </label>
-                                    <button
-                                        type="button"
+                                    <a
+                                        :href="applicationDetailUrl(application)"
                                         class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
-                                        @click="openApplicationPreview(application)"
                                     >
                                         {{ applicationActionLabel(application) }}
-                                    </button>
+                                        <i class="fa-solid fa-arrow-right ml-2 text-[10px]" aria-hidden="true"></i>
+                                    </a>
                                 </div>
                             </article>
 
@@ -1103,147 +1146,6 @@ onMounted(loadProviderData);
             </div>
         </section>
 
-        <Teleport to="body">
-            <div
-                v-if="selectedApplicationPreview"
-                class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="provider-application-preview-title"
-                tabindex="-1"
-                @click.self="closeApplicationPreview"
-                @keydown.esc="closeApplicationPreview"
-            >
-                <section class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
-                    <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
-                        <span class="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-xs font-bold tracking-[0.08em] text-white">
-                            <img
-                                v-if="selectedApplicationPreview.applicant?.profile_photo_url"
-                                :src="selectedApplicationPreview.applicant.profile_photo_url"
-                                :alt="`${selectedApplicationPreview.applicant?.name || 'Applicant'} photo`"
-                                class="h-full w-full object-cover"
-                            >
-                            <span v-else>{{ applicantInitials(selectedApplicationPreview) }}</span>
-                        </span>
-                        <div class="min-w-0 flex-1">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Review summary</p>
-                                <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', statusClass(selectedApplicationPreview.status)]">
-                                    {{ statusLabel(selectedApplicationPreview.status) }}
-                                </span>
-                            </div>
-                            <h2 id="provider-application-preview-title" class="mt-1 truncate text-lg font-bold text-slate-950 sm:text-xl">
-                                {{ selectedApplicationPreview.applicant?.name || 'Applicant' }}
-                            </h2>
-                            <p class="mt-1 truncate text-xs text-slate-500">
-                                {{ selectedApplicationPreview.applicant?.email || 'No email provided' }}
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
-                            aria-label="Close application overview"
-                            @click="closeApplicationPreview"
-                        >
-                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                        </button>
-                    </header>
-
-                    <div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-                        <section class="rounded-md border border-slate-200 bg-slate-50 p-4">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Scholarship program</p>
-                            <p class="mt-1 text-base font-bold text-slate-950">
-                                {{ selectedApplicationPreview.scholarship?.title || 'Scholarship program' }}
-                            </p>
-                            <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
-                                <span>Submitted {{ selectedApplicationPreview.submitted_at || 'recently' }}</span>
-                                <span v-if="showWaitingTime(selectedApplicationPreview)">Waiting {{ selectedApplicationPreview.waiting_days }} days</span>
-                                <span v-if="canAssignReviewers">
-                                    {{ selectedApplicationPreview.assigned_reviewer?.name ? `Reviewer: ${selectedApplicationPreview.assigned_reviewer.name}` : 'Reviewer unassigned' }}
-                                </span>
-                            </div>
-                        </section>
-
-                        <div class="mt-4 grid gap-3 sm:grid-cols-3">
-                            <article class="rounded-md border border-slate-200 bg-white p-3">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">DSS guidance</p>
-                                <div class="mt-2 flex items-center justify-between gap-2">
-                                    <p class="text-xl font-bold text-slate-950">{{ selectedApplicationPreview.dss_score ?? 0 }}%</p>
-                                    <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', recommendationClass(selectedApplicationPreview.dss_recommendation)]">
-                                        {{ statusLabel(selectedApplicationPreview.dss_recommendation || 'needs_review') }}
-                                    </span>
-                                </div>
-                                <p class="mt-2 text-[11px] leading-4 text-slate-500">
-                                    {{ selectedApplicationPreview.dss_explanation?.score_interpretation || 'Compares the applicant profile with this program criteria. It guides review but does not decide approval.' }}
-                                </p>
-                            </article>
-
-                            <article class="rounded-md border border-slate-200 bg-white p-3">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Required files</p>
-                                <p class="mt-2 text-xl font-bold text-slate-950">
-                                    {{ selectedApplicationPreview.document_readiness?.uploaded ?? 0 }}/{{ selectedApplicationPreview.document_readiness?.required ?? 0 }}
-                                </p>
-                                <p :class="['mt-1 text-xs font-semibold', documentIssueCount(selectedApplicationPreview) ? 'text-amber-700' : 'text-slate-500']">
-                                    {{ documentIssueCount(selectedApplicationPreview) ? `${documentIssueCount(selectedApplicationPreview)} need review` : 'No file issues shown' }}
-                                </p>
-                            </article>
-
-                            <article class="rounded-md border border-slate-200 bg-white p-3">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Applicant profile</p>
-                                <div class="mt-2 flex items-center gap-2">
-                                    <i
-                                        :class="selectedApplicationPreview.applicant?.profile_verification_status === 'approved' ? 'fa-solid fa-circle-check text-emerald-600' : 'fa-regular fa-circle text-amber-600'"
-                                        aria-hidden="true"
-                                    ></i>
-                                    <p class="text-sm font-bold text-slate-950">
-                                        {{ selectedApplicationPreview.applicant?.profile_verification_status === 'approved' ? 'Verified' : statusLabel(selectedApplicationPreview.applicant?.profile_verification_status || 'pending') }}
-                                    </p>
-                                </div>
-                                <p class="mt-2 line-clamp-1 text-xs text-slate-500">
-                                    {{ selectedApplicationPreview.applicant?.education_level || selectedApplicationPreview.applicant?.school || 'Profile available in full review' }}
-                                </p>
-                            </article>
-                        </div>
-
-                        <section class="mt-4 rounded-md border border-slate-200 bg-white p-4">
-                            <div class="flex items-start gap-3">
-                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                    <i class="fa-solid fa-list-check text-xs" aria-hidden="true"></i>
-                                </span>
-                                <div class="min-w-0">
-                                    <p class="text-sm font-bold text-slate-950">Review focus</p>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">
-                                        {{ selectedApplicationPreview.dss_explanation?.next_action || 'Check eligibility, submitted files, and the applicant profile before recording a decision.' }}
-                                    </p>
-                                    <p v-if="selectedApplicationPreview.documents_changed_since_review" class="mt-2 text-xs font-bold text-amber-700">
-                                        The applicant uploaded newer files after the last review.
-                                    </p>
-                                </div>
-                            </div>
-                        </section>
-                    </div>
-
-                    <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                        <p class="text-xs text-slate-500">Open the full review to check required files, the verified academic record, rubric scores, and record a decision.</p>
-                        <div class="flex shrink-0 gap-2">
-                            <button
-                                type="button"
-                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                @click="closeApplicationPreview"
-                            >
-                                Close
-                            </button>
-                            <a
-                                :href="applicationDetailUrl(selectedApplicationPreview)"
-                                class="rounded-md bg-slate-950 px-3 py-2 text-center text-xs font-bold text-white transition hover:bg-slate-800"
-                            >
-                                Continue review
-                            </a>
-                        </div>
-                    </footer>
-                </section>
-            </div>
-        </Teleport>
     </main>
 
     <ConfirmationDialog v-bind="confirmation" @confirm="confirmConfirmation" @cancel="cancelConfirmation" />

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Mail\PortalNotificationMail;
 use App\Models\Scholarship;
+use App\Models\ScholarshipApplication;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -117,11 +118,29 @@ class RolePermissionAccountTest extends TestCase
             'title' => 'Team Managed Draft',
             'status' => 'draft',
         ])->assertCreated();
+        $programId = $programResponse->json('scholarship.id');
 
         $this->assertDatabaseHas('scholarships', [
-            'id' => $programResponse->json('scholarship.id'),
+            'id' => $programId,
             'provider_id' => $provider->id,
         ]);
+
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        ScholarshipApplication::create([
+            'scholarship_id' => $programId,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'workflow_stage' => 'screening',
+            'application_state' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($staff)
+            ->getJson("/provider/scholarships/{$programId}")
+            ->assertOk()
+            ->assertJsonPath('scholarship.workflow_counts.needs_review', 0)
+            ->assertJsonPath('scholarship.workflow_counts.all', 0)
+            ->assertJsonCount(0, 'scholarship.activity_statuses');
 
         $this->actingAs($staff)->get('/provider/applications')->assertForbidden();
         $this->actingAs($staff)->get('/provider/reports')->assertForbidden();

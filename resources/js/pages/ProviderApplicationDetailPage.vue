@@ -2,7 +2,6 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import ApplicantProfileProofModal from '../components/ApplicantProfileProofModal.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
-import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
@@ -21,8 +20,12 @@ const application = ref(null);
 const pageSearchParams = new URLSearchParams(window.location.search);
 const requestedSection = pageSearchParams.get('section');
 const requestedReturnTo = pageSearchParams.get('return_to');
-const normalizedRequestedSection = requestedSection === 'review' ? 'eligibility' : requestedSection;
-const validSections = ['applicant', 'eligibility', 'documents', 'decision', 'schedule', 'history'];
+const normalizedRequestedSection = requestedSection === 'review'
+    ? 'eligibility'
+    : requestedSection === 'schedule'
+        ? 'decision'
+        : requestedSection;
+const validSections = ['applicant', 'eligibility', 'documents', 'decision', 'history'];
 const activeSection = ref(validSections.includes(normalizedRequestedSection)
     ? normalizedRequestedSection
     : 'applicant');
@@ -58,7 +61,6 @@ const primaryDetailSections = [
     { key: 'decision', label: 'Decision', icon: 'fa-solid fa-gavel' },
 ];
 const secondaryDetailSections = [
-    { key: 'schedule', label: 'Schedule', icon: 'fa-regular fa-calendar' },
     { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
 ];
 const scheduleTypeCatalog = [
@@ -190,12 +192,20 @@ const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
 const workflow = computed(() => application.value?.workflow ?? {});
 const currentWorkflowStage = computed(() => workflow.value.current_stage ?? 'screening');
-const programWorkspaceAction = computed(() => {
-    const waitingType = ['exam', 'interview'].includes(currentWorkflowStage.value)
+const currentActivityType = computed(() => (
+    ['exam', 'interview'].includes(currentWorkflowStage.value)
         ? currentWorkflowStage.value
-        : null;
+        : null
+));
+const currentStageSchedule = computed(() => (
+    currentActivityType.value
+        ? schedules.value.find((schedule) => schedule.type === currentActivityType.value) ?? null
+        : null
+));
+const programWorkspaceAction = computed(() => {
+    const waitingType = currentActivityType.value;
 
-    if (waitingType && !schedules.value.some((schedule) => schedule.type === waitingType)) {
+    if (waitingType && !currentStageSchedule.value) {
         return {
             section: 'schedule',
             title: `${scheduleTypeLabel(waitingType)} schedule needs to be published`,
@@ -211,6 +221,13 @@ const programWorkspaceUrl = computed(() => {
 
     return scholarshipId
         ? `/provider/programs/${scholarshipId}/applications?workspace=${workspaceSection}`
+        : '/provider/applications';
+});
+const programActivityUrl = computed(() => {
+    const scholarshipId = application.value?.scholarship?.id;
+
+    return scholarshipId
+        ? `/provider/programs/${scholarshipId}/applications?workspace=schedule`
         : '/provider/applications';
 });
 const applicantProfileProofs = computed(() => application.value?.applicant?.profile_proofs ?? []);
@@ -640,31 +657,11 @@ function sectionSummary(sectionKey) {
         return statusLabel(application.value?.status);
     }
 
-    if (sectionKey === 'schedule') {
-        return `${schedules.value.length} ${schedules.value.length === 1 ? 'item' : 'items'}`;
-    }
-
     return `${timeline.value.length} ${timeline.value.length === 1 ? 'event' : 'events'}`;
-}
-
-function scheduleStatusClass(status) {
-    if (status === 'completed') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'cancelled') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
 }
 
 function scheduleTypeLabel(type) {
     return scheduleTypeCatalog.find((option) => option.value === type)?.label ?? labelFromKey(type);
-}
-
-function scheduleTypeIcon(type) {
-    return scheduleTypeCatalog.find((option) => option.value === type)?.icon ?? 'fa-solid fa-calendar';
 }
 
 function scheduleModeLabel(mode) {
@@ -1106,6 +1103,7 @@ async function updateStatus() {
                 actionLabel: completedReviewAction.label,
                 message: response.data.message || 'The applicant decision was saved.',
                 remainingCount: Number(response.data.review_navigation?.remaining_count ?? 0),
+                stageLabel: response.data.review_navigation?.stage_label || 'current stage',
                 listUrl: applicationListUrl.value,
                 nextApplication: response.data.review_navigation?.next_application ?? null,
             };
@@ -1303,7 +1301,7 @@ onMounted(loadApplication);
                         </nav>
 
                         <nav class="flex flex-wrap items-center gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2" aria-label="Applicant follow-up sections">
-                            <span class="mr-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Follow-up</span>
+                            <span class="mr-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Record</span>
                             <button
                                 v-for="section in secondaryDetailSections"
                                 :key="section.key"
@@ -1320,17 +1318,12 @@ onMounted(loadApplication);
                                 <i :class="section.icon" aria-hidden="true"></i>
                                 {{ section.label }}
                                 <span class="font-semibold text-slate-400">{{ sectionSummary(section.key) }}</span>
-                                <span
-                                    v-if="section.key === 'schedule' && programWorkspaceAction"
-                                    class="h-2 w-2 rounded-full bg-amber-400"
-                                    aria-label="Program action needed"
-                                ></span>
                             </button>
                         </nav>
                     </section>
 
                     <section
-                        v-if="programWorkspaceAction && !(postDecisionSummary && activeSection === 'decision')"
+                        v-if="programWorkspaceAction && activeSection !== 'decision'"
                         class="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
                     >
                         <div class="flex min-w-0 items-start gap-3">
@@ -1347,7 +1340,7 @@ onMounted(loadApplication);
                             :href="programWorkspaceUrl"
                             class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                         >
-                            Open Program Workspace
+                            Manage program activity
                             <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                         </a>
                     </section>
@@ -1445,6 +1438,38 @@ onMounted(loadApplication);
                                             {{ workflow.current_stage_label || statusLabel(application.status) }}
                                         </span>
                                     </div>
+                                </div>
+
+                                <div
+                                    v-if="currentActivityType && !postDecisionSummary"
+                                    class="mt-5 flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                    <div class="flex min-w-0 items-start gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-amber-300">
+                                            <i :class="currentActivityType === 'exam' ? 'fa-solid fa-clipboard-question' : 'fa-solid fa-comments'" aria-hidden="true"></i>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Program activity</p>
+                                            <p class="mt-1 text-sm font-bold text-slate-950">
+                                                {{ currentStageSchedule ? currentStageSchedule.title : `${scheduleTypeLabel(currentActivityType)} details are not published yet` }}
+                                            </p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-600">
+                                                <template v-if="currentStageSchedule">
+                                                    {{ currentStageSchedule.scheduled_label }} &middot; {{ scheduleModeLabel(currentStageSchedule.mode) }}
+                                                </template>
+                                                <template v-else>
+                                                    Publish this once for all applicants who reached the {{ scheduleTypeLabel(currentActivityType).toLowerCase() }} stage.
+                                                </template>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <a
+                                        :href="programActivityUrl"
+                                        class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                                    >
+                                        {{ currentStageSchedule ? 'Manage activity' : 'Set activity' }}
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </a>
                                 </div>
 
                                 <div
@@ -1552,7 +1577,7 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <div class="mt-5">
+                                <div v-if="!postDecisionSummary" class="mt-5">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Available actions</p>
                                         <button
@@ -1683,22 +1708,14 @@ onMounted(loadApplication);
                                                     <p class="mt-1 text-xs leading-5 text-emerald-900">{{ postDecisionSummary.message }}</p>
                                                     <p class="mt-1 text-xs font-semibold text-emerald-800">
                                                         <template v-if="postDecisionSummary.remainingCount">
-                                                            {{ postDecisionSummary.remainingCount }} other applicant{{ postDecisionSummary.remainingCount === 1 ? '' : 's' }} still need{{ postDecisionSummary.remainingCount === 1 ? 's' : '' }} review in this program.
+                                                            {{ postDecisionSummary.remainingCount }} other applicant{{ postDecisionSummary.remainingCount === 1 ? '' : 's' }} still need{{ postDecisionSummary.remainingCount === 1 ? 's' : '' }} {{ postDecisionSummary.stageLabel.toLowerCase() }} review.
                                                         </template>
                                                         <template v-else>
-                                                            No other applicants are waiting for a decision in this program.
+                                                            No other applicants are waiting at this stage.
                                                         </template>
                                                     </p>
                                                 </div>
                                             </div>
-                                            <button
-                                                type="button"
-                                                class="grid h-8 w-8 shrink-0 place-items-center rounded-md text-emerald-800 transition hover:bg-emerald-100"
-                                                aria-label="Dismiss decision follow-up"
-                                                @click="postDecisionSummary = null"
-                                            >
-                                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                                            </button>
                                         </div>
 
                                         <div class="mt-4 flex flex-col gap-2 border-t border-emerald-200 pt-4 sm:flex-row sm:flex-wrap">
@@ -1717,11 +1734,11 @@ onMounted(loadApplication);
                                                 Back to applications
                                             </a>
                                             <a
-                                                v-if="programWorkspaceAction"
+                                                v-if="!postDecisionSummary.remainingCount && programWorkspaceAction"
                                                 :href="programWorkspaceUrl"
                                                 class="inline-flex items-center justify-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-950 transition hover:bg-amber-100 sm:ml-auto"
                                             >
-                                                {{ programWorkspaceAction.section === 'schedule' ? 'Set program schedule' : 'Open Program Workspace' }}
+                                                Continue to {{ scheduleTypeLabel(currentActivityType) }} setup
                                                 <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                             </a>
                                         </div>
@@ -1729,7 +1746,7 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'decision' && rubricReview.criteria?.length" class="provider-panel order-4 p-5">
+                            <section v-if="activeSection === 'decision' && !postDecisionSummary && rubricReview.criteria?.length" class="provider-panel order-4 p-5">
                                 <div>
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -1990,82 +2007,6 @@ onMounted(loadApplication);
                                 </div>
                                 <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
                                     This application does not have any document requirements yet.
-                                </div>
-                            </section>
-
-                            <section v-if="activeSection === 'schedule'" class="space-y-5">
-                                <div class="provider-panel p-5">
-                                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                                        <div>
-                                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant schedule</p>
-                                            <h3 class="mt-2 text-xl font-bold text-slate-950">Published stage details</h3>
-                                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                                Exam and interview dates are published once from the Program Workspace. Record the applicant result from the Decision tab when it is available.
-                                            </p>
-                                        </div>
-                                        <a :href="`/provider/programs/${application.scholarship.id}/applications?workspace=schedule`" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-                                            Open program schedule
-                                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                        </a>
-                                    </div>
-                                </div>
-
-                                <div v-if="schedules.length" class="grid gap-3">
-                                    <details
-                                        v-for="schedule in schedules"
-                                        :key="schedule.id"
-                                        class="provider-panel group overflow-hidden"
-                                    >
-                                        <summary class="flex cursor-pointer list-none items-center gap-3 p-3.5 [&::-webkit-details-marker]:hidden">
-                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-white">
-                                                <i :class="scheduleTypeIcon(schedule.type)" aria-hidden="true"></i>
-                                            </span>
-                                            <div class="min-w-0 flex-1">
-                                                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                                                    <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(schedule.type) }}</p>
-                                                    <h3 class="truncate text-sm font-bold text-slate-950">{{ schedule.title }}</h3>
-                                                </div>
-                                                <p class="mt-1 text-xs text-slate-500">{{ schedule.scheduled_label }} - {{ scheduleModeLabel(schedule.mode) }}</p>
-                                            </div>
-                                            <span :class="['hidden rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', scheduleStatusClass(schedule.status)]">{{ labelFromKey(schedule.status) }}</span>
-                                            <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
-                                        </summary>
-
-                                        <div class="grid gap-3 border-t border-slate-200 p-3 text-sm lg:grid-cols-2">
-                                            <div v-if="schedule.venue || schedule.location_address" class="rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
-                                                <p class="font-bold text-slate-800">{{ schedule.venue || 'Activity site' }}</p>
-                                                <p v-if="schedule.location_address" class="mt-1 leading-5 text-slate-600">{{ schedule.location_address }}</p>
-                                            </div>
-                                            <a v-if="schedule.online_url" :href="schedule.online_url" target="_blank" rel="noopener noreferrer" class="flex items-center justify-between rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5 font-bold text-sky-800 hover:bg-sky-100">
-                                                Open online access link
-                                                <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
-                                            </a>
-                                            <p class="whitespace-pre-line rounded-md bg-slate-50 p-3 leading-6 text-slate-600 ring-1 ring-slate-200 lg:col-span-2">{{ schedule.instructions }}</p>
-
-                                            <LeafletMapPreview
-                                                v-if="schedule.latitude && schedule.longitude"
-                                                class="lg:col-span-2"
-                                                :latitude="schedule.latitude"
-                                                :longitude="schedule.longitude"
-                                                :title="schedule.venue || schedule.title"
-                                                :marker-text="schedule.venue || schedule.title"
-                                                height="10rem"
-                                            />
-
-                                        </div>
-                                    </details>
-                                </div>
-
-                                <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
-                                    <p class="text-sm font-bold text-slate-800">No schedule announced yet</p>
-                                    <p class="mt-1 text-sm text-slate-500">Publish an exam or interview schedule from this program's applicant page when needed.</p>
-                                    <a
-                                        :href="`/provider/programs/${application.scholarship?.id}/applications?workspace=schedule`"
-                                        class="mt-4 inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                    >
-                                        Set program schedule
-                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                    </a>
                                 </div>
                             </section>
 

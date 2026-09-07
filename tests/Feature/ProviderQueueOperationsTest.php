@@ -121,10 +121,13 @@ class ProviderQueueOperationsTest extends TestCase
             'uploaded_at' => now(),
         ]);
 
-        $dashboardProgram = $this->actingAs($provider)
+        $dashboard = $this->actingAs($provider)
             ->getJson('/provider/dashboard/data')
             ->assertOk()
-            ->json('scholarships.0');
+            ->assertJsonPath('application_workflow_counts.needs_review', 1)
+            ->assertJsonPath('application_workflow_counts.all', 2)
+            ->json();
+        $dashboardProgram = $dashboard['scholarships'][0];
 
         $this->assertSame(2, $dashboardProgram['applications_count']);
         $this->assertSame(1, $dashboardProgram['pending_review_applications_count']);

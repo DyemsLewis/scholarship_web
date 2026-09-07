@@ -156,8 +156,8 @@ Route::middleware(['auth', 'provider'])
         Route::get('/reports', [SupportReportController::class, 'providerPage'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports');
         Route::get('/reports/data', [SupportReportController::class, 'providerData'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.data');
         Route::patch('/reports/{report}/status', [SupportReportController::class, 'updateStatus'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.status');
-        Route::redirect('/insights', '/provider/applications?filter=pending_review')->name('insights.redirect');
-        Route::redirect('/review', '/provider/applications?filter=pending_review')
+        Route::redirect('/insights', '/provider/applications?filter=needs_review')->name('insights.redirect');
+        Route::redirect('/review', '/provider/applications?filter=needs_review')
             ->middleware(['permission:review_applications', 'provider.approved'])
             ->name('review');
         Route::get('/profile/data', [ProviderController::class, 'profileData'])->name('profile.data');

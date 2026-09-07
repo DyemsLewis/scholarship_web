@@ -188,7 +188,7 @@ class DemoReadinessWorkflowTest extends TestCase
         $this->actingAs($provider)
             ->getJson('/provider/dashboard/data')
             ->assertOk()
-            ->assertJsonPath('review_queue.0.id', $applicationId);
+            ->assertJsonPath('application_workflow_counts.needs_review', 1);
 
         ApplicationDocument::query()
             ->where('scholarship_application_id', $applicationId)

@@ -37,6 +37,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -419,33 +420,33 @@ class ProviderController extends Controller
             ->withCount($this->providerProgramCountRelations())
             ->latest()
             ->get();
-        $reviewQueue = $provider->hasPortalPermission('review_applications')
+        $canReviewApplications = $provider->hasPortalPermission('review_applications')
             && $providerOwner->hasVerifiedEmail()
-            && $providerOwner->providerProfile?->isVerified()
-            ? ScholarshipApplication::query()
-                ->with(['applicant.studentProfile', 'documents', 'scholarship'])
-                ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId))
-                ->whereIn('status', ['submitted', 'under_review', 'qualified', 'shortlisted', 'interview'])
-                ->latest('submitted_at')
-                ->limit(3)
-                ->get()
-            : collect();
-
+            && $providerOwner->providerProfile?->isVerified();
+        $applicationsBase = ScholarshipApplication::query()
+            ->whereHas('scholarship', fn (Builder $query) => $query->where('provider_id', $providerId));
+        $applicationWorkflowCounts = $canReviewApplications
+            ? $this->providerApplicationFilterCounts($applicationsBase)
+            : [
+                'all' => 0,
+                'needs_review' => 0,
+                'waiting_activity' => 0,
+                'ready_result' => 0,
+                'final_decision' => 0,
+            ];
         return response()->json([
             'user' => [
                 ...$provider->publicPayload(),
                 'verification_documents_count' => $verificationDocumentsCount,
             ],
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
-            'review_queue' => $reviewQueue->map(fn (ScholarshipApplication $application) => [
-                'id' => $application->id,
-                'detail_url' => route('provider.applications.show', $application, false),
-                'applicant' => $application->applicant?->name,
-                'scholarship' => $application->scholarship?->title,
-                'status' => $application->status,
-                'pending_documents' => $application->documents->where('status', 'pending')->count(),
-                'submitted_at' => $application->submitted_at?->format('M d, Y'),
-            ])->values(),
+            'application_workflow_counts' => [
+                'needs_review' => (int) ($applicationWorkflowCounts['needs_review'] ?? 0),
+                'waiting_activity' => (int) ($applicationWorkflowCounts['waiting_activity'] ?? 0),
+                'ready_result' => (int) ($applicationWorkflowCounts['ready_result'] ?? 0),
+                'final_decision' => (int) ($applicationWorkflowCounts['final_decision'] ?? 0),
+                'all' => (int) ($applicationWorkflowCounts['all'] ?? 0),
+            ],
         ]);
     }
 
@@ -1032,7 +1033,18 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
 
         $validated = $request->validate([
-            'filter' => ['sometimes', Rule::in(['pending_review', 'document_issues', 'active_stages', 'formal_application', 'decided', 'all'])],
+            'filter' => ['sometimes', Rule::in([
+                'needs_review',
+                'waiting_activity',
+                'ready_result',
+                'final_decision',
+                'pending_review',
+                'document_issues',
+                'active_stages',
+                'formal_application',
+                'decided',
+                'all',
+            ])],
             'sort' => ['sometimes', Rule::in(['priority', 'dss', 'documents', 'oldest'])],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'page' => ['sometimes', 'integer', 'min:1'],
@@ -1041,7 +1053,7 @@ class ProviderController extends Controller
 
         $providerId = $request->user()->providerOrganizationId();
         $selectedScholarship = $this->requestedProviderScholarship($request);
-        $filter = $validated['filter'] ?? 'pending_review';
+        $filter = $validated['filter'] ?? 'needs_review';
         $sort = $validated['sort'] ?? 'priority';
         $search = trim((string) ($validated['search'] ?? ''));
         $perPage = (int) ($validated['per_page'] ?? 10);
@@ -1074,6 +1086,7 @@ class ProviderController extends Controller
             ->whereNotIn('application_state', ['closed', 'withdrawn'])
             ->groupByRaw("COALESCE(workflow_stage, 'screening')")
             ->pluck('total', 'workflow_stage');
+        $activityWaitingCounts = $this->providerActivityWaitingCounts($applicationsBase);
         $filterCounts = $this->providerApplicationFilterCounts($applicationsBase);
         $totalApplications = (int) ($filterCounts['all'] ?? 0);
 
@@ -1143,6 +1156,7 @@ class ProviderController extends Controller
             ],
             'filter_counts' => $filterCounts,
             'stage_counts' => $stageCounts,
+            'activity_waiting_counts' => $activityWaitingCounts,
             'status_counts' => [
                 'submitted' => $statusCounts['submitted'] ?? 0,
                 'under_review' => $statusCounts['under_review'] ?? 0,
@@ -1204,11 +1218,70 @@ class ProviderController extends Controller
 
     private function applyProviderApplicationFilter(Builder $query, string $filter): void
     {
-        if ($filter === 'pending_review') {
+        if (in_array($filter, ['needs_review', 'pending_review'], true)) {
             $query
                 ->where(fn (Builder $query) => $query
                     ->where('workflow_stage', 'screening')
-                    ->orWhereNull('workflow_stage'))
+                    ->orWhere(fn (Builder $legacyQuery) => $legacyQuery
+                        ->whereNull('workflow_stage')
+                        ->whereIn('status', ['submitted', 'under_review', 'qualified', 'shortlisted'])))
+                ->whereNotIn('application_state', ['closed', 'withdrawn']);
+
+            return;
+        }
+
+        if ($filter === 'waiting_activity') {
+            $query
+                ->whereNotIn('application_state', ['closed', 'withdrawn'])
+                ->where(function (Builder $query): void {
+                    $query
+                        ->where(function (Builder $examQuery): void {
+                            $examQuery
+                                ->where('workflow_stage', 'exam')
+                                ->whereDoesntHave('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
+                                    ->where('type', 'exam')
+                                    ->where('status', 'completed'));
+                        })
+                        ->orWhere(function (Builder $interviewQuery): void {
+                            $interviewQuery
+                                ->where('workflow_stage', 'interview')
+                                ->whereDoesntHave('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
+                                    ->where('type', 'interview')
+                                    ->where('status', 'completed'));
+                        });
+                });
+
+            return;
+        }
+
+        if ($filter === 'ready_result') {
+            $query
+                ->whereNotIn('application_state', ['closed', 'withdrawn'])
+                ->where(function (Builder $query): void {
+                    $query
+                        ->where('workflow_stage', 'formal_application')
+                        ->orWhere(function (Builder $examQuery): void {
+                            $examQuery
+                                ->where('workflow_stage', 'exam')
+                                ->whereHas('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
+                                    ->where('type', 'exam')
+                                    ->where('status', 'completed'));
+                        })
+                        ->orWhere(function (Builder $interviewQuery): void {
+                            $interviewQuery
+                                ->where('workflow_stage', 'interview')
+                                ->whereHas('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
+                                    ->where('type', 'interview')
+                                    ->where('status', 'completed'));
+                        });
+                });
+
+            return;
+        }
+
+        if ($filter === 'final_decision') {
+            $query
+                ->where('workflow_stage', 'decision')
                 ->whereNotIn('application_state', ['closed', 'withdrawn']);
 
             return;
@@ -1303,13 +1376,36 @@ class ProviderController extends Controller
     {
         $counts = ['all' => (clone $baseQuery)->count()];
 
-        foreach (['pending_review', 'document_issues', 'active_stages', 'formal_application', 'decided'] as $filter) {
+        foreach (['needs_review', 'waiting_activity', 'ready_result', 'final_decision'] as $filter) {
+            $query = clone $baseQuery;
+            $this->applyProviderApplicationFilter($query, $filter);
+            $counts[$filter] = $query->count();
+        }
+
+        // Keep old URLs and dashboard links compatible while the UI moves to task-based queues.
+        $counts['pending_review'] = $counts['needs_review'];
+
+        foreach (['document_issues', 'active_stages', 'formal_application', 'decided'] as $filter) {
             $query = clone $baseQuery;
             $this->applyProviderApplicationFilter($query, $filter);
             $counts[$filter] = $query->count();
         }
 
         return $counts;
+    }
+
+    private function providerActivityWaitingCounts(Builder $baseQuery): Collection
+    {
+        return collect(['exam', 'interview'])->mapWithKeys(function (string $stage) use ($baseQuery): array {
+            $query = (clone $baseQuery)
+                ->where('workflow_stage', $stage)
+                ->whereNotIn('application_state', ['closed', 'withdrawn'])
+                ->whereDoesntHave('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
+                    ->where('type', $stage)
+                    ->where('status', 'completed'));
+
+            return [$stage => $query->count()];
+        });
     }
 
     public function applicationDetailData(Request $request, ScholarshipApplication $application): JsonResponse
@@ -1409,10 +1505,25 @@ class ProviderController extends Controller
             ->where('workflow_stage', $event->type)
             ->count();
 
+        $completedAt = now();
+
         $event->update([
             'status' => 'completed',
             'updated_by' => $request->user()->id,
         ]);
+
+        ApplicationSchedule::query()
+            ->where('type', $event->type)
+            ->where('status', 'scheduled')
+            ->whereHas('application', fn (Builder $query) => $query
+                ->where('scholarship_id', $scholarship->id)
+                ->where('workflow_stage', $event->type))
+            ->update([
+                'status' => 'completed',
+                'completed_at' => $completedAt,
+                'updated_by' => $request->user()->id,
+                'updated_at' => $completedAt,
+            ]);
 
         ActivityLog::record(
             $request->user(),
@@ -1686,7 +1797,7 @@ class ProviderController extends Controller
         return response()->json([
             'message' => $notification['title'].'.',
             'application' => $this->applicationPayload($updated, true),
-            'review_navigation' => $this->reviewNavigationPayload($updated),
+            'review_navigation' => $this->reviewNavigationPayload($updated, $previousStage),
         ]);
     }
 
@@ -1753,7 +1864,7 @@ class ProviderController extends Controller
         return response()->json([
             'message' => "Final outcome recorded as {$outcomeLabel}.",
             'application' => $this->applicationPayload($updated, true),
-            'review_navigation' => $this->reviewNavigationPayload($updated),
+            'review_navigation' => $this->reviewNavigationPayload($updated, 'decision'),
         ]);
     }
 
@@ -3037,7 +3148,40 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
         abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
 
-        $scholarship->load(['announcements.publisher']);
+        $scholarship->load(['announcements.publisher', 'events']);
+        $providerOwner = $request->user()->providerOrganizationOwner()->loadMissing('providerProfile');
+        $canAccessApplicantWorkflow = $request->user()->hasPortalPermission('review_applications')
+            && $providerOwner->hasVerifiedEmail()
+            && $providerOwner->providerProfile?->isVerified();
+        $applicationsBase = ScholarshipApplication::query()
+            ->where('scholarship_id', $scholarship->id);
+        $workflowCounts = $canAccessApplicantWorkflow
+            ? $this->providerApplicationFilterCounts($applicationsBase)
+            : [];
+        $activityStatuses = collect();
+
+        if ($canAccessApplicantWorkflow) {
+            $stageCounts = (clone $applicationsBase)
+                ->selectRaw("COALESCE(workflow_stage, 'screening') as workflow_stage, count(*) as total")
+                ->whereNotIn('application_state', ['closed', 'withdrawn'])
+                ->groupByRaw("COALESCE(workflow_stage, 'screening')")
+                ->pluck('total', 'workflow_stage');
+            $activityWaitingCounts = $this->providerActivityWaitingCounts($applicationsBase);
+            $activityStatuses = collect(ScholarshipSelectionPlan::normalize($scholarship->selection_stages))
+                ->filter(fn (string $stage): bool => ScholarshipSelectionPlan::isSchedulable($stage))
+                ->map(function (string $stage) use ($scholarship, $stageCounts, $activityWaitingCounts): array {
+                    $event = $scholarship->events->firstWhere('type', $stage);
+
+                    return [
+                        'type' => $stage,
+                        'label' => ScholarshipSelectionPlan::label($stage),
+                        'active_applicants' => (int) ($stageCounts[$stage] ?? 0),
+                        'waiting_applicants' => (int) ($activityWaitingCounts[$stage] ?? 0),
+                        'event' => $event ? ScholarshipEventPayload::make($event) : null,
+                    ];
+                })
+                ->values();
+        }
 
         return response()->json([
             'scholarship' => [
@@ -3047,6 +3191,14 @@ class ProviderController extends Controller
                 'announcements' => $scholarship->announcements
                     ->map(fn (ScholarshipAnnouncement $announcement) => $this->scholarshipAnnouncementPayload($announcement))
                     ->values(),
+                'workflow_counts' => [
+                    'needs_review' => (int) ($workflowCounts['needs_review'] ?? 0),
+                    'waiting_activity' => (int) ($workflowCounts['waiting_activity'] ?? 0),
+                    'ready_result' => (int) ($workflowCounts['ready_result'] ?? 0),
+                    'final_decision' => (int) ($workflowCounts['final_decision'] ?? 0),
+                    'all' => (int) ($workflowCounts['all'] ?? 0),
+                ],
+                'activity_statuses' => $activityStatuses,
             ],
         ]);
     }
@@ -4430,20 +4582,48 @@ class ProviderController extends Controller
             ->findOrFail($scholarshipId);
     }
 
-    private function reviewNavigationPayload(ScholarshipApplication $application): array
+    private function reviewNavigationPayload(
+        ScholarshipApplication $application,
+        ?string $reviewedStage = null,
+    ): array
     {
-        $remainingApplications = ScholarshipApplication::query()
-            ->with('applicant')
+        $remainingApplicationsQuery = ScholarshipApplication::query()
+            ->with(['applicant', 'scholarship', 'stageProgresses'])
             ->where('scholarship_id', $application->scholarship_id)
-            ->where('id', '!=', $application->id)
-            ->whereIn('status', self::REVIEW_DECISION_STATUSES)
+            ->where('id', '!=', $application->id);
+
+        if ($reviewedStage === null) {
+            $remainingApplicationsQuery->whereIn('status', self::REVIEW_DECISION_STATUSES);
+        } else {
+            $remainingApplicationsQuery->where(function (Builder $query) use ($reviewedStage): void {
+                $query->where('workflow_stage', $reviewedStage)
+                    ->orWhereNull('workflow_stage');
+            });
+        }
+
+        $remainingApplications = $remainingApplicationsQuery
             ->orderBy('submitted_at')
             ->orderBy('id')
             ->get();
+
+        if ($reviewedStage !== null) {
+            $remainingApplications = $remainingApplications
+                ->filter(function (ScholarshipApplication $candidate) use ($reviewedStage): bool {
+                    $workflow = $this->workflowService->payload($candidate);
+
+                    return ! $workflow['is_closed'] && $workflow['current_stage'] === $reviewedStage;
+                })
+                ->values();
+        }
+
         $nextApplication = $remainingApplications->first();
 
         return [
             'remaining_count' => $remainingApplications->count(),
+            'stage' => $reviewedStage,
+            'stage_label' => $reviewedStage !== null
+                ? ScholarshipSelectionPlan::label($reviewedStage)
+                : 'Review',
             'list_url' => route('provider.applications', [
                 'scholarship_id' => $application->scholarship_id,
             ], false),

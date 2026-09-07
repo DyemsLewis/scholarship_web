@@ -2,20 +2,28 @@
 import { computed, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import ProviderWorkflowNav from '../components/ProviderWorkflowNav.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
 const user = ref(null);
 const scholarships = ref([]);
-const reviewQueue = ref([]);
+const applicationWorkflowCounts = ref({
+    needs_review: 0,
+    waiting_activity: 0,
+    ready_result: 0,
+    final_decision: 0,
+    all: 0,
+});
 const canManagePrograms = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_programs'),
 ));
 const canReviewApplications = computed(() => Boolean(
-    window.portalUser?.has_full_access
-        || window.portalUser?.permissions?.includes('review_applications'),
+    window.portalUser?.can_post_scholarships
+        && (
+            window.portalUser?.has_full_access
+            || window.portalUser?.permissions?.includes('review_applications')
+        ),
 ));
 const canManageProfile = computed(() => Boolean(
     window.portalUser?.has_full_access
@@ -30,13 +38,70 @@ const totalApplicationCount = computed(() => scholarships.value.reduce(
     (total, program) => total + Number(program.applications_count ?? 0),
     0,
 ));
-const selectedRecipientCount = computed(() => scholarships.value.reduce(
-    (total, program) => total + Number(program.awarded_slots_count ?? 0),
-    0,
-));
 const draftPrograms = computed(() => scholarships.value.filter((program) => program.status === 'draft'));
 const rejectedPrograms = computed(() => scholarships.value.filter((program) => program.status === 'rejected'));
 const pendingPrograms = computed(() => scholarships.value.filter((program) => program.status === 'pending_review'));
+const closedPrograms = computed(() => scholarships.value.filter((program) => program.status === 'closed'));
+const applicantWorkQueues = computed(() => [
+    {
+        key: 'needs_review',
+        label: 'Needs review',
+        description: 'Check applicant details, eligibility, and files.',
+        icon: 'fa-solid fa-user-check',
+        href: '/provider/applications?filter=needs_review',
+    },
+    {
+        key: 'ready_result',
+        label: 'Ready for result',
+        description: 'Record completed activity or formal application results.',
+        icon: 'fa-solid fa-clipboard-check',
+        href: '/provider/applications?filter=ready_result',
+    },
+    {
+        key: 'final_decision',
+        label: 'Final decision',
+        description: 'Select, waitlist, or decline qualified applicants.',
+        icon: 'fa-solid fa-award',
+        href: '/provider/applications?filter=final_decision',
+    },
+    {
+        key: 'waiting_activity',
+        label: 'Waiting for activity',
+        description: 'Applicants are waiting for an exam or interview.',
+        icon: 'fa-solid fa-calendar-day',
+        href: '/provider/applications?filter=waiting_activity',
+    },
+]);
+const programLifecycle = computed(() => [
+    {
+        label: 'Needs setup',
+        description: 'Drafts or programs returned for changes',
+        count: draftPrograms.value.length + rejectedPrograms.value.length,
+        href: '/provider/programs',
+        icon: 'fa-solid fa-pen-ruler',
+    },
+    {
+        label: 'In admin review',
+        description: 'Submitted and waiting for publication review',
+        count: pendingPrograms.value.length,
+        href: '/provider/programs?status=pending_review',
+        icon: 'fa-solid fa-hourglass-half',
+    },
+    {
+        label: 'Published',
+        description: 'Visible to eligible applicants',
+        count: publishedProgramCount.value,
+        href: '/provider/programs?status=published',
+        icon: 'fa-solid fa-bullhorn',
+    },
+    {
+        label: 'Closed',
+        description: 'Programs no longer accepting applications',
+        count: closedPrograms.value.length,
+        href: '/provider/programs?status=closed',
+        icon: 'fa-solid fa-box-archive',
+    },
+]);
 const providerProfileNeedsCompletion = computed(() => [
     user.value?.provider_name,
     user.value?.provider_type,
@@ -102,17 +167,6 @@ const verificationPrompt = computed(() => {
         action: 'View verification status',
     };
 });
-const workflowStates = computed(() => ({
-    organization: user.value?.can_post_scholarships ? 'complete' : 'attention',
-    programs: !user.value?.can_post_scholarships
-        ? 'pending'
-        : (scholarships.value.length === 0 || draftPrograms.value.length || rejectedPrograms.value.length ? 'attention' : 'complete'),
-    screening: reviewQueue.value.length
-        ? 'attention'
-        : (totalApplicationCount.value > 0 ? 'complete' : 'pending'),
-    stages: totalApplicationCount.value > 0 && reviewQueue.value.length === 0 ? 'attention' : 'pending',
-    outcomes: selectedRecipientCount.value > 0 ? 'complete' : 'pending',
-}));
 const nextAction = computed(() => {
     if (!user.value?.can_post_scholarships) {
         return {
@@ -136,14 +190,36 @@ const nextAction = computed(() => {
         };
     }
 
-    if (reviewQueue.value.length && canReviewApplications.value) {
+    if (applicationWorkflowCounts.value.needs_review > 0 && canReviewApplications.value) {
         return {
-            eyebrow: 'Step 3 - Pre-screening',
-            title: `${reviewQueue.value.length} recent applicant${reviewQueue.value.length === 1 ? '' : 's'} need attention`,
+            eyebrow: 'Priority - Applicant review',
+            title: `${applicationWorkflowCounts.value.needs_review} applicant${applicationWorkflowCounts.value.needs_review === 1 ? '' : 's'} need review`,
             description: 'Review eligibility, applicant information, and submitted files before advancing or declining each application.',
-            href: '/provider/applications?filter=pending_review',
+            href: '/provider/applications?filter=needs_review',
             label: 'Review applicants',
             icon: 'fa-solid fa-user-check',
+        };
+    }
+
+    if (applicationWorkflowCounts.value.ready_result > 0 && canReviewApplications.value) {
+        return {
+            eyebrow: 'Priority - Record results',
+            title: `${applicationWorkflowCounts.value.ready_result} applicant${applicationWorkflowCounts.value.ready_result === 1 ? '' : 's'} ready for a result`,
+            description: 'A formal application, exam, or interview is complete and ready for your decision.',
+            href: '/provider/applications?filter=ready_result',
+            label: 'Record results',
+            icon: 'fa-solid fa-clipboard-check',
+        };
+    }
+
+    if (applicationWorkflowCounts.value.final_decision > 0 && canReviewApplications.value) {
+        return {
+            eyebrow: 'Priority - Final decisions',
+            title: `${applicationWorkflowCounts.value.final_decision} applicant${applicationWorkflowCounts.value.final_decision === 1 ? '' : 's'} await a final decision`,
+            description: 'Complete recipient selection for applicants who finished the required stages.',
+            href: '/provider/applications?filter=final_decision',
+            label: 'Make decisions',
+            icon: 'fa-solid fa-award',
         };
     }
 
@@ -171,14 +247,14 @@ const nextAction = computed(() => {
         };
     }
 
-    if (totalApplicationCount.value > 0 && canReviewApplications.value) {
+    if (applicationWorkflowCounts.value.waiting_activity > 0 && canReviewApplications.value) {
         return {
-            eyebrow: 'Step 4 - Next stages',
-            title: 'Continue active applicant work',
-            description: 'Manage formal application steps, provider-run activities, and final outcomes from the applicant workflow.',
-            href: '/provider/applications?filter=active_stages',
-            label: 'Open applicant workflow',
-            icon: 'fa-solid fa-arrow-right-arrow-left',
+            eyebrow: 'Applicant activities',
+            title: `${applicationWorkflowCounts.value.waiting_activity} applicant${applicationWorkflowCounts.value.waiting_activity === 1 ? '' : 's'} waiting for an activity`,
+            description: 'Check the shared exam or interview schedule and keep applicants moving through the selection process.',
+            href: '/provider/applications?filter=waiting_activity',
+            label: 'Check activities',
+            icon: 'fa-solid fa-calendar-day',
         };
     }
 
@@ -252,7 +328,10 @@ async function loadProviderData() {
 
         user.value = response.data.user;
         scholarships.value = response.data.scholarships;
-        reviewQueue.value = response.data.review_queue ?? [];
+        applicationWorkflowCounts.value = {
+            ...applicationWorkflowCounts.value,
+            ...(response.data.application_workflow_counts ?? {}),
+        };
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load provider dashboard.';
     } finally {
@@ -270,7 +349,7 @@ onMounted(loadProviderData);
         <section class="provider-page">
             <div class="provider-container">
                 <header class="provider-hero">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                                 Provider workspace
@@ -282,15 +361,6 @@ onMounted(loadProviderData);
                                 Move from organization setup to applicant outcomes through one clear scholarship workflow.
                             </p>
                         </div>
-
-                        <a
-                            v-if="!isLoading && !errorMessage"
-                            :href="nextAction.href"
-                            class="rounded-md bg-slate-950 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                        >
-                            {{ nextAction.label }}
-                            <i class="fa-solid fa-arrow-right ml-2 text-xs" aria-hidden="true"></i>
-                        </a>
                     </div>
                 </header>
 
@@ -357,76 +427,83 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <ProviderWorkflowNav :states="workflowStates" show-heading />
-
-                    <div class="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-                        <section class="provider-panel h-full overflow-hidden">
+                    <div :class="['grid items-stretch gap-4', canReviewApplications ? 'xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]' : '']">
+                        <section v-if="canReviewApplications" class="provider-panel h-full overflow-hidden">
                             <header class="flex items-end justify-between gap-4 border-b border-slate-200 px-5 py-4">
                                 <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Work queue</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">Applicants needing attention</h3>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant work</p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">What needs your attention</h3>
                                 </div>
-                                <a v-if="reviewQueue.length" href="/provider/applications?filter=pending_review" class="shrink-0 text-xs font-bold text-slate-600 transition hover:text-slate-950">
-                                    View all <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i>
+                                <a href="/provider/applications" class="shrink-0 text-xs font-bold text-slate-600 transition hover:text-slate-950">
+                                    All applications <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i>
                                 </a>
                             </header>
 
-                            <div v-if="reviewQueue.length" class="divide-y divide-slate-200">
+                            <div class="grid sm:grid-cols-2">
                                 <a
-                                    v-for="application in reviewQueue"
-                                    :key="application.id"
-                                    :href="application.detail_url"
-                                    class="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50"
+                                    v-for="(queue, index) in applicantWorkQueues"
+                                    :key="queue.key"
+                                    :href="queue.href"
+                                    :class="[
+                                        'group flex min-h-28 items-start gap-3 border-slate-200 px-5 py-4 transition hover:bg-slate-50',
+                                        index < applicantWorkQueues.length - 1 ? 'border-b' : '',
+                                        index === 2 ? 'sm:border-b-0' : '',
+                                        index % 2 === 0 ? 'sm:border-r' : '',
+                                    ]"
                                 >
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">
-                                        <i class="fa-solid fa-user" aria-hidden="true"></i>
+                                    <span
+                                        :class="[
+                                            'grid h-9 w-9 shrink-0 place-items-center rounded-md text-xs',
+                                            Number(applicationWorkflowCounts[queue.key] ?? 0) > 0
+                                                ? 'bg-amber-100 text-amber-800'
+                                                : 'bg-slate-100 text-slate-500',
+                                        ]"
+                                    >
+                                        <i :class="queue.icon" aria-hidden="true"></i>
                                     </span>
                                     <span class="min-w-0 flex-1">
-                                        <span class="block truncate text-sm font-bold text-slate-950">{{ application.applicant || 'Applicant' }}</span>
-                                        <span class="mt-0.5 block truncate text-xs text-slate-500">{{ application.scholarship || 'Scholarship program' }}</span>
+                                        <span class="flex items-center justify-between gap-3">
+                                            <span class="text-sm font-bold text-slate-950">{{ queue.label }}</span>
+                                            <span class="text-lg font-bold leading-none text-slate-950">{{ applicationWorkflowCounts[queue.key] ?? 0 }}</span>
+                                        </span>
+                                        <span class="mt-1 block text-xs leading-5 text-slate-500">{{ queue.description }}</span>
                                     </span>
-                                    <span class="hidden shrink-0 text-right sm:block">
-                                        <span class="block text-xs font-bold text-slate-700">{{ application.pending_documents }} file{{ application.pending_documents === 1 ? '' : 's' }} pending</span>
-                                        <span class="mt-0.5 block text-[11px] text-slate-500">{{ application.submitted_at }}</span>
-                                    </span>
-                                    <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 transition group-hover:text-slate-700" aria-hidden="true"></i>
                                 </a>
-                            </div>
-
-                            <div v-else class="flex items-center gap-3 px-5 py-6">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700">
-                                    <i class="fa-solid fa-check" aria-hidden="true"></i>
-                                </span>
-                                <div>
-                                    <p class="text-sm font-bold text-slate-950">No recent pre-screening reviews are waiting</p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">Use the workflow above to check active stages or recorded outcomes.</p>
-                                </div>
                             </div>
                         </section>
 
                         <section class="provider-panel h-full overflow-hidden">
-                            <header class="border-b border-slate-200 px-5 py-4">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Current activity</p>
-                                <h3 class="mt-1 text-lg font-bold text-slate-950">Operating picture</h3>
+                            <header class="flex items-end justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program lifecycle</p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">Where programs stand</h3>
+                                </div>
+                                <a href="/provider/programs" class="shrink-0 text-xs font-bold text-slate-600 transition hover:text-slate-950">
+                                    View all <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i>
+                                </a>
                             </header>
-                            <dl class="divide-y divide-slate-200">
-                                <div class="flex items-center justify-between gap-4 px-5 py-3.5">
-                                    <dt class="text-sm font-semibold text-slate-600">Published programs</dt>
-                                    <dd class="text-sm font-bold text-slate-950">{{ publishedProgramCount }} of {{ scholarships.length }}</dd>
-                                </div>
-                                <div class="flex items-center justify-between gap-4 px-5 py-3.5">
-                                    <dt class="text-sm font-semibold text-slate-600">Applications received</dt>
-                                    <dd class="text-sm font-bold text-slate-950">{{ totalApplicationCount }}</dd>
-                                </div>
-                                <div class="flex items-center justify-between gap-4 px-5 py-3.5">
-                                    <dt class="text-sm font-semibold text-slate-600">Selected recipients</dt>
-                                    <dd class="text-sm font-bold text-slate-950">{{ selectedRecipientCount }}</dd>
-                                </div>
-                                <div class="flex items-center justify-between gap-4 px-5 py-3.5">
-                                    <dt class="text-sm font-semibold text-slate-600">Programs in admin review</dt>
-                                    <dd class="text-sm font-bold text-slate-950">{{ pendingPrograms.length }}</dd>
-                                </div>
-                            </dl>
+                            <div class="divide-y divide-slate-200">
+                                <a
+                                    v-for="stage in programLifecycle"
+                                    :key="stage.label"
+                                    :href="stage.href"
+                                    class="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50"
+                                >
+                                    <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100 text-[11px] text-slate-600">
+                                        <i :class="stage.icon" aria-hidden="true"></i>
+                                    </span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block text-sm font-bold text-slate-950">{{ stage.label }}</span>
+                                        <span class="mt-0.5 block truncate text-[11px] text-slate-500">{{ stage.description }}</span>
+                                    </span>
+                                    <span class="text-base font-bold text-slate-950">{{ stage.count }}</span>
+                                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-300 transition group-hover:text-slate-700" aria-hidden="true"></i>
+                                </a>
+                            </div>
+                            <div class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs text-slate-600">
+                                <span v-if="canReviewApplications">{{ totalApplicationCount }} total application{{ totalApplicationCount === 1 ? '' : 's' }}</span>
+                                <span>{{ scholarships.length }} program{{ scholarships.length === 1 ? '' : 's' }}</span>
+                            </div>
                         </section>
                     </div>
 
@@ -457,8 +534,10 @@ onMounted(loadProviderData);
                                         <span :class="['hidden shrink-0 rounded px-2 py-1 text-[9px] font-bold uppercase sm:inline-flex', statusClass(program.status)]">{{ verificationLabel(program.status) }}</span>
                                     </span>
                                     <span class="mt-0.5 block text-xs text-slate-500">
-                                        {{ program.applications_count ?? 0 }} applicants
-                                        <span class="mx-1 text-slate-300">/</span>
+                                        <template v-if="canReviewApplications">
+                                            {{ program.applications_count ?? 0 }} applicant{{ Number(program.applications_count ?? 0) === 1 ? '' : 's' }}
+                                            <span class="mx-1 text-slate-300">/</span>
+                                        </template>
                                         Updated {{ program.updated_at || 'recently' }}
                                     </span>
                                 </span>
@@ -468,7 +547,7 @@ onMounted(loadProviderData);
                         </div>
                         <div v-else class="flex flex-col items-start gap-3 px-5 py-6 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <p class="text-sm font-bold text-slate-950">No scholarship programs yet</p>
+                                <p class="text-sm font-bold text-slate-950">No programs yet</p>
                                 <p class="mt-1 text-xs leading-5 text-slate-500">Complete organization verification, then create the first program.</p>
                             </div>
                             <a :href="verificationActionHref" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Start setup</a>

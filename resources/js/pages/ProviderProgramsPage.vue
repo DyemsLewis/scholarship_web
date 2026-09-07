@@ -1,66 +1,55 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
-import ConfirmationDialog from '../components/ConfirmationDialog.vue';
-import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
 const user = ref(null);
 const scholarships = ref([]);
-const selectedPreviewScholarship = ref(null);
-const selectedMapScholarship = ref(null);
-const duplicatingId = ref(null);
 const searchQuery = ref('');
 const requestedStatusFilter = new URLSearchParams(window.location.search).get('status');
-const programStatusFilters = ['all', 'published', 'pending_review', 'draft', 'rejected', 'closed'];
-const statusFilter = ref(programStatusFilters.includes(requestedStatusFilter) ? requestedStatusFilter : 'all');
-const {
-    confirmation,
-    requestConfirmation,
-    confirmConfirmation,
-    cancelConfirmation,
-} = useConfirmationDialog();
+const legacyStatusAliases = { draft: 'drafts', rejected: 'drafts', pending_review: 'review' };
+const normalizedStatusFilter = legacyStatusAliases[requestedStatusFilter] ?? requestedStatusFilter;
+const programStatusFilters = ['all', 'drafts', 'review', 'published', 'closed'];
+const statusFilter = ref(programStatusFilters.includes(normalizedStatusFilter) ? normalizedStatusFilter : 'all');
 
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 const canManagePrograms = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_programs'),
 ));
+const canReviewApplications = computed(() => Boolean(
+    window.portalUser?.can_post_scholarships
+        && (
+            window.portalUser?.has_full_access
+            || window.portalUser?.permissions?.includes('review_applications')
+        ),
+));
 const canManageProfile = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_profile'),
 ));
-const canReviewApplications = computed(() => Boolean(
-    window.portalUser?.has_full_access
-        || window.portalUser?.permissions?.includes('review_applications'),
-));
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
-const statusFilterOptions = computed(() => {
+const lifecycleOptions = computed(() => {
     const options = [
-        { value: 'all', label: 'All programs', count: scholarships.value.length },
-        { value: 'published', label: 'Published' },
-        { value: 'pending_review', label: 'In review' },
-        { value: 'draft', label: 'Drafts' },
-        { value: 'rejected', label: 'Needs changes' },
-        { value: 'closed', label: 'Closed' },
+        { value: 'drafts', label: 'Drafts', description: 'Finish setup or correct feedback.', icon: 'fa-solid fa-pen-ruler' },
+        { value: 'review', label: 'In admin review', description: 'Waiting for a publishing decision.', icon: 'fa-solid fa-shield-halved' },
+        { value: 'published', label: 'Published', description: 'Visible to eligible applicants.', icon: 'fa-solid fa-bullhorn' },
+        { value: 'closed', label: 'Closed', description: 'Keep final program records.', icon: 'fa-solid fa-box-archive' },
     ];
 
     return options.map((option) => ({
         ...option,
-        count: option.value === 'all'
-            ? scholarships.value.length
-            : scholarships.value.filter((scholarship) => scholarship.status === option.value).length,
+        count: scholarships.value.filter((scholarship) => programLifecycle(scholarship) === option.value).length,
     }));
 });
 const filteredScholarships = computed(() => {
     const query = searchQuery.value.trim().toLowerCase();
 
     return scholarships.value.filter((scholarship) => {
-        const matchesStatus = statusFilter.value === 'all' || scholarship.status === statusFilter.value;
+        const matchesStatus = statusFilter.value === 'all' || programLifecycle(scholarship) === statusFilter.value;
         const searchableText = [
             scholarship.title,
             scholarship.category,
@@ -94,38 +83,12 @@ const verificationMessage = computed(() => {
 
     return 'Your verification proof is awaiting admin review. Program creation will become available after approval.';
 });
-const selectedMapAddress = computed(() => {
-    const parts = [
-        selectedMapScholarship.value?.location_address,
-        selectedMapScholarship.value?.location_name,
-    ].filter(Boolean);
+function programLifecycle(scholarship) {
+    if (['draft', 'rejected'].includes(scholarship.status)) return 'drafts';
+    if (scholarship.status === 'pending_review') return 'review';
+    if (scholarship.status === 'closed') return 'closed';
 
-    return parts.length ? [...parts, 'Philippines'].join(', ') : '';
-});
-
-function openMapModal(scholarship) {
-    selectedPreviewScholarship.value = null;
-    selectedMapScholarship.value = scholarship;
-}
-
-function closeMapModal() {
-    selectedMapScholarship.value = null;
-}
-
-function openPreviewModal(scholarship) {
-    selectedPreviewScholarship.value = scholarship;
-}
-
-function closePreviewModal() {
-    selectedPreviewScholarship.value = null;
-}
-
-function hasScholarshipMapPreview(scholarship) {
-    return Boolean(
-        (scholarship.latitude && scholarship.longitude)
-        || scholarship.location_address
-        || scholarship.location_name,
-    );
+    return 'published';
 }
 
 function targetApplicantLabel(scholarship) {
@@ -163,15 +126,6 @@ function programDeadlineLabel(deadline) {
     }).format(parsedDate);
 }
 
-function programSlotLabel(scholarship) {
-    const selected = Number(scholarship.awarded_slots_count ?? 0);
-    const capacity = Number(scholarship.slots_available ?? 0);
-
-    return capacity > 0
-        ? `${selected}/${capacity} slots used`
-        : `${selected} selected`;
-}
-
 function programStatusLabel(status) {
     return {
         draft: 'Draft',
@@ -202,14 +156,20 @@ function programStatusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
-function programStatusGuidance(status) {
+function programPrimaryAction(scholarship) {
+    if (['draft', 'rejected'].includes(scholarship.status) && canManagePrograms.value) {
+        return {
+            label: scholarship.status === 'rejected' ? 'Fix program' : 'Continue setup',
+            href: `/provider/programs/${scholarship.id}/edit`,
+        };
+    }
+
     return {
-        draft: 'Finish the program details, then submit it for administrator review.',
-        pending_review: 'The program is waiting for an administrator decision. You can still review its setup.',
-        published: 'This program is visible to applicants and can receive applications until it closes.',
-        rejected: 'Review the administrator feedback, update the program, and submit it again.',
-        closed: 'This program is no longer accepting new applications.',
-    }[status] ?? 'Review the program details and choose the next management action.';
+        label: scholarship.status === 'closed'
+            ? 'View records'
+            : (scholarship.status === 'pending_review' ? 'View status' : 'Open control center'),
+        href: `/provider/programs/${scholarship.id}`,
+    };
 }
 
 async function loadProviderData() {
@@ -230,31 +190,14 @@ async function loadProviderData() {
     }
 }
 
-async function duplicateProgram(scholarship) {
-    const confirmed = await requestConfirmation({
-        title: 'Duplicate this program?',
-        message: `A new draft copy of ${scholarship.title} will be added to your program list.`,
-        confirmLabel: 'Duplicate program',
-    });
+watch(statusFilter, (status) => {
+    const url = new URL(window.location.href);
 
-    if (!confirmed) {
-        return;
-    }
+    if (status === 'all') url.searchParams.delete('status');
+    else url.searchParams.set('status', status);
 
-    duplicatingId.value = scholarship.id;
-    errorMessage.value = '';
-
-    try {
-        await window.axios.post(`/provider/scholarships/${scholarship.id}/duplicate`);
-
-        closePreviewModal();
-        await loadProviderData();
-    } catch (handledError) {
-        void handledError;
-    } finally {
-        duplicatingId.value = null;
-    }
-}
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+});
 
 onMounted(loadProviderData);
 </script>
@@ -262,12 +205,6 @@ onMounted(loadProviderData);
 <template>
     <main class="provider-shell">
         <ProviderSidebar />
-
-        <ConfirmationDialog
-            v-bind="confirmation"
-            @confirm="confirmConfirmation"
-            @cancel="cancelConfirmation"
-        />
 
         <section class="provider-page">
             <div class="provider-container">
@@ -278,10 +215,10 @@ onMounted(loadProviderData);
                                 Provider Programs
                             </p>
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Manage scholarship programs
+                                Scholarship programs
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Create programs, track publishing status, and open each program's applicant workspace.
+                                Follow each program from setup and admin review through applicant management and closing.
                             </p>
                         </div>
 
@@ -328,14 +265,42 @@ onMounted(loadProviderData);
                     </div>
 
                     <section class="provider-panel p-5">
-                        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                            <div>
-                                <h3 class="text-xl font-bold text-slate-950">Your programs</h3>
-                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                    Select a program to preview it, edit its details, or manage applicants.
-                                </p>
-                            </div>
-                            <label class="relative w-full lg:max-w-sm">
+                        <div>
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program lifecycle</p>
+                            <h3 class="mt-1 text-xl font-bold text-slate-950">Programs by current stage</h3>
+                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                                Choose a stage, then continue the next required action for a program.
+                            </p>
+                        </div>
+
+                        <div class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                            <button
+                                v-for="option in lifecycleOptions"
+                                :key="option.value"
+                                type="button"
+                                :class="[
+                                    'flex min-h-24 items-start gap-3 rounded-md border p-3 text-left transition',
+                                    statusFilter === option.value
+                                        ? 'border-slate-900 bg-slate-900 text-white'
+                                        : 'border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-400 hover:bg-white',
+                                ]"
+                                @click="statusFilter = option.value"
+                            >
+                                <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', statusFilter === option.value ? 'bg-white/10 text-amber-300' : 'bg-white text-slate-600 ring-1 ring-slate-200']">
+                                    <i :class="option.icon" aria-hidden="true"></i>
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="flex items-center justify-between gap-2">
+                                        <span class="text-sm font-bold">{{ option.label }}</span>
+                                        <span :class="['rounded px-2 py-0.5 text-xs font-bold', statusFilter === option.value ? 'bg-white/10' : 'bg-white text-slate-700 ring-1 ring-slate-200']">{{ option.count }}</span>
+                                    </span>
+                                    <span :class="['mt-1 block text-xs leading-5', statusFilter === option.value ? 'text-slate-300' : 'text-slate-500']">{{ option.description }}</span>
+                                </span>
+                            </button>
+                        </div>
+
+                        <div class="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                            <label class="relative w-full sm:max-w-sm">
                                 <span class="sr-only">Search programs</span>
                                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
                                 <input
@@ -345,31 +310,18 @@ onMounted(loadProviderData);
                                     class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                                 >
                             </label>
-                        </div>
-
-                        <div class="mt-4 flex flex-wrap items-center gap-2 border-y border-slate-200 py-3">
-                            <span class="mr-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Status</span>
-                                <button
-                                    v-for="option in statusFilterOptions"
-                                    :key="option.value"
-                                    type="button"
-                                    :class="[
-                                        'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                        statusFilter === option.value
-                                            ? 'border-slate-900 bg-slate-900 text-white'
-                                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50',
-                                    ]"
-                                    @click="statusFilter = option.value"
-                                >
-                                    {{ option.label }} ({{ option.count }})
+                            <div class="flex items-center gap-3">
+                                <button type="button" :class="['rounded-md border px-3 py-2.5 text-xs font-bold transition', statusFilter === 'all' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100']" @click="statusFilter = 'all'">
+                                    All programs ({{ scholarships.length }})
                                 </button>
-                            <p class="ml-auto text-xs font-semibold text-slate-500">
+                                <p class="hidden text-xs font-semibold text-slate-500 md:block">
                                 Showing {{ filteredScholarships.length }} of {{ scholarships.length }}
-                            </p>
+                                </p>
+                            </div>
                         </div>
 
                         <div v-if="scholarships.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
-                            <p class="text-sm font-bold text-slate-900">No scholarship programs yet</p>
+                            <p class="text-sm font-bold text-slate-900">No programs yet</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
                                 {{ canPostScholarships
                                     ? 'Create your first program when its details and requirements are ready.'
@@ -382,7 +334,7 @@ onMounted(loadProviderData);
                                 <article
                                     v-for="scholarship in filteredScholarships"
                                     :key="scholarship.id"
-                                    class="flex items-center gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
+                                    class="flex flex-wrap items-center gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:flex-nowrap sm:px-4"
                                 >
                                     <img
                                         :src="scholarship.image_url"
@@ -402,25 +354,25 @@ onMounted(loadProviderData);
                                             {{ scholarship.category || 'Uncategorized' }}
                                             <span class="mx-1 text-slate-300">&middot;</span>
                                             {{ targetApplicantLabel(scholarship) }}
-                                            <span class="mx-1 text-slate-300">&middot;</span>
-                                            {{ scholarship.applications_count ?? 0 }} applicant{{ Number(scholarship.applications_count ?? 0) === 1 ? '' : 's' }}
-                                            <template v-if="scholarship.deadline">
+                                            <template v-if="canReviewApplications && ['published', 'closed'].includes(scholarship.status)">
                                                 <span class="mx-1 text-slate-300">&middot;</span>
-                                                {{ programDeadlineLabel(scholarship.deadline) }}
+                                                {{ scholarship.applications_count ?? 0 }} applicant{{ Number(scholarship.applications_count ?? 0) === 1 ? '' : 's' }}
                                             </template>
+                                            <span v-if="scholarship.deadline" class="hidden sm:inline"><span class="mx-1 text-slate-300">&middot;</span>{{ programDeadlineLabel(scholarship.deadline) }}</span>
                                         </p>
                                     </div>
                                     <span
-                                        v-if="Number(scholarship.pending_review_applications_count ?? 0) > 0"
+                                        v-if="canReviewApplications && Number(scholarship.pending_review_applications_count ?? 0) > 0"
                                         class="hidden shrink-0 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800 md:inline-flex"
                                     >
                                         {{ scholarship.pending_review_applications_count }} to review
                                     </span>
                                     <a
-                                        :href="`/provider/programs/${scholarship.id}`"
-                                        class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                        :href="programPrimaryAction(scholarship).href"
+                                        class="ml-14 inline-flex w-full shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 sm:ml-0 sm:w-auto"
                                     >
-                                        Open workspace
+                                        {{ programPrimaryAction(scholarship).label }}
+                                        <i class="fa-solid fa-arrow-right ml-2 text-[10px]" aria-hidden="true"></i>
                                     </a>
                                 </article>
                             </div>
@@ -443,223 +395,5 @@ onMounted(loadProviderData);
                 <ProviderFooter />
             </div>
         </section>
-
-        <div
-            v-if="selectedPreviewScholarship"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="provider-program-manage-title"
-            @click.self="closePreviewModal"
-        >
-            <section class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-md bg-[#f4f6f8] shadow-2xl">
-                <header class="relative overflow-hidden bg-[#081426] px-5 py-5 text-white sm:px-6">
-                    <div class="pointer-events-none absolute inset-y-0 right-0 w-56 bg-[linear-gradient(135deg,_transparent,_rgba(251,191,36,0.13))]"></div>
-                    <div class="relative flex items-start gap-3">
-                        <img
-                            :src="selectedPreviewScholarship.image_url"
-                            :alt="selectedPreviewScholarship.title"
-                            class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-2 ring-1 ring-white/20"
-                        >
-                        <div class="min-w-0 flex-1">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Program workspace</p>
-                                <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', programStatusClass(selectedPreviewScholarship.status)]">
-                                    {{ programStatusLabel(selectedPreviewScholarship.status) }}
-                                </span>
-                            </div>
-                            <h3 id="provider-program-manage-title" class="mt-1 text-xl font-bold leading-tight text-white">
-                                {{ selectedPreviewScholarship.title }}
-                            </h3>
-                            <p class="mt-1 truncate text-xs font-semibold text-slate-300">
-                                {{ selectedPreviewScholarship.category || 'Scholarship program' }} for {{ targetApplicantLabel(selectedPreviewScholarship).toLowerCase() }}
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/15 text-slate-300 transition hover:bg-white hover:text-slate-950"
-                            aria-label="Close program workspace"
-                            @click="closePreviewModal"
-                        >
-                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                        </button>
-                    </div>
-                </header>
-
-                <div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-                    <div class="flex items-start gap-3 rounded-md border border-amber-200 bg-white px-4 py-3 shadow-sm">
-                        <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                        </span>
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Recommended next step</p>
-                            <p class="mt-1 text-sm font-semibold leading-5 text-slate-800">
-                                {{ programStatusGuidance(selectedPreviewScholarship.status) }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <dl class="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 shadow-sm sm:grid-cols-4">
-                        <div class="bg-white p-3.5">
-                            <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                <i class="fa-regular fa-calendar text-amber-700" aria-hidden="true"></i>
-                                Deadline
-                            </dt>
-                            <dd class="mt-2 text-sm font-bold text-slate-900">{{ programDeadlineLabel(selectedPreviewScholarship.deadline) }}</dd>
-                        </div>
-                        <div class="bg-white p-3.5">
-                            <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                <i class="fa-solid fa-users text-amber-700" aria-hidden="true"></i>
-                                Applicants
-                            </dt>
-                            <dd class="mt-2 text-sm font-bold text-slate-900">
-                                {{ selectedPreviewScholarship.applications_count ?? 0 }} total
-                            </dd>
-                            <p v-if="Number(selectedPreviewScholarship.pending_review_applications_count ?? 0) > 0" class="mt-1 text-[10px] font-bold text-amber-700">
-                                {{ selectedPreviewScholarship.pending_review_applications_count }} to review
-                            </p>
-                        </div>
-                        <div class="bg-white p-3.5">
-                            <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                <i class="fa-solid fa-user-graduate text-amber-700" aria-hidden="true"></i>
-                                Learners
-                            </dt>
-                            <dd class="mt-2 text-sm font-bold text-slate-900">{{ targetApplicantLabel(selectedPreviewScholarship) }}</dd>
-                        </div>
-                        <div class="bg-white p-3.5">
-                            <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                <i class="fa-solid fa-award text-amber-700" aria-hidden="true"></i>
-                                Slots
-                            </dt>
-                            <dd class="mt-2 text-sm font-bold text-slate-900">{{ programSlotLabel(selectedPreviewScholarship) }}</dd>
-                        </div>
-                    </dl>
-
-                    <section class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-                        <div class="grid sm:grid-cols-2 sm:divide-x sm:divide-slate-200">
-                            <div class="p-4">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Program overview</p>
-                                <p class="mt-2 text-sm leading-6 text-slate-600">
-                                    {{ selectedPreviewScholarship.description || 'No program description has been added yet.' }}
-                                </p>
-                            </div>
-                            <div class="border-t border-slate-200 bg-amber-50/60 p-4 sm:border-t-0">
-                                <p class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-800">
-                                    <i class="fa-solid fa-gift" aria-hidden="true"></i>
-                                    Benefits
-                                </p>
-                                <p class="mt-2 text-sm font-semibold leading-6 text-slate-900">
-                                    {{ selectedPreviewScholarship.benefit_summary || 'No benefit summary has been added yet.' }}
-                                </p>
-                            </div>
-                        </div>
-                        <div class="flex items-start gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-600">
-                            <i class="fa-solid fa-location-dot mt-0.5 text-amber-700" aria-hidden="true"></i>
-                            <div>
-                                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Program location</p>
-                                <p class="mt-0.5 font-semibold text-slate-800">
-                                    {{ selectedPreviewScholarship.location_name || selectedPreviewScholarship.location_address || 'Not listed' }}
-                                </p>
-                            </div>
-                        </div>
-                    </section>
-                </div>
-
-                <div class="grid grid-cols-2 gap-2 border-t border-slate-200 bg-white p-4 sm:flex sm:justify-end sm:px-5">
-                        <button
-                            v-if="hasScholarshipMapPreview(selectedPreviewScholarship)"
-                            type="button"
-                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                            @click="openMapModal(selectedPreviewScholarship)"
-                        >
-                            <i class="fa-solid fa-location-dot mr-1.5" aria-hidden="true"></i>
-                            Map
-                        </button>
-                        <button
-                            v-if="canManagePrograms"
-                            type="button"
-                            :disabled="duplicatingId === selectedPreviewScholarship.id"
-                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                            @click="duplicateProgram(selectedPreviewScholarship)"
-                        >
-                            <i v-if="duplicatingId !== selectedPreviewScholarship.id" class="fa-regular fa-copy mr-1.5" aria-hidden="true"></i>
-                            {{ duplicatingId === selectedPreviewScholarship.id ? 'Duplicating...' : 'Duplicate' }}
-                        </button>
-                        <a
-                            v-if="canManagePrograms"
-                            :href="`/provider/programs/${selectedPreviewScholarship.id}/edit`"
-                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                        >
-                            <i class="fa-solid fa-pen mr-1.5" aria-hidden="true"></i>
-                            Edit program
-                        </a>
-                        <a
-                            v-if="canReviewApplications"
-                            :href="`/provider/programs/${selectedPreviewScholarship.id}/applications`"
-                            class="rounded-md bg-slate-900 px-3 py-2 text-center text-xs font-bold text-white transition hover:bg-slate-800"
-                        >
-                            <i class="fa-solid fa-users mr-1.5" aria-hidden="true"></i>
-                            Applicants
-                        </a>
-                </div>
-            </section>
-        </div>
-
-        <div
-            v-if="selectedMapScholarship"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6"
-            @click.self="closeMapModal"
-        >
-            <section class="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl">
-                <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
-                            Provider Map Preview
-                        </p>
-                        <h3 class="mt-1 text-xl font-bold text-slate-950">
-                            {{ selectedMapScholarship.location_name || selectedMapScholarship.title }}
-                        </h3>
-                        <p class="mt-1 text-sm leading-6 text-slate-600">
-                            {{ selectedMapScholarship.location_address || 'No map address added yet.' }}
-                        </p>
-                    </div>
-
-                    <button
-                        type="button"
-                        class="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                        @click="closeMapModal"
-                    >
-                        Close
-                    </button>
-                </div>
-
-                <div class="bg-slate-100 p-4">
-                    <LeafletMapPreview
-                        :address="selectedMapAddress"
-                        :latitude="selectedMapScholarship.latitude"
-                        :longitude="selectedMapScholarship.longitude"
-                        :title="selectedMapScholarship.location_name || selectedMapScholarship.title"
-                        :marker-text="selectedMapScholarship.location_name || selectedMapScholarship.title"
-                        height="55vh"
-                        auto-geocode
-                    />
-                </div>
-
-                <div class="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p class="text-xs leading-5 text-slate-500">
-                        This Leaflet/OpenStreetMap preview is similar to what students will see when browsing scholarship locations.
-                    </p>
-                    <a
-                        v-if="selectedMapScholarship.map_url"
-                        :href="selectedMapScholarship.map_url"
-                        target="_blank"
-                        rel="noreferrer"
-                        class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                    >
-                        Open Full Map
-                    </a>
-                </div>
-            </section>
-        </div>
     </main>
 </template>

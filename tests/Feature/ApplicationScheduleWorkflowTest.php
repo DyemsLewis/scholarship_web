@@ -134,6 +134,46 @@ class ApplicationScheduleWorkflowTest extends TestCase
             ->assertJsonPath('participant_count', 0);
     }
 
+    public function test_archiving_a_program_activity_makes_affected_applicant_schedules_ready_for_results(): void
+    {
+        [$provider, , $application, $scholarship] = $this->applicationAt('exam');
+        $application->forceFill([
+            'workflow_version' => 2,
+            'application_state' => 'under_review',
+            'workflow_stage' => 'exam',
+        ])->save();
+        $event = ScholarshipEvent::create([
+            'scholarship_id' => $scholarship->id,
+            'type' => 'exam',
+            'title' => 'Completed exam',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'venue' => 'Provider office',
+            'instructions' => 'Bring a school ID.',
+            'status' => 'scheduled',
+            'created_by' => $provider->id,
+        ]);
+        $schedule = ApplicationSchedule::create([
+            'scholarship_application_id' => $application->id,
+            'type' => 'exam',
+            'title' => 'Completed exam',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'venue' => 'Provider office',
+            'status' => 'scheduled',
+            'created_by' => $provider->id,
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$event->id}/complete")
+            ->assertOk()
+            ->assertJsonPath('participant_count', 1);
+
+        $this->assertSame('completed', $schedule->fresh()->status);
+        $this->assertNotNull($schedule->fresh()->completed_at);
+        $this->assertSame('exam', $application->fresh()->workflow_stage);
+    }
+
     public function test_only_exam_and_interview_can_be_published_as_schedules(): void
     {
         [$provider, , $application, $scholarship] = $this->applicationAt('exam');

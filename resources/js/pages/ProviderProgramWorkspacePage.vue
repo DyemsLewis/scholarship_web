@@ -3,7 +3,6 @@ import { computed, nextTick, onMounted, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
-import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { labelFromKey } from '../support/display';
@@ -75,6 +74,132 @@ const slotUsagePercent = computed(() => {
 const locationLabel = computed(() => scholarship.value?.location_name
     || scholarship.value?.location_address
     || 'Location not listed');
+const workflowCounts = computed(() => scholarship.value?.workflow_counts ?? {});
+const activityStatuses = computed(() => scholarship.value?.activity_statuses ?? []);
+const applicantWorkspaceUrl = computed(() => `/provider/programs/${scholarshipId}/applications`);
+const workflowQueues = computed(() => [
+    {
+        key: 'needs_review',
+        label: 'Needs review',
+        description: 'Check profile, eligibility, and files.',
+        icon: 'fa-solid fa-file-circle-check',
+        count: Number(workflowCounts.value.needs_review ?? 0),
+        href: `${applicantWorkspaceUrl.value}?filter=needs_review`,
+    },
+    {
+        key: 'waiting_activity',
+        label: 'Waiting for activity',
+        description: 'Exam or interview is pending.',
+        icon: 'fa-solid fa-calendar-clock',
+        count: Number(workflowCounts.value.waiting_activity ?? 0),
+        href: `${applicantWorkspaceUrl.value}?filter=waiting_activity&workspace=schedule`,
+    },
+    {
+        key: 'ready_result',
+        label: 'Ready for result',
+        description: 'Record the completed stage result.',
+        icon: 'fa-solid fa-clipboard-check',
+        count: Number(workflowCounts.value.ready_result ?? 0),
+        href: `${applicantWorkspaceUrl.value}?filter=ready_result`,
+    },
+    {
+        key: 'final_decision',
+        label: 'Final decision',
+        description: 'Select, waitlist, or decline.',
+        icon: 'fa-solid fa-gavel',
+        count: Number(workflowCounts.value.final_decision ?? 0),
+        href: `${applicantWorkspaceUrl.value}?filter=final_decision`,
+    },
+]);
+const openTaskCount = computed(() => workflowQueues.value.reduce((total, queue) => total + queue.count, 0));
+const recommendedAction = computed(() => {
+    const program = scholarship.value;
+
+    if (!program) return null;
+
+    if (['draft', 'rejected'].includes(program.status)) {
+        return {
+            eyebrow: program.status === 'rejected' ? 'Changes required' : 'Finish setup',
+            title: program.status === 'rejected' ? 'Update and resubmit this program' : 'Complete the program details',
+            description: statusGuidance(program.status),
+            label: 'Open program setup',
+            href: `/provider/programs/${program.id}/edit`,
+        };
+    }
+
+    if (program.status === 'pending_review') {
+        return {
+            eyebrow: 'Admin review',
+            title: 'Program submission is being reviewed',
+            description: statusGuidance(program.status),
+            label: 'View all programs',
+            href: '/provider/programs?status=pending_review',
+        };
+    }
+
+    if (!canAccessApplicantWorkspace.value) {
+        return !providerIsApproved.value
+            ? {
+                eyebrow: 'Provider verification',
+                title: 'Complete organization verification',
+                description: 'Applicant records become available after the provider account is approved.',
+                label: 'View verification',
+                href: '/provider/profile#verification-documents',
+            }
+            : {
+                eyebrow: 'Program status',
+                title: 'Applicant review is assigned to another team role',
+                description: 'You can still maintain the program details available to your role.',
+                label: canManagePrograms.value ? 'Open program setup' : 'View all programs',
+                href: canManagePrograms.value ? `/provider/programs/${program.id}/edit` : '/provider/programs',
+            };
+    }
+
+    const reviewQueue = workflowQueues.value.find((queue) => queue.key === 'needs_review' && queue.count > 0);
+    if (reviewQueue) {
+        return { eyebrow: 'Recommended next', title: `Review ${reviewQueue.count} applicant${reviewQueue.count === 1 ? '' : 's'}`, description: reviewQueue.description, label: 'Start reviewing', href: reviewQueue.href };
+    }
+
+    const missingActivity = activityStatuses.value.find((activity) => (
+        Number(activity.waiting_applicants ?? 0) > 0 && activity.event?.status !== 'scheduled'
+    ));
+    if (missingActivity) {
+        return {
+            eyebrow: 'Schedule needed',
+            title: `Publish the ${String(missingActivity.label).toLowerCase()} details`,
+            description: `${missingActivity.waiting_applicants} applicant${missingActivity.waiting_applicants === 1 ? '' : 's'} reached this stage and need the shared activity information.`,
+            label: 'Set activity',
+            href: `${applicantWorkspaceUrl.value}?workspace=schedule&filter=waiting_activity`,
+        };
+    }
+
+    const resultQueue = workflowQueues.value.find((queue) => queue.key === 'ready_result' && queue.count > 0);
+    if (resultQueue) {
+        return { eyebrow: 'Recommended next', title: `Record ${resultQueue.count} stage result${resultQueue.count === 1 ? '' : 's'}`, description: resultQueue.description, label: 'Review results', href: resultQueue.href };
+    }
+
+    const decisionQueue = workflowQueues.value.find((queue) => queue.key === 'final_decision' && queue.count > 0);
+    if (decisionQueue) {
+        return { eyebrow: 'Recommended next', title: `Complete ${decisionQueue.count} final decision${decisionQueue.count === 1 ? '' : 's'}`, description: decisionQueue.description, label: 'Record decisions', href: decisionQueue.href };
+    }
+
+    const waitingQueue = workflowQueues.value.find((queue) => queue.key === 'waiting_activity' && queue.count > 0);
+    if (waitingQueue) {
+        return { eyebrow: 'Activity in progress', title: `${waitingQueue.count} applicant${waitingQueue.count === 1 ? '' : 's'} waiting for an activity`, description: 'The shared schedule is published. Return after the activity to record results.', label: 'View activities', href: waitingQueue.href };
+    }
+
+    if (Number(workflowCounts.value.all ?? 0) > 0) {
+        return { eyebrow: 'Program records', title: 'No applicant action is due', description: 'Review completed and active records whenever you need them.', label: 'View all records', href: `${applicantWorkspaceUrl.value}?filter=all` };
+    }
+
+    return {
+        eyebrow: 'Program is ready',
+        title: 'Waiting for the first applicant',
+        description: statusGuidance(program.status),
+        label: canManagePrograms.value ? 'Review public details' : 'View program status',
+        href: canManagePrograms.value ? `/provider/programs/${program.id}/edit` : '/provider/programs',
+    };
+});
 
 function statusLabel(status) {
     return {
@@ -128,6 +253,20 @@ function targetLabel(program) {
 
     return levels.slice(0, 2).map(labelFromKey).join(', ')
         + (levels.length > 2 ? ` +${levels.length - 2}` : '');
+}
+
+function activityState(activity) {
+    if (!activity.event) return 'Not scheduled';
+    if (activity.event.status === 'completed') return 'Completed';
+
+    return activity.event.scheduled_label || 'Scheduled';
+}
+
+function activityStateClass(activity) {
+    if (!activity.event) return 'bg-amber-100 text-amber-800';
+    if (activity.event.status === 'completed') return 'bg-emerald-100 text-emerald-800';
+
+    return 'bg-sky-100 text-sky-800';
 }
 
 async function loadProgram() {
@@ -222,8 +361,6 @@ onMounted(loadProgram);
                     <span class="truncate font-semibold text-slate-950">{{ scholarship?.title || 'Program workspace' }}</span>
                 </nav>
 
-                <ProviderProgramNav :program-id="scholarshipId" :can-manage="canManagePrograms" />
-
                 <div v-if="isLoading" class="mt-5 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading program workspace...
                 </div>
@@ -233,17 +370,17 @@ onMounted(loadProgram);
 
                 <template v-else-if="scholarship">
                     <section class="provider-panel mt-5 overflow-hidden">
-                        <header class="relative overflow-hidden bg-[#081426] px-5 py-6 text-white sm:px-7">
+                        <header class="relative overflow-hidden bg-[#081426] px-5 py-5 text-white sm:px-6">
                             <div class="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border-[42px] border-amber-300/10"></div>
-                            <div class="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div class="flex min-w-0 items-center gap-4">
-                                    <img :src="scholarship.image_url" :alt="scholarship.title" class="h-16 w-16 shrink-0 rounded-md bg-white object-contain p-2 shadow-sm ring-1 ring-white/20">
+                                    <img :src="scholarship.image_url" :alt="scholarship.title" class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-2 shadow-sm ring-1 ring-white/20">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Program workspace</p>
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Program control center</p>
                                             <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', statusClass(scholarship.status)]">{{ statusLabel(scholarship.status) }}</span>
                                         </div>
-                                        <h1 class="mt-2 font-display text-2xl font-bold leading-tight sm:text-3xl">{{ scholarship.title }}</h1>
+                                        <h1 class="mt-1.5 font-display text-2xl font-bold leading-tight sm:text-3xl">{{ scholarship.title }}</h1>
                                         <p class="mt-1 text-sm font-semibold text-slate-300">{{ scholarship.category || 'Scholarship program' }} · {{ targetLabel(scholarship) }}</p>
                                     </div>
                                 </div>
@@ -254,76 +391,127 @@ onMounted(loadProgram);
                             </div>
                         </header>
 
-                        <dl class="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 lg:grid-cols-4">
+                        <dl class="grid grid-cols-2 gap-px bg-slate-200 lg:grid-cols-4">
                             <div class="bg-white px-5 py-4">
                                 <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i class="fa-regular fa-calendar text-amber-700" aria-hidden="true"></i>Deadline</dt>
                                 <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ dateLabel(scholarship.deadline) }}</dd>
                             </div>
                             <div class="bg-white px-5 py-4">
-                                <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i class="fa-solid fa-users text-amber-700" aria-hidden="true"></i>Applicants</dt>
-                                <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ scholarship.applications_count ?? 0 }} total</dd>
+                                <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i :class="[canAccessApplicantWorkspace ? 'fa-solid fa-users' : 'fa-solid fa-eye', 'text-amber-700']" aria-hidden="true"></i>{{ canAccessApplicantWorkspace ? 'Applicants' : 'Visibility' }}</dt>
+                                <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ canAccessApplicantWorkspace ? `${scholarship.applications_count ?? 0} total` : statusLabel(scholarship.status) }}</dd>
                             </div>
                             <div class="bg-white px-5 py-4">
-                                <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i class="fa-solid fa-inbox text-amber-700" aria-hidden="true"></i>Needs review</dt>
-                                <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ scholarship.pending_review_applications_count ?? 0 }} waiting</dd>
+                                <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i :class="[canAccessApplicantWorkspace ? 'fa-solid fa-list-check' : 'fa-solid fa-user-lock', 'text-amber-700']" aria-hidden="true"></i>{{ canAccessApplicantWorkspace ? 'Open tasks' : 'Your access' }}</dt>
+                                <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ canAccessApplicantWorkspace ? `${openTaskCount} applicant actions` : (canManagePrograms ? 'Program setup' : 'View program') }}</dd>
                             </div>
                             <div class="bg-white px-5 py-4">
-                                <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i class="fa-solid fa-user-check text-amber-700" aria-hidden="true"></i>Selected</dt>
-                                <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ selectedCount }}{{ slotCapacity > 0 ? ` of ${slotCapacity}` : '' }}</dd>
-                                <div v-if="slotCapacity > 0" class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-amber-400" :style="{ width: `${slotUsagePercent}%` }"></div></div>
+                                <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i :class="[canAccessApplicantWorkspace ? 'fa-solid fa-user-check' : 'fa-regular fa-clock', 'text-amber-700']" aria-hidden="true"></i>{{ canAccessApplicantWorkspace ? 'Selected' : 'Updated' }}</dt>
+                                <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ canAccessApplicantWorkspace ? `${selectedCount}${slotCapacity > 0 ? ` of ${slotCapacity}` : ''}` : (scholarship.updated_at || 'Recently') }}</dd>
+                                <div v-if="canAccessApplicantWorkspace && slotCapacity > 0" class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-amber-400" :style="{ width: `${slotUsagePercent}%` }"></div></div>
                             </div>
                         </dl>
+                    </section>
 
-                        <div class="flex flex-col gap-3 border-b border-amber-200 bg-amber-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                            <div class="flex min-w-0 items-start gap-3">
-                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900"><i class="fa-solid fa-arrow-right text-sm" aria-hidden="true"></i></span>
-                                <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-800">What happens next</p>
-                                    <p class="mt-1 text-sm font-semibold leading-6 text-slate-800">{{ statusGuidance(scholarship.status) }}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <section class="flex flex-col gap-4 border-b border-slate-200 bg-slate-50 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="flex min-w-0 items-start gap-3">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white text-amber-700 ring-1 ring-slate-200"><i class="fa-solid fa-users-viewfinder" aria-hidden="true"></i></span>
-                                <div>
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <h2 class="text-lg font-bold text-slate-950">Applicant workspace</h2>
-                                        <span class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{{ scholarship.pending_review_applications_count ?? 0 }} waiting</span>
+                    <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+                        <section v-if="recommendedAction" class="overflow-hidden rounded-lg border border-amber-200 bg-amber-50 shadow-sm">
+                            <div class="flex h-full flex-col justify-between gap-5 p-5 sm:flex-row sm:items-center">
+                                <div class="flex min-w-0 items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+                                    <div>
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-800">{{ recommendedAction.eyebrow }}</p>
+                                        <h2 class="mt-1 text-lg font-bold text-slate-950">{{ recommendedAction.title }}</h2>
+                                        <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{{ recommendedAction.description }}</p>
                                     </div>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">Review profiles, files, decisions, and schedules for this program.</p>
-                                    <div v-if="!providerIsApproved" class="mt-2 text-xs font-semibold text-amber-800">
-                                        Provider verification is required before applicant records become available.
-                                        <a href="/provider/profile#verification-documents" class="ml-1 font-bold text-slate-900 hover:underline">View verification</a>
-                                    </div>
-                                    <p v-else-if="!canAccessApplicantWorkspace" class="mt-2 text-xs font-semibold text-slate-500">Your account does not have applicant review permission.</p>
                                 </div>
+                                <a :href="recommendedAction.href" class="inline-flex w-fit shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
+                                    {{ recommendedAction.label }}
+                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                </a>
                             </div>
-                            <a v-if="canAccessApplicantWorkspace" :href="`/provider/programs/${scholarship.id}/applications`" class="inline-flex w-fit shrink-0 items-center gap-3 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
-                                Open applicant workspace
-                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                            </a>
                         </section>
 
-                        <div class="grid md:grid-cols-2">
-                            <section class="px-5 py-5 sm:px-6 md:border-r md:border-slate-200">
-                                <div class="flex items-center gap-2">
-                                    <i class="fa-solid fa-align-left text-sm text-amber-700" aria-hidden="true"></i>
-                                    <h2 class="text-base font-bold text-slate-950">About the program</h2>
-                                </div>
-                                <p class="mt-3 text-sm leading-6 text-slate-600">{{ scholarship.description || 'No description has been added.' }}</p>
-                            </section>
-                            <section class="border-t border-slate-200 px-5 py-5 sm:px-6 md:border-t-0">
-                                <div class="flex items-center gap-2">
-                                    <i class="fa-solid fa-gift text-sm text-amber-700" aria-hidden="true"></i>
-                                    <h2 class="text-base font-bold text-slate-950">Support package</h2>
-                                </div>
-                                <p class="mt-3 text-sm font-semibold leading-6 text-slate-700">{{ scholarship.benefit_summary || 'No benefit summary has been added.' }}</p>
-                            </section>
-                        </div>
+                        <section class="provider-panel p-5">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Quick actions</p>
+                            <div class="mt-3 grid gap-2">
+                                <a v-if="canAccessApplicantWorkspace" :href="`${applicantWorkspaceUrl}?filter=all`" class="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-400 hover:bg-white">
+                                    All applicant records <i class="fa-solid fa-arrow-right text-xs text-slate-400" aria-hidden="true"></i>
+                                </a>
+                                <a href="#announcements" class="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-400 hover:bg-white">
+                                    Applicant updates <i class="fa-solid fa-bullhorn text-xs text-slate-400" aria-hidden="true"></i>
+                                </a>
+                                <button v-if="canManagePrograms" type="button" :disabled="isDuplicating" class="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-sm font-bold text-slate-800 transition hover:border-slate-400 hover:bg-white disabled:opacity-60" @click="duplicateProgram">
+                                    {{ isDuplicating ? 'Duplicating...' : 'Duplicate as draft' }} <i class="fa-regular fa-copy text-xs text-slate-400" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </section>
+                    </div>
 
-                        <div v-if="hasMap || canManagePrograms" class="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                    <section v-if="canAccessApplicantWorkspace || !providerIsApproved" class="provider-panel mt-4 overflow-hidden">
+                        <header class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant workflow</p>
+                                <h2 class="mt-1 text-xl font-bold text-slate-950">Work by next action</h2>
+                                <p class="mt-1 text-sm text-slate-600">Open only the applicants who need the same task.</p>
+                            </div>
+                            <a v-if="canAccessApplicantWorkspace" :href="`${applicantWorkspaceUrl}?filter=all`" class="text-xs font-bold text-slate-600 transition hover:text-slate-950">View all records <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i></a>
+                        </header>
+
+                        <div v-if="canAccessApplicantWorkspace" class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+                            <a v-for="queue in workflowQueues" :key="queue.key" :href="queue.href" class="group flex min-h-32 flex-col bg-white p-4 transition hover:bg-slate-50">
+                                <span class="flex items-start justify-between gap-3">
+                                    <span class="grid h-9 w-9 place-items-center rounded-md bg-slate-100 text-slate-700"><i :class="queue.icon" aria-hidden="true"></i></span>
+                                    <span :class="['rounded-md px-2.5 py-1 text-sm font-bold', queue.count > 0 ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-500']">{{ queue.count }}</span>
+                                </span>
+                                <span class="mt-3 text-sm font-bold text-slate-950">{{ queue.label }}</span>
+                                <span class="mt-1 text-xs leading-5 text-slate-500">{{ queue.description }}</span>
+                                <span class="mt-auto pt-3 text-xs font-bold text-slate-700 group-hover:text-slate-950">Open queue <i class="fa-solid fa-arrow-right ml-1 text-[10px]" aria-hidden="true"></i></span>
+                            </a>
+                        </div>
+                        <div v-else class="px-5 py-5 text-sm text-slate-600 sm:px-6">
+                            <p v-if="!providerIsApproved" class="font-semibold text-amber-800">Provider verification is required before applicant records become available. <a href="/provider/profile#verification-documents" class="font-bold text-slate-900 hover:underline">View verification</a></p>
+                        </div>
+                    </section>
+
+                    <section v-if="canAccessApplicantWorkspace && activityStatuses.length" class="provider-panel mt-4 overflow-hidden">
+                        <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program activities</p>
+                            <h2 class="mt-1 text-xl font-bold text-slate-950">Exam and interview status</h2>
+                            <p class="mt-1 text-sm text-slate-600">Publish one shared schedule, complete the activity, then record individual results.</p>
+                        </header>
+                        <div class="divide-y divide-slate-200">
+                            <article v-for="activity in activityStatuses" :key="activity.type" class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                <div class="flex min-w-0 items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i :class="activity.type === 'exam' ? 'fa-solid fa-clipboard-question' : 'fa-solid fa-comments'" aria-hidden="true"></i></span>
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h3 class="font-bold text-slate-950">{{ activity.label }}</h3>
+                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', activityStateClass(activity)]">{{ activityState(activity) }}</span>
+                                        </div>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                                            {{ activity.active_applicants }} currently at this stage
+                                            <span v-if="activity.waiting_applicants"> · {{ activity.waiting_applicants }} waiting for completion</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                <a v-if="canAccessApplicantWorkspace" :href="`${applicantWorkspaceUrl}?workspace=schedule&filter=waiting_activity`" class="inline-flex w-fit shrink-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Manage activity <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
+                            </article>
+                        </div>
+                    </section>
+
+                    <section class="provider-panel mt-4 overflow-hidden">
+                        <div class="grid md:grid-cols-2">
+                            <div class="px-5 py-5 sm:px-6 md:border-r md:border-slate-200">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Program summary</p>
+                                <h2 class="mt-1 text-base font-bold text-slate-950">About the program</h2>
+                                <p class="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">{{ scholarship.description || 'No description has been added.' }}</p>
+                            </div>
+                            <div class="border-t border-slate-200 px-5 py-5 sm:px-6 md:border-l-0 md:border-t-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Applicant support</p>
+                                <h2 class="mt-1 text-base font-bold text-slate-950">Support package</h2>
+                                <p class="mt-2 line-clamp-3 text-sm font-semibold leading-6 text-slate-700">{{ scholarship.benefit_summary || 'No benefit summary has been added.' }}</p>
+                            </div>
+                        </div>
+                        <div v-if="hasMap" class="border-t border-slate-200 px-5 py-4 sm:px-6">
                             <button v-if="hasMap" type="button" class="flex min-w-0 items-center gap-3 text-left" @click="showMap = true">
                                 <i class="fa-solid fa-location-dot shrink-0 text-amber-700" aria-hidden="true"></i>
                                 <span class="min-w-0">
@@ -331,10 +519,6 @@ onMounted(loadProgram);
                                     <span class="mt-0.5 block truncate text-sm font-bold text-slate-900">{{ locationLabel }}</span>
                                 </span>
                                 <span class="hidden text-xs font-bold text-slate-500 sm:inline">View map <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i></span>
-                            </button>
-                            <button v-if="canManagePrograms" type="button" :disabled="isDuplicating" class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" @click="duplicateProgram">
-                                <i class="fa-regular fa-copy text-amber-700" aria-hidden="true"></i>
-                                {{ isDuplicating ? 'Duplicating...' : 'Duplicate as draft' }}
                             </button>
                         </div>
                     </section>

@@ -43,12 +43,23 @@ class FocusedDashboardPayloadTest extends TestCase
         $dashboard = $this->actingAs($provider)
             ->getJson('/provider/dashboard/data')
             ->assertOk()
-            ->assertJsonStructure(['user', 'scholarships', 'review_queue'])
+            ->assertJsonStructure([
+                'user',
+                'scholarships',
+                'application_workflow_counts' => [
+                    'needs_review',
+                    'waiting_activity',
+                    'ready_result',
+                    'final_decision',
+                    'all',
+                ],
+            ])
             ->json();
 
         $this->assertArrayNotHasKey('stats', $dashboard);
         $this->assertArrayNotHasKey('notifications', $dashboard);
         $this->assertArrayNotHasKey('verification_documents', $dashboard);
+        $this->assertArrayNotHasKey('review_queue', $dashboard);
 
         $profile = $this->actingAs($provider)
             ->getJson('/provider/profile/data')

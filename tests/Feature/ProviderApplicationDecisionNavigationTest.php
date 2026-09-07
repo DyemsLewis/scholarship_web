@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Services\ApplicationWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -65,13 +66,75 @@ class ProviderApplicationDecisionNavigationTest extends TestCase
             ->assertJsonPath('application_navigation.next_application.url', "/provider/applications/{$older->id}");
     }
 
-    private function program(User $provider, string $title): Scholarship
+    public function test_stage_result_continues_with_applicants_at_the_same_stage_before_the_next_process(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $program = $this->program(
+            $provider,
+            'Stage-aware program',
+            ['screening', 'exam', 'formal_application', 'decision'],
+        );
+        $current = $this->application($program, 'submitted', now()->subMinutes(3));
+        $next = $this->application($program, 'submitted', now()->subMinutes(2));
+        $laterStage = $this->application($program, 'submitted', now()->subMinute());
+        $workflow = app(ApplicationWorkflowService::class);
+
+        $current = $workflow->start($current);
+        $next = $workflow->start($next);
+        $laterStage = $workflow->start($laterStage);
+        $laterStage = $workflow->recordStageResult($laterStage, 'screening', 'passed', $provider);
+        $laterStage->update(['status' => 'shortlisted']);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$current->id}/stages/screening/result", [
+                'result' => 'passed',
+                'notes' => 'Ready for the provider-managed exam.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.workflow.current_stage', 'exam')
+            ->assertJsonPath('review_navigation.stage', 'screening')
+            ->assertJsonPath('review_navigation.stage_label', 'screening')
+            ->assertJsonPath('review_navigation.remaining_count', 1)
+            ->assertJsonPath('review_navigation.next_application.id', $next->id);
+    }
+
+    public function test_exam_result_continues_with_the_next_applicant_waiting_for_exam_review(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $program = $this->program(
+            $provider,
+            'Exam review program',
+            ['screening', 'exam', 'formal_application', 'decision'],
+        );
+        $current = $this->application($program, 'submitted', now()->subMinutes(2));
+        $next = $this->application($program, 'submitted', now()->subMinute());
+        $workflow = app(ApplicationWorkflowService::class);
+
+        $current = $workflow->recordStageResult($workflow->start($current), 'screening', 'passed', $provider);
+        $next = $workflow->recordStageResult($workflow->start($next), 'screening', 'passed', $provider);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$current->id}/stages/exam/result", [
+                'result' => 'passed',
+                'notes' => 'Provider exam result recorded.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('review_navigation.stage', 'exam')
+            ->assertJsonPath('review_navigation.remaining_count', 1)
+            ->assertJsonPath('review_navigation.next_application.id', $next->id);
+    }
+
+    private function program(
+        User $provider,
+        string $title,
+        array $selectionStages = ['screening', 'distribution'],
+    ): Scholarship
     {
         return Scholarship::create([
             'provider_id' => $provider->id,
             'title' => $title,
             'description' => 'Program used to test the provider review continuation flow.',
-            'selection_stages' => ['screening', 'distribution'],
+            'selection_stages' => $selectionStages,
             'status' => 'published',
         ]);
     }
