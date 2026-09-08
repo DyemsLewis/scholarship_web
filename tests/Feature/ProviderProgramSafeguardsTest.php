@@ -63,6 +63,42 @@ class ProviderProgramSafeguardsTest extends TestCase
         ]);
     }
 
+    public function test_provider_can_save_structured_eligibility_conditions(): void
+    {
+        $provider = $this->verifiedProvider();
+        $conditions = [
+            [
+                'key' => 'currently_enrolled',
+                'label' => 'Currently enrolled',
+                'statement' => 'Currently enrolled in a recognized learning program.',
+                'verification_type' => 'automatic',
+                'source' => 'structured_rule',
+            ],
+            [
+                'key' => 'custom_1',
+                'label' => 'Additional condition',
+                'statement' => 'Must not hold another active scholarship.',
+                'verification_type' => 'applicant_declaration',
+                'source' => 'provider_condition',
+            ],
+        ];
+
+        $response = $this->actingAs($provider)
+            ->postJson('/provider/scholarships', [
+                'title' => 'Structured Eligibility Draft',
+                'eligibility' => collect($conditions)->pluck('statement')->implode("\n"),
+                'eligibility_conditions' => json_encode($conditions),
+                'status' => 'draft',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('scholarship.eligibility_conditions.0.verification_type', 'automatic')
+            ->assertJsonPath('scholarship.eligibility_conditions.1.verification_type', 'applicant_declaration');
+
+        $scholarship = Scholarship::findOrFail($response->json('scholarship.id'));
+
+        $this->assertSame('Must not hold another active scholarship.', $scholarship->eligibility_conditions[1]['statement']);
+    }
+
     public function test_incomplete_program_cannot_be_submitted_for_review(): void
     {
         $provider = $this->verifiedProvider();
@@ -90,7 +126,107 @@ class ProviderProgramSafeguardsTest extends TestCase
 
         $this->assertDatabaseMissing('scholarships', [
             'title' => 'Incomplete Program',
-        ]);
+            ]);
+    }
+
+    public function test_structured_conditions_must_have_matching_rules_before_submission(): void
+    {
+        $provider = $this->verifiedProvider();
+        $conditions = [
+            [
+                'key' => 'academic_performance',
+                'label' => 'Academic requirement',
+                'statement' => 'Meets the academic requirement.',
+                'verification_type' => 'automatic',
+                'source' => 'structured_rule',
+            ],
+            [
+                'key' => 'financial_need',
+                'label' => 'Financial need',
+                'statement' => 'Meets the household-income requirement.',
+                'verification_type' => 'automatic',
+                'source' => 'structured_rule',
+            ],
+            [
+                'key' => 'location_coverage',
+                'label' => 'Location coverage',
+                'statement' => 'Lives or studies in the covered location.',
+                'verification_type' => 'automatic',
+                'source' => 'structured_rule',
+            ],
+        ];
+
+        $this->actingAs($provider)
+            ->postJson('/provider/scholarships', $this->completeSubmissionPayload([
+                'eligibility_conditions' => json_encode($conditions),
+                'minimum_grade_scale' => null,
+                'minimum_gwa' => null,
+                'income_requirement' => 'Any',
+                'eligible_locations' => 'Nationwide',
+            ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'minimum_grade_scale',
+                'income_requirement',
+                'eligible_locations',
+            ]);
+    }
+
+    public function test_open_to_all_cannot_be_combined_with_restrictive_conditions(): void
+    {
+        $provider = $this->verifiedProvider();
+        $conditions = [
+            [
+                'key' => 'open_to_all',
+                'label' => 'Open to all learners',
+                'statement' => 'Open to all learners.',
+                'verification_type' => 'information',
+                'source' => 'structured_rule',
+            ],
+            [
+                'key' => 'learner_group',
+                'label' => 'Target learner group',
+                'statement' => 'Meets the target learner group.',
+                'verification_type' => 'automatic',
+                'source' => 'structured_rule',
+            ],
+        ];
+
+        $this->actingAs($provider)
+            ->postJson('/provider/scholarships', $this->completeSubmissionPayload([
+                'eligibility_conditions' => json_encode($conditions),
+            ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('eligibility_conditions');
+
+        $this->actingAs($provider)
+            ->postJson('/provider/scholarships', $this->completeSubmissionPayload([
+                'title' => 'Contradictory Open Program',
+                'eligibility_conditions' => json_encode([$conditions[0]]),
+            ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('eligibility_conditions');
+    }
+
+    public function test_required_document_condition_cannot_use_profile_only_review(): void
+    {
+        $provider = $this->verifiedProvider();
+        $conditions = [[
+            'key' => 'required_documents',
+            'label' => 'Required documents',
+            'statement' => 'Can provide the required documents.',
+            'verification_type' => 'provider_verification',
+            'source' => 'structured_rule',
+        ]];
+
+        $this->actingAs($provider)
+            ->postJson('/provider/scholarships', $this->completeSubmissionPayload([
+                'eligibility_conditions' => json_encode($conditions),
+                'application_mode' => 'provider_review',
+                'requirements' => null,
+            ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('application_mode');
     }
 
     public function test_program_submission_rejects_a_past_deadline(): void

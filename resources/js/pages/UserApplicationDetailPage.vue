@@ -1,8 +1,10 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
+import ApplicantNextActionPanel from '../components/ApplicantNextActionPanel.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
@@ -110,6 +112,7 @@ const applicationFileRows = computed(() => {
     return rows;
 });
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
+const eligibilityConditionResults = computed(() => application.value?.eligibility_breakdown?.condition_results ?? []);
 const dssDecisionNotice = computed(() => application.value?.dss_breakdown?.decision_notice ?? 'This score supports screening only. The scholarship provider makes the final decision.');
 const rubricReview = computed(() => application.value?.rubric_review ?? null);
 const rubricCriteria = computed(() => rubricReview.value?.criteria ?? []);
@@ -760,32 +763,23 @@ onMounted(loadApplication);
                         </dl>
                     </section>
 
-                    <section class="student-card flex flex-col gap-4 border-l-4 border-l-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                        <div class="flex items-start gap-3">
-                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
-                                <i :class="applicationIsClosed ? 'fa-solid fa-flag-checkered' : 'fa-solid fa-arrow-right'" aria-hidden="true"></i>
-                            </span>
-                            <div class="min-w-0">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <p class="student-kicker">{{ applicationIsClosed ? 'Final update' : 'What happens next' }}</p>
-                                    <span class="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">{{ applicantNextActor }}</span>
-                                </div>
-                                <h3 class="mt-1 text-base font-bold leading-6 text-slate-950">{{ applicantNextStep }}</h3>
-                                <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ applicantNextDescription }}</p>
-                            </div>
-                        </div>
-                        <button
-                            v-if="nextActionButton"
-                            type="button"
-                            class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                            @click="followNextAction"
-                        >
-                            {{ nextActionButton.label }}
-                        </button>
-                        <span v-else class="w-fit shrink-0 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                            {{ applicationIsClosed ? 'Process complete' : 'No action needed now' }}
-                        </span>
-                    </section>
+                    <ApplicantNextActionPanel
+                        :actor="applicantNextActor"
+                        :title="applicantNextStep"
+                        :description="applicantNextDescription"
+                        :closed="applicationIsClosed"
+                        :action-available="Boolean(nextActionButton)"
+                    >
+                        <template #action>
+                            <button
+                                type="button"
+                                class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                @click="followNextAction"
+                            >
+                                {{ nextActionButton?.label }}
+                            </button>
+                        </template>
+                    </ApplicantNextActionPanel>
 
                     <nav class="overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm" aria-label="Application details sections">
                         <div class="flex min-w-max gap-1 sm:min-w-0" role="tablist">
@@ -1317,7 +1311,7 @@ onMounted(loadApplication);
                                             <p class="text-sm font-bold text-slate-950">Eligibility checks</p>
                                             <p class="mt-1 text-xs text-slate-500">Your saved answers compared with the program rules.</p>
                                         </div>
-                                        <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', matchClass(application.eligibility_score)]">{{ application.eligibility_score ?? 0 }}% matched</span>
+                                        <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', matchClass(application.eligibility_score)]">{{ application.eligibility_score ?? 0 }}% profile match</span>
                                     </div>
                                     <div v-if="application.eligibility_breakdown?.criteria?.length" class="mt-2 divide-y divide-slate-200 border-y border-slate-200">
                                         <div v-for="criterion in application.eligibility_breakdown.criteria" :key="criterion.key" class="flex items-center justify-between gap-4 py-2.5 text-sm">
@@ -1326,6 +1320,12 @@ onMounted(loadApplication);
                                         </div>
                                     </div>
                                     <p v-else class="mt-3 text-sm leading-5 text-slate-500">{{ application.eligibility_breakdown?.summary || 'No individual eligibility checks are available.' }}</p>
+                                </div>
+
+                                <div v-if="eligibilityConditionResults.length" class="border-t border-slate-200 px-4 py-3 sm:px-5">
+                                    <p class="text-sm font-bold text-slate-950">Provider-required conditions</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">These results were saved when you submitted the application.</p>
+                                    <EligibilityConditionList class="mt-3" :conditions="eligibilityConditionResults" />
                                 </div>
 
                                 <div v-if="application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length" class="border-t border-slate-200 px-4 sm:px-5">

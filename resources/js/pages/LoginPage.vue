@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
         ]"
         panel-note="Use the same account details connected to your scholarship application to continue where you left off."
         :show-panel="false"
-        background-image="/images/scholarship-cards.jpg"
+        background-image="/images/filipino-students-studying.jpg"
     >
         <ToastMessage
             :show="toast.show"

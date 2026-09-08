@@ -49,7 +49,7 @@ async function submitForm() {
         ]"
         panel-note="Password reset links expire after one hour and should not be shared."
         :show-panel="false"
-        background-image="/images/scholarship-cards.jpg"
+        background-image="/images/filipino-students-studying.jpg"
     >
         <form ref="formElement" class="space-y-4" @submit.prevent="submitForm">
             <div>

@@ -1,8 +1,10 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
+import ApplicantNextActionPanel from '../components/ApplicantNextActionPanel.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
@@ -89,6 +91,7 @@ const selectedAlreadyApplied = computed(() => selectedScholarship.value && appli
 const allDocumentsChecked = computed(() => selectedRequirements.value.every((requirement) => documentChecklist.value.includes(requirement)));
 const canApply = computed(() => profileReadiness.value.complete);
 const selectedEligibilityBlockers = computed(() => selectedScholarship.value?.eligibility_match?.blocking_criteria ?? []);
+const selectedEligibilityConditions = computed(() => selectedScholarship.value?.eligibility_match?.condition_results ?? []);
 const selectedIsEligible = computed(() => selectedScholarship.value?.eligibility_match?.is_eligible !== false);
 const selectedCanStartApplication = computed(() => {
     if (!selectedScholarship.value) {
@@ -103,7 +106,11 @@ const selectedCanStartApplication = computed(() => {
 });
 const selectedEligibilityMessage = computed(() => {
     if (selectedIsEligible.value) {
-        return '';
+        return selectedScholarship.value?.eligibility_match?.difference_summary || '';
+    }
+
+    if (selectedScholarship.value?.eligibility_match?.difference_summary) {
+        return selectedScholarship.value.eligibility_match.difference_summary;
     }
 
     const labels = selectedEligibilityBlockers.value
@@ -156,8 +163,10 @@ const selectedEligibilityCriteria = computed(() => {
         return {
             ...rule,
             value: rule.formatted ? rule.value : eligibilityRuleLabel(rule.value, check),
+            profileValue: check?.student_value || check?.studentValue || 'Not provided',
             status: check?.status ?? 'info',
             statusLabel: eligibilityCriterionStatusLabel(check),
+            comparison: check?.comparison || check?.note || '',
         };
     });
 });
@@ -337,15 +346,43 @@ function applicationStatusLabel(application) {
 }
 
 function applicationNextAction(application) {
+    if (application?.correction_status === 'requested') {
+        return 'Update the information requested by the provider';
+    }
+
     return application?.workflow?.next_action?.label
         ?? application?.status_progress?.next_action
         ?? 'Open the application for the latest update.';
 }
 
 function applicationNextActionDetails(application) {
+    if (application?.correction_status === 'requested') {
+        return {
+            actor_label: 'You',
+            description: application?.correction_message
+                || 'Review the provider request, update the affected details or files, then send your response.',
+        };
+    }
+
     return application?.workflow?.next_action
         ?? application?.status_progress?.next_action_details
         ?? {};
+}
+
+function applicationActionLabel(application) {
+    if (application?.correction_status === 'requested') {
+        return 'Review update';
+    }
+
+    if (application?.workflow?.is_closed) {
+        return 'View outcome';
+    }
+
+    if (primarySchedule(application)?.status === 'scheduled') {
+        return 'Open schedule';
+    }
+
+    return 'Open application';
 }
 
 function statusClass(status) {
@@ -498,7 +535,7 @@ function criteriaLabel(value) {
 
 function eligibilityRuleLabel(value, criterion) {
     if (criterion?.status === 'info') {
-        return 'No restriction';
+        return 'Open to all';
     }
 
     return criteriaLabel(value);
@@ -519,7 +556,7 @@ function eligibilityCriterionStatusLabel(criterion) {
 
     return criterion?.key === 'academic' && criterion?.requirement
         ? 'Provider review'
-        : 'No restriction';
+        : 'Open to all';
 }
 
 function documentRequirements(requirements) {
@@ -954,7 +991,7 @@ watch(selectedScholarship, (scholarship) => {
                                             </div>
                                         </div>
                                         <div class="relative flex w-full shrink-0 flex-row gap-2 sm:w-auto sm:items-center">
-                                            <span :class="['rounded-md px-3 py-2 text-center text-xs font-bold ring-1', selectedIsEligible ? 'bg-emerald-400/15 text-emerald-200 ring-emerald-300/25' : 'bg-rose-400/15 text-rose-200 ring-rose-300/25']">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% match</span>
+                                            <span :class="['rounded-md px-3 py-2 text-center text-xs font-bold ring-1', selectedIsEligible ? 'bg-emerald-400/15 text-emerald-200 ring-emerald-300/25' : 'bg-rose-400/15 text-rose-200 ring-rose-300/25']">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% profile match</span>
                                             <a :href="`/dashboard/scholarships/${selectedScholarship.id}`" class="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-900 transition hover:bg-amber-100 sm:flex-none">
                                                 More details
                                                 <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
@@ -993,14 +1030,39 @@ watch(selectedScholarship, (scholarship) => {
                                         <div class="flex items-start gap-3">
                                             <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md', selectedIsEligible ? 'bg-slate-950 text-amber-300' : 'bg-rose-600 text-white']"><i :class="selectedIsEligible ? 'fa-solid fa-check' : 'fa-solid fa-exclamation'" aria-hidden="true"></i></span>
                                             <div>
-                                                <p :class="['text-xs font-bold uppercase tracking-[0.14em]', selectedIsEligible ? 'text-amber-700' : 'text-rose-700']">Your eligibility result</p>
-                                                <h3 :class="['mt-1 text-xl font-bold', selectedIsEligible ? 'text-slate-950' : 'text-rose-950']">{{ selectedIsEligible ? 'Your profile meets the listed criteria' : 'Your profile needs attention' }}</h3>
-                                                <p :class="['mt-1 text-sm leading-6', selectedIsEligible ? 'text-slate-600' : 'text-rose-800']">{{ selectedIsEligible ? (selectedScholarship.eligibility || 'Your profile meets the published eligibility rules.') : selectedEligibilityMessage }}</p>
+                                                <p :class="['text-xs font-bold uppercase tracking-[0.14em]', selectedIsEligible ? 'text-amber-700' : 'text-rose-700']">DSS profile comparison</p>
+                                                <h3 :class="['mt-1 text-xl font-bold', selectedIsEligible ? 'text-slate-950' : 'text-rose-950']">{{ selectedIsEligible ? 'Your profile matches the structured restrictions' : 'Some structured restrictions are different' }}</h3>
+                                                <p :class="['mt-1 text-sm leading-6', selectedIsEligible ? 'text-slate-600' : 'text-rose-800']">{{ selectedEligibilityMessage || selectedScholarship.eligibility || 'Your profile meets the published eligibility rules.' }}</p>
                                             </div>
                                         </div>
-                                        <span :class="['w-fit shrink-0 rounded-md px-3 py-2 text-sm font-bold', selectedIsEligible ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-800']">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% match</span>
+                                        <span :class="['w-fit shrink-0 rounded-md px-3 py-2 text-sm font-bold', selectedIsEligible ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-800']">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% profile match</span>
                                     </header>
 
+                                    <div class="border-b border-amber-200 bg-amber-50 p-4">
+                                        <div class="flex items-start gap-3">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
+                                                <i class="fa-solid fa-file-circle-check" aria-hidden="true"></i>
+                                            </span>
+                                            <div>
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Provider-required eligibility</p>
+                                                <p class="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-slate-900">{{ selectedScholarship.eligibility || 'No separate written conditions were provided.' }}</p>
+                                                <p class="mt-2 text-xs leading-5 text-amber-900">You must meet these written conditions too. The provider verifies them during pre-screening even when the DSS profile match is high.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="selectedEligibilityConditions.length" class="border-b border-slate-200 p-4">
+                                        <div>
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Required condition checks</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">See which conditions are automatic and which the provider will review.</p>
+                                        </div>
+                                        <EligibilityConditionList class="mt-3" :conditions="selectedEligibilityConditions" />
+                                    </div>
+
+                                    <div class="px-4 pt-4">
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Structured matching restrictions</p>
+                                        <p class="mt-1 text-xs text-slate-500">Automatically compared with the information in your profile.</p>
+                                    </div>
                                     <dl class="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">
                                         <div
                                             v-for="criterion in selectedEligibilityCriteria"
@@ -1014,6 +1076,7 @@ watch(selectedScholarship, (scholarship) => {
                                             <div class="min-w-0">
                                                 <dt class="text-[11px] font-semibold text-slate-500">{{ criterion.label }}</dt>
                                                 <dd class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ criterion.value }}</dd>
+                                                <p class="mt-1 text-xs leading-5 text-slate-500">Your profile: <span class="font-semibold text-slate-700">{{ criteriaLabel(criterion.profileValue) }}</span></p>
                                                 <span :class="['mt-2 inline-flex rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', criterion.status === 'fail' ? 'bg-rose-100 text-rose-700' : criterion.status === 'missing' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">{{ criterion.statusLabel }}</span>
                                             </div>
                                         </div>
@@ -1163,7 +1226,7 @@ watch(selectedScholarship, (scholarship) => {
                                             </div>
                                             <div class="flex items-start gap-3 p-4">
                                                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
-                                                <div><p class="text-xs font-semibold text-slate-500">Eligibility check</p><p class="mt-1 font-bold text-slate-950">Profile meets the published criteria</p><p class="mt-1 text-xs text-slate-500">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% profile match</p></div>
+                                                <div><p class="text-xs font-semibold text-slate-500">Eligibility check</p><p class="mt-1 font-bold text-slate-950">Structured profile restrictions matched</p><p class="mt-1 text-xs text-slate-500">Provider-required eligibility will still be verified · {{ selectedScholarship.eligibility_match?.score ?? 0 }}% profile match</p></div>
                                             </div>
                                             <div class="flex items-start gap-3 p-4">
                                                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
@@ -1373,38 +1436,27 @@ watch(selectedScholarship, (scholarship) => {
                                         >
                                             Responded {{ application.student_responded_at }}
                                         </span>
-                                        <div class="ml-auto flex flex-wrap gap-2">
-                                            <a
-                                                v-if="primarySchedule(application)"
-                                                :href="application.detail_url || `/dashboard/applications/${application.id}`"
-                                                class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
-                                            >
-                                                Open schedule
-                                                <i class="fa-solid fa-calendar-days text-[10px]" aria-hidden="true"></i>
-                                            </a>
-                                            <a
-                                                :href="application.detail_url || `/dashboard/applications/${application.id}`"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-700 transition hover:bg-slate-50"
-                                            >
-                                                View details
-                                            </a>
-                                        </div>
                                     </div>
 
-                                    <div class="mt-3 flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-700">
-                                        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-xs text-amber-700 ring-1 ring-slate-200">
-                                            <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
-                                        </span>
-                                        <span class="min-w-0">
-                                            <span class="block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
-                                                Who acts next: {{ applicationNextActionDetails(application).actor_label || 'Check application' }}
-                                            </span>
-                                            <strong class="mt-0.5 block text-sm text-slate-900">{{ applicationNextAction(application) }}</strong>
-                                            <span v-if="applicationNextActionDetails(application).description" class="mt-0.5 hidden text-xs leading-5 text-slate-500 sm:block">
-                                                {{ applicationNextActionDetails(application).description }}
-                                            </span>
-                                        </span>
-                                    </div>
+                                    <ApplicantNextActionPanel
+                                        class="mt-3"
+                                        :actor="applicationNextActionDetails(application).actor_label || 'Check application'"
+                                        :title="applicationNextAction(application)"
+                                        :description="applicationNextActionDetails(application).description || ''"
+                                        :closed="Boolean(application.workflow?.is_closed)"
+                                        compact
+                                        action-available
+                                    >
+                                        <template #action>
+                                            <a
+                                                :href="application.detail_url || `/dashboard/applications/${application.id}`"
+                                                class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                            >
+                                                {{ applicationActionLabel(application) }}
+                                                <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                            </a>
+                                        </template>
+                                    </ApplicantNextActionPanel>
 
                                     <details v-if="application.status_progress?.steps?.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
                                         <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-xs font-bold text-slate-700">

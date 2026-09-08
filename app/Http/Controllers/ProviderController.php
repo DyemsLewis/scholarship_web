@@ -28,6 +28,7 @@ use App\Support\ApplicationSchedulePayload;
 use App\Support\CsvExport;
 use App\Support\LearnerProgramPath;
 use App\Support\ReviewRubric;
+use App\Support\ScholarshipEligibilityCondition;
 use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
@@ -3259,6 +3260,7 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipProgramPaths($validated);
         $validated = $this->normalizeScholarshipRequirements($validated);
+        $validated = $this->normalizeScholarshipEligibilityConditions($validated, $request);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
         $validated = $this->normalizeScholarshipApplicationQuestions($validated, $request);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
@@ -3331,6 +3333,7 @@ class ProviderController extends Controller
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipProgramPaths($validated);
         $validated = $this->normalizeScholarshipRequirements($validated);
+        $validated = $this->normalizeScholarshipEligibilityConditions($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipApplicationQuestions($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
@@ -3452,6 +3455,8 @@ class ProviderController extends Controller
             && CarbonImmutable::parse($expectedResultsAt)->startOfDay()->isBefore(CarbonImmutable::parse($deadline)->startOfDay())) {
             $errors['expected_results_at'] = 'The expected results date must be on or after the application deadline.';
         }
+
+        $this->addScholarshipEligibilityConsistencyErrors($errors, $value);
 
         // Do not strand an older live program that predates the expanded form.
         // Its unchanged deadline remains editable, while a new invalid value is blocked.
@@ -3588,6 +3593,93 @@ class ProviderController extends Controller
         }
     }
 
+    private function addScholarshipEligibilityConsistencyErrors(array &$errors, callable $value): void
+    {
+        $conditions = ScholarshipEligibilityCondition::normalize((array) ($value('eligibility_conditions') ?? []));
+
+        if ($conditions === []) {
+            return;
+        }
+
+        $conditionKeys = collect($conditions)->pluck('key');
+
+        if ($conditionKeys->contains('open_to_all')) {
+            $educationLevels = collect(preg_split('/\r\n|\r|\n|,/', (string) $value('eligible_education_levels')))
+                ->map(fn (string $level): string => Str::lower(trim($level)))
+                ->filter()
+                ->unique()
+                ->values();
+            $allEducationLevels = collect([
+                'preschool',
+                'elementary',
+                'junior_high_school',
+                'senior_high_school',
+                'college',
+                'tvet',
+                'als',
+            ]);
+            $hasEducationRestriction = $educationLevels->isNotEmpty()
+                && ($educationLevels->count() !== $allEducationLevels->count()
+                    || $educationLevels->diff($allEducationLevels)->isNotEmpty());
+            $hasFinderRestriction = $hasEducationRestriction
+                || ! $this->isOpenScholarshipRule($value('eligible_courses'))
+                || filled($value('eligible_school_types'))
+                || ! $this->isOpenScholarshipRule($value('eligible_year_levels'))
+                || ! $this->isOpenScholarshipRule($value('eligible_locations'))
+                || ! $this->isOpenScholarshipRule($value('income_requirement'))
+                || filled($value('minimum_grade_scale'))
+                || filled($value('minimum_gwa'));
+
+            if (count($conditions) > 1 || $hasFinderRestriction) {
+                $errors['eligibility_conditions'] = 'Open to all learners cannot be combined with other conditions or restrictive matching fields.';
+            }
+        }
+
+        if ($conditionKeys->contains('academic_performance')
+            && blank($value('minimum_grade_scale'))
+            && blank($value('minimum_gwa'))) {
+            $errors['minimum_grade_scale'] = 'Choose an academic grading rule or remove the academic requirement condition.';
+        }
+
+        if ($conditionKeys->contains('financial_need') && $this->isOpenScholarshipRule($value('income_requirement'))) {
+            $errors['income_requirement'] = 'Choose a household-income range or remove the financial need condition.';
+        }
+
+        if ($conditionKeys->contains('location_coverage') && $this->isOpenScholarshipRule($value('eligible_locations'))) {
+            $errors['eligible_locations'] = 'Add a covered location or remove the location coverage condition.';
+        }
+
+        if ($conditionKeys->contains('required_documents')) {
+            if ($value('application_mode') === 'provider_review') {
+                $errors['application_mode'] = 'Required documents cannot be checked in profile review only. Choose a portal document review method or remove the condition.';
+            } elseif (blank($value('requirements'))) {
+                $errors['requirements'] = 'Select at least one pre-screening file or remove the required documents condition.';
+            }
+        }
+
+        if (collect($conditions)->contains(
+            fn (array $condition): bool => $condition['source'] === 'provider_condition'
+                && $condition['verification_type'] === 'automatic',
+        )) {
+            $errors['eligibility_conditions'] = 'A custom condition must be confirmed by the applicant or reviewed by the provider; it cannot be checked automatically.';
+        }
+    }
+
+    private function isOpenScholarshipRule(mixed $value): bool
+    {
+        $normalized = Str::of((string) $value)->lower()->squish()->toString();
+
+        return $normalized === '' || in_array($normalized, [
+            'any',
+            'all',
+            'open to all',
+            'nationwide',
+            'no restriction',
+            'no income requirement',
+            'any income',
+        ], true);
+    }
+
     private function validateScholarship(Request $request): array
     {
         $requiresCompleteSubmission = ! in_array($request->input('status'), ['draft', 'closed'], true);
@@ -3603,6 +3695,7 @@ class ProviderController extends Controller
                 'max:5000',
             ],
             'eligibility' => ['nullable', 'string', 'max:5000'],
+            'eligibility_conditions' => ['nullable', 'string', 'max:15000', 'json'],
             'eligible_education_levels' => ['nullable', 'string', 'max:2000'],
             'eligible_courses' => ['nullable', 'string', 'max:3000'],
             'eligible_school_types' => ['nullable', 'string', 'max:2000'],
@@ -3725,6 +3818,24 @@ class ProviderController extends Controller
 
             $validated[$field] = $normalized !== '' ? $normalized : null;
         }
+
+        return $validated;
+    }
+
+    private function normalizeScholarshipEligibilityConditions(
+        array $validated,
+        Request $request,
+        ?Scholarship $scholarship = null,
+    ): array {
+        if (! $request->has('eligibility_conditions')) {
+            $validated['eligibility_conditions'] = $scholarship?->eligibility_conditions ?? [];
+
+            return $validated;
+        }
+
+        $validated['eligibility_conditions'] = ScholarshipEligibilityCondition::fromJson(
+            $validated['eligibility_conditions'] ?? null,
+        );
 
         return $validated;
     }
@@ -4449,6 +4560,7 @@ class ProviderController extends Controller
             'program_cycle' => $scholarship->program_cycle,
             'description' => $scholarship->description,
             'eligibility' => $scholarship->eligibility,
+            'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
             'eligible_education_levels' => $scholarship->eligible_education_levels,
             'eligible_courses' => $scholarship->eligible_courses,
             'eligible_school_types' => $scholarship->eligible_school_types,

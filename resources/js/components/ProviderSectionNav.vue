@@ -36,6 +36,15 @@ const catalog = {
             description: 'Optional platform assistance',
             icon: 'fa-solid fa-headset',
             permission: 'manage_billing',
+            exact: true,
+        },
+        {
+            href: '/provider/billing/requests',
+            label: 'Your requests',
+            description: 'Payment and support progress',
+            icon: 'fa-solid fa-receipt',
+            permission: 'manage_billing',
+            matchesWorkspaces: true,
         },
         {
             href: '/provider/reports',
@@ -51,6 +60,14 @@ const links = computed(() => (catalog[props.section] ?? []).filter(
 ));
 
 function isActive(link) {
+    if (link.matchesWorkspaces && /^\/provider\/billing\/\d+$/.test(currentPath)) {
+        return true;
+    }
+
+    if (link.exact) {
+        return currentPath === link.href;
+    }
+
     return currentPath === link.href || currentPath.startsWith(`${link.href}/`);
 }
 </script>
@@ -58,7 +75,7 @@ function isActive(link) {
 <template>
     <nav
         v-if="links.length > 1"
-        class="mt-5 grid gap-1 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm sm:grid-cols-2"
+        :class="['mt-5 grid gap-1 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm', section === 'support' ? 'sm:grid-cols-3' : 'sm:grid-cols-2']"
         :aria-label="section === 'organization' ? 'Organization sections' : 'Support sections'"
     >
         <a

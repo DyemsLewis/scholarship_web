@@ -1444,6 +1444,7 @@ class AdminController extends Controller
             'program_cycle' => $scholarship->program_cycle,
             'description' => $scholarship->description,
             'eligibility' => $scholarship->eligibility,
+            'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
             'provider' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
             'provider_email' => $scholarship->provider?->email,
             'provider_type' => $scholarship->provider?->provider_type,

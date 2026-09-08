@@ -15,6 +15,7 @@ const purchases = ref([]);
 const selectedPlan = ref(null);
 const acceptsTerms = ref(false);
 const syncingReference = ref('');
+const activeView = window.location.pathname.replace(/\/$/, '').endsWith('/requests') ? 'requests' : 'services';
 
 function money(amount, currency = 'PHP') {
     return new Intl.NumberFormat('en-PH', {
@@ -292,12 +293,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <p class="text-sm font-semibold uppercase text-amber-700">Provider support</p>
-                            <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Support services for your team</h1>
+                            <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">
+                                {{ activeView === 'requests' ? 'Your support requests' : 'Support services for your team' }}
+                            </h1>
                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                Request one-time help when {{ organization?.name ?? 'your organization' }} needs guidance with setup, application operations, or integration.
+                                <template v-if="activeView === 'requests'">Track payments, support progress, meetings, and completed requests for {{ organization?.name ?? 'your organization' }}.</template>
+                                <template v-else>Request one-time help when {{ organization?.name ?? 'your organization' }} needs guidance with setup, application operations, or integration.</template>
                             </p>
                         </div>
-                        <div :class="['flex w-fit items-center gap-3 rounded-md border bg-white px-3.5 py-3 shadow-sm', gateway.configured ? 'border-emerald-200' : 'border-amber-200']">
+                        <a
+                            v-if="activeView === 'requests'"
+                            href="/provider/billing"
+                            class="inline-flex w-fit items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                        >
+                            Browse services
+                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                        </a>
+                        <div v-else :class="['flex w-fit items-center gap-3 rounded-md border bg-white px-3.5 py-3 shadow-sm', gateway.configured ? 'border-emerald-200' : 'border-amber-200']">
                             <span :class="['grid h-9 w-9 place-items-center rounded-md', gateway.configured ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']">
                                 <i :class="['fa-solid', gateway.configured ? 'fa-lock' : 'fa-clock']" aria-hidden="true"></i>
                             </span>
@@ -322,7 +334,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                 </div>
 
                 <template v-else>
-                    <section class="provider-panel mt-5 flex items-start gap-3 px-4 py-3.5 sm:items-center">
+                    <section v-if="activeView === 'services'" class="provider-panel mt-5 flex items-start gap-3 px-4 py-3.5 sm:items-center">
                         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-amber-300">
                             <i class="fa-solid fa-shield-heart" aria-hidden="true"></i>
                         </span>
@@ -332,7 +344,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                         </div>
                     </section>
 
-                    <section class="provider-panel mt-4 overflow-hidden">
+                    <section v-if="activeView === 'services'" class="provider-panel mt-4 overflow-hidden">
                         <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                                 <p class="text-xs font-bold uppercase text-amber-700">Available support</p>
@@ -385,7 +397,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                         </div>
                     </section>
 
-                    <section class="provider-panel mt-4 overflow-hidden">
+                    <section v-if="activeView === 'requests'" class="provider-panel mt-5 overflow-hidden">
                         <div class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-5 py-4">
                             <div>
                                 <p class="text-xs font-bold uppercase text-amber-700">Your requests</p>
@@ -401,7 +413,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                             </span>
                             <div>
                                 <p class="text-sm font-bold text-slate-900">No support requests yet</p>
-                                <p class="mt-1 text-sm leading-5 text-slate-500">Choose a service above only when your team needs additional help.</p>
+                                <p class="mt-1 text-sm leading-5 text-slate-500">Optional support appears here after your team requests a service.</p>
+                                <a href="/provider/billing" class="mt-2 inline-flex items-center gap-2 text-xs font-bold text-slate-800 hover:text-amber-700">
+                                    Browse available services
+                                    <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                </a>
                             </div>
                         </div>
 

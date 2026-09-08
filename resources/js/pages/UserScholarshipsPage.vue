@@ -1114,7 +1114,7 @@ onBeforeUnmount(() => {
                                             Upcoming
                                         </p>
                                         <p class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
-                                            {{ scholarship.eligibility_match?.score ?? 0 }}% match
+                                            {{ scholarship.eligibility_match?.score ?? 0 }}% profile match
                                         </p>
                                         <p class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                             <i class="fa-regular fa-calendar mr-1"></i>
@@ -1256,7 +1256,7 @@ onBeforeUnmount(() => {
                     <div class="overflow-y-auto p-5">
                         <div class="flex flex-wrap gap-2">
                             <span class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
-                                {{ previewScholarship.eligibility_match?.score ?? 0 }}% match
+                                {{ previewScholarship.eligibility_match?.score ?? 0 }}% profile match
                             </span>
                             <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                 <i class="fa-regular fa-calendar mr-1"></i>
@@ -1271,6 +1271,18 @@ onBeforeUnmount(() => {
                         <p class="mt-4 text-sm leading-6 text-slate-600">
                             {{ previewScholarship.description || 'Open the full scholarship page to review the complete program information.' }}
                         </p>
+
+                        <div :class="['mt-4 flex items-start gap-3 rounded-md border p-3', previewScholarship.eligibility_match?.is_eligible === false ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50']">
+                            <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', previewScholarship.eligibility_match?.is_eligible === false ? 'bg-rose-100 text-rose-700' : 'bg-slate-950 text-amber-300']">
+                                <i :class="previewScholarship.eligibility_match?.is_eligible === false ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-check'" aria-hidden="true"></i>
+                            </span>
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Compared with your profile</p>
+                                <p class="mt-1 text-sm leading-6 text-slate-700">
+                                    {{ previewScholarship.eligibility_match?.difference_summary || previewScholarship.eligibility_match?.summary || 'Open the full details to compare each eligibility rule.' }}
+                                </p>
+                            </div>
+                        </div>
 
                         <section class="mt-5">
                             <h3 class="text-sm font-bold text-slate-950">
@@ -1519,7 +1531,7 @@ onBeforeUnmount(() => {
                                     </span>
                                     <span class="mt-3 flex flex-wrap gap-2">
                                         <span :class="['rounded px-2 py-1 text-[10px] font-bold', isComparisonSelected(scholarship.id) ? 'bg-white/10 text-amber-300' : 'bg-emerald-100 text-emerald-800']">
-                                            {{ scholarship.eligibility_match?.score ?? 0 }}% match
+                                            {{ scholarship.eligibility_match?.score ?? 0 }}% profile match
                                         </span>
                                         <span :class="['rounded px-2 py-1 text-[10px] font-bold', isComparisonSelected(scholarship.id) ? 'bg-white/10 text-slate-200' : 'bg-slate-100 text-slate-600']">
                                             {{ compactDeadlineLabel(scholarship) }}

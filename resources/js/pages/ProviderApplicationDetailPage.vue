@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import ApplicantProfileProofModal from '../components/ApplicantProfileProofModal.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
@@ -148,6 +149,7 @@ const customStatusLabels = {
 };
 
 const eligibilityCriteria = computed(() => application.value?.eligibility_breakdown?.criteria ?? []);
+const eligibilityConditionResults = computed(() => application.value?.eligibility_breakdown?.condition_results ?? []);
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
 const dssComparison = computed(() => application.value?.dss_explanation?.comparison ?? {
     state: 'complete',
@@ -1368,6 +1370,12 @@ onMounted(loadApplication);
                                     <span><strong class="text-amber-700">{{ dssComparison.missing }}</strong> missing</span>
                                     <span><strong class="text-slate-700">{{ dssComparison.manual_review }}</strong> manual review</span>
                                     <span><strong class="text-slate-700">{{ dssComparison.not_applicable }}</strong> unrestricted</span>
+                                </div>
+
+                                <div v-if="eligibilityConditionResults.length" class="border-b border-slate-200 p-5">
+                                    <p class="text-sm font-bold text-slate-950">Required condition checks</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">Automatic results come from the submitted profile snapshot. Review the remaining conditions before deciding.</p>
+                                    <EligibilityConditionList class="mt-3" :conditions="eligibilityConditionResults" audience="reviewer" />
                                 </div>
 
                                 <div v-if="eligibilityCriteria.length" class="grid gap-px bg-slate-200 md:grid-cols-2">

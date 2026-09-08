@@ -35,6 +35,8 @@ class DecisionSupportServiceTest extends TestCase
         $this->assertTrue(collect($eligibility['criteria'])
             ->whereIn('key', ['education_level', 'course', 'school_type', 'year_level', 'location', 'income'])
             ->every(fn (array $criterion): bool => $criterion['status'] === 'info'));
+        $this->assertSame(0, $eligibility['status_counts']['different']);
+        $this->assertStringContainsString('open', strtolower($eligibility['difference_summary']));
         $this->assertSame(DecisionSupportService::METHODOLOGY_VERSION, $score['methodology_version']);
         $this->assertSame(100, $score['suitability_score']);
         $this->assertSame('Strong match', $score['label']);
@@ -52,6 +54,59 @@ class DecisionSupportServiceTest extends TestCase
         $this->assertSame('pass', $education['status']);
         $this->assertTrue($eligibility['is_eligible']);
         $this->assertSame([], $eligibility['blocking_criteria']);
+    }
+
+    public function test_automatic_required_conditions_use_the_matching_profile_fields(): void
+    {
+        [, $applicant, $scholarship] = $this->application([
+            'eligible_locations' => 'Cebu',
+            'eligibility_conditions' => [
+                [
+                    'key' => 'currently_enrolled',
+                    'label' => 'Currently enrolled',
+                    'statement' => 'Currently enrolled in a recognized learning program.',
+                    'verification_type' => 'automatic',
+                    'source' => 'structured_rule',
+                ],
+                [
+                    'key' => 'location_coverage',
+                    'label' => 'Location coverage',
+                    'statement' => 'Lives or studies within the covered locations.',
+                    'verification_type' => 'automatic',
+                    'source' => 'structured_rule',
+                ],
+            ],
+        ]);
+        $applicant->studentProfile()->update(['enrollment_status' => 'Not currently enrolled']);
+
+        $eligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship->fresh(), $applicant->fresh());
+        $conditions = collect($eligibility['condition_results'])->keyBy('key');
+
+        $this->assertFalse($eligibility['is_eligible']);
+        $this->assertSame('fail', $conditions['currently_enrolled']['status']);
+        $this->assertSame('fail', $conditions['location_coverage']['status']);
+        $this->assertContains('enrollment_status', $conditions['currently_enrolled']['criteria_keys']);
+        $this->assertTrue($conditions['currently_enrolled']['is_blocking']);
+    }
+
+    public function test_manual_conditions_do_not_create_automatic_mismatches(): void
+    {
+        [, $applicant, $scholarship] = $this->application([
+            'eligibility_conditions' => [[
+                'key' => 'custom_1',
+                'label' => 'Additional condition',
+                'statement' => 'Must not hold another active scholarship.',
+                'verification_type' => 'applicant_declaration',
+                'source' => 'provider_condition',
+            ]],
+        ]);
+
+        $eligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship, $applicant);
+
+        $this->assertTrue($eligibility['is_eligible']);
+        $this->assertSame([], $eligibility['blocking_criteria']);
+        $this->assertSame('confirmation_required', $eligibility['condition_results'][0]['status']);
+        $this->assertFalse($eligibility['condition_results'][0]['is_blocking']);
     }
 
     public function test_provider_progress_and_documents_do_not_change_suitability(): void
@@ -95,6 +150,27 @@ class DecisionSupportServiceTest extends TestCase
         $eligibility = collect($score['criteria'])->firstWhere('key', 'eligibility');
 
         $this->assertSame(100, $eligibility['score']);
+    }
+
+    public function test_match_explains_how_an_applicant_differs_from_program_specific_rules(): void
+    {
+        [, $applicant, $scholarship] = $this->application([
+            'eligible_courses' => 'ABM',
+            'eligible_locations' => 'Cebu',
+        ]);
+
+        $eligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship, $applicant);
+        $course = collect($eligibility['criteria'])->firstWhere('key', 'course');
+        $location = collect($eligibility['criteria'])->firstWhere('key', 'location');
+
+        $this->assertFalse($eligibility['is_eligible']);
+        $this->assertSame(2, $eligibility['status_counts']['different']);
+        $this->assertTrue($course['is_blocking']);
+        $this->assertStringContainsString('STEM', $course['comparison']);
+        $this->assertStringContainsString('ABM', $course['comparison']);
+        $this->assertStringContainsString('Cebu', $location['comparison']);
+        $this->assertStringContainsString('Track / strand / course', $eligibility['difference_summary']);
+        $this->assertStringContainsString('Location', $eligibility['difference_summary']);
     }
 
     public function test_explanation_marks_missing_profile_data_as_provisional(): void

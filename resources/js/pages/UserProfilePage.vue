@@ -351,7 +351,8 @@ const hasGuardianDetails = computed(() => [
     form.value.guardian_contact,
     form.value.guardian_email,
 ].some(hasValue) || form.value.guardian_is_account_owner);
-const visibleProfileSections = computed(() => profileSections);
+const visibleProfileSections = computed(() => profileSections
+    .filter((section) => !['review', 'verification'].includes(section.id)));
 const requiredProfileFields = computed(() => profileSections.flatMap((section) => sectionRequiredFields(section)));
 const requiredFieldData = computed(() => requiredProfileFields.value.map((key) => ({
     key,
@@ -887,8 +888,24 @@ function openSection(sectionId) {
 }
 
 function openProfileEditor(sectionId = profileRecommendedAction.value.section) {
+    if (sectionId === 'verification') {
+        openVerificationRecords();
+        return;
+    }
+
+    if (sectionId === 'review') {
+        profileView.value = 'overview';
+        return;
+    }
+
     profileView.value = 'edit';
     openSection(sectionId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function openVerificationRecords() {
+    profileView.value = 'verification';
+    openSection('verification');
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -2019,7 +2036,7 @@ watch(() => form.value.grading_scale, (scale) => {
                     <section class="student-card overflow-hidden">
                         <div class="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
                             <div class="flex min-w-0 items-start gap-4">
-                                <div class="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-xl font-bold text-white">
+                                <div class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-xl font-bold text-white">
                                     <img
                                         v-if="profilePhotoUrl"
                                         :src="profilePhotoUrl"
@@ -2052,10 +2069,10 @@ watch(() => form.value.grading_scale, (scale) => {
                                 <button
                                     type="button"
                                     class="w-full rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto"
-                                    @click="showProviderPreview = true"
+                                    @click="openVerificationRecords"
                                 >
-                                    <i class="fa-solid fa-eye mr-2" aria-hidden="true"></i>
-                                    Preview provider view
+                                    <i class="fa-solid fa-file-shield mr-2" aria-hidden="true"></i>
+                                    Verification records
                                 </button>
                                 <button
                                     type="button"
@@ -2068,160 +2085,100 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </div>
 
-                        <div class="border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-                            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.6fr)] lg:items-center">
-                                <div>
-                                    <div class="flex items-center justify-between gap-3 text-sm">
-                                        <span class="font-bold text-slate-900">Profile completeness</span>
-                                        <span class="font-bold text-slate-700">{{ profileCompletion }}%</span>
-                                    </div>
-                                    <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
-                                        <div class="h-full rounded-full bg-slate-900 transition-all" :style="{ width: `${profileCompletion}%` }"></div>
-                                    </div>
-                                    <p class="mt-2 text-xs leading-5 text-slate-500">
-                                        {{ completedRequiredFields }} of {{ requiredFieldData.length }} required details completed.
-                                    </p>
-                                </div>
-                                <button
-                                    type="button"
-                                    class="border-l-2 border-amber-400 pl-4 text-left"
-                                    @click="openProfileEditor(profileRecommendedAction.section)"
-                                >
-                                    <span class="block text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Next action</span>
-                                    <span class="mt-1 block text-sm font-bold text-slate-950">{{ profileRecommendedAction.label }}</span>
-                                    <span class="mt-1 block text-xs leading-5 text-slate-500">{{ profileRecommendedAction.detail }}</span>
-                                </button>
+                        <div class="grid border-t border-slate-200 bg-slate-50 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                            <div class="px-5 py-4 sm:px-6">
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider-facing profile</p>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">
+                                    This is the information a provider reviews after you submit an application. Use the edit buttons below to keep it current.
+                                </p>
                             </div>
-
-                            <div class="mt-4 border-t border-slate-200 pt-4">
-                                <div class="flex flex-wrap items-center justify-between gap-3">
-                                    <div>
-                                        <p class="text-sm font-bold text-slate-900">Scholarship matching</p>
-                                        <p class="mt-0.5 text-xs text-slate-500">Based on your saved profile and the current catalog.</p>
-                                    </div>
-                                    <a href="/dashboard/scholarships" class="flex items-center gap-2 text-xs font-bold text-slate-700 transition hover:text-slate-950">
-                                        View matches
-                                        <i class="fa-solid fa-chevron-right text-[10px]" aria-hidden="true"></i>
-                                    </a>
-                                </div>
-                                <div class="mt-3 grid grid-cols-2 overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-4">
-                                    <div class="border-b border-r border-slate-200 px-3 py-2.5 sm:border-b-0">
-                                        <p class="text-lg font-bold text-slate-950">{{ matchSummary.strong_matches }}</p>
-                                        <p class="text-[11px] font-semibold text-slate-500">Strong matches</p>
-                                    </div>
-                                    <div class="border-b border-slate-200 px-3 py-2.5 sm:border-b-0 sm:border-r">
-                                        <p class="text-lg font-bold text-slate-950">{{ matchSummary.eligible_programs }}</p>
-                                        <p class="text-[11px] font-semibold text-slate-500">Eligible</p>
-                                    </div>
-                                    <div class="border-r border-slate-200 px-3 py-2.5">
-                                        <p class="text-lg font-bold text-slate-950">{{ matchSummary.needs_review }}</p>
-                                        <p class="text-[11px] font-semibold text-slate-500">Needs review</p>
-                                    </div>
-                                    <div class="px-3 py-2.5">
-                                        <p class="text-lg font-bold text-slate-950">{{ matchSummary.available_programs }}</p>
-                                        <p class="text-[11px] font-semibold text-slate-500">Programs checked</p>
-                                    </div>
-                                </div>
-                            </div>
+                            <a
+                                href="/dashboard/scholarships"
+                                class="flex h-full items-center justify-between gap-5 border-t border-slate-200 px-5 py-4 text-sm font-bold text-slate-900 transition hover:bg-white md:border-l md:border-t-0 sm:px-6"
+                            >
+                                <span>{{ matchSummary.eligible_programs }} eligible scholarship{{ matchSummary.eligible_programs === 1 ? '' : 's' }}</span>
+                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                            </a>
                         </div>
                     </section>
 
-                    <div class="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.75fr)] lg:items-stretch">
-                        <section class="student-card overflow-hidden">
-                            <div class="flex items-start justify-between gap-4 border-b border-slate-200 p-5 sm:p-6">
-                                <div>
-                                    <p class="student-kicker">Profile record</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Your information</h3>
-                                    <p class="mt-1 text-sm leading-6 text-slate-500">Review each part without opening the form.</p>
-                                </div>
-                                <button
-                                    type="button"
-                                    class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                    @click="openProfileEditor('personal')"
-                                >
-                                    Edit
-                                </button>
+                    <section class="student-card overflow-hidden">
+                        <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                            <div>
+                                <p class="student-kicker">Shared profile</p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-950">Information providers will review</h3>
+                                <p class="mt-1 text-sm leading-6 text-slate-500">Edit a group directly from this preview. Empty details are clearly marked before you apply.</p>
                             </div>
+                            <span class="inline-flex w-fit items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+                                <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                                Shared only after applying
+                            </span>
+                        </div>
 
-                            <div class="divide-y divide-slate-200">
-                                <div
-                                    v-for="section in profileOverviewSections"
-                                    :key="section.id"
-                                    class="grid grid-cols-[2.5rem_minmax(0,1fr)_2.25rem] items-center gap-3 px-5 py-4 sm:px-6"
-                                >
-                                    <div class="grid h-10 w-10 place-items-center rounded-md bg-slate-100 text-slate-600">
-                                        <i :class="section.icon" aria-hidden="true"></i>
-                                    </div>
-                                    <div class="min-w-0">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <p class="font-bold text-slate-950">{{ section.label }}</p>
-                                            <span :class="['rounded-md px-2 py-0.5 text-[11px] font-bold', section.statusClass]">
-                                                {{ section.status }}
-                                            </span>
-                                        </div>
-                                        <p class="mt-1 line-clamp-2 text-sm leading-5 text-slate-500">{{ section.summary }}</p>
+                        <div class="divide-y divide-slate-200">
+                            <article
+                                v-for="group in reviewGroups"
+                                :key="group.id"
+                                class="grid gap-5 px-5 py-5 sm:px-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8"
+                            >
+                                <div class="flex items-start justify-between gap-3 lg:block">
+                                    <div class="flex min-w-0 items-center gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-white">
+                                            <i :class="group.icon" aria-hidden="true"></i>
+                                        </span>
+                                        <h4 class="text-sm font-bold text-slate-950">{{ group.title }}</h4>
                                     </div>
                                     <button
                                         type="button"
-                                        class="grid h-9 w-9 place-items-center rounded-md border border-slate-300 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-                                        :title="`Edit ${section.label}`"
-                                        :aria-label="`Edit ${section.label}`"
-                                        @click="openProfileEditor(section.id)"
+                                        class="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 lg:mt-4"
+                                        @click="openProfileEditor(group.id)"
                                     >
-                                        <i class="fa-solid fa-pen" aria-hidden="true"></i>
+                                        <i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
+                                        Edit
                                     </button>
                                 </div>
-                            </div>
-                        </section>
 
-                        <aside class="space-y-5 lg:h-full">
-                            <section class="student-card overflow-hidden lg:flex lg:h-full lg:flex-col">
-                                <div class="border-b border-slate-200 p-5">
-                                    <p class="student-kicker">Application checklist</p>
-                                    <h3 class="mt-2 text-lg font-bold text-slate-950">Profile and files</h3>
-                                </div>
-                                <div class="divide-y divide-slate-200 lg:flex lg:flex-1 lg:flex-col">
-                                    <div v-for="item in applicationSetupItems" :key="item.id" class="flex items-start gap-3 px-5 py-3.5 lg:flex-1 lg:items-center">
-                                        <i
-                                            :class="[
-                                                'mt-0.5 text-sm',
-                                                item.state === 'complete'
-                                                    ? 'fa-solid fa-circle-check text-emerald-600'
-                                                    : item.state === 'pending'
-                                                        ? 'fa-solid fa-clock text-amber-600'
-                                                        : item.state === 'optional'
-                                                            ? 'fa-regular fa-circle text-slate-300'
-                                                            : 'fa-solid fa-circle-exclamation text-amber-600',
-                                            ]"
-                                            aria-hidden="true"
-                                        ></i>
-                                        <div class="min-w-0 flex-1">
-                                            <p class="text-sm font-bold text-slate-900">{{ item.label }}</p>
-                                            <p class="mt-0.5 text-xs leading-5 text-slate-500">{{ item.detail }}</p>
-                                        </div>
-                                        <button
-                                            v-if="item.section"
-                                            type="button"
-                                            class="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-900"
-                                            :aria-label="`Open ${item.label}`"
-                                            @click="openProfileEditor(item.section)"
-                                        >
-                                            <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-                                        </button>
-                                        <a
-                                            v-else-if="item.href"
-                                            :href="item.href"
-                                            class="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-900"
-                                            :aria-label="`Open ${item.label}`"
-                                        >
-                                            <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-                                        </a>
+                                <dl class="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+                                    <div v-for="item in group.items" :key="`${group.title}-${item[0]}`" class="min-w-0">
+                                        <dt class="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">{{ item[0] }}</dt>
+                                        <dd :class="['mt-1 break-words text-sm font-semibold leading-5', hasValue(item[1]) ? 'text-slate-900' : 'italic text-slate-400']">
+                                            {{ hasValue(item[1]) ? item[1] : 'Not provided' }}
+                                        </dd>
                                     </div>
-                                </div>
-                            </section>
+                                </dl>
+                            </article>
+                        </div>
+                    </section>
 
-                        </aside>
-                    </div>
+                    <section class="grid gap-4 md:grid-cols-2">
+                        <button
+                            type="button"
+                            class="student-card flex items-center gap-4 p-5 text-left transition hover:border-slate-300 hover:bg-white"
+                            @click="openVerificationRecords"
+                        >
+                            <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md', profileVerificationStatus === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']">
+                                <i class="fa-solid fa-file-shield" aria-hidden="true"></i>
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-bold text-slate-950">Verification records</span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-500">Academic proof is managed separately from your editable profile.</span>
+                            </span>
+                            <span class="shrink-0 text-xs font-bold text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
+                            <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
+                        </button>
+
+                        <a href="/dashboard/documents" class="student-card flex items-center gap-4 p-5 text-left transition hover:border-slate-300 hover:bg-white">
+                            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
+                                <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-bold text-slate-950">Prepared documents</span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-500">Keep reusable application files in your document library.</span>
+                            </span>
+                            <span class="shrink-0 text-xs font-bold text-slate-600">{{ preparedDocumentsCount }} saved</span>
+                            <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
+                        </a>
+                    </section>
                 </div>
 
                 <div v-else class="mt-6 space-y-5">
@@ -2239,14 +2196,14 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </button>
                                 <div class="min-w-0">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
-                                        Step {{ visibleActiveSectionIndex + 1 }} of {{ visibleProfileSections.length }}
+                                        {{ profileView === 'verification' ? 'Separate records' : 'Edit provider profile' }}
                                     </p>
                                     <h2 class="mt-1 truncate text-xl font-bold text-slate-950">{{ activeProfileSection.label }}</h2>
                                     <p class="mt-1 text-sm text-slate-500">{{ activeProfileSection.impact }}</p>
                                 </div>
                             </div>
 
-                            <div class="flex items-center gap-3">
+                            <div v-if="profileView === 'edit'" class="flex items-center gap-3">
                                 <span :class="['text-xs font-bold', hasUnsavedChanges ? 'text-amber-700' : 'text-slate-400']">
                                     {{ hasUnsavedChanges ? 'Unsaved changes' : 'Saved' }}
                                 </span>
@@ -2261,19 +2218,15 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </div>
 
-                        <div class="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
-                            <div class="mb-3 flex items-center justify-between gap-4">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Profile setup</p>
-                                <p class="text-xs font-semibold text-slate-500">{{ profileCompletion }}% required details complete</p>
-                            </div>
-
+                        <div v-if="profileView === 'edit'" class="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
+                            <p class="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Choose information to edit</p>
                             <nav aria-label="Profile sections">
-                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                     <li v-for="step in profileNavigationSteps" :key="step.id" class="min-w-0">
                                         <button
                                             type="button"
                                             :class="[
-                                                'flex min-h-14 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition',
+                                                'flex min-h-12 w-full items-center gap-2.5 rounded-md px-3 py-2 text-left transition',
                                                 activeSection === step.id
                                                     ? 'bg-slate-900 text-white shadow-sm'
                                                     : step.attention
@@ -2283,28 +2236,11 @@ watch(() => form.value.grading_scale, (scale) => {
                                             :aria-current="activeSection === step.id ? 'step' : undefined"
                                             @click="openSection(step.id)"
                                         >
-                                            <span
-                                                :class="[
-                                                    'grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-black',
-                                                    activeSection === step.id
-                                                        ? 'bg-amber-300 text-slate-950'
-                                                        : step.attention
-                                                            ? 'bg-rose-100 text-rose-700'
-                                                            : step.complete
-                                                                ? 'bg-slate-900 text-white'
-                                                                : 'bg-slate-100 text-slate-500',
-                                                ]"
-                                            >
-                                                <i v-if="step.complete && activeSection !== step.id" class="fa-solid fa-check" aria-hidden="true"></i>
-                                                <i v-else-if="step.attention" class="fa-solid fa-exclamation" aria-hidden="true"></i>
-                                                <span v-else>{{ step.number }}</span>
+                                            <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs', activeSection === step.id ? 'bg-amber-300 text-slate-950' : step.attention ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600']">
+                                                <i v-if="step.attention" class="fa-solid fa-exclamation" aria-hidden="true"></i>
+                                                <i v-else :class="step.icon" aria-hidden="true"></i>
                                             </span>
-                                            <span class="min-w-0">
-                                                <span class="block truncate text-xs font-bold sm:text-sm">{{ step.label }}</span>
-                                                <span :class="['mt-0.5 block truncate text-[11px] font-semibold', activeSection === step.id ? 'text-slate-300' : step.attention ? 'text-rose-700' : 'text-slate-500']">
-                                                    {{ step.status }}
-                                                </span>
-                                            </span>
+                                            <span class="block min-w-0 truncate text-xs font-bold sm:text-sm">{{ step.label }}</span>
                                         </button>
                                     </li>
                                 </ol>
@@ -2337,9 +2273,6 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Personal and household details</h3>
                                     <p class="mt-1 text-sm text-slate-500">Add the learner's identity, current contact, and household context in one place.</p>
                                 </div>
-                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('personal'))]">
-                                    {{ sectionStatusLabel(profileSection('personal')) }}
-                                </span>
                             </div>
 
                             <div :class="[sectionBodyClass, 'space-y-4']">
@@ -2516,7 +2449,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
                                 </div>
 
-                                <div v-if="needsGuardianContext || hasGuardianDetails" :class="formPanelClass">
+                                <div :class="formPanelClass">
                                     <div class="mb-4 flex items-start gap-3">
                                         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200">
                                             <i class="fa-solid fa-user-shield text-sm" aria-hidden="true"></i>
@@ -2624,9 +2557,6 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Learning background</h3>
                                     <p class="mt-1 text-sm text-slate-500">Add the learner's current school stage, program path, and grade format.</p>
                                 </div>
-                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('academic'))]">
-                                    {{ sectionStatusLabel(profileSection('academic')) }}
-                                </span>
                             </div>
 
                             <div :class="[sectionBodyClass, 'space-y-4']">
@@ -2791,9 +2721,6 @@ watch(() => form.value.grading_scale, (scale) => {
                                         Help reviewers understand the applicant beyond grades. Short answers are enough.
                                     </p>
                                 </div>
-                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('background'))]">
-                                    {{ sectionStatusLabel(profileSection('background')) }}
-                                </span>
                             </div>
 
                             <div :class="[sectionBodyClass, 'space-y-4']">
@@ -2851,9 +2778,6 @@ watch(() => form.value.grading_scale, (scale) => {
                                         Programs use your city, province, and region for residency rules and distance estimates.
                                     </p>
                                 </div>
-                                <span :class="[sectionStatusPillClass, sectionStatusClass(profileSection('location'))]">
-                                    {{ sectionStatusLabel(profileSection('location')) }}
-                                </span>
                             </div>
 
                             <div :class="[sectionBodyClass, 'space-y-4']">
@@ -3361,7 +3285,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </section>
 
-                        <div class="student-card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div v-if="profileView === 'edit'" class="student-card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
                             <button
                                 type="button"
                                 class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3372,7 +3296,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             </button>
 
                             <p class="text-center text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                {{ activeProfileSection.label }} - {{ visibleActiveSectionIndex + 1 }} of {{ visibleProfileSections.length }}
+                                {{ activeProfileSection.label }}
                             </p>
 
                             <button
@@ -3384,8 +3308,8 @@ watch(() => form.value.grading_scale, (scale) => {
                                 {{ isSaving
                                     ? 'Saving...'
                                     : visibleActiveSectionIndex >= visibleProfileSections.length - 1
-                                        ? (hasUnsavedChanges ? 'Save and finish' : 'Finish')
-                                        : (hasUnsavedChanges ? 'Save and continue' : 'Next section') }}
+                                        ? (hasUnsavedChanges ? 'Save and return' : 'Return to profile')
+                                        : (hasUnsavedChanges ? 'Save and continue' : 'Next') }}
                             </button>
                         </div>
                     </section>

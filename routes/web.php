@@ -145,6 +145,7 @@ Route::middleware(['auth', 'provider'])
         Route::patch('/team/accounts/{account}', [ProviderController::class, 'updateTeamAccount'])->middleware('permission:manage_team')->whereNumber('account')->name('team.accounts.update');
         Route::patch('/team/accounts/{account}/status', [ProviderController::class, 'updateTeamAccountStatus'])->middleware('permission:manage_team')->whereNumber('account')->name('team.accounts.status');
         Route::get('/billing', [BillingController::class, 'providerPage'])->middleware(['permission:manage_billing', 'provider.approved'])->name('billing');
+        Route::get('/billing/requests', [BillingController::class, 'providerPage'])->middleware(['permission:manage_billing', 'provider.approved'])->name('billing.requests');
         Route::get('/billing/data', [BillingController::class, 'providerData'])->middleware(['permission:manage_billing', 'provider.approved'])->name('billing.data');
         Route::post('/billing/checkout', [BillingController::class, 'checkout'])->middleware(['permission:manage_billing', 'provider.approved', 'throttle:5,1'])->name('billing.checkout');
         Route::post('/billing/sync', [BillingController::class, 'syncCheckout'])->middleware(['permission:manage_billing', 'provider.approved', 'throttle:10,1'])->name('billing.sync');

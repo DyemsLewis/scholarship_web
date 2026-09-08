@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import { labelFromKey } from '../support/display';
@@ -64,6 +65,13 @@ const eligibilityChecks = computed(() => new Map(
     (scholarship.value?.eligibility_match?.criteria ?? [])
         .map((criterion) => [criterion.key, criterion]),
 ));
+const eligibilityStatusCounts = computed(() => scholarship.value?.eligibility_match?.status_counts ?? {
+    matched: (scholarship.value?.eligibility_match?.criteria ?? []).filter((criterion) => criterion.status === 'pass' && criterion.key !== 'documents').length,
+    different: (scholarship.value?.eligibility_match?.criteria ?? []).filter((criterion) => criterion.status === 'fail' && criterion.key !== 'documents').length,
+    missing: (scholarship.value?.eligibility_match?.criteria ?? []).filter((criterion) => criterion.status === 'missing' && criterion.key !== 'documents').length,
+    open: (scholarship.value?.eligibility_match?.criteria ?? []).filter((criterion) => criterion.status === 'info' && criterion.key !== 'documents').length,
+});
+const eligibilityConditionResults = computed(() => scholarship.value?.eligibility_match?.condition_results ?? []);
 const isAcceptingApplications = computed(() => scholarship.value?.is_accepting_applications !== false);
 const isUpcomingProgram = computed(() => Boolean(
     scholarship.value?.application_opens_date
@@ -80,7 +88,7 @@ const eligibilityState = computed(() => {
 
     if (isEligible.value) {
         return {
-            title: 'Your profile meets the listed rules',
+            title: 'Your profile matches the structured restrictions',
             icon: 'fa-solid fa-check',
             classes: 'bg-emerald-100 text-emerald-800',
         };
@@ -346,7 +354,7 @@ function criteriaLabel(value) {
 
 function eligibilityRuleLabel(key, value) {
     if (eligibilityChecks.value.get(key)?.status === 'info') {
-        return 'No restriction';
+        return 'Open to all';
     }
 
     return criteriaLabel(value);
@@ -453,7 +461,7 @@ function criterionStatusLabel(criterion) {
 
     return criterion.key === 'academic' && criterion.requirement
         ? 'Provider review'
-        : 'No restriction';
+        : 'Open to all';
 }
 
 async function loadScholarship() {
@@ -683,8 +691,8 @@ onMounted(loadScholarship);
                                         </span>
                                         <div>
                                             <p class="student-kicker">Eligibility</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Do you qualify?</h2>
-                                            <p class="mt-1 text-sm text-slate-500">Compare the provider's rules with your saved profile.</p>
+                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Check both eligibility parts</h2>
+                                            <p class="mt-1 text-sm text-slate-500">A profile match is helpful, but you must also meet the provider's written conditions.</p>
                                         </div>
                                     </div>
                                     <span :class="['w-fit rounded-md px-3 py-1.5 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
@@ -698,26 +706,58 @@ onMounted(loadScholarship);
                                     </span>
                                     <div>
                                         <p class="text-sm font-bold text-slate-950">
-                                            {{ canApply && isEligible ? (scholarship.eligibility_match?.label || eligibilityState.title) : eligibilityState.title }}
+                                            {{ eligibilityState.title }}
                                         </p>
                                         <p class="mt-1 text-sm leading-6 text-slate-600">
-                                            <template v-if="scholarship.eligibility_match?.applicable">
-                                                {{ scholarship.eligibility_match?.passed ?? 0 }} of {{ scholarship.eligibility_match.applicable }} published checks match your profile.
-                                            </template>
-                                            <template v-else>
-                                                The provider did not add enough structured rules for an automatic check.
-                                            </template>
-                                            The provider still makes the final decision.
+                                            {{ scholarship.eligibility_match?.difference_summary || scholarship.eligibility_match?.summary || 'Review the program rules against your profile.' }}
                                         </p>
                                         <p v-if="canApply && !isEligible" class="mt-1 text-sm font-semibold text-rose-700">{{ applicationBlockedLabel }}</p>
                                     </div>
                                 </div>
 
-                                <p class="mt-5 whitespace-pre-line text-sm leading-6 text-slate-600">
-                                    {{ scholarship.eligibility || 'The provider has not posted a separate eligibility description.' }}
-                                </p>
+                                <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold">
+                                    <span v-if="eligibilityStatusCounts.matched" class="rounded-md bg-emerald-50 px-2.5 py-1.5 text-emerald-800 ring-1 ring-emerald-200">
+                                        {{ eligibilityStatusCounts.matched }} matched
+                                    </span>
+                                    <span v-if="eligibilityStatusCounts.different" class="rounded-md bg-rose-50 px-2.5 py-1.5 text-rose-800 ring-1 ring-rose-200">
+                                        {{ eligibilityStatusCounts.different }} different
+                                    </span>
+                                    <span v-if="eligibilityStatusCounts.missing" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-amber-800 ring-1 ring-amber-200">
+                                        {{ eligibilityStatusCounts.missing }} missing from profile
+                                    </span>
+                                    <span v-if="eligibilityStatusCounts.open" class="rounded-md bg-slate-100 px-2.5 py-1.5 text-slate-600 ring-1 ring-slate-200">
+                                        {{ eligibilityStatusCounts.open }} open to all
+                                    </span>
+                                </div>
 
-                                <div class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                <div class="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
+                                            <i class="fa-solid fa-file-circle-check" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Provider-required eligibility</p>
+                                            <p class="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-slate-900">
+                                                {{ scholarship.eligibility || 'The provider has not posted separate written eligibility conditions.' }}
+                                            </p>
+                                            <p class="mt-2 text-xs leading-5 text-amber-900">
+                                                This written condition is reviewed by the provider and may not be fully checked by the DSS. You must meet it even when your structured profile match is high.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div v-if="eligibilityConditionResults.length" class="mt-4">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">How the required conditions are checked</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">Automatic checks use your profile. The provider reviews conditions that cannot be checked safely by the portal.</p>
+                                    <EligibilityConditionList class="mt-3" :conditions="eligibilityConditionResults" />
+                                </div>
+
+                                <div class="mt-5">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">DSS matching restrictions</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">These are the structured values automatically compared with your saved profile.</p>
+                                </div>
+                                <div class="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
                                     <div class="grid sm:grid-cols-2">
                                         <div
                                             v-for="item in fitHighlights"
@@ -756,20 +796,27 @@ onMounted(loadScholarship);
                                         <div
                                             v-for="criterion in scholarship.eligibility_match.criteria"
                                             :key="criterion.key"
-                                            class="flex flex-col gap-2 border-b border-slate-200 p-4 last:border-b-0 sm:flex-row sm:items-start sm:justify-between"
+                                            class="border-b border-slate-200 p-4 last:border-b-0"
                                         >
-                                            <div class="min-w-0">
+                                            <div class="flex items-start justify-between gap-3">
                                                 <p class="text-sm font-bold text-slate-950">{{ eligibilityCriterionText(criterion.label, 'Eligibility requirement') }}</p>
-                                                <p class="mt-1 text-xs leading-5 text-slate-500">
-                                                    Your profile: {{ eligibilityCriterionText(criterion.student_value || criterion.studentValue, 'Not set') }}
-                                                </p>
-                                                <p v-if="criterion.requirement || criterion.status === 'info'" class="mt-0.5 text-xs leading-5 text-slate-500">
-                                                    Provider rule: {{ criterionStatusLabel(criterion) === 'No restriction' ? 'No restriction' : eligibilityCriterionText(criterion.requirement) }}
-                                                </p>
+                                                <span :class="['w-fit shrink-0 rounded-md border px-2.5 py-1 text-xs font-bold', criterionClass(criterion.status)]">
+                                                    {{ criterionStatusLabel(criterion) }}
+                                                </span>
                                             </div>
-                                            <span :class="['w-fit rounded-md border px-2.5 py-1 text-xs font-bold', criterionClass(criterion.status)]">
-                                                {{ criterionStatusLabel(criterion) }}
-                                            </span>
+                                            <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                                                <div class="rounded-md bg-slate-50 px-3 py-2.5">
+                                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Your profile</p>
+                                                    <p class="mt-1 text-sm font-semibold text-slate-800">{{ eligibilityCriterionText(criterion.student_value || criterion.studentValue, 'Not provided') }}</p>
+                                                </div>
+                                                <div class="rounded-md bg-slate-50 px-3 py-2.5">
+                                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">This program accepts</p>
+                                                    <p class="mt-1 text-sm font-semibold text-slate-800">
+                                                        {{ criterion.status === 'info' ? 'Open to all' : eligibilityCriterionText(criterion.requirement, 'No restriction') }}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <p class="mt-2 text-xs leading-5 text-slate-500">{{ criterion.comparison || criterion.note }}</p>
                                         </div>
                                     </div>
                                 </details>

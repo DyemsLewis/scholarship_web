@@ -9,6 +9,7 @@ use App\Models\StudentDocument;
 use App\Models\User;
 use App\Support\AcademicRequirement;
 use App\Support\LearnerProgramPath;
+use App\Support\ScholarshipEligibilityCondition;
 
 class ScholarshipEligibilityService
 {
@@ -19,7 +20,17 @@ class ScholarshipEligibilityService
         $passed = 0;
         $applicable = 0;
 
-        $addCriterion = function (string $key, string $label, string $status, ?string $studentValue, ?string $requirement, string $note, bool $counts = true) use (&$criteria, &$passed, &$applicable): void {
+        $addCriterion = function (
+            string $key,
+            string $label,
+            string $status,
+            ?string $studentValue,
+            ?string $requirement,
+            string $note,
+            bool $counts = true,
+            ?string $comparisonMode = null,
+            string $category = 'eligibility',
+        ) use (&$criteria, &$passed, &$applicable): void {
             $criteria[] = [
                 'key' => $key,
                 'label' => $label,
@@ -27,6 +38,10 @@ class ScholarshipEligibilityService
                 'student_value' => $studentValue,
                 'requirement' => $requirement,
                 'note' => $note,
+                'comparison' => $this->criterionComparison($status, $studentValue, $requirement, $category),
+                'comparison_mode' => $comparisonMode,
+                'category' => $category,
+                'is_blocking' => $status === 'fail' && $category === 'eligibility',
             ];
 
             if (! $counts) {
@@ -49,6 +64,7 @@ class ScholarshipEligibilityService
             $academicMatch['requirement'],
             $academicMatch['note'],
             $academicMatch['counts'],
+            $academicMatch['comparison_mode'] ?? null,
         );
 
         $this->addOptionCriterion(
@@ -142,13 +158,55 @@ class ScholarshipEligibilityService
                 $documentsReady
                     ? 'Your document library already covers this program requirement.'
                     : 'Upload matching documents in Documents to improve readiness before applying.',
+                true,
+                null,
+                'readiness',
             );
         } else {
-            $addCriterion('documents', 'Prepared documents', 'info', null, null, 'No document requirements listed.', false);
+            $addCriterion('documents', 'Prepared documents', 'info', null, null, 'No document requirements listed.', false, null, 'readiness');
+        }
+
+        $eligibilityConditions = ScholarshipEligibilityCondition::normalize($scholarship->eligibility_conditions ?? []);
+        $requiresEnrollmentCheck = collect($eligibilityConditions)->contains(
+            fn (array $condition): bool => $condition['key'] === 'currently_enrolled'
+                && $condition['verification_type'] === 'automatic',
+        );
+
+        if ($requiresEnrollmentCheck) {
+            $enrollmentStatus = $profile?->enrollment_status;
+            $acceptedStatuses = ['Enrolled', 'Continuing student', 'Graduating'];
+            $isEnrolled = filled($enrollmentStatus) && collect($acceptedStatuses)->contains(
+                fn (string $status): bool => $this->normalizeOption($enrollmentStatus) === $this->normalizeOption($status),
+            );
+            $addCriterion(
+                'enrollment_status',
+                'Enrollment status',
+                filled($enrollmentStatus) ? ($isEnrolled ? 'pass' : 'fail') : 'missing',
+                $enrollmentStatus,
+                implode(', ', $acceptedStatuses),
+                $isEnrolled
+                    ? 'Your profile shows an active enrollment status.'
+                    : 'This program requires an active enrollment status.',
+            );
         }
 
         $score = $applicable === 0 ? 100 : (int) round(($passed / $applicable) * 100);
         $blockingCriteria = $this->blockers(['criteria' => $criteria]);
+        $conditionResults = $this->eligibilityConditionResults($eligibilityConditions, $criteria);
+        $eligibilityCriteria = collect($criteria)->where('category', 'eligibility');
+        $missingCriteria = $eligibilityCriteria->where('status', 'missing');
+        $statusCounts = [
+            'matched' => $eligibilityCriteria->where('status', 'pass')->count(),
+            'different' => $eligibilityCriteria->where('status', 'fail')->count(),
+            'missing' => $missingCriteria->count(),
+            'open' => $eligibilityCriteria->where('status', 'info')->count(),
+        ];
+        $differenceSummary = match (true) {
+            $blockingCriteria !== [] => 'Your profile differs from this program in: '.collect($blockingCriteria)->pluck('label')->implode(', ').'.',
+            $missingCriteria->isNotEmpty() => 'Add '.str($missingCriteria->pluck('label')->implode(', '))->lower().' to your profile for a complete comparison.',
+            $eligibilityCriteria->whereIn('status', ['pass', 'fail', 'missing'])->isEmpty() => 'This program is open for the structured eligibility criteria shown.',
+            default => 'Your profile matches every restrictive eligibility rule published for this program.',
+        };
 
         return [
             'score' => $score,
@@ -160,6 +218,9 @@ class ScholarshipEligibilityService
             'summary' => $applicable === 0
                 ? 'This scholarship has no structured matching rules yet.'
                 : "{$passed} of {$applicable} structured criteria match your profile.",
+            'difference_summary' => $differenceSummary,
+            'status_counts' => $statusCounts,
+            'condition_results' => $conditionResults,
             'criteria' => $criteria,
         ];
     }
@@ -439,6 +500,103 @@ class ScholarshipEligibilityService
             ->replaceMatches('/[.;:]+/', '')
             ->squish()
             ->toString();
+    }
+
+    private function criterionComparison(string $status, ?string $studentValue, ?string $requirement, string $category): string
+    {
+        if ($category === 'readiness') {
+            return $status === 'pass'
+                ? 'Your prepared files cover this program requirement.'
+                : ($status === 'missing'
+                    ? 'Some required files still need to be prepared.'
+                    : 'This program does not request files during pre-screening.');
+        }
+
+        return match ($status) {
+            'pass' => filled($studentValue) && filled($requirement)
+                ? "Your profile lists {$studentValue}, which is included in {$requirement}."
+                : 'Your profile matches this program rule.',
+            'fail' => "Your profile lists ".($studentValue ?: 'no value').", while this program accepts ".($requirement ?: 'a different value').'.',
+            'missing' => 'This program checks '.($requirement ?: 'this information').', but it is missing from your profile.',
+            default => filled($requirement)
+                ? 'This program is open to all applicants for this criterion.'
+                : 'The provider did not set a restriction for this criterion.',
+        };
+    }
+
+    private function eligibilityConditionResults(array $conditions, array $criteria): array
+    {
+        $criteriaByKey = collect($criteria)->keyBy('key');
+        $criterionKeys = [
+            'currently_enrolled' => ['enrollment_status'],
+            'learner_group' => ['education_level', 'course', 'school_type', 'year_level'],
+            'academic_performance' => ['academic'],
+            'financial_need' => ['income'],
+            'location_coverage' => ['location'],
+        ];
+
+        return collect($conditions)->map(function (array $condition) use ($criteriaByKey, $criterionKeys): array {
+            $verificationType = $condition['verification_type'];
+            $base = [
+                'key' => $condition['key'],
+                'label' => $condition['label'],
+                'statement' => $condition['statement'],
+                'verification_type' => $verificationType,
+                'source' => $condition['source'],
+                'is_blocking' => false,
+            ];
+
+            if ($verificationType !== 'automatic') {
+                return [
+                    ...$base,
+                    'status' => match ($verificationType) {
+                        'applicant_declaration' => 'confirmation_required',
+                        'provider_verification' => 'provider_review',
+                        default => 'information',
+                    },
+                    'note' => match ($verificationType) {
+                        'applicant_declaration' => 'The applicant must confirm this condition before submitting.',
+                        'provider_verification' => 'The provider will verify this condition during pre-screening.',
+                        default => 'This condition is provided for applicant information.',
+                    },
+                    'criteria_keys' => [],
+                ];
+            }
+
+            $keys = $criterionKeys[$condition['key']] ?? [];
+            $checks = collect($keys)
+                ->map(fn (string $key) => $criteriaByKey->get($key))
+                ->filter()
+                ->values();
+
+            if ($checks->isEmpty()) {
+                return [
+                    ...$base,
+                    'status' => 'provider_review',
+                    'note' => 'This condition does not have an automatic profile comparison yet, so the provider will verify it.',
+                    'criteria_keys' => $keys,
+                ];
+            }
+
+            $status = match (true) {
+                $checks->contains(fn (array $criterion): bool => $criterion['status'] === 'fail') => 'fail',
+                $checks->contains(fn (array $criterion): bool => $criterion['status'] === 'missing') => 'missing',
+                default => 'pass',
+            };
+            $attentionCheck = $checks->first(
+                fn (array $criterion): bool => $criterion['status'] === $status,
+            ) ?? $checks->first();
+
+            return [
+                ...$base,
+                'status' => $status,
+                'is_blocking' => $status === 'fail',
+                'note' => $status === 'pass'
+                    ? 'Your profile satisfies this automatically checked condition.'
+                    : ($attentionCheck['comparison'] ?? $attentionCheck['note'] ?? 'Review this condition.'),
+                'criteria_keys' => $keys,
+            ];
+        })->values()->all();
     }
 
     private function addOptionCriterion(

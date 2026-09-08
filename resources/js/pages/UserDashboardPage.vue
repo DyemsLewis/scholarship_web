@@ -783,7 +783,7 @@ onMounted(loadDashboard);
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <span v-if="index === 0" class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Best match</span>
                                                 <span class="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
-                                                    {{ scholarship.eligibility_match?.score ?? 0 }}% match
+                                                    {{ scholarship.eligibility_match?.score ?? 0 }}% profile match
                                                 </span>
                                             </div>
                                             <h4 class="mt-1.5 line-clamp-2 text-sm font-bold leading-5 text-slate-950 sm:text-base">

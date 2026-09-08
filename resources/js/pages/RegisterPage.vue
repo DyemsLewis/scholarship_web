@@ -309,7 +309,7 @@ onBeforeUnmount(() => {
         :panel-note="shellCopy.panelNote"
         :show-panel="false"
         :wide="isProviderRegistration && registrationStep === 'details'"
-        background-image="/images/scholarship-cards.jpg"
+        background-image="/images/filipino-students-studying.jpg"
     >
         <ToastMessage
             :show="toast.show"
