@@ -16,6 +16,13 @@ import {
     seniorHighPathOptions,
     tvetPathOptions,
 } from '../support/learnerProgramPaths';
+import {
+    citiesForLocation,
+    findLocationOption,
+    findPhilippineRegion,
+    philippineRegionOptions,
+    provincesForRegion,
+} from '../support/philippineLocations';
 import { showPortalToast } from '../support/portalToast';
 
 const isLoading = ref(true);
@@ -32,7 +39,12 @@ const activeSection = ref(['personal', 'academic', 'background', 'location', 've
 const showProviderPreview = ref(false);
 const isUploadingProfilePhoto = ref(false);
 const isDeletingProfilePhoto = ref(false);
-const addressLookupTrigger = ref(0);
+const applicantProvinceOptions = ref([]);
+const applicantCityOptions = ref([]);
+const isLoadingApplicantProvinces = ref(false);
+const isLoadingApplicantCities = ref(false);
+const locationOptionsError = ref('');
+let locationHierarchyRequestId = 0;
 const savedFormSnapshot = ref('');
 const fieldErrors = ref({});
 const matchSummary = ref({
@@ -124,8 +136,6 @@ const accountManagerOptions = [
     { value: 'other', label: 'Other trusted person' },
 ];
 const guardianRelationshipOptions = ['Parent / guardian', 'Mother', 'Father', 'Grandparent', 'Sibling', 'Relative', 'Teacher / adviser', 'Other'];
-const regionOptions = ['NCR', 'CAR', 'Region I', 'Region II', 'Region III', 'Region IV-A', 'MIMAROPA', 'Region V', 'Region VI', 'Region VII', 'Region VIII', 'Region IX', 'Region X', 'Region XI', 'Region XII', 'Region XIII', 'BARMM'];
-const provinceOptions = ['Metro Manila', 'Abra', 'Agusan del Norte', 'Agusan del Sur', 'Aklan', 'Albay', 'Antique', 'Apayao', 'Aurora', 'Bataan', 'Batangas', 'Benguet', 'Bohol', 'Bukidnon', 'Bulacan', 'Cagayan', 'Camarines Norte', 'Camarines Sur', 'Capiz', 'Cavite', 'Cebu', 'Davao del Norte', 'Davao del Sur', 'Davao Oriental', 'Iloilo', 'Isabela', 'Laguna', 'La Union', 'Leyte', 'Misamis Oriental', 'Negros Occidental', 'Negros Oriental', 'Nueva Ecija', 'Nueva Vizcaya', 'Pampanga', 'Pangasinan', 'Quezon', 'Rizal', 'South Cotabato', 'Tarlac', 'Zambales'];
 const educationLevelOptions = [
     { value: 'preschool', label: 'Preschool / Kindergarten' },
     { value: 'elementary', label: 'Elementary' },
@@ -639,8 +649,6 @@ const validationErrorEntries = computed(() => Object.entries(fieldErrors.value).
 })));
 const profileMapAddress = computed(() => {
     const parts = [
-        form.value.address,
-        form.value.barangay,
         form.value.city,
         form.value.province,
         form.value.region,
@@ -1446,20 +1454,106 @@ function clearProfileMapPoint() {
     locationMessage.value = '';
 }
 
-function lookupProfileAddress() {
-    if (!profileMapAddress.value) {
-        locationMessage.value = 'Enter your address first so the map can search it.';
+async function loadApplicantCities(requestId = locationHierarchyRequestId) {
+    const region = findPhilippineRegion(form.value.region);
+    const province = findLocationOption(applicantProvinceOptions.value, form.value.province);
+
+    applicantCityOptions.value = [];
+
+    if (!region || !province) {
         return;
     }
 
-    locationMessage.value = 'Searching your address on the map...';
-    addressLookupTrigger.value += 1;
+    isLoadingApplicantCities.value = true;
+
+    try {
+        const cities = await citiesForLocation(region.code, province.code);
+
+        if (requestId === locationHierarchyRequestId) {
+            applicantCityOptions.value = cities;
+        }
+    } catch (error) {
+        if (requestId === locationHierarchyRequestId) {
+            locationOptionsError.value = 'City and municipality options could not be loaded. Check your internet connection and try the region again.';
+        }
+    } finally {
+        if (requestId === locationHierarchyRequestId) {
+            isLoadingApplicantCities.value = false;
+        }
+    }
+}
+
+async function loadApplicantLocationHierarchy({ resetProvince = false, resetCity = false } = {}) {
+    const requestId = ++locationHierarchyRequestId;
+    const region = findPhilippineRegion(form.value.region);
+
+    locationOptionsError.value = '';
+    applicantProvinceOptions.value = [];
+    applicantCityOptions.value = [];
+
+    if (resetProvince) {
+        form.value.province = '';
+    }
+
+    if (resetProvince || resetCity) {
+        form.value.city = '';
+    }
+
+    if (!region) {
+        return;
+    }
+
+    form.value.region = region.value;
+
+    isLoadingApplicantProvinces.value = true;
+
+    try {
+        const provinces = await provincesForRegion(region.code);
+
+        if (requestId !== locationHierarchyRequestId) {
+            return;
+        }
+
+        applicantProvinceOptions.value = provinces;
+
+        if (region.value === 'NCR') {
+            form.value.province = 'Metro Manila';
+        }
+
+        await loadApplicantCities(requestId);
+    } catch (error) {
+        if (requestId === locationHierarchyRequestId) {
+            locationOptionsError.value = 'Province options could not be loaded. Check your internet connection and select the region again.';
+        }
+    } finally {
+        if (requestId === locationHierarchyRequestId) {
+            isLoadingApplicantProvinces.value = false;
+        }
+    }
+}
+
+function handleApplicantRegionChange() {
+    clearProfileMapPoint();
+    loadApplicantLocationHierarchy({ resetProvince: true });
+}
+
+function handleApplicantProvinceChange() {
+    const requestId = ++locationHierarchyRequestId;
+
+    form.value.city = '';
+    locationOptionsError.value = '';
+    clearProfileMapPoint();
+    loadApplicantCities(requestId);
+}
+
+function handleApplicantCityChange() {
+    clearProfileMapPoint();
 }
 
 function handleProfileLocationResolved(location) {
     form.value.latitude = Number(location.latitude).toFixed(7);
     form.value.longitude = Number(location.longitude).toFixed(7);
-    locationMessage.value = 'Address found on the map. Save your profile to keep this map point.';
+    locationMessage.value = 'Map updated from your city, province, and region. Save your profile to keep this map point.';
 }
 
 function handleProfileLocationPicked(location) {
@@ -1486,9 +1580,11 @@ function handleProfileLocationPicked(location) {
         || address.state
         || address.county
         || form.value.province;
-    form.value.region = address.region
+    const resolvedRegion = findPhilippineRegion(address.region
         || address.state
-        || form.value.region;
+        || form.value.region);
+    form.value.region = resolvedRegion?.value || form.value.region;
+    loadApplicantLocationHierarchy();
     locationMessage.value = location.displayName
         ? 'Pin set. Address fields were filled from the selected map point.'
         : 'Pin set. Save your profile to keep this map point.';
@@ -1693,6 +1789,7 @@ async function loadProfile() {
 
         user.value = response.data.user;
         fillForm(response.data.user);
+        await loadApplicantLocationHierarchy();
         matchSummary.value = response.data.match_summary ?? matchSummary.value;
         verificationDocuments.value = response.data.verification_documents ?? [];
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? 0;
@@ -1731,6 +1828,7 @@ async function saveProfile(requireComplete = false, nextSectionId = null) {
 
         user.value = response.data.user;
         fillForm(response.data.user);
+        await loadApplicantLocationHierarchy();
         matchSummary.value = response.data.match_summary ?? matchSummary.value;
         markFormSaved();
         if (requireComplete) {
@@ -2811,64 +2909,64 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
                                     <div class="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
                                             <div>
-                                                <label :class="labelClass" for="profile-city">City / municipality</label>
-                                                <input id="profile-city" v-model="form.city" placeholder="City or municipality" :class="inputClass" @input="clearProfileMapPoint">
+                                                <label :class="labelClass" for="profile-region">Region</label>
+                                                <select id="profile-region" v-model="form.region" :class="inputClass" @change="handleApplicantRegionChange">
+                                                    <option value="">Select region</option>
+                                                    <option v-if="form.region && !findPhilippineRegion(form.region)" :value="form.region">{{ form.region }}</option>
+                                                    <option v-for="region in philippineRegionOptions" :key="region.code" :value="region.value">{{ region.label }}</option>
+                                                </select>
                                             </div>
                                             <div>
                                                 <label :class="labelClass" for="profile-province">Province</label>
-                                                <select id="profile-province" v-model="form.province" :class="inputClass" @change="clearProfileMapPoint">
-                                                    <option value="">Select province</option>
-                                                    <option v-if="form.province && form.province !== 'Other' && !provinceOptions.includes(form.province)" :value="form.province">{{ form.province }}</option>
-                                                    <option v-for="province in provinceOptions" :key="province" :value="province">{{ province }}</option>
-                                                    <option value="Other">Other / not listed</option>
-                                                </select>
-                                                <input
-                                                    v-if="form.province === 'Other' || (hasValue(form.province) && !provinceOptions.includes(form.province))"
+                                                <select
+                                                    id="profile-province"
                                                     v-model="form.province"
-                                                    class="mt-2"
-                                                    placeholder="Type province"
                                                     :class="inputClass"
-                                                    @input="clearProfileMapPoint"
+                                                    :disabled="!form.region || isLoadingApplicantProvinces"
+                                                    @change="handleApplicantProvinceChange"
                                                 >
+                                                    <option value="">{{ isLoadingApplicantProvinces ? 'Loading provinces...' : 'Select province' }}</option>
+                                                    <option v-if="form.province && !findLocationOption(applicantProvinceOptions, form.province)" :value="form.province">{{ form.province }}</option>
+                                                    <option v-for="province in applicantProvinceOptions" :key="province.code" :value="province.value">{{ province.label }}</option>
+                                                </select>
                                             </div>
                                             <div>
-                                                <label :class="labelClass" for="profile-region">Region</label>
-                                                <select id="profile-region" v-model="form.region" :class="inputClass" @change="clearProfileMapPoint">
-                                                    <option value="">Select region</option>
-                                                    <option v-if="form.region && !regionOptions.includes(form.region)" :value="form.region">{{ form.region }}</option>
-                                                    <option v-for="region in regionOptions" :key="region" :value="region">{{ region }}</option>
+                                                <label :class="labelClass" for="profile-city">City / municipality</label>
+                                                <select
+                                                    id="profile-city"
+                                                    v-model="form.city"
+                                                    :class="inputClass"
+                                                    :disabled="!form.province || isLoadingApplicantCities"
+                                                    @change="handleApplicantCityChange"
+                                                >
+                                                    <option value="">{{ isLoadingApplicantCities ? 'Loading cities...' : 'Select city or municipality' }}</option>
+                                                    <option v-if="form.city && !findLocationOption(applicantCityOptions, form.city)" :value="form.city">{{ form.city }}</option>
+                                                    <option v-for="city in applicantCityOptions" :key="city.code" :value="city.value">{{ city.label }}</option>
                                                 </select>
                                             </div>
                                             <div>
                                                 <label :class="labelClass" for="profile-barangay">Barangay <span class="font-normal text-slate-400">(optional)</span></label>
-                                                <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass" @input="clearProfileMapPoint">
+                                                <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass">
                                             </div>
                                             <div class="md:col-span-2 xl:col-span-4">
                                                 <label :class="labelClass" for="profile-address">Street / home address <span class="font-normal text-slate-400">(optional)</span></label>
-                                                <input id="profile-address" v-model="form.address" placeholder="Street and house number" :class="inputClass" @input="clearProfileMapPoint">
+                                                <input id="profile-address" v-model="form.address" placeholder="Street and house number" :class="inputClass">
                                             </div>
                                         </div>
+                                        <p v-if="locationOptionsError" class="mt-3 text-xs font-semibold text-rose-600">{{ locationOptionsError }}</p>
                                 </div>
 
                                 <div :class="formPanelClass">
-                                    <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div class="mb-4 flex items-start gap-3">
                                         <div class="flex items-start gap-3">
                                             <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-amber-200 bg-amber-50 text-amber-700">
                                                 <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
                                             </span>
                                             <div>
-                                                <h4 :class="formPanelTitleClass">Confirm your location on the map</h4>
-                                                <p :class="formPanelDescriptionClass">Find the address above, then adjust the pin if needed.</p>
+                                                <h4 :class="formPanelTitleClass">Location map</h4>
+                                                <p :class="formPanelDescriptionClass">The map updates automatically from your city, province, and region. Your street and house number are not used for automatic map searches.</p>
                                             </div>
                                         </div>
-                                        <button
-                                            type="button"
-                                            class="w-full shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800 sm:w-auto"
-                                            @click="lookupProfileAddress"
-                                        >
-                                            <i class="fa-solid fa-location-crosshairs mr-1.5 text-amber-300" aria-hidden="true"></i>
-                                            Find address
-                                        </button>
                                     </div>
 
                                     <LeafletMapPreview
@@ -2878,7 +2976,9 @@ watch(() => form.value.grading_scale, (scale) => {
                                         title="Student address map preview"
                                         marker-text="Student address"
                                         height="18rem"
-                                        :geocode-trigger="addressLookupTrigger"
+                                        auto-geocode
+                                        :auto-geocode-delay="900"
+                                        :geocode-zoom="11"
                                         picker
                                         @resolved="handleProfileLocationResolved"
                                         @picked="handleProfileLocationPicked"

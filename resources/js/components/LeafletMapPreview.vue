@@ -46,6 +46,14 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    autoGeocodeDelay: {
+        type: Number,
+        default: 850,
+    },
+    geocodeZoom: {
+        type: Number,
+        default: 15,
+    },
     geocodeTrigger: {
         type: Number,
         default: 0,
@@ -82,6 +90,9 @@ const secondaryMarkerInstance = ref(null);
 const routeLineInstance = ref(null);
 let isMounted = false;
 let pendingPickedCoordinates = null;
+let pendingGeocodedCoordinates = null;
+let automaticGeocodeTimer = null;
+let geocodeController = null;
 
 function numberOrNull(value) {
     if (value === null || value === undefined || value === '') {
@@ -167,8 +178,8 @@ async function ensureLeaflet() {
     }
 }
 
-async function geocodeAddress() {
-    const query = props.address.trim();
+async function geocodeAddress(address = props.address) {
+    const query = String(address ?? '').trim();
 
     if (!query) {
         statusMessage.value = 'Add an address to preview the map.';
@@ -176,6 +187,9 @@ async function geocodeAddress() {
     }
 
     statusMessage.value = 'Searching address on OpenStreetMap...';
+    geocodeController?.abort();
+    geocodeController = new AbortController();
+    const activeController = geocodeController;
 
     try {
         const params = new URLSearchParams({
@@ -189,6 +203,7 @@ async function geocodeAddress() {
             headers: {
                 Accept: 'application/json',
             },
+            signal: activeController.signal,
         });
 
         if (!response.ok) {
@@ -197,6 +212,10 @@ async function geocodeAddress() {
 
         const results = await response.json();
         const firstResult = results[0];
+
+        if (activeController.signal.aborted || query !== props.address.trim()) {
+            return null;
+        }
 
         if (!firstResult) {
             statusMessage.value = 'No map match found for this address.';
@@ -210,13 +229,22 @@ async function geocodeAddress() {
             displayName: firstResult.display_name,
         };
 
+        pendingGeocodedCoordinates = coordinates;
         emit('resolved', coordinates);
 
         return coordinates;
     } catch (error) {
+        if (error?.name === 'AbortError') {
+            return null;
+        }
+
         statusMessage.value = 'Map search is unavailable. Check internet connection and try again.';
         emit('error', statusMessage.value);
         return null;
+    } finally {
+        if (geocodeController === activeController) {
+            geocodeController = null;
+        }
     }
 }
 
@@ -357,7 +385,7 @@ function updateRouteLine(primaryCoordinates, userCoordinates) {
     });
 }
 
-async function renderMap(coordinates = currentCoordinates(), preserveView = false) {
+async function renderMap(coordinates = currentCoordinates(), preserveView = false, zoom = 15) {
     if (!isMounted || !mapElement.value) {
         return;
     }
@@ -396,7 +424,7 @@ async function renderMap(coordinates = currentCoordinates(), preserveView = fals
     const position = [coordinates.latitude, coordinates.longitude];
 
     if (!preserveView) {
-        mapInstance.value.setView(position, 15);
+        mapInstance.value.setView(position, zoom);
     }
 
     updateMarker(coordinates);
@@ -448,8 +476,38 @@ async function handleMarkerDragEnd(event) {
 }
 
 async function previewAddress() {
-    const coordinates = currentCoordinates() || await geocodeAddress();
-    await renderMap(coordinates);
+    const savedCoordinates = currentCoordinates();
+    const coordinates = savedCoordinates || await geocodeAddress();
+
+    if (!coordinates) {
+        return;
+    }
+
+    await renderMap(coordinates, false, savedCoordinates ? 15 : props.geocodeZoom);
+}
+
+function scheduleAutomaticGeocode() {
+    window.clearTimeout(automaticGeocodeTimer);
+    geocodeController?.abort();
+
+    const query = props.address.trim();
+
+    if (!query) {
+        renderMap(null);
+        return;
+    }
+
+    automaticGeocodeTimer = window.setTimeout(async () => {
+        if (!isMounted || currentCoordinates()) {
+            return;
+        }
+
+        const coordinates = await geocodeAddress(query);
+
+        if (coordinates) {
+            await renderMap(coordinates, false, props.geocodeZoom);
+        }
+    }, Math.max(250, props.autoGeocodeDelay));
 }
 
 watch(
@@ -457,12 +515,17 @@ watch(
     () => {
         const coordinates = currentCoordinates();
         const preserveView = props.picker && coordinatesMatch(coordinates, pendingPickedCoordinates);
+        const useGeocodeZoom = coordinatesMatch(coordinates, pendingGeocodedCoordinates);
 
         if (preserveView) {
             pendingPickedCoordinates = null;
         }
 
-        renderMap(coordinates, preserveView);
+        if (useGeocodeZoom) {
+            pendingGeocodedCoordinates = null;
+        }
+
+        renderMap(coordinates, preserveView, useGeocodeZoom ? props.geocodeZoom : 15);
     },
 );
 
@@ -472,6 +535,17 @@ watch(
         if (props.geocodeTrigger > 0) {
             previewAddress();
         }
+    },
+);
+
+watch(
+    () => props.address,
+    (address, previousAddress) => {
+        if (!props.autoGeocode || address.trim() === previousAddress.trim()) {
+            return;
+        }
+
+        scheduleAutomaticGeocode();
     },
 );
 
@@ -498,6 +572,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
     isMounted = false;
+    window.clearTimeout(automaticGeocodeTimer);
+    geocodeController?.abort();
     mapInstance.value?.off('click', handleMapClick);
     markerInstance.value?.off('dragend', handleMarkerDragEnd);
     removeSecondaryLayers();

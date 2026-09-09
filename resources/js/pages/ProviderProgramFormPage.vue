@@ -16,6 +16,11 @@ import {
     providerProgramPathOptionsForTarget,
     splitProgramPaths,
 } from '../support/learnerProgramPaths';
+import {
+    citiesForLocation,
+    philippineRegionOptions,
+    provincesForRegion,
+} from '../support/philippineLocations';
 import { cashGrantAmount, normalizeScholarshipBenefits as normalizeBenefits } from '../support/scholarshipBenefits';
 
 const scholarshipId = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit$/)?.[1] ?? null;
@@ -41,6 +46,16 @@ const selectedTargetPresetKey = ref('');
 const programPathChoice = ref('');
 const customProgramPath = ref('');
 const gradeLevelChoice = ref('');
+const coverageLevel = ref('city');
+const coverageRegionCode = ref('');
+const coverageProvinceCode = ref('');
+const coverageCity = ref('');
+const coverageProvinceOptions = ref([]);
+const coverageCityOptions = ref([]);
+const isLoadingCoverageProvinces = ref(false);
+const isLoadingCoverageCities = ref(false);
+const coverageOptionsError = ref('');
+let coverageRequestId = 0;
 const autosaveReady = ref(false);
 const draftSavedAt = ref('');
 let autosaveTimer = null;
@@ -183,6 +198,11 @@ const commitmentOptions = [
 const selectedCommitmentOption = ref('provider_briefing');
 const customCommitmentText = ref('');
 const incomeOptions = ['Any', 'Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
+const coverageLevelOptions = [
+    { value: 'region', label: 'Whole region' },
+    { value: 'province', label: 'Province' },
+    { value: 'city', label: 'City / municipality' },
+];
 const applicationModeOptions = [
     { value: 'online', label: 'Portal review', detail: 'Review the applicant profile and uploaded files in the portal.' },
     { value: 'onsite', label: 'Portal review with in-person verification', detail: 'Review uploads first, then request original documents on-site when needed.' },
@@ -818,6 +838,7 @@ const activeTargetForm = computed(() => targetFormProfiles[activeTargetKey.value
 const programPathSelectOptions = computed(() => providerProgramPathOptionsForTarget(activeTargetKey.value));
 const selectedProgramPaths = computed(() => splitProgramPaths(scholarshipForm.value.eligibleCourses));
 const selectedGradeLevels = computed(() => splitRequirementText(scholarshipForm.value.eligibleYearLevels));
+const selectedEligibleLocations = computed(() => splitRequirementText(scholarshipForm.value.eligibleLocations));
 const gradeLevelSelectOptions = computed(() => {
     const selectedEducationLevels = scholarshipForm.value.eligibleEducationLevels.length
         ? scholarshipForm.value.eligibleEducationLevels
@@ -1319,6 +1340,128 @@ function removeEligibleGradeLevel(level) {
     setEligibleGradeLevels(selectedGradeLevels.value.filter((selectedLevel) => selectedLevel !== level));
 }
 
+function setEligibleLocations(locations) {
+    scholarshipForm.value.eligibleLocations = [...new Set(locations)].join('\n');
+}
+
+async function loadCoverageCities(requestId = coverageRequestId) {
+    coverageCityOptions.value = [];
+    coverageCity.value = '';
+
+    if (!coverageRegionCode.value || !coverageProvinceCode.value || coverageLevel.value !== 'city') {
+        return;
+    }
+
+    isLoadingCoverageCities.value = true;
+
+    try {
+        const cities = await citiesForLocation(coverageRegionCode.value, coverageProvinceCode.value);
+
+        if (requestId === coverageRequestId) {
+            coverageCityOptions.value = cities;
+        }
+    } catch (error) {
+        if (requestId === coverageRequestId) {
+            coverageOptionsError.value = 'City and municipality options could not be loaded. Check your internet connection and try again.';
+        }
+    } finally {
+        if (requestId === coverageRequestId) {
+            isLoadingCoverageCities.value = false;
+        }
+    }
+}
+
+async function handleCoverageRegionChange() {
+    const requestId = ++coverageRequestId;
+
+    coverageProvinceCode.value = '';
+    coverageCity.value = '';
+    coverageProvinceOptions.value = [];
+    coverageCityOptions.value = [];
+    coverageOptionsError.value = '';
+
+    if (!coverageRegionCode.value || coverageLevel.value === 'region') {
+        return;
+    }
+
+    isLoadingCoverageProvinces.value = true;
+
+    try {
+        const provinces = await provincesForRegion(coverageRegionCode.value);
+
+        if (requestId !== coverageRequestId) {
+            return;
+        }
+
+        coverageProvinceOptions.value = provinces;
+
+        if (coverageRegionCode.value === '1300000000') {
+            coverageProvinceCode.value = '1300000000';
+            await loadCoverageCities(requestId);
+        }
+    } catch (error) {
+        if (requestId === coverageRequestId) {
+            coverageOptionsError.value = 'Province options could not be loaded. Check your internet connection and try the region again.';
+        }
+    } finally {
+        if (requestId === coverageRequestId) {
+            isLoadingCoverageProvinces.value = false;
+        }
+    }
+}
+
+function handleCoverageProvinceChange() {
+    const requestId = ++coverageRequestId;
+
+    coverageOptionsError.value = '';
+    loadCoverageCities(requestId);
+}
+
+function handleCoverageLevelChange() {
+    handleCoverageRegionChange();
+}
+
+function addEligibleLocation() {
+    const region = philippineRegionOptions.find((option) => option.code === coverageRegionCode.value);
+    const province = coverageProvinceOptions.value.find((option) => option.code === coverageProvinceCode.value);
+    const location = coverageLevel.value === 'region'
+        ? region?.value
+        : coverageLevel.value === 'province'
+            ? province?.value
+            : coverageCity.value;
+
+    if (!location) {
+        coverageOptionsError.value = `Select a ${coverageLevel.value === 'city' ? 'city or municipality' : coverageLevel.value} before adding coverage.`;
+        return;
+    }
+
+    const existing = selectedEligibleLocations.value
+        .filter((item) => !['nationwide', 'any', 'open to all'].includes(item.toLowerCase()));
+
+    if (!existing.some((item) => item.toLowerCase() === location.toLowerCase())) {
+        setEligibleLocations([...existing, location]);
+    }
+
+    selectedEligibilityOptions.value = [
+        ...selectedEligibilityOptions.value.filter((key) => key !== 'open_to_all'),
+        ...(selectedEligibilityOptions.value.includes('location_coverage') ? [] : ['location_coverage']),
+    ];
+    updateEligibilitySummary();
+
+    coverageOptionsError.value = '';
+}
+
+function removeEligibleLocation(location) {
+    setEligibleLocations(selectedEligibleLocations.value.filter((item) => item !== location));
+}
+
+function setNationwideCoverage() {
+    setEligibleLocations(['Nationwide']);
+    selectedEligibilityOptions.value = selectedEligibilityOptions.value.filter((key) => key !== 'location_coverage');
+    updateEligibilitySummary();
+    coverageOptionsError.value = '';
+}
+
 function applyActiveTargetDefaults() {
     const targetForm = activeTargetForm.value;
 
@@ -1749,10 +1892,6 @@ function lookupScholarshipAddress() {
 
 function openLocationMap() {
     showLocationMap.value = true;
-
-    if (scholarshipFormMapAddress.value && !scholarshipForm.value.latitude) {
-        nextTick(lookupScholarshipAddress);
-    }
 }
 
 function closeLocationMap() {
@@ -1806,6 +1945,13 @@ function resetScholarshipForm() {
     selectedTargetPresetKey.value = '';
     selectedEligibilityOptions.value = [];
     customEligibilityText.value = '';
+    coverageLevel.value = 'city';
+    coverageRegionCode.value = '';
+    coverageProvinceCode.value = '';
+    coverageCity.value = '';
+    coverageProvinceOptions.value = [];
+    coverageCityOptions.value = [];
+    coverageOptionsError.value = '';
     imageFile.value = null;
     imagePreviewUrl.value = '';
     formError.value = '';
@@ -3239,17 +3385,74 @@ onBeforeUnmount(() => {
                                         </p>
                                     </div>
 
-                                    <div :class="fieldStackClass">
-                                        <label :class="labelClass" for="scholarship-locations">
-                                            Eligible locations
-                                        </label>
-                                        <input
-                                            id="scholarship-locations"
-                                            v-model="scholarshipForm.eligibleLocations"
-                                            type="text"
-                                            placeholder="Example: Manila, Cebu, Quezon City"
-                                            :class="inputClass"
-                                        >
+                                    <div :class="[fieldStackClass, 'lg:col-span-2']">
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                            <div>
+                                                <p class="text-sm font-bold text-slate-900">Eligible locations</p>
+                                                <p class="mt-1 text-xs text-slate-500">Choose a region first. Province and city options are limited to that region.</p>
+                                            </div>
+                                            <button type="button" class="self-start text-xs font-bold text-slate-700 hover:text-slate-950 sm:self-auto" @click="setNationwideCoverage">
+                                                Set nationwide
+                                            </button>
+                                        </div>
+
+                                        <div class="mt-3 grid items-end gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                            <label>
+                                                <span :class="labelClass">Coverage level</span>
+                                                <select v-model="coverageLevel" :class="inputClass" @change="handleCoverageLevelChange">
+                                                    <option v-for="option in coverageLevelOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                                </select>
+                                            </label>
+                                            <label>
+                                                <span :class="labelClass">Region</span>
+                                                <select v-model="coverageRegionCode" :class="inputClass" @change="handleCoverageRegionChange">
+                                                    <option value="">Select region</option>
+                                                    <option v-for="region in philippineRegionOptions" :key="region.code" :value="region.code">{{ region.label }}</option>
+                                                </select>
+                                            </label>
+                                            <label v-if="coverageLevel !== 'region'">
+                                                <span :class="labelClass">Province</span>
+                                                <select
+                                                    v-model="coverageProvinceCode"
+                                                    :class="inputClass"
+                                                    :disabled="!coverageRegionCode || isLoadingCoverageProvinces"
+                                                    @change="handleCoverageProvinceChange"
+                                                >
+                                                    <option value="">{{ isLoadingCoverageProvinces ? 'Loading provinces...' : 'Select province' }}</option>
+                                                    <option v-for="province in coverageProvinceOptions" :key="province.code" :value="province.code">{{ province.label }}</option>
+                                                </select>
+                                            </label>
+                                            <label v-if="coverageLevel === 'city'">
+                                                <span :class="labelClass">City / municipality</span>
+                                                <select v-model="coverageCity" :class="inputClass" :disabled="!coverageProvinceCode || isLoadingCoverageCities">
+                                                    <option value="">{{ isLoadingCoverageCities ? 'Loading cities...' : 'Select city or municipality' }}</option>
+                                                    <option v-for="city in coverageCityOptions" :key="city.code" :value="city.value">{{ city.label }}</option>
+                                                </select>
+                                            </label>
+                                        </div>
+
+                                        <button type="button" class="mt-3 w-fit rounded-md bg-slate-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800" @click="addEligibleLocation">
+                                            <i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>
+                                            Add coverage
+                                        </button>
+
+                                        <p v-if="coverageOptionsError" class="mt-2 text-xs font-semibold text-rose-600">{{ coverageOptionsError }}</p>
+
+                                        <div v-if="selectedEligibleLocations.length" class="mt-3 flex flex-wrap gap-2">
+                                            <button
+                                                v-for="location in selectedEligibleLocations"
+                                                :key="location"
+                                                type="button"
+                                                class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-slate-700 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                                                :title="`Remove ${location}`"
+                                                @click="removeEligibleLocation(location)"
+                                            >
+                                                <i class="fa-solid fa-location-dot text-amber-600" aria-hidden="true"></i>
+                                                <span>{{ location }}</span>
+                                                <i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
+                                        <p v-else class="mt-3 text-xs font-semibold text-emerald-700">No location restriction selected.</p>
                                     </div>
 
                                     <div :class="fieldStackClass">
@@ -3279,7 +3482,7 @@ onBeforeUnmount(() => {
                                             <span :class="requiredHintClass">Address and pin required</span>
                                         </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Add the office, campus, or service address. Search an address or click the map to set a pin and fill the address.
+                                            Add the public office, campus, or service address. The map locates it automatically when opened, and you can adjust the pin if needed.
                                         </p>
                                     </div>
 
@@ -4075,6 +4278,8 @@ onBeforeUnmount(() => {
                             title="Scholarship address map preview"
                             :marker-text="scholarshipForm.locationName || 'Scholarship location'"
                             :geocode-trigger="providerAddressLookupTrigger"
+                            auto-geocode
+                            :auto-geocode-delay="900"
                             height="min(58vh, 32rem)"
                             picker
                             @resolved="handleScholarshipLocationResolved"
@@ -4094,7 +4299,7 @@ onBeforeUnmount(() => {
                                 class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                                 @click="lookupScholarshipAddress"
                             >
-                                Search address
+                                Retry address search
                             </button>
                             <button
                                 type="button"
