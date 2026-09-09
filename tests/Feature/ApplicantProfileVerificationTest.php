@@ -85,7 +85,7 @@ class ApplicantProfileVerificationTest extends TestCase
         Http::assertSentCount(1);
     }
 
-    public function test_reviewer_cannot_verify_when_cloud_scan_did_not_find_an_academic_result(): void
+    public function test_reviewer_cannot_verify_a_failed_scan_without_entering_the_academic_result(): void
     {
         Storage::fake('local');
         $this->enableAcademicOcr();
@@ -116,7 +116,55 @@ class ApplicantProfileVerificationTest extends TestCase
                 'verification_status' => 'approved',
             ])
             ->assertUnprocessable()
-            ->assertJsonPath('message', 'The academic record must have a successful scan before its result can be verified.');
+            ->assertJsonPath('message', 'The scan did not produce a usable result. Enter the verified academic result from the uploaded record before approving it.');
+    }
+
+    public function test_admin_can_correct_and_verify_an_academic_result_when_cloud_extraction_fails(): void
+    {
+        Storage::fake('local');
+        $this->enableAcademicOcr();
+        Http::fake([
+            'https://api.ocr.space/parse/image' => Http::response([
+                'ParsedResults' => [[
+                    'ParsedText' => 'School year 2026-2027 subject grades only',
+                ]],
+                'OCRExitCode' => 1,
+                'IsErroredOnProcessing' => false,
+            ]),
+        ]);
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('readable-to-reviewer.pdf', 120, 'application/pdf'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('verification_documents.0.ocr_status', 'needs_review');
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+                'verification_status' => 'approved',
+                'academic_grading_scale' => 'percentage',
+                'academic_result' => 91.25,
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.applicant_verification_status', 'approved')
+            ->assertJsonPath('user.gwa', '91.25')
+            ->assertJsonPath('user.academic_result_source', 'admin_review')
+            ->assertJsonPath('verification_documents.0.ocr_status', 'needs_review');
+
+        $this->assertDatabaseHas('student_profiles', [
+            'user_id' => $applicant->id,
+            'gwa' => 91.25,
+            'grading_scale' => 'percentage',
+            'academic_result_source' => 'admin_review',
+            'verification_status' => 'approved',
+            'verified_by' => $admin->id,
+        ]);
     }
 
     public function test_applicant_can_submit_private_academic_record_for_admin_review(): void
@@ -629,6 +677,70 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertOk()
             ->assertJsonPath('applicants.0.verification_oversight.source', 'provider')
             ->assertJsonPath('applicants.0.verification_oversight.provider_organization', 'Tulay Aral Community Foundation');
+    }
+
+    public function test_provider_can_correct_and_verify_a_result_when_cloud_extraction_fails(): void
+    {
+        $this->enableAcademicOcr();
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
+            'verification_status' => 'pending',
+        ]);
+        $proof = ApplicantVerificationDocument::create([
+            'applicant_id' => $applicant->id,
+            'uploaded_by' => $applicant->id,
+            'document_type' => 'academic_record',
+            'original_name' => 'academic-record.pdf',
+            'path' => "applicant-verification/{$applicant->id}/academic-record.pdf",
+            'mime_type' => 'application/pdf',
+            'size' => 1024,
+            'status' => 'submitted',
+            'ocr_status' => 'needs_review',
+            'ocr_provider' => 'ocr_space',
+            'ocr_message' => 'No clearly labeled result was found.',
+            'uploaded_at' => now(),
+        ]);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Reviewer Correction Scholarship',
+            'category' => 'Academic merit',
+            'description' => 'Tests provider correction of an academic result.',
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/profile-verification", [
+                'academic_grading_scale' => 'grade_point',
+                'academic_result' => 1.75,
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.applicant.profile_verification_status', 'approved')
+            ->assertJsonPath('application.applicant.gwa', '1.75')
+            ->assertJsonPath('application.applicant.academic_result_source', 'provider_review')
+            ->assertJsonPath('application.applicant.profile_proofs.0.ocr_status', 'needs_review');
+
+        $this->assertDatabaseHas('student_profiles', [
+            'user_id' => $applicant->id,
+            'gwa' => 1.75,
+            'grading_scale' => 'grade_point',
+            'academic_result_source' => 'provider_review',
+            'verification_status' => 'approved',
+            'verified_by' => $provider->id,
+        ]);
+        $this->assertDatabaseHas('applicant_verification_documents', [
+            'id' => $proof->id,
+            'ocr_status' => 'needs_review',
+            'status' => 'approved',
+        ]);
     }
 
     public function test_admin_can_reopen_provider_verification_with_a_reason_and_provider_cannot_override_it(): void

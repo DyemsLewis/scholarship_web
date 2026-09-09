@@ -195,6 +195,14 @@ const nextActionButton = computed(() => {
     return null;
 });
 const applicationScholarship = computed(() => application.value?.scholarship ?? null);
+const correctionTargetOptions = [
+    { value: 'profile', label: 'Profile information' },
+    { value: 'academic_record', label: 'Academic record' },
+    { value: 'application_files', label: 'Application files' },
+    { value: 'application_answers', label: 'Application answers' },
+    { value: 'other', label: 'Other information' },
+];
+const correctionTargets = computed(() => application.value?.correction_targets ?? []);
 const scholarshipMapAddress = computed(() => {
     const parts = [
         applicationScholarship.value?.location_address,
@@ -235,6 +243,14 @@ function statusLabel(status) {
     return String(status ?? 'submitted')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function correctionTargetLabel(target) {
+    return correctionTargetOptions.find((option) => option.value === target)?.label ?? labelFromKey(target);
+}
+
+function correctionTargetsInclude(target) {
+    return correctionTargets.value.includes(target);
 }
 
 function statusClass(status) {
@@ -1595,10 +1611,30 @@ onMounted(loadApplication);
                                             {{ application.correction_status === 'requested' ? 'Provider needs an update' : application.correction_status === 'submitted' ? 'Correction sent for review' : 'Correction completed' }}
                                         </h3>
                                         <p v-if="application.correction_message" class="mt-2 text-sm leading-6 text-slate-700">{{ application.correction_message }}</p>
+                                        <div v-if="correctionTargets.length" class="mt-2 flex flex-wrap gap-1.5">
+                                            <span v-for="target in correctionTargets" :key="target" class="rounded-md bg-white/80 px-2 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                                                {{ correctionTargetLabel(target) }}
+                                            </span>
+                                        </div>
                                         <p v-if="application.correction_response" class="mt-2 rounded-md bg-white/80 px-3 py-2 text-xs leading-5 text-slate-600"><strong>Your response:</strong> {{ application.correction_response }}</p>
                                         <div v-if="application.correction_status === 'requested'" class="mt-3 flex flex-wrap gap-2">
+                                            <a
+                                                v-if="correctionTargetsInclude('profile')"
+                                                href="/dashboard/profile?section=personal"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                            >Update profile</a>
+                                            <a
+                                                v-if="correctionTargetsInclude('academic_record')"
+                                                href="/dashboard/profile?section=verification"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                            >Update academic record</a>
+                                            <button
+                                                v-if="correctionTargetsInclude('application_files') || !correctionTargets.length"
+                                                type="button"
+                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                                @click="openSection('files')"
+                                            >Update files</button>
                                             <button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="showCorrectionModal = true">Send correction</button>
-                                            <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openSection('files')">Update files</button>
                                         </div>
                                     </div>
                                 </div>
@@ -1643,6 +1679,12 @@ onMounted(loadApplication);
                 </div>
                 <div class="p-5">
                     <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">{{ application?.correction_message }}</div>
+                    <div v-if="correctionTargets.length" class="mt-3">
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Requested areas</p>
+                        <div class="mt-2 flex flex-wrap gap-1.5">
+                            <span v-for="target in correctionTargets" :key="target" class="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{{ correctionTargetLabel(target) }}</span>
+                        </div>
+                    </div>
                     <label class="mt-4 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500" for="correction-response">What did you update?</label>
                     <textarea id="correction-response" v-model="correctionResponse" rows="4" maxlength="1500" class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-600" placeholder="Example: I replaced my report card with the latest copy."></textarea>
                 </div>

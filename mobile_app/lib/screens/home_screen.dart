@@ -21,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool isLoading = true;
   bool isSaving = false;
+  bool isProfilePhotoUploading = false;
   bool isDocumentsLoading = false;
   bool isDocumentSaving = false;
   bool documentsLoaded = false;
@@ -28,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? documentsErrorMessage;
   int selectedTab = 0;
   Map<String, dynamic> user = {};
+  Map<String, dynamic> profileReadiness = {};
   Map<String, dynamic> stats = {};
   Map<String, dynamic> documentStats = {};
   List<Map<String, dynamic>> scholarships = [];
@@ -65,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         user = asMap(data['user']);
+        profileReadiness = asMap(data['profile_readiness']);
         stats = asMap(data['stats']);
         scholarships = asMapList(data['scholarships']);
         applications = asMapList(data['applications']);
@@ -168,6 +171,41 @@ class _HomeScreenState extends State<HomeScreen> {
     if (updated == true) {
       showMessage('Profile updated.');
       await loadPortal();
+    }
+  }
+
+  Future<void> uploadProfilePhoto() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+    );
+    final file = result?.files.single;
+
+    if (file?.path == null) {
+      return;
+    }
+
+    setState(() => isProfilePhotoUploading = true);
+
+    try {
+      final response = await widget.apiClient.uploadProfilePhoto(
+        filePath: file!.path!,
+        fileName: file.name,
+      );
+
+      if (mounted) {
+        setState(() {
+          user = asMap(response['user']);
+          profileReadiness = asMap(response['profile_readiness']);
+        });
+        showMessage('Applicant photo updated.');
+      }
+    } on ApiException catch (error) {
+      showMessage(error.message);
+    } finally {
+      if (mounted) {
+        setState(() => isProfilePhotoUploading = false);
+      }
     }
   }
 
@@ -573,7 +611,12 @@ class _HomeScreenState extends State<HomeScreen> {
           subtitle: 'Complete your details to improve match and DSS scores.',
         ),
         const SizedBox(height: 16),
-        _ProfileCard(user: user, onEdit: openProfileEditor),
+        _ProfileCard(
+          user: user,
+          onEdit: openProfileEditor,
+          onUploadPhoto: uploadProfilePhoto,
+          isUploadingPhoto: isProfilePhotoUploading,
+        ),
       ];
     }
 
@@ -586,7 +629,7 @@ class _HomeScreenState extends State<HomeScreen> {
       const SizedBox(height: 16),
       _StatsGrid(stats: stats),
       const SizedBox(height: 16),
-      _ProfileSummary(user: user),
+      _ProfileSummary(user: user, readiness: profileReadiness),
       const SizedBox(height: 16),
       _NotificationsCard(
         notifications: notifications,
@@ -1069,9 +1112,10 @@ class _StatCard extends StatelessWidget {
 }
 
 class _ProfileSummary extends StatelessWidget {
-  const _ProfileSummary({required this.user});
+  const _ProfileSummary({required this.user, required this.readiness});
 
   final Map<String, dynamic> user;
+  final Map<String, dynamic> readiness;
 
   @override
   Widget build(BuildContext context) {
@@ -1093,7 +1137,14 @@ class _ProfileSummary extends StatelessWidget {
     final complete = readinessFields
         .where((key) => stringValue(user[key]).isNotEmpty)
         .length;
-    final percent = (complete / readinessFields.length * 100).round();
+    final calculatedPercent =
+        ((complete + (user['has_profile_photo'] == true ? 1 : 0)) /
+                (readinessFields.length + 1) *
+                100)
+            .round();
+    final percent = readiness.isNotEmpty
+        ? intValue(readiness['percent'])
+        : calculatedPercent;
 
     return Card(
       child: Padding(
@@ -1271,10 +1322,17 @@ class _NotificationTile extends StatelessWidget {
 }
 
 class _ProfileCard extends StatelessWidget {
-  const _ProfileCard({required this.user, required this.onEdit});
+  const _ProfileCard({
+    required this.user,
+    required this.onEdit,
+    required this.onUploadPhoto,
+    required this.isUploadingPhoto,
+  });
 
   final Map<String, dynamic> user;
   final VoidCallback onEdit;
+  final VoidCallback onUploadPhoto;
+  final bool isUploadingPhoto;
 
   @override
   Widget build(BuildContext context) {
@@ -1401,6 +1459,59 @@ class _ProfileCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    user['has_profile_photo'] == true
+                        ? Icons.check_circle
+                        : Icons.account_box_outlined,
+                    color: user['has_profile_photo'] == true
+                        ? const Color(0xFF047857)
+                        : const Color(0xFF92400E),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Applicant 1x1 or 2x2 photo',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          user['has_profile_photo'] == true
+                              ? 'Required photo uploaded'
+                              : 'Required before applying',
+                          style: const TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  FilledButton.tonal(
+                    onPressed: isUploadingPhoto ? null : onUploadPhoto,
+                    child: Text(
+                      isUploadingPhoto
+                          ? 'Uploading...'
+                          : user['has_profile_photo'] == true
+                          ? 'Replace'
+                          : 'Upload',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             for (final detail in details)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),

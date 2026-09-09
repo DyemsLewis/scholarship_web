@@ -2309,6 +2309,25 @@ class ProviderController extends Controller
         $applicant = $application->applicant;
         abort_unless($applicant?->isApplicant(), 404);
 
+        $reviewedScale = $request->input('academic_grading_scale');
+        $reviewedResultIsNumeric = AcademicRequirement::requiresNumeric($reviewedScale);
+        $validated = $request->validate([
+            'academic_grading_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
+            'academic_result' => [
+                Rule::requiredIf($reviewedResultIsNumeric),
+                'nullable',
+                'numeric',
+                'gt:0',
+                $reviewedScale === AcademicRequirement::SCALE_GRADE_POINT ? 'max:5' : 'max:100',
+            ],
+        ]);
+        $reviewedAcademicResult = filled($validated['academic_grading_scale'] ?? null)
+            ? [
+                'grading_scale' => $validated['academic_grading_scale'],
+                'gwa' => $reviewedResultIsNumeric ? (float) $validated['academic_result'] : null,
+            ]
+            : null;
+
         $verificationStatus = $applicant->applicantAcademicVerificationStatus();
 
         if ($verificationStatus === 'approved') {
@@ -2342,20 +2361,44 @@ class ProviderController extends Controller
             $academicRecord = $applicant->applicantVerificationDocuments
                 ->firstWhere('document_type', 'academic_record');
 
-            if ($academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED) {
+            if ($academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED && $reviewedAcademicResult === null) {
                 throw ValidationException::withMessages([
-                    'verification' => 'The academic record must have a successful scan before its result can be verified.',
+                    'verification' => 'The scan did not produce a usable result. Enter the verified academic result from the uploaded record before approving it.',
                 ]);
             }
         }
 
-        DB::transaction(function () use ($applicant, $request): void {
-            $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
+        $academicRecord ??= $applicant->applicantVerificationDocuments
+            ->firstWhere('document_type', 'academic_record');
+        $previousAcademicResult = [
+            'grading_scale' => $applicant->studentProfile?->grading_scale,
+            'gwa' => $applicant->studentProfile?->gwa !== null
+                ? (float) $applicant->studentProfile->gwa
+                : null,
+        ];
+        $academicResultCorrected = $reviewedAcademicResult !== null
+            && (
+                $reviewedAcademicResult['grading_scale'] !== $previousAcademicResult['grading_scale']
+                || $reviewedAcademicResult['gwa'] !== $previousAcademicResult['gwa']
+                || $academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED
+            );
+
+        DB::transaction(function () use ($applicant, $request, $reviewedAcademicResult, $academicResultCorrected): void {
+            $profileUpdates = [
                 'verification_status' => 'approved',
                 'verification_notes' => null,
                 'verified_by' => $request->user()->id,
                 'verified_at' => now(),
-            ]);
+            ];
+
+            if ($academicResultCorrected) {
+                $profileUpdates = array_merge($profileUpdates, $reviewedAcademicResult, [
+                    'academic_result_source' => 'provider_review',
+                    'academic_result_extracted_at' => now(),
+                ]);
+            }
+
+            $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], $profileUpdates);
 
             $applicant->applicantVerificationDocuments()
                 ->whereIn('document_type', ['academic_record', 'school_record'])
@@ -2378,8 +2421,22 @@ class ProviderController extends Controller
                 'application_id' => $application->id,
                 'scholarship_id' => $application->scholarship_id,
                 'provider_id' => $request->user()->providerOrganizationId(),
+                'academic_result_corrected' => $academicResultCorrected,
+                'previous_academic_result' => $previousAcademicResult,
+                'verified_academic_result' => $academicResultCorrected ? $reviewedAcademicResult : null,
             ],
         );
+
+        if ($academicResultCorrected) {
+            ScholarshipApplication::query()
+                ->where('applicant_id', $applicant->id)
+                ->where(fn ($query) => $query
+                    ->whereNull('application_state')
+                    ->orWhereNotIn('application_state', ['closed', 'withdrawn']))
+                ->get()
+                ->each(fn (ScholarshipApplication $activeApplication) => app(DecisionSupportService::class)
+                    ->syncApplication($activeApplication, 'provider_academic_result_corrected'));
+        }
 
         PortalNotification::create([
             'user_id' => $applicant->id,
@@ -2403,6 +2460,8 @@ class ProviderController extends Controller
         $validated = $request->validate([
             'action' => ['required', Rule::in(['request', 'resolve'])],
             'message' => [Rule::requiredIf($request->input('action') === 'request'), 'nullable', 'string', 'min:5', 'max:1500'],
+            'targets' => ['sometimes', 'array', 'min:1', 'max:5'],
+            'targets.*' => ['required', 'string', 'distinct', Rule::in(ApplicationWorkflowService::CORRECTION_TARGETS)],
         ]);
         $isRequest = $validated['action'] === 'request';
         $application = $isRequest
@@ -2410,17 +2469,21 @@ class ProviderController extends Controller
                 $application,
                 $request->user(),
                 $validated['message'],
+                $validated['targets'] ?? ['other'],
             )
             : $this->workflowService->resolveCorrection($application);
 
         $application->loadMissing(['applicant', 'scholarship']);
+        $targetLabels = collect($application->correction_targets ?? [])
+            ->map(fn (string $target): string => $this->correctionTargetLabel($target))
+            ->implode(', ');
         PortalNotification::create([
             'user_id' => $application->applicant_id,
             'type' => 'application_correction',
             'title' => $isRequest ? 'Application correction requested' : 'Application correction accepted',
             'message' => $isRequest
-                ? "The provider requested an update for your {$application->scholarship->title} application."
-                : "The provider completed the correction review for your {$application->scholarship->title} application.",
+                ? "The provider requested an update for your {$application->scholarship->title} application".($targetLabels ? ": {$targetLabels}." : '.')
+                : "The provider accepted your correction for {$application->scholarship->title}. You can continue from the current application stage.",
             'action_url' => route('dashboard.applications.show', $application, false),
         ]);
         ActivityLog::record(
@@ -4358,7 +4421,7 @@ class ProviderController extends Controller
             'documents' => $application->documents->map(fn (ApplicationDocument $document) => $this->documentPayload($document))->values(),
             'application_answers' => $application->application_answers ?? [],
             'eligibility_score' => $application->eligibility_score,
-            'eligibility_breakdown' => $application->eligibility_breakdown,
+            'eligibility_breakdown' => AcademicRequirement::withReferenceEquivalence($application->eligibility_breakdown),
             'dss_score' => $dss['score'],
             'dss_recommendation' => $dss['recommendation'],
             'dss_breakdown' => $dss,
@@ -4373,6 +4436,7 @@ class ProviderController extends Controller
             'review_notes' => $application->review_notes,
             'correction_status' => $application->correction_status,
             'correction_message' => $application->correction_message,
+            'correction_targets' => $application->correction_targets ?? [],
             'correction_response' => $application->correction_response,
             'correction_requested_at' => $application->correction_requested_at?->format('M d, Y h:i A'),
             'correction_responded_at' => $application->correction_responded_at?->format('M d, Y h:i A'),
@@ -5032,6 +5096,13 @@ class ProviderController extends Controller
             'size' => $document->size,
             'status' => $document->status,
             'review_notes' => $document->review_notes,
+            'ocr_status' => $document->ocr_status ?? AcademicRecordOcrService::STATUS_NOT_REQUESTED,
+            'ocr_provider' => $document->ocr_provider,
+            'ocr_grade' => $document->ocr_grade,
+            'ocr_grading_scale' => $document->ocr_grading_scale,
+            'ocr_label' => $document->ocr_label,
+            'ocr_message' => $document->ocr_message,
+            'ocr_processed_at' => $document->ocr_processed_at?->format('M d, Y h:i A'),
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'view_url' => route('provider.applications.profile-proofs.view', [$application, $document]),
         ];
@@ -5248,6 +5319,17 @@ class ProviderController extends Controller
             'interview' => 'interview',
             'distribution' => 'award release',
             default => 'activity',
+        };
+    }
+
+    private function correctionTargetLabel(string $target): string
+    {
+        return match ($target) {
+            'profile' => 'profile information',
+            'academic_record' => 'academic record',
+            'application_files' => 'application files',
+            'application_answers' => 'application answers',
+            default => 'other application information',
         };
     }
 

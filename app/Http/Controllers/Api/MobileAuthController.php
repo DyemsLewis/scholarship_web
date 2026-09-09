@@ -171,6 +171,7 @@ class MobileAuthController extends Controller
 
         return response()->json([
             'user' => $this->userPayload($user),
+            'profile_readiness' => $user->applicantProfileReadiness(),
             'stats' => $this->statsPayload($user),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $user))->values(),
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
@@ -347,6 +348,73 @@ class MobileAuthController extends Controller
             'user' => $this->userPayload($freshUser),
             'profile_readiness' => $freshUser->applicantProfileReadiness(),
             'verification_reset' => $verificationReset,
+        ]);
+    }
+
+    public function uploadProfilePhoto(Request $request): JsonResponse
+    {
+        [$token, $user] = $this->resolveToken($request);
+
+        if (! $token || ! $user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        $validated = $request->validate([
+            'profile_photo' => [
+                'required',
+                'image',
+                'mimes:jpg,jpeg,png',
+                'max:5120',
+                'dimensions:min_width=300,min_height=300,max_width=4000,max_height=4000,ratio=1/1',
+            ],
+        ], [
+            'profile_photo.dimensions' => 'Use a square 1x1 or 2x2-style photo between 300 x 300 and 4000 x 4000 pixels.',
+        ]);
+
+        $token->forceFill(['last_used_at' => now()])->save();
+        $profile = $user->studentProfile()->firstOrCreate(['user_id' => $user->id]);
+        $file = $validated['profile_photo'];
+        $path = $file->store("profile-photos/{$user->id}", 'local');
+
+        if (! is_string($path)) {
+            throw ValidationException::withMessages([
+                'profile_photo' => 'The applicant photo could not be stored. Please try again.',
+            ]);
+        }
+
+        $oldPath = $profile->profile_photo_path;
+
+        try {
+            $profile->update([
+                'profile_photo_path' => $path,
+                'profile_photo_original_name' => $file->getClientOriginalName(),
+                'profile_photo_mime_type' => $file->getMimeType(),
+                'profile_photo_size' => $file->getSize() ?: 0,
+                'profile_photo_updated_at' => now(),
+            ]);
+        } catch (Throwable $error) {
+            Storage::disk('local')->delete($path);
+
+            throw $error;
+        }
+
+        if ($oldPath && $oldPath !== $path) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        ActivityLog::record(
+            $user,
+            'mobile_applicant_profile_photo_updated',
+            "{$user->name} updated their applicant profile photo from the mobile app.",
+            $request,
+        );
+
+        $freshUser = $user->fresh();
+
+        return response()->json([
+            'message' => 'Applicant photo updated.',
+            'user' => $this->userPayload($freshUser),
+            'profile_readiness' => $freshUser->applicantProfileReadiness(),
         ]);
     }
 
@@ -1161,6 +1229,7 @@ class MobileAuthController extends Controller
             'review_notes' => $application->review_notes,
             'correction_status' => $application->correction_status,
             'correction_message' => $application->correction_message,
+            'correction_targets' => $application->correction_targets ?? [],
             'correction_response' => $application->correction_response,
             'correction_requested_at' => $application->correction_requested_at?->format('M d, Y h:i A'),
             'correction_responded_at' => $application->correction_responded_at?->format('M d, Y h:i A'),

@@ -27,7 +27,7 @@ class FinanceController extends Controller
             'search' => ['nullable', 'string', 'max:120'],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
-        $period = $validated['period'] ?? 'month';
+        $period = $validated['period'] ?? 'all';
         $search = trim($validated['search'] ?? '');
         $now = now();
 

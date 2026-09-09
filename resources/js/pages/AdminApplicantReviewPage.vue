@@ -13,7 +13,15 @@ const loadError = ref('');
 const decisionError = ref('');
 const applicant = ref(null);
 const reviewNote = ref('');
+const reviewedAcademicScale = ref('');
+const reviewedAcademicResult = ref('');
 const previewDocument = ref(null);
+const academicScaleOptions = [
+    { value: 'percentage', label: 'General average / percentage' },
+    { value: 'grade_point', label: 'GWA / GPA grade point' },
+    { value: 'pass_fail', label: 'Pass/fail or competency based' },
+    { value: 'other', label: 'Other grading scale' },
+];
 const requestedSection = new URLSearchParams(window.location.search).get('section');
 const reviewSections = [
     { key: 'profile', label: 'Applicant record', icon: 'fa-solid fa-user-graduate' },
@@ -29,6 +37,21 @@ const academicRecord = computed(() => academicVerificationDocument(applicant.val
 const savedAcademicResult = computed(() => academicResultLabel(applicant.value));
 const academicScanRequired = computed(() => Boolean(applicant.value?.academic_scan_required));
 const academicScanReady = computed(() => !academicScanRequired.value || academicRecord.value?.ocr_status === 'succeeded');
+const reviewedAcademicResultIsNumeric = computed(() => ['percentage', 'grade_point'].includes(reviewedAcademicScale.value));
+const reviewedAcademicResultReady = computed(() => {
+    if (!reviewedAcademicScale.value) {
+        return false;
+    }
+
+    if (!reviewedAcademicResultIsNumeric.value) {
+        return true;
+    }
+
+    const result = Number(reviewedAcademicResult.value);
+    const maximum = reviewedAcademicScale.value === 'grade_point' ? 5 : 100;
+
+    return reviewedAcademicResult.value !== '' && Number.isFinite(result) && result > 0 && result <= maximum;
+});
 const hasGuardianDetails = computed(() => Boolean(
     applicant.value?.guardian_name
     || applicant.value?.guardian_relationship
@@ -233,7 +256,7 @@ function applicantActionOptions(currentApplicant) {
     const status = applicantReviewStatus(currentApplicant);
     const actions = [];
 
-    if (status !== 'approved' && academicScanReady.value) {
+    if (status !== 'approved' && (academicScanReady.value || reviewedAcademicResultReady.value)) {
         actions.push({
             status: 'approved',
             label: 'Verify academic result',
@@ -263,6 +286,8 @@ function applicantActionOptions(currentApplicant) {
 function applyApplicant(payload) {
     applicant.value = payload;
     reviewNote.value = payload?.applicant_verification_notes ?? '';
+    reviewedAcademicScale.value = payload?.grading_scale ?? '';
+    reviewedAcademicResult.value = payload?.gwa ?? '';
 }
 
 async function loadApplicant() {
@@ -307,6 +332,10 @@ async function updateApplicant(verificationStatus) {
         const response = await window.axios.patch(`/admin/users/${applicantId}/profile-verification`, {
             verification_status: verificationStatus,
             verification_notes: verificationNote,
+            academic_grading_scale: verificationStatus === 'approved' ? reviewedAcademicScale.value : null,
+            academic_result: verificationStatus === 'approved' && reviewedAcademicResultIsNumeric.value
+                ? reviewedAcademicResult.value
+                : null,
         });
         const updatedApplicant = response.data.applicant ?? {
             ...applicant.value,
@@ -818,8 +847,38 @@ onMounted(loadApplicant);
                             </div>
 
                             <p v-if="academicScanRequired && !academicScanReady" class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
-                                The portal could not extract a usable academic result. Ask the applicant to upload a clearer record or retry the scan before verification.
+                                The automatic scan did not find a usable result. Read the uploaded record and enter the verified result below, or request a clearer replacement.
                             </p>
+
+                            <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
+                                <p class="text-sm font-bold text-slate-950">Verified academic result</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Correct the value only after comparing it with the uploaded academic record.</p>
+                                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <label class="block">
+                                        <span class="mb-1.5 block text-xs font-bold text-slate-700">Grading scale</span>
+                                        <select v-model="reviewedAcademicScale" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100" @change="decisionError = ''">
+                                            <option value="">Select grading scale</option>
+                                            <option v-for="option in academicScaleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                        </select>
+                                    </label>
+                                    <label v-if="reviewedAcademicResultIsNumeric" class="block">
+                                        <span class="mb-1.5 block text-xs font-bold text-slate-700">Result shown on record</span>
+                                        <input
+                                            v-model="reviewedAcademicResult"
+                                            type="number"
+                                            min="0.01"
+                                            :max="reviewedAcademicScale === 'grade_point' ? 5 : 100"
+                                            step="0.01"
+                                            :placeholder="reviewedAcademicScale === 'grade_point' ? 'Example: 1.75' : 'Example: 89.50'"
+                                            class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
+                                            @input="decisionError = ''"
+                                        >
+                                    </label>
+                                    <div v-else-if="reviewedAcademicScale" class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-xs leading-5 text-slate-600">
+                                        Confirm this non-numeric result directly from the uploaded record.
+                                    </div>
+                                </div>
+                            </div>
 
                             <label class="mt-5 block text-xs font-bold text-slate-700">
                                 Review note <span class="font-normal text-slate-500">(required for reopening or replacement)</span>

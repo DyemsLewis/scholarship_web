@@ -89,7 +89,7 @@ const workflowQueues = computed(() => [
     {
         key: 'waiting_activity',
         label: 'Waiting for activity',
-        description: 'Exam or interview is pending.',
+        description: 'Publish or complete an exam or interview.',
         icon: 'fa-regular fa-calendar',
         count: Number(workflowCounts.value.waiting_activity ?? 0),
         href: `${applicantWorkspaceUrl.value}?filter=waiting_activity&workspace=schedule`,
@@ -185,7 +185,7 @@ const recommendedAction = computed(() => {
 
     const waitingQueue = workflowQueues.value.find((queue) => queue.key === 'waiting_activity' && queue.count > 0);
     if (waitingQueue) {
-        return { eyebrow: 'Activity in progress', title: `${waitingQueue.count} applicant${waitingQueue.count === 1 ? '' : 's'} waiting for an activity`, description: 'The shared schedule is published. Return after the activity to record results.', label: 'View activities', href: waitingQueue.href };
+        return { eyebrow: 'Activity scheduled', title: `${waitingQueue.count} applicant${waitingQueue.count === 1 ? '' : 's'} scheduled for an activity`, description: 'The shared schedule is published. Complete the activity, then record each applicant\'s result.', label: 'Manage activities', href: waitingQueue.href };
     }
 
     if (Number(workflowCounts.value.all ?? 0) > 0) {
@@ -412,9 +412,9 @@ onMounted(loadProgram);
                         </dl>
                     </section>
 
-                    <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-                        <section v-if="recommendedAction" class="overflow-hidden rounded-lg border border-amber-200 bg-amber-50 shadow-sm">
-                            <div class="flex h-full flex-col justify-between gap-5 p-5 sm:flex-row sm:items-center">
+                    <div class="mt-4 grid gap-4">
+                        <section v-if="recommendedAction" class="self-start overflow-hidden rounded-lg border border-amber-200 bg-amber-50 shadow-sm">
+                            <div class="flex flex-col justify-between gap-5 p-5 sm:flex-row sm:items-center">
                                 <div class="flex min-w-0 items-start gap-3">
                                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
                                     <div>

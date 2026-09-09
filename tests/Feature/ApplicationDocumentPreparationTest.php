@@ -252,6 +252,7 @@ class ApplicationDocumentPreparationTest extends TestCase
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',
+            'profile_photo_path' => 'profile-photos/tests/document-applicant.jpg',
         ]);
 
         return $applicant->fresh();

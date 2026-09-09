@@ -15,11 +15,10 @@ const isMeetingSaving = ref(false);
 const errorMessage = ref('');
 const purchase = ref(null);
 const previewFile = ref(null);
-const requestForm = ref({ request_summary: '', requested_outcome: '' });
 const responseMessage = ref('');
 const completionForm = ref({ rating: '', feedback: '' });
 const reopenReason = ref('');
-const meetingForm = ref({ meeting_scheduled_for: '', meeting_mode: 'online', meeting_purpose: '' });
+const meetingForm = ref({ meeting_scheduled_for: '', meeting_mode: 'online' });
 
 const supportingFiles = computed(() => purchase.value?.files?.filter((file) => file.category === 'supporting') ?? []);
 const deliverables = computed(() => purchase.value?.files?.filter((file) => file.category === 'deliverable') ?? []);
@@ -30,18 +29,6 @@ const canReopen = computed(() => ['provider_review', 'completed'].includes(purch
 const canRequestMeeting = computed(() => purchase.value?.status === 'paid'
     && purchase.value?.fulfillment_status !== 'completed');
 const minimumMeetingDateTime = computed(() => dateTimeInput(new Date(Date.now() + 60 * 60 * 1000).toISOString()));
-
-const milestoneDescriptions = {
-    'Program form walkthrough': 'Review the program details, applicant information, benefits, and schedule fields needed for a complete setup.',
-    'Requirement and eligibility review': 'Check that the eligibility rules and required documents are clear, relevant, and ready for applicants.',
-    'Publishing-readiness check': 'Confirm the program content and workflow are complete before it is submitted for platform review.',
-    'Workflow setup review': 'Review the application stages and provider actions so the cycle follows the intended process.',
-    'Applicant queue organization': 'Organize applicant records and statuses so the team can review each group efficiently.',
-    'Schedule and notification check': 'Confirm important dates, locations, instructions, and applicant notifications are prepared.',
-    'Current-process review': 'Document how the organization currently receives, evaluates, and advances scholarship applications.',
-    'Data and workflow mapping': 'Match existing applicant data and review steps to the corresponding portal fields and stages.',
-    'Implementation recommendations': 'Provide practical next steps for moving the organization process into the platform.',
-};
 
 function statusLabel(value) {
     return {
@@ -84,21 +71,11 @@ function dateTimeInput(value) {
     return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function milestoneDescription(label) {
-    return milestoneDescriptions[label]
-        ?? 'Complete and document this agreed part of the service before the work is sent for your review.';
-}
-
 function applyPurchase(payload) {
     purchase.value = payload;
-    requestForm.value = {
-        request_summary: payload?.request_summary ?? '',
-        requested_outcome: payload?.requested_outcome ?? '',
-    };
     meetingForm.value = {
         meeting_scheduled_for: dateTimeInput(payload?.meeting_scheduled_for),
         meeting_mode: payload?.meeting_mode ?? 'online',
-        meeting_purpose: payload?.meeting_purpose ?? '',
     };
 }
 
@@ -116,27 +93,15 @@ async function loadWorkspace() {
     }
 }
 
-async function saveBrief() {
-    if (isSaving.value) return;
-    isSaving.value = true;
-
-    try {
-        const response = await window.axios.patch(`/provider/billing/${purchaseId}/request`, requestForm.value);
-        applyPurchase(response.data.purchase);
-        showPortalToast({ title: 'Brief updated', message: response.data.message });
-    } catch (error) {
-        showPortalToast({ type: 'error', title: 'Unable to update brief', message: error.response?.data?.message ?? 'Check the request details and try again.' });
-    } finally {
-        isSaving.value = false;
-    }
-}
-
 async function requestMeeting() {
     if (isMeetingSaving.value) return;
     isMeetingSaving.value = true;
 
     try {
-        const response = await window.axios.post(`/provider/billing/${purchaseId}/meeting`, meetingForm.value);
+        const response = await window.axios.post(`/provider/billing/${purchaseId}/meeting`, {
+            ...meetingForm.value,
+            meeting_purpose: `Discuss the ${purchase.value?.plan_name ?? 'provider service'} request with platform support.`,
+        });
         applyPurchase(response.data.purchase);
         showPortalToast({ title: 'Meeting request sent', message: response.data.message });
     } catch (error) {
@@ -228,8 +193,8 @@ onMounted(loadWorkspace);
         <section class="provider-page">
             <div class="provider-container">
                 <header class="provider-hero">
-                    <a href="/provider/billing" class="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-950">
-                        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to services
+                    <a href="/provider/billing/requests" class="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-950">
+                        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to your requests
                     </a>
                     <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div>
@@ -249,19 +214,18 @@ onMounted(loadWorkspace);
                 <div v-else-if="errorMessage || !purchase" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
 
                 <template v-else>
-                    <section class="provider-panel mt-5 grid overflow-hidden sm:grid-cols-3">
-                        <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
-                            <p class="text-xs font-semibold text-slate-500">Assigned support</p>
-                            <p class="mt-1 text-sm font-bold text-slate-950">{{ purchase.assigned_to_name || 'Awaiting assignment' }}</p>
+                    <section class="provider-panel mt-5 flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex flex-wrap gap-x-8 gap-y-3">
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500">Assigned support</p>
+                                <p class="mt-1 text-sm font-bold text-slate-950">{{ purchase.assigned_to_name || 'Awaiting assignment' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500">Target completion</p>
+                                <p class="mt-1 text-sm font-bold text-slate-950">{{ dateTime(purchase.target_due_at) }}</p>
+                            </div>
                         </div>
-                        <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
-                            <p class="text-xs font-semibold text-slate-500">Target completion</p>
-                            <p class="mt-1 text-sm font-bold text-slate-950">{{ dateTime(purchase.target_due_at) }}</p>
-                        </div>
-                        <div class="p-4">
-                            <p class="text-xs font-semibold text-slate-500">Milestones</p>
-                            <p class="mt-1 text-sm font-bold text-slate-950">{{ completedMilestones }} of {{ purchase.milestones?.length ?? 0 }} completed</p>
-                        </div>
+                        <p class="text-xs font-semibold text-slate-500">{{ completedMilestones }} of {{ purchase.milestones?.length ?? 0 }} steps complete</p>
                     </section>
 
                     <div v-if="purchase.status !== 'paid'" class="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
@@ -269,67 +233,44 @@ onMounted(loadWorkspace);
                     </div>
 
                     <div class="mt-5 space-y-4">
-                        <div class="space-y-4">
-                            <section class="provider-panel p-5 sm:p-6">
-                                <div class="flex items-start gap-3">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span>
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Request brief</p>
-                                        <h2 class="mt-1 text-xl font-bold text-slate-950">What your team needs</h2>
-                                    </div>
-                                </div>
-                                <form class="mt-5 grid gap-4" @submit.prevent="saveBrief">
-                                    <label class="block">
-                                        <span class="text-sm font-bold text-slate-700">Situation or challenge</span>
-                                        <textarea v-model="requestForm.request_summary" rows="4" maxlength="2000" :disabled="!canWork" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100 disabled:bg-slate-50" placeholder="Explain the current process, issue, or program your team needs help with."></textarea>
-                                    </label>
-                                    <label class="block">
-                                        <span class="text-sm font-bold text-slate-700">Expected result</span>
-                                        <textarea v-model="requestForm.requested_outcome" rows="3" maxlength="1200" :disabled="!canWork" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100 disabled:bg-slate-50" placeholder="Describe what a useful completed service should provide."></textarea>
-                                    </label>
-                                    <button v-if="canWork" type="submit" class="w-fit rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50" :disabled="isSaving">{{ isSaving ? 'Saving...' : 'Save brief' }}</button>
-                                </form>
-                            </section>
+                        <div class="flex flex-col gap-4">
 
-                            <section class="provider-panel overflow-hidden">
+                            <section class="provider-panel order-2 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6">
                                     <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Included work</p>
-                                        <h2 class="mt-1 text-xl font-bold text-slate-950">Service milestones</h2>
-                                        <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">These checkpoints show what is included in the service and what platform support has completed.</p>
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Progress</p>
+                                        <h2 class="mt-1 text-xl font-bold text-slate-950">Service steps</h2>
+                                        <p class="mt-2 text-sm text-slate-600">Track what platform support has finished after your meeting.</p>
                                     </div>
                                     <span class="w-fit rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">{{ completedMilestones }} of {{ purchase.milestones?.length ?? 0 }} completed</span>
                                 </div>
-                                <ol class="grid gap-4 p-5 sm:p-6 lg:grid-cols-3">
-                                    <li v-for="(item, index) in purchase.milestones" :key="item.id" :class="['rounded-lg border p-4', item.completed ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-slate-50']">
-                                        <div class="flex items-center justify-between gap-3">
-                                            <span class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Milestone {{ index + 1 }}</span>
-                                            <span :class="['inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-bold', item.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-slate-600 ring-1 ring-slate-200']">
-                                                <i :class="['fa-solid', item.completed ? 'fa-check' : 'fa-clock']" aria-hidden="true"></i>
-                                                {{ item.completed ? 'Completed' : 'Pending' }}
-                                            </span>
-                                        </div>
-                                        <h3 class="mt-3 text-base font-bold text-slate-950">{{ item.label }}</h3>
-                                        <p class="mt-2 text-sm leading-6 text-slate-600">{{ milestoneDescription(item.label) }}</p>
+                                <ol class="divide-y divide-slate-200">
+                                    <li v-for="(item, index) in purchase.milestones" :key="item.id" class="flex items-center gap-3 px-5 py-4 sm:px-6">
+                                        <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold', item.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">
+                                            <i v-if="item.completed" class="fa-solid fa-check" aria-hidden="true"></i>
+                                            <span v-else>{{ index + 1 }}</span>
+                                        </span>
+                                        <p class="min-w-0 flex-1 text-sm font-bold text-slate-900">{{ item.label }}</p>
+                                        <span :class="['shrink-0 text-xs font-bold', item.completed ? 'text-emerald-700' : 'text-slate-500']">{{ item.completed ? 'Completed' : 'Pending' }}</span>
                                     </li>
                                 </ol>
                             </section>
 
-                            <section class="provider-panel overflow-hidden">
+                            <section class="provider-panel order-1 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
                                     <div class="flex items-start gap-3">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i></span>
                                         <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Coordination</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Meeting with admin support</h2>
-                                            <p class="mt-2 text-sm leading-6 text-slate-600">Choose a preferred date and time. An admin confirms the request before the meeting becomes final.</p>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Next step</p>
+                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Schedule your service meeting</h2>
+                                            <p class="mt-2 text-sm leading-6 text-slate-600">Choose when and how to meet. Your team and platform support will discuss the work during the meeting.</p>
                                         </div>
                                     </div>
                                     <span v-if="purchase.meeting_status" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold capitalize', meetingStatusClass(purchase.meeting_status)]">{{ purchase.meeting_status }}</span>
                                 </div>
 
                                 <div class="p-5 sm:p-6">
-                                    <div v-if="purchase.meeting_scheduled_for" class="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                                    <div v-if="purchase.meeting_scheduled_for" class="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
                                         <div>
                                             <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Preferred schedule</p>
                                             <p class="mt-1.5 text-sm font-bold text-slate-950">{{ dateTime(purchase.meeting_scheduled_for) }}</p>
@@ -338,11 +279,7 @@ onMounted(loadWorkspace);
                                             <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Meeting format</p>
                                             <p class="mt-1.5 text-sm font-bold text-slate-950">{{ purchase.meeting_mode === 'online' ? 'Online' : 'On-site' }}</p>
                                         </div>
-                                        <div class="sm:col-span-2 lg:col-span-1">
-                                            <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Purpose</p>
-                                            <p class="mt-1.5 text-sm leading-6 text-slate-700">{{ purchase.meeting_purpose }}</p>
-                                        </div>
-                                        <div v-if="purchase.meeting_admin_note" class="border-t border-slate-200 pt-4 sm:col-span-2 lg:col-span-3">
+                                        <div v-if="purchase.meeting_admin_note" class="border-t border-slate-200 pt-4 sm:col-span-2">
                                             <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Admin note or instructions</p>
                                             <p class="mt-1.5 whitespace-pre-line text-sm leading-6 text-slate-700">{{ purchase.meeting_admin_note }}</p>
                                         </div>
@@ -350,8 +287,8 @@ onMounted(loadWorkspace);
 
                                     <form v-if="canRequestMeeting" :class="['grid gap-4', purchase.meeting_scheduled_for ? 'mt-5 border-t border-slate-200 pt-5' : '']" @submit.prevent="requestMeeting">
                                         <div>
-                                            <h3 class="text-sm font-bold text-slate-950">{{ purchase.meeting_status === 'confirmed' ? 'Request a different time' : purchase.meeting_status ? 'Update meeting request' : 'Request a meeting' }}</h3>
-                                            <p class="mt-1 text-sm text-slate-500">Use a time when your team is available to discuss this service request.</p>
+                                            <h3 class="text-sm font-bold text-slate-950">{{ purchase.meeting_status === 'confirmed' ? 'Change the meeting' : purchase.meeting_status ? 'Update the meeting' : 'Choose a meeting time' }}</h3>
+                                            <p class="mt-1 text-sm text-slate-500">The admin will confirm your preferred schedule.</p>
                                         </div>
                                         <div class="grid gap-4 sm:grid-cols-2">
                                             <label class="block">
@@ -366,13 +303,9 @@ onMounted(loadWorkspace);
                                                 </select>
                                             </label>
                                         </div>
-                                        <label class="block">
-                                            <span class="text-sm font-bold text-slate-700">Meeting purpose</span>
-                                            <textarea v-model="meetingForm.meeting_purpose" rows="2" required minlength="10" maxlength="1000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100" placeholder="What would you like to discuss with platform support?"></textarea>
-                                        </label>
                                         <p v-if="purchase.meeting_status === 'confirmed'" class="text-xs leading-5 text-amber-700">Submitting a different time replaces the confirmed schedule and requires admin confirmation again.</p>
                                         <button type="submit" class="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 sm:w-fit" :disabled="isMeetingSaving">
-                                            {{ isMeetingSaving ? 'Sending...' : purchase.meeting_status ? 'Send updated request' : 'Request meeting' }}
+                                            {{ isMeetingSaving ? 'Sending...' : purchase.meeting_status ? 'Update meeting' : 'Send meeting request' }}
                                         </button>
                                     </form>
 
@@ -380,7 +313,7 @@ onMounted(loadWorkspace);
                                 </div>
                             </section>
 
-                            <section class="provider-panel overflow-hidden">
+                            <section class="provider-panel order-3 overflow-hidden">
                                 <div class="border-b border-slate-200 p-5 sm:p-6">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Files</p>
                                     <h2 class="mt-1 text-xl font-bold text-slate-950">Supporting files and deliverables</h2>
@@ -416,7 +349,7 @@ onMounted(loadWorkspace);
                                 </div>
                             </section>
 
-                            <section class="provider-panel overflow-hidden">
+                            <section class="provider-panel order-4 overflow-hidden">
                                 <div class="border-b border-slate-200 p-5 sm:p-6">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Updates</p>
                                     <h2 class="mt-1 text-xl font-bold text-slate-950">Service history</h2>

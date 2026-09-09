@@ -115,11 +115,28 @@ class DataQualityTrackingTest extends TestCase
     public function test_incompatible_or_non_numeric_grading_scales_are_flagged_for_manual_review(): void
     {
         $scaleMismatch = AcademicRequirement::match(1.75, 'grade_point', 85, 'percentage');
+        $reverseScaleMismatch = AcademicRequirement::match(90, 'percentage', 1.50, 'grade_point');
         $passFail = AcademicRequirement::match(null, 'pass_fail', null, 'pass_fail');
 
         $this->assertSame('missing', $scaleMismatch['status']);
         $this->assertSame('scale_mismatch', $scaleMismatch['comparison_mode']);
         $this->assertFalse($scaleMismatch['is_comparable']);
+        $this->assertSame('Approx. 87-92%', $scaleMismatch['equivalence']['applicant']);
+        $this->assertSame('Approx. 2.00-2.25 GWA/GPA', $scaleMismatch['equivalence']['requirement']);
+        $this->assertSame('Approx. 1.50-1.75 GWA/GPA', $reverseScaleMismatch['equivalence']['applicant']);
+        $this->assertSame('Approx. 90-95%', $reverseScaleMismatch['equivalence']['requirement']);
+
+        $legacyBreakdown = AcademicRequirement::withReferenceEquivalence([
+            'criteria' => [[
+                'comparison_mode' => 'scale_mismatch',
+                'student_value' => '90.00%',
+                'requirement' => 'Maximum GWA/GPA 1.50',
+                'student_scale' => 'percentage',
+                'requirement_scale' => 'grade_point',
+            ]],
+        ]);
+        $this->assertSame('Approx. 1.50-1.75 GWA/GPA', $legacyBreakdown['criteria'][0]['equivalence']['applicant']);
+        $this->assertSame('Approx. 90-95%', $legacyBreakdown['criteria'][0]['equivalence']['requirement']);
         $this->assertSame('info', $passFail['status']);
         $this->assertSame('manual_review', $passFail['comparison_mode']);
         $this->assertFalse($passFail['counts']);
@@ -144,6 +161,7 @@ class DataQualityTrackingTest extends TestCase
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',
+            'profile_photo_path' => 'profile-photos/tests/data-quality-applicant.jpg',
         ]);
         $scholarship = Scholarship::create([
             'provider_id' => $provider->id,

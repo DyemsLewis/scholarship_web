@@ -451,6 +451,7 @@ class DemoReadinessWorkflowTest extends TestCase
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',
+            'profile_photo_path' => 'profile-photos/tests/demo-readiness-applicant.jpg',
         ]);
 
         return $applicant->fresh();

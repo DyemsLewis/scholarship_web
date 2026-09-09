@@ -46,8 +46,11 @@ const applicationNavigation = ref({
 });
 const showCorrectionForm = ref(false);
 const correctionMessage = ref('');
+const correctionTargets = ref([]);
 const isHandlingCorrection = ref(false);
 const isVerifyingAcademicRecord = ref(false);
+const reviewedAcademicScale = ref('');
+const reviewedAcademicResult = ref('');
 const {
     confirmation,
     requestConfirmation,
@@ -73,6 +76,18 @@ const scheduleModeOptions = [
     { value: 'online', label: 'Online' },
     { value: 'hybrid', label: 'Hybrid' },
     { value: 'provider_managed', label: 'Provider managed' },
+];
+const academicScaleOptions = [
+    { value: 'percentage', label: 'General average / percentage' },
+    { value: 'grade_point', label: 'GWA / GPA grade point' },
+    { value: 'pass_fail', label: 'Pass/fail or competency based' },
+    { value: 'other', label: 'Other grading scale' },
+];
+const correctionTargetOptions = [
+    { value: 'profile', label: 'Profile information', icon: 'fa-solid fa-user-pen' },
+    { value: 'academic_record', label: 'Academic record', icon: 'fa-solid fa-graduation-cap' },
+    { value: 'application_files', label: 'Application files', icon: 'fa-solid fa-file-arrow-up' },
+    { value: 'other', label: 'Other information', icon: 'fa-solid fa-ellipsis' },
 ];
 
 function safeProviderUrl(value) {
@@ -238,6 +253,21 @@ const academicProfileProof = computed(() => applicantProfileProofs.value.find(
 ) ?? null);
 const academicScanRequired = computed(() => Boolean(application.value?.applicant?.academic_scan_required));
 const academicScanReady = computed(() => !academicScanRequired.value || academicProfileProof.value?.ocr_status === 'succeeded');
+const reviewedAcademicResultIsNumeric = computed(() => ['percentage', 'grade_point'].includes(reviewedAcademicScale.value));
+const reviewedAcademicResultReady = computed(() => {
+    if (!reviewedAcademicScale.value) {
+        return false;
+    }
+
+    if (!reviewedAcademicResultIsNumeric.value) {
+        return true;
+    }
+
+    const result = Number(reviewedAcademicResult.value);
+    const maximum = reviewedAcademicScale.value === 'grade_point' ? 5 : 100;
+
+    return reviewedAcademicResult.value !== '' && Number.isFinite(result) && result > 0 && result <= maximum;
+});
 const applicantApplicationAnswers = computed(() => (
     Array.isArray(application.value?.application_answers)
         ? application.value.application_answers
@@ -259,7 +289,7 @@ const academicEvidenceState = computed(() => {
 const canVerifyAcademicRecord = computed(() => (
     application.value?.applicant?.profile_verification_status === 'pending'
         && Boolean(academicProfileProof.value)
-        && academicScanReady.value
+        && (academicScanReady.value || reviewedAcademicResultReady.value)
 ));
 const applicantInitials = computed(() => String(application.value?.applicant?.name ?? 'Applicant')
     .split(/\s+/)
@@ -447,15 +477,7 @@ const decisionPanelDescription = computed(() => {
     return 'Use one result to move the applicant forward or close the application at this stage.';
 });
 const canRequestCorrection = computed(() => application.value
-    && ![
-        'withdrawn',
-        'rejected',
-        'not_awarded',
-        'exam_failed',
-        'interview_failed',
-        'disbursed',
-        'renewed',
-    ].includes(application.value.status)
+    && !workflow.value.is_closed
     && !['requested', 'submitted'].includes(application.value.correction_status));
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
@@ -800,6 +822,22 @@ function labelFromKey(value) {
     return formatKeyLabel(value);
 }
 
+function eligibilityValueLabel(value, fallback) {
+    const text = String(value ?? '').trim();
+
+    return text ? labelFromKey(text) : fallback;
+}
+
+function correctionTargetLabel(target) {
+    return correctionTargetOptions.find((option) => option.value === target)?.label ?? labelFromKey(target);
+}
+
+function resetCorrectionForm() {
+    showCorrectionForm.value = false;
+    correctionMessage.value = '';
+    correctionTargets.value = [];
+}
+
 function documentRequirements(requirements) {
     if (!requirements) {
         return [];
@@ -827,6 +865,8 @@ function applicantAcademicLabel(applicant) {
 
 function applyApplication(payload) {
     application.value = payload;
+    reviewedAcademicScale.value = payload?.applicant?.grading_scale ?? '';
+    reviewedAcademicResult.value = payload?.applicant?.gwa ?? '';
     selectedReviewActionKey.value = '';
     reviewForm.value = {
         status: payload?.status ?? 'submitted',
@@ -863,7 +903,7 @@ async function verifyApplicantAcademicRecord() {
 
     const confirmed = await requestConfirmation({
         title: 'Verify this academic record?',
-        message: 'Confirm that you reviewed the uploaded academic record. This verifies the applicant profile across the portal, but does not approve this scholarship application.',
+        message: 'Confirm that the saved academic result matches the uploaded record. This verifies the applicant profile across the portal, but does not approve this scholarship application.',
         confirmLabel: 'Verify record',
     });
 
@@ -877,7 +917,10 @@ async function verifyApplicantAcademicRecord() {
     try {
         const response = await window.axios.patch(
             `/provider/applications/${application.value.id}/profile-verification`,
-            {},
+            {
+                academic_grading_scale: reviewedAcademicScale.value,
+                academic_result: reviewedAcademicResultIsNumeric.value ? reviewedAcademicResult.value : null,
+            },
             { portalToast: false },
         );
 
@@ -965,8 +1008,10 @@ async function loadApplication() {
 async function requestApplicationCorrection() {
     const message = correctionMessage.value.trim();
 
-    if (!application.value || message.length < 5) {
-        errorMessage.value = 'Tell the applicant what needs to be corrected.';
+    if (!application.value || !correctionTargets.value.length || message.length < 5) {
+        errorMessage.value = !correctionTargets.value.length
+            ? 'Choose what the applicant needs to update.'
+            : 'Tell the applicant what needs to be corrected.';
         return;
     }
 
@@ -977,17 +1022,18 @@ async function requestApplicationCorrection() {
         const response = await window.axios.patch(`/provider/applications/${application.value.id}/correction`, {
             action: 'request',
             message,
+            targets: correctionTargets.value,
         });
 
         applyApplication(response.data.application);
-        correctionMessage.value = '';
-        showCorrectionForm.value = false;
+        resetCorrectionForm();
         showPortalToast({
             title: 'Correction requested',
             message: response.data.message,
         });
     } catch (error) {
         errorMessage.value = error.response?.data?.errors?.message?.[0]
+            ?? error.response?.data?.errors?.targets?.[0]
             ?? error.response?.data?.errors?.action?.[0]
             ?? error.response?.data?.message
             ?? 'Unable to send the correction request.';
@@ -1393,13 +1439,25 @@ onMounted(loadApplication);
                                         <dl class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
                                             <div class="rounded-md bg-slate-50 p-2.5">
                                                 <dt class="font-semibold text-slate-500">Applicant</dt>
-                                                <dd class="mt-1 break-words font-bold text-slate-800">{{ criterion.student_value || 'Not provided' }}</dd>
+                                                <dd class="mt-1 break-words font-bold text-slate-800">{{ eligibilityValueLabel(criterion.student_value, 'Not provided') }}</dd>
                                             </div>
                                             <div class="rounded-md bg-slate-50 p-2.5">
                                                 <dt class="font-semibold text-slate-500">Program rule</dt>
-                                                <dd class="mt-1 break-words font-bold text-slate-800">{{ criterion.requirement || 'Open to all' }}</dd>
+                                                <dd class="mt-1 break-words font-bold text-slate-800">{{ eligibilityValueLabel(criterion.requirement, 'Open to all') }}</dd>
                                             </div>
                                         </dl>
+                                        <div v-if="criterion.equivalence" class="mt-3 border-l-2 border-amber-400 bg-amber-50 px-3 py-2.5 text-xs">
+                                            <p class="font-bold text-slate-900">Reference equivalents</p>
+                                            <div class="mt-1.5 grid gap-1 text-slate-700 sm:grid-cols-2">
+                                                <p v-if="criterion.equivalence.applicant">
+                                                    <span class="font-semibold">Applicant:</span> {{ criterion.equivalence.applicant }}
+                                                </p>
+                                                <p v-if="criterion.equivalence.requirement">
+                                                    <span class="font-semibold">Required grade:</span> {{ criterion.equivalence.requirement }}
+                                                </p>
+                                            </div>
+                                            <p class="mt-1.5 leading-5 text-slate-600">{{ criterion.equivalence.notice }}</p>
+                                        </div>
                                     </article>
                                 </div>
                                 <p v-else class="p-5 text-sm leading-6 text-slate-600">This program does not have structured eligibility rules to compare.</p>
@@ -1540,6 +1598,11 @@ onMounted(loadApplication);
                                             <p v-if="application.correction_message" class="mt-2 text-sm leading-6 text-slate-700">
                                                 <strong>Requested:</strong> {{ application.correction_message }}
                                             </p>
+                                            <div v-if="application.correction_targets?.length" class="mt-2 flex flex-wrap gap-1.5">
+                                                <span v-for="target in application.correction_targets" :key="target" class="rounded-md bg-white/80 px-2 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                                                    {{ correctionTargetLabel(target) }}
+                                                </span>
+                                            </div>
                                             <p v-if="application.correction_response" class="mt-1 text-sm leading-6 text-slate-700">
                                                 <strong>Applicant response:</strong> {{ application.correction_response }}
                                             </p>
@@ -1557,7 +1620,17 @@ onMounted(loadApplication);
                                 </div>
 
                                 <div v-if="showCorrectionForm" class="mt-5 rounded-md border border-slate-300 bg-slate-50 p-4">
-                                    <label :class="labelClass">What should the applicant correct?</label>
+                                    <fieldset>
+                                        <legend :class="labelClass">What needs attention?</legend>
+                                        <div class="grid gap-2 sm:grid-cols-2">
+                                            <label v-for="option in correctionTargetOptions" :key="option.value" class="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:border-slate-400">
+                                                <input v-model="correctionTargets" type="checkbox" :value="option.value" class="h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400">
+                                                <i :class="option.icon" class="w-4 text-center text-slate-400" aria-hidden="true"></i>
+                                                <span>{{ option.label }}</span>
+                                            </label>
+                                        </div>
+                                    </fieldset>
+                                    <label :class="[labelClass, 'mt-4']">What should the applicant correct?</label>
                                     <textarea
                                         v-model="correctionMessage"
                                         rows="3"
@@ -1578,7 +1651,7 @@ onMounted(loadApplication);
                                             type="button"
                                             :disabled="isHandlingCorrection"
                                             class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
-                                            @click="showCorrectionForm = false; correctionMessage = ''"
+                                            @click="resetCorrectionForm"
                                         >
                                             Cancel
                                         </button>
@@ -2288,22 +2361,51 @@ onMounted(loadApplication);
                                         <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                             {{ applicantProfileProofs.length ? 'Record available' : 'No record' }}
                                         </span>
-                                        <button
-                                            v-if="canVerifyAcademicRecord"
-                                            type="button"
-                                            class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                            :disabled="isVerifyingAcademicRecord"
-                                            @click="verifyApplicantAcademicRecord"
-                                        >
-                                            <i class="fa-solid fa-shield-check" aria-hidden="true"></i>
-                                            {{ isVerifyingAcademicRecord ? 'Verifying...' : 'Verify record' }}
-                                        </button>
                                     </div>
                                 </div>
 
                                 <p v-if="academicScanRequired && academicProfileProof && !academicScanReady" class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm leading-6 text-amber-900">
-                                    The academic result was not extracted successfully. Ask the applicant to retry or upload a clearer record before verification.
+                                    The automatic scan did not find a usable result. Read the uploaded record and enter the verified result below, or ask for a clearer replacement.
                                 </p>
+
+                                <div v-if="academicProfileProof && application.applicant?.profile_verification_status === 'pending'" class="border-b border-slate-200 bg-slate-50 p-4 sm:px-5">
+                                    <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
+                                        <label class="block flex-1">
+                                            <span class="mb-1.5 block text-xs font-bold text-slate-700">Verified grading scale</span>
+                                            <select v-model="reviewedAcademicScale" :class="inputClass" @change="errorMessage = ''">
+                                                <option value="">Select grading scale</option>
+                                                <option v-for="option in academicScaleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                            </select>
+                                        </label>
+                                        <label v-if="reviewedAcademicResultIsNumeric" class="block flex-1">
+                                            <span class="mb-1.5 block text-xs font-bold text-slate-700">Result shown on record</span>
+                                            <input
+                                                v-model="reviewedAcademicResult"
+                                                type="number"
+                                                min="0.01"
+                                                :max="reviewedAcademicScale === 'grade_point' ? 5 : 100"
+                                                step="0.01"
+                                                :placeholder="reviewedAcademicScale === 'grade_point' ? 'Example: 1.75' : 'Example: 89.50'"
+                                                :class="inputClass"
+                                                @input="errorMessage = ''"
+                                            >
+                                        </label>
+                                        <div v-else-if="reviewedAcademicScale" class="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-xs leading-5 text-slate-600">
+                                            Confirm this non-numeric result directly from the uploaded record.
+                                        </div>
+                                        <button
+                                            v-if="canVerifyAcademicRecord"
+                                            type="button"
+                                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                            :disabled="isVerifyingAcademicRecord"
+                                            @click="verifyApplicantAcademicRecord"
+                                        >
+                                            <i class="fa-solid fa-shield-check" aria-hidden="true"></i>
+                                            {{ isVerifyingAcademicRecord ? 'Verifying...' : 'Verify result' }}
+                                        </button>
+                                    </div>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">Correct the result only after comparing it with the uploaded academic record.</p>
+                                </div>
 
                                 <div v-if="applicantProfileProofs.length" class="divide-y divide-slate-200">
                                     <article v-for="proof in applicantProfileProofs" :key="proof.id" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">

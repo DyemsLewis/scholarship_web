@@ -69,6 +69,13 @@ class AdminFinanceTest extends TestCase
             ->assertJsonPath('pagination.total', 2)
             ->assertJsonCount(2, 'receipts')
             ->assertJsonPath('receipts.0.service', 'Today service');
+
+        $this->actingAs($admin)
+            ->getJson('/admin/finance/data')
+            ->assertOk()
+            ->assertJsonPath('selected_period', 'all')
+            ->assertJsonPath('pagination.total', 3)
+            ->assertJsonCount(3, 'receipts');
     }
 
     private function purchase(

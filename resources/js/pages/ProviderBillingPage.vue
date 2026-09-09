@@ -306,8 +306,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                             href="/provider/billing"
                             class="inline-flex w-fit items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                         >
-                            Browse services
-                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                            <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
+                            Back to services
                         </a>
                         <div v-else :class="['flex w-fit items-center gap-3 rounded-md border bg-white px-3.5 py-3 shadow-sm', gateway.configured ? 'border-emerald-200' : 'border-amber-200']">
                             <span :class="['grid h-9 w-9 place-items-center rounded-md', gateway.configured ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']">

@@ -66,9 +66,13 @@ class DecisionSupportService
     public function syncApplication(ScholarshipApplication $application, string $source = 'system'): array
     {
         $eligibilitySnapshot = $this->currentEligibilitySnapshot($application);
+        $storedEligibilityScore = $application->eligibility_score;
+        $storedEligibilityBreakdown = $application->eligibility_breakdown;
+        $preserveSubmittedEligibility = $this->shouldPreserveSubmittedEligibility($application, $source);
 
         // Program criteria and applicant profiles can change after submission. Refresh the
-        // in-memory values before scoring so a legacy mismatch cannot survive an open rule.
+        // in-memory values before scoring and snapshotting, while keeping the comparison
+        // attached to a submitted application immutable for provider review.
         if ($eligibilitySnapshot !== null) {
             $application->setAttribute('eligibility_score', $eligibilitySnapshot['score']);
             $application->setAttribute('eligibility_breakdown', $eligibilitySnapshot);
@@ -82,15 +86,41 @@ class DecisionSupportService
             'dss_breakdown' => $score,
         ];
 
-        if ($eligibilitySnapshot !== null) {
+        if ($eligibilitySnapshot !== null && ! $preserveSubmittedEligibility) {
             $updates['eligibility_score'] = $eligibilitySnapshot['score'];
             $updates['eligibility_breakdown'] = $eligibilitySnapshot;
+        }
+
+        if ($preserveSubmittedEligibility) {
+            $application->setAttribute('eligibility_score', $storedEligibilityScore);
+            $application->setAttribute('eligibility_breakdown', $storedEligibilityBreakdown);
         }
 
         $application->forceFill($updates)->saveQuietly();
         $this->captureSnapshot($application->fresh(), $score, $eligibilitySnapshot, $source);
 
         return $score;
+    }
+
+    private function shouldPreserveSubmittedEligibility(
+        ScholarshipApplication $application,
+        string $source,
+    ): bool {
+        if (! is_array($application->eligibility_breakdown)) {
+            return false;
+        }
+
+        if (is_array(data_get($application->submission_snapshot, 'current'))) {
+            return true;
+        }
+
+        if (in_array($source, ['submission', 'web_application_submitted', 'mobile_application_submitted'], true)) {
+            return false;
+        }
+
+        return $application->dssSnapshots()
+            ->whereIn('source', ['submission', 'web_application_submitted', 'mobile_application_submitted'])
+            ->exists();
     }
 
     public function explainApplication(ScholarshipApplication $application, ?array $score = null): array
@@ -502,6 +532,7 @@ class DecisionSupportService
                 'requirement_scale' => $academicMatch['requirement_scale'],
                 'comparison_mode' => $academicMatch['comparison_mode'],
                 'is_comparable' => $academicMatch['is_comparable'],
+                'equivalence' => $academicMatch['equivalence'] ?? null,
             ],
         );
 

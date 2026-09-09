@@ -437,6 +437,7 @@ class User extends Authenticatable implements MustVerifyEmail
         $fields = [
             'first_name' => 'First name',
             'last_name' => 'Last name',
+            'has_profile_photo' => 'Applicant 1x1 or 2x2 photo',
             'contact_number' => 'Contact number',
             'birthdate' => 'Birthdate',
             'citizenship_status' => 'Citizenship declaration',
@@ -492,7 +493,9 @@ class User extends Authenticatable implements MustVerifyEmail
         $payload = $this->publicPayload();
         $fields = self::applicantProfileRequiredFields($payload);
         $missing = collect($fields)
-            ->reject(fn (string $label, string $key) => filled($payload[$key] ?? null))
+            ->reject(fn (string $label, string $key) => $key === 'has_profile_photo'
+                ? ($payload[$key] ?? false) === true
+                : filled($payload[$key] ?? null))
             ->map(fn (string $label, string $key) => [
                 'key' => $key,
                 'label' => $label,

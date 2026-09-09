@@ -9,6 +9,7 @@ use App\Support\ReviewRubric;
 use App\Support\Terms;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Storage;
 
 class DatabaseSeeder extends Seeder
 {
@@ -95,7 +96,7 @@ class DatabaseSeeder extends Seeder
             role: 'applicant',
             password: env('STUDENT_PASSWORD', $password),
         );
-        $student->studentProfile()->updateOrCreate([
+        $studentProfile = $student->studentProfile()->updateOrCreate([
             'user_id' => $student->id,
         ], [
             'first_name' => 'Alex',
@@ -144,6 +145,19 @@ class DatabaseSeeder extends Seeder
             'verified_at' => now(),
             'verified_by' => $admin->id,
         ]);
+
+        $demoPhotoSource = public_path('images/study-student.jpg');
+        if (is_file($demoPhotoSource)) {
+            $demoPhotoPath = "profile-photos/{$student->id}/demo-applicant.jpg";
+            Storage::disk('local')->put($demoPhotoPath, file_get_contents($demoPhotoSource));
+            $studentProfile->update([
+                'profile_photo_path' => $demoPhotoPath,
+                'profile_photo_original_name' => 'demo-applicant.jpg',
+                'profile_photo_mime_type' => 'image/jpeg',
+                'profile_photo_size' => filesize($demoPhotoSource),
+                'profile_photo_updated_at' => now(),
+            ]);
+        }
 
         $this->seedScholarships($tulayAral, $bukasKinabukasan);
 
@@ -216,7 +230,7 @@ class DatabaseSeeder extends Seeder
                     'latitude' => 14.6255000,
                     'longitude' => 121.1245000,
                     'requirements' => implode("\n", [
-                'Certificate of enrollment',
+                        'Certificate of enrollment',
                         'Latest report card or grades',
                         'School ID',
                         'Proof of income',
@@ -433,7 +447,7 @@ class DatabaseSeeder extends Seeder
                     'latitude' => 14.3595000,
                     'longitude' => 121.0473000,
                     'requirements' => implode("\n", [
-                'Certificate of enrollment',
+                        'Certificate of enrollment',
                         'Latest report card or grades',
                         'School ID',
                         'Recommendation letter',
@@ -547,5 +561,4 @@ class DatabaseSeeder extends Seeder
             }
         }
     }
-
 }

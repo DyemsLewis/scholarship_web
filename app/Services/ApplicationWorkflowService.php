@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStageProgress;
 use App\Models\ApplicationStatusHistory;
 use App\Models\Scholarship;
@@ -16,6 +17,14 @@ class ApplicationWorkflowService
     public const RESULTS = ['passed', 'not_passed'];
 
     public const FINAL_OUTCOMES = ['selected', 'waitlisted', 'not_selected'];
+
+    public const CORRECTION_TARGETS = [
+        'profile',
+        'academic_record',
+        'application_files',
+        'application_answers',
+        'other',
+    ];
 
     private const ACTIVE_CORRECTION_STATUSES = ['requested', 'submitted'];
 
@@ -423,10 +432,11 @@ class ApplicationWorkflowService
         ScholarshipApplication $application,
         User $actor,
         string $message,
+        array $targets = [],
     ): ScholarshipApplication {
         $application = $this->initialize($application);
 
-        return DB::transaction(function () use ($application, $actor, $message): ScholarshipApplication {
+        return DB::transaction(function () use ($application, $actor, $message, $targets): ScholarshipApplication {
             $locked = ScholarshipApplication::query()
                 ->with(['scholarship', 'stageProgresses'])
                 ->lockForUpdate()
@@ -447,6 +457,11 @@ class ApplicationWorkflowService
             $locked->update([
                 'correction_status' => 'requested',
                 'correction_message' => $message,
+                'correction_targets' => collect($targets)
+                    ->filter(fn (mixed $target): bool => in_array($target, self::CORRECTION_TARGETS, true))
+                    ->unique()
+                    ->values()
+                    ->all(),
                 'correction_response' => null,
                 'correction_requested_by' => $actor->id,
                 'correction_requested_at' => now(),
@@ -653,7 +668,7 @@ class ApplicationWorkflowService
 
     public function payload(ScholarshipApplication $application): array
     {
-        $application->loadMissing(['scholarship', 'stageProgresses']);
+        $application->loadMissing(['scholarship', 'stageProgresses', 'schedules']);
         $stages = $this->stagesForApplication($application);
 
         if (! $this->hasInitializedWorkflow($application, $stages)) {
@@ -973,22 +988,8 @@ class ApplicationWorkflowService
                     'description' => 'Continue through the provider\'s formal process and keep original documents ready when requested.',
                     'url' => route('dashboard.applications.show', $application, false),
                 ],
-                'exam' => [
-                    'key' => 'exam',
-                    'label' => 'Review the exam details',
-                    'actor' => 'applicant',
-                    'actor_label' => 'Applicant',
-                    'description' => 'Check the provider-managed exam schedule and follow the listed instructions.',
-                    'url' => route('dashboard.applications.show', $application, false),
-                ],
-                'interview' => [
-                    'key' => 'interview',
-                    'label' => 'Review the interview details',
-                    'actor' => 'applicant',
-                    'actor_label' => 'Applicant',
-                    'description' => 'Check the provider-managed interview schedule and follow the listed instructions.',
-                    'url' => route('dashboard.applications.show', $application, false),
-                ],
+                'exam' => $this->applicantActivityAction($application, 'exam'),
+                'interview' => $this->applicantActivityAction($application, 'interview'),
                 default => [
                     'key' => 'application',
                     'label' => 'Review application',
@@ -1026,10 +1027,90 @@ class ApplicationWorkflowService
         return match ($application->workflow_stage) {
             'screening' => ['key' => 'screening', 'label' => 'Review eligibility and required files', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'Check the applicant profile, DSS guidance, and supporting files before recording the pre-screening result.'],
             'formal_application' => ['key' => 'formal_application', 'label' => 'Record the formal application result', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'Confirm whether the applicant completed the provider-managed formal application requirements.'],
-            'exam' => ['key' => 'exam', 'label' => 'Record the exam result', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'After the shared exam activity is complete, record whether this applicant passed.'],
-            'interview' => ['key' => 'interview', 'label' => 'Record the interview result', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'After the shared interview activity is complete, record whether this applicant passed.'],
+            'exam' => $this->providerActivityAction($application, 'exam'),
+            'interview' => $this->providerActivityAction($application, 'interview'),
             'decision' => ['key' => 'decision', 'label' => 'Record the final outcome', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'Choose selected, waitlisted, or not selected after all configured stages are complete.'],
             default => ['key' => 'complete', 'label' => 'No action required', 'actor' => 'none', 'actor_label' => 'No action required', 'description' => 'This application workflow is complete.'],
         };
+    }
+
+    private function applicantActivityAction(ScholarshipApplication $application, string $stage): array
+    {
+        $label = $stage === 'exam' ? 'exam' : 'interview';
+        $schedule = $this->activitySchedule($application, $stage);
+        $url = route('dashboard.applications.show', $application, false);
+
+        if (! $schedule || $schedule->status === 'cancelled') {
+            return [
+                'key' => "{$stage}_schedule_pending",
+                'label' => "Wait for the {$label} schedule",
+                'actor' => 'provider',
+                'actor_label' => 'Scholarship provider',
+                'description' => "The provider will publish the {$label} date and instructions when they are ready.",
+                'url' => $url,
+            ];
+        }
+
+        if ($schedule->status === 'completed') {
+            return [
+                'key' => "{$stage}_result_pending",
+                'label' => "Wait for the {$label} result",
+                'actor' => 'provider',
+                'actor_label' => 'Scholarship provider',
+                'description' => "The {$label} activity is complete. The provider is recording applicant results.",
+                'url' => $url,
+            ];
+        }
+
+        return [
+            'key' => $stage,
+            'label' => 'Review the '.$label.' details',
+            'actor' => 'applicant',
+            'actor_label' => 'Applicant',
+            'description' => 'Check the provider-managed '.$label.' schedule and follow the listed instructions.',
+            'url' => $url,
+        ];
+    }
+
+    private function providerActivityAction(ScholarshipApplication $application, string $stage): array
+    {
+        $label = $stage === 'exam' ? 'exam' : 'interview';
+        $schedule = $this->activitySchedule($application, $stage);
+
+        if (! $schedule || $schedule->status === 'cancelled') {
+            return [
+                'key' => "publish_{$stage}_schedule",
+                'label' => 'Publish the '.$label.' schedule',
+                'actor' => 'provider',
+                'actor_label' => 'Provider reviewer',
+                'description' => 'Publish one shared date and the instructions for applicants currently at this stage.',
+            ];
+        }
+
+        if ($schedule->status === 'scheduled') {
+            return [
+                'key' => "complete_{$stage}",
+                'label' => 'Complete the '.$label.', then record results',
+                'actor' => 'provider',
+                'actor_label' => 'Provider reviewer',
+                'description' => 'Applicants can see the schedule. Record results after the provider-managed activity takes place.',
+            ];
+        }
+
+        return [
+            'key' => $stage,
+            'label' => 'Record the '.$label.' result',
+            'actor' => 'provider',
+            'actor_label' => 'Provider reviewer',
+            'description' => 'The shared activity is complete and this applicant is ready for an individual result.',
+        ];
+    }
+
+    private function activitySchedule(ScholarshipApplication $application, string $stage): ?ApplicationSchedule
+    {
+        return $application->schedules
+            ->where('type', $stage)
+            ->sortByDesc('id')
+            ->first();
     }
 }

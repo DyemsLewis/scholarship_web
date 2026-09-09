@@ -107,6 +107,62 @@ class ApplicationLifecycleIntegrityTest extends TestCase
         ]);
     }
 
+    public function test_correction_returns_to_the_same_stage_and_notifies_the_responsible_reviewer(): void
+    {
+        $provider = $this->provider();
+        $reviewer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'permissions' => ['review_applications'],
+        ]);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start($this->application($this->program($provider), $applicant));
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $provider);
+        $application->update(['assigned_reviewer_id' => $reviewer->id]);
+
+        $this->actingAs($reviewer)
+            ->patchJson("/provider/applications/{$application->id}/correction", [
+                'action' => 'request',
+                'targets' => ['application_files'],
+                'message' => 'Replace the unreadable school document.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.workflow.current_stage', 'formal_application');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/stages/formal_application/result", [
+                'result' => 'passed',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('result');
+
+        $this->actingAs($applicant)
+            ->patchJson("/dashboard/applications/{$application->id}/correction-response", [
+                'response' => 'I uploaded a readable replacement.',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $provider->id,
+            'type' => 'application_correction',
+            'title' => 'Applicant submitted a correction',
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $reviewer->id,
+            'type' => 'application_correction',
+            'title' => 'Applicant submitted a correction',
+        ]);
+
+        $this->actingAs($reviewer)
+            ->patchJson("/provider/applications/{$application->id}/correction", [
+                'action' => 'resolve',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.workflow.current_stage', 'formal_application')
+            ->assertJsonPath('application.workflow.application_state', 'in_provider_process');
+    }
+
     public function test_duplicate_waitlist_decision_is_rejected_and_restore_is_audited(): void
     {
         $provider = $this->provider();

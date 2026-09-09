@@ -52,6 +52,56 @@ class PlatformReadinessAndWorkflowGuidanceTest extends TestCase
         $this->assertSame('Record the formal application result', $formalApplication['provider_action']['label']);
     }
 
+    public function test_activity_guidance_reflects_schedule_and_result_state(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create();
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Scheduled Activity Scholarship',
+            'description' => 'Used to verify activity guidance across both portal views.',
+            'status' => 'published',
+            'selection_stages' => ['screening', 'exam', 'formal_application', 'decision'],
+            'deadline' => now()->addMonth()->toDateString(),
+        ]);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start(ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]));
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $provider);
+
+        $waitingForSchedule = $workflow->payload($application);
+        $this->assertSame('exam_schedule_pending', $waitingForSchedule['next_action']['key']);
+        $this->assertSame('provider', $waitingForSchedule['next_action']['actor']);
+        $this->assertSame('publish_exam_schedule', $waitingForSchedule['provider_action']['key']);
+
+        $schedule = $application->schedules()->create([
+            'type' => 'exam',
+            'title' => 'Scholarship exam',
+            'scheduled_at' => now()->addWeek(),
+            'mode' => 'onsite',
+            'venue' => 'Provider office',
+            'status' => 'scheduled',
+            'attendance_status' => 'not_required',
+            'created_by' => $provider->id,
+            'updated_by' => $provider->id,
+        ]);
+
+        $scheduled = $workflow->payload($application->fresh());
+        $this->assertSame('exam', $scheduled['next_action']['key']);
+        $this->assertSame('applicant', $scheduled['next_action']['actor']);
+        $this->assertSame('complete_exam', $scheduled['provider_action']['key']);
+
+        $schedule->update(['status' => 'completed', 'completed_at' => now()]);
+        $waitingForResult = $workflow->payload($application->fresh());
+        $this->assertSame('exam_result_pending', $waitingForResult['next_action']['key']);
+        $this->assertSame('provider', $waitingForResult['next_action']['actor']);
+        $this->assertSame('exam', $waitingForResult['provider_action']['key']);
+    }
+
     public function test_readiness_command_reports_local_warnings_without_changing_data(): void
     {
         $this->artisan('platform:readiness')

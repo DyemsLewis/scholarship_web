@@ -963,12 +963,12 @@ onMounted(loadDashboard);
                                     </div>
                                 </div>
 
-                                <div class="flex flex-1 flex-col divide-y divide-slate-200">
+                                <div class="flex flex-1 flex-col divide-y divide-slate-200 xl:min-h-0 xl:snap-y xl:snap-mandatory xl:overflow-y-auto xl:overscroll-contain" aria-label="Important updates">
                                     <a
                                         v-for="reminder in reminders"
                                         :key="reminder.key"
                                         :href="reminder.href"
-                                        class="group flex flex-1 items-center gap-3 p-4 transition hover:bg-slate-50 sm:p-5"
+                                        class="group flex shrink-0 items-center gap-3 p-4 transition hover:bg-slate-50 sm:p-5 xl:min-h-full xl:snap-start"
                                         @click="openReminder($event, reminder)"
                                     >
                                         <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', reminder.key === 'clear' ? 'bg-slate-100 text-slate-700' : 'bg-amber-100 text-amber-800']">

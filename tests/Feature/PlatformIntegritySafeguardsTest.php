@@ -325,6 +325,7 @@ class PlatformIntegritySafeguardsTest extends TestCase
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',
+            'profile_photo_path' => 'profile-photos/tests/integrity-applicant.jpg',
         ]);
 
         return $applicant->fresh(['studentProfile']);

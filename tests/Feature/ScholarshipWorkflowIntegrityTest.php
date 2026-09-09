@@ -283,6 +283,7 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',
+            'profile_photo_path' => 'profile-photos/tests/workflow-applicant.jpg',
         ]);
 
         return $applicant->fresh();

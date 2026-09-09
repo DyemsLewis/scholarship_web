@@ -7,7 +7,7 @@ import AdminSidebar from '../components/AdminSidebar.vue';
 const isLoading = ref(true);
 const errorMessage = ref('');
 const search = ref('');
-const period = ref('month');
+const period = ref('all');
 const summary = ref({
     today: 0,
     month: 0,

@@ -8,6 +8,7 @@ Route::prefix('mobile')->middleware('throttle:120,1')->group(function (): void {
     Route::post('/login', [MobileAuthController::class, 'login'])->middleware('throttle:10,1')->name('mobile.login');
     Route::get('/profile', [MobileAuthController::class, 'profile'])->name('mobile.profile');
     Route::patch('/profile', [MobileAuthController::class, 'updateProfile'])->name('mobile.profile.update');
+    Route::post('/profile/photo', [MobileAuthController::class, 'uploadProfilePhoto'])->middleware('throttle:10,1')->name('mobile.profile.photo.store');
     Route::get('/documents', [MobileAuthController::class, 'documents'])->name('mobile.documents');
     Route::post('/student-documents', [MobileAuthController::class, 'uploadPreparedDocument'])->middleware('throttle:20,1')->name('mobile.student-documents.store');
     Route::delete('/student-documents/{document}', [MobileAuthController::class, 'deletePreparedDocument'])->name('mobile.student-documents.destroy');

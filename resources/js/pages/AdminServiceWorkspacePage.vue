@@ -25,7 +25,6 @@ const workflowForm = ref({
     milestones: [],
     fulfillment_notes: '',
     provider_update: '',
-    internal_note: '',
 });
 const updateForm = ref({ kind: 'progress_update', message: '' });
 const meetingDecisionForm = ref({ meeting_admin_note: '' });
@@ -77,7 +76,6 @@ function applyPurchase(payload) {
         milestones: (payload.milestones ?? []).map((item) => ({ ...item })),
         fulfillment_notes: payload.fulfillment_notes ?? '',
         provider_update: '',
-        internal_note: '',
     };
     meetingDecisionForm.value.meeting_admin_note = payload.meeting_admin_note ?? '';
 }
@@ -106,7 +104,6 @@ async function saveWorkflow() {
             assigned_to: workflowForm.value.assigned_to || null,
             target_due_at: workflowForm.value.target_due_at || null,
             provider_update: workflowForm.value.provider_update.trim() || null,
-            internal_note: workflowForm.value.internal_note.trim() || null,
         });
         applyPurchase(response.data.purchase);
         showPortalToast({ title: 'Service workspace updated', message: response.data.message });
@@ -202,38 +199,35 @@ onMounted(loadWorkspace);
                 <div v-else-if="errorMessage || !purchase" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
 
                 <template v-else>
-                    <section class="admin-panel mt-5 grid overflow-hidden sm:grid-cols-4">
-                        <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r"><p class="text-xs font-semibold text-slate-500">Payment</p><p class="mt-1 text-sm font-bold text-slate-950">{{ statusLabel(purchase.status) }}</p></div>
-                        <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r"><p class="text-xs font-semibold text-slate-500">Priority</p><p class="mt-1 text-sm font-bold text-slate-950">{{ statusLabel(purchase.priority) }}</p></div>
-                        <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r"><p class="text-xs font-semibold text-slate-500">Assigned to</p><p class="mt-1 text-sm font-bold text-slate-950">{{ purchase.assigned_to_name || 'Unassigned' }}</p></div>
-                        <div class="p-4"><p class="text-xs font-semibold text-slate-500">Target date</p><p class="mt-1 text-sm font-bold text-slate-950">{{ dateTime(purchase.target_due_at) }}</p></div>
+                    <section class="admin-panel mt-5 flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex flex-wrap gap-x-8 gap-y-3">
+                            <div><p class="text-xs font-semibold text-slate-500">Assigned to</p><p class="mt-1 text-sm font-bold text-slate-950">{{ purchase.assigned_to_name || 'Unassigned' }}</p></div>
+                            <div><p class="text-xs font-semibold text-slate-500">Target completion</p><p class="mt-1 text-sm font-bold text-slate-950">{{ dateTime(purchase.target_due_at) }}</p></div>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                            <span>{{ statusLabel(purchase.priority) }} priority</span>
+                            <span class="text-slate-300">|</span>
+                            <span>{{ completedMilestones }} of {{ workflowForm.milestones.length }} steps complete</span>
+                        </div>
                     </section>
 
-                    <div class="mt-5 space-y-4">
-                        <div class="space-y-4">
-                            <section class="admin-panel p-5 sm:p-6">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider brief</p>
-                                <h2 class="mt-1 text-xl font-bold text-slate-950">Requested support</h2>
-                                <div class="mt-4 grid gap-4 lg:grid-cols-2">
-                                    <div class="rounded-md border border-slate-200 bg-slate-50 p-4"><p class="text-xs font-bold text-slate-500">Situation or challenge</p><p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ purchase.request_summary || 'The provider has not supplied a service brief.' }}</p></div>
-                                    <div class="rounded-md border border-slate-200 bg-slate-50 p-4"><p class="text-xs font-bold text-slate-500">Expected result</p><p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ purchase.requested_outcome || 'No expected result was supplied.' }}</p></div>
-                                </div>
-                            </section>
+                    <div class="mt-5 flex flex-col gap-4">
+                        <div class="contents">
 
-                            <section v-if="purchase.meeting_status" class="admin-panel overflow-hidden">
+                            <section class="admin-panel order-1 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
                                     <div class="flex items-start gap-3">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span>
                                         <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Meeting request</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Coordinate with the provider</h2>
-                                            <p class="mt-2 text-sm leading-6 text-slate-600">Confirm the proposed schedule or decline it with a short reason so the provider can choose another time.</p>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Next action</p>
+                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Service meeting</h2>
+                                            <p class="mt-2 text-sm leading-6 text-slate-600">Review and confirm the provider's preferred meeting schedule.</p>
                                         </div>
                                     </div>
-                                    <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold capitalize', meetingStatusClass(purchase.meeting_status)]">{{ purchase.meeting_status }}</span>
+                                    <span v-if="purchase.meeting_status" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold capitalize', meetingStatusClass(purchase.meeting_status)]">{{ purchase.meeting_status }}</span>
                                 </div>
                                 <div class="p-5 sm:p-6">
-                                    <div class="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                                    <div v-if="purchase.meeting_scheduled_for" class="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
                                         <div>
                                             <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Proposed schedule</p>
                                             <p class="mt-1.5 text-sm font-bold text-slate-950">{{ dateTime(purchase.meeting_scheduled_for) }}</p>
@@ -242,9 +236,13 @@ onMounted(loadWorkspace);
                                             <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Meeting format</p>
                                             <p class="mt-1.5 text-sm font-bold text-slate-950">{{ purchase.meeting_mode === 'online' ? 'Online' : 'On-site' }}</p>
                                         </div>
-                                        <div class="sm:col-span-2 lg:col-span-1">
-                                            <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Purpose</p>
-                                            <p class="mt-1.5 text-sm leading-6 text-slate-700">{{ purchase.meeting_purpose }}</p>
+                                    </div>
+
+                                    <div v-else class="flex items-center gap-3 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-400 ring-1 ring-slate-200"><i class="fa-solid fa-clock" aria-hidden="true"></i></span>
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-900">Waiting for the provider</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">The meeting request will appear here after the provider selects a date and format.</p>
                                         </div>
                                     </div>
 
@@ -260,7 +258,7 @@ onMounted(loadWorkspace);
                                         <p class="mt-2 text-xs leading-5 text-slate-500">A short reason is required only when declining the request.</p>
                                     </div>
 
-                                    <div v-else class="mt-5 rounded-md border border-slate-200 bg-white p-4">
+                                    <div v-else-if="purchase.meeting_status" class="mt-5 rounded-md border border-slate-200 bg-white p-4">
                                         <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Decision details</p>
                                         <p v-if="purchase.meeting_admin_note" class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ purchase.meeting_admin_note }}</p>
                                         <p v-else class="mt-2 text-sm text-slate-500">No additional instructions were added.</p>
@@ -269,10 +267,10 @@ onMounted(loadWorkspace);
                                 </div>
                             </section>
 
-                            <section class="admin-panel p-5 sm:p-6">
+                            <section class="admin-panel order-2 p-5 sm:p-6">
                                 <div class="flex items-start justify-between gap-3">
-                                    <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Workflow</p><h2 class="mt-1 text-xl font-bold text-slate-950">Manage the service</h2></div>
-                                    <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ completedMilestones }}/{{ workflowForm.milestones.length }} milestones</span>
+                                    <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Service work</p><h2 class="mt-1 text-xl font-bold text-slate-950">Update progress</h2><p class="mt-2 text-sm text-slate-500">Assign the request, update its status, and mark finished steps.</p></div>
+                                    <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ completedMilestones }}/{{ workflowForm.milestones.length }} complete</span>
                                 </div>
                                 <form class="mt-5" @submit.prevent="saveWorkflow">
                                     <div class="grid gap-4 sm:grid-cols-2">
@@ -282,20 +280,20 @@ onMounted(loadWorkspace);
                                         <label class="text-sm font-bold text-slate-700">Target completion<input v-model="workflowForm.target_due_at" type="date" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"></label>
                                     </div>
 
-                                    <fieldset class="mt-5 rounded-md border border-slate-200 p-4">
-                                        <legend class="px-1 text-sm font-bold text-slate-700">Service milestones</legend>
-                                        <label v-for="item in workflowForm.milestones" :key="item.id" class="flex cursor-pointer items-start gap-3 border-b border-slate-100 py-2.5 last:border-b-0"><input v-model="item.completed" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400"><span class="text-sm text-slate-700">{{ item.label }}</span></label>
+                                    <fieldset class="mt-5 overflow-hidden rounded-md border border-slate-200">
+                                        <legend class="sr-only">Service steps</legend>
+                                        <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3"><p class="text-sm font-bold text-slate-900">Service steps</p><p class="text-xs text-slate-500">Mark each step after it is finished</p></div>
+                                        <label v-for="item in workflowForm.milestones" :key="item.id" class="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0 hover:bg-slate-50"><input v-model="item.completed" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400"><span class="flex-1 text-sm font-semibold text-slate-700">{{ item.label }}</span><span class="text-xs font-semibold text-slate-400">{{ item.completed ? 'Complete' : 'Pending' }}</span></label>
                                     </fieldset>
 
-                                    <label class="mt-5 block text-sm font-bold text-slate-700">Current service summary <span class="font-normal text-slate-500">(shown to provider)</span><textarea v-model="workflowForm.fulfillment_notes" rows="2" maxlength="2000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal" placeholder="Short current-state summary"></textarea></label>
-                                    <label class="mt-4 block text-sm font-bold text-slate-700">Provider update <span class="font-normal text-slate-500">(required for information requests and provider review)</span><textarea v-model="workflowForm.provider_update" rows="3" maxlength="2000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal" placeholder="Explain progress, needed information, or the completed result."></textarea></label>
-                                    <label class="mt-4 block text-sm font-bold text-slate-700">Internal note <span class="font-normal text-slate-500">(admin only)</span><textarea v-model="workflowForm.internal_note" rows="2" maxlength="2000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal" placeholder="Optional coordination note hidden from providers"></textarea></label>
-                                    <button type="submit" class="mt-5 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50" :disabled="isSaving || purchase.status !== 'paid' || purchase.fulfillment_status === 'completed'">{{ isSaving ? 'Saving...' : 'Save workflow' }}</button>
+                                    <label class="mt-5 block text-sm font-bold text-slate-700">Status summary <span class="font-normal text-slate-500">(visible to provider)</span><textarea v-model="workflowForm.fulfillment_notes" rows="2" maxlength="2000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal" placeholder="Briefly describe the current progress"></textarea></label>
+                                    <label v-if="['needs_information', 'provider_review'].includes(workflowForm.fulfillment_status)" class="mt-4 block text-sm font-bold text-slate-700">Message to provider <span class="font-normal text-slate-500">(required)</span><textarea v-model="workflowForm.provider_update" rows="3" maxlength="2000" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal" :placeholder="workflowForm.fulfillment_status === 'needs_information' ? 'Explain what information is needed.' : 'Summarize the completed work for provider review.'"></textarea></label>
+                                    <button type="submit" class="mt-5 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50" :disabled="isSaving || purchase.status !== 'paid' || purchase.fulfillment_status === 'completed'">{{ isSaving ? 'Saving...' : 'Save progress' }}</button>
                                     <p v-if="workflowForm.fulfillment_status === 'provider_review'" class="mt-3 text-xs leading-5 text-slate-500">All milestones and a provider update are required. The provider, not the admin, confirms final completion.</p>
                                 </form>
                             </section>
 
-                            <section class="admin-panel overflow-hidden">
+                            <section class="admin-panel order-4 overflow-hidden">
                                 <div class="border-b border-slate-200 p-5 sm:p-6"><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">History</p><h2 class="mt-1 text-xl font-bold text-slate-950">Updates and internal notes</h2></div>
                                 <div class="divide-y divide-slate-200">
                                     <article v-for="update in purchase.updates" :key="update.id" :class="['flex gap-3 p-4 sm:px-6', update.visible_to_provider ? '' : 'bg-amber-50/60']">
@@ -314,18 +312,25 @@ onMounted(loadWorkspace);
                             </section>
                         </div>
 
-                        <div class="space-y-4">
-                            <section class="admin-panel p-5">
-                                <div class="flex items-center justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Deliverables</p><h2 class="mt-1 text-lg font-bold text-slate-950">Files for provider</h2></div><label v-if="purchase.status === 'paid' && purchase.fulfillment_status !== 'completed'" class="cursor-pointer rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white"><span>{{ isUploading ? 'Uploading...' : 'Upload' }}</span><input type="file" class="sr-only" :disabled="isUploading" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv,.txt" @change="uploadDeliverable"></label></div>
-                                <div class="mt-4 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in deliverables" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-circle-check text-emerald-600" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!deliverables.length" class="p-4 text-sm text-slate-500">No deliverables uploaded.</p></div>
+                        <div class="contents">
+                            <section class="admin-panel order-3 overflow-hidden">
+                                <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                    <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Files</p><h2 class="mt-1 text-xl font-bold text-slate-950">Shared materials</h2></div>
+                                    <label v-if="purchase.status === 'paid' && purchase.fulfillment_status !== 'completed'" class="inline-flex w-fit cursor-pointer items-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-xs font-bold text-white"><i class="fa-solid fa-upload" aria-hidden="true"></i><span>{{ isUploading ? 'Uploading...' : 'Upload deliverable' }}</span><input type="file" class="sr-only" :disabled="isUploading" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv,.txt" @change="uploadDeliverable"></label>
+                                </div>
+                                <div class="grid gap-5 p-5 sm:p-6 lg:grid-cols-2">
+                                    <div>
+                                        <h3 class="text-sm font-bold text-slate-950">From the provider</h3>
+                                        <div class="mt-3 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in supportingFiles" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-lines text-slate-400" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!supportingFiles.length" class="p-4 text-sm text-slate-500">No provider files uploaded.</p></div>
+                                    </div>
+                                    <div>
+                                        <h3 class="text-sm font-bold text-slate-950">For the provider</h3>
+                                        <div class="mt-3 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in deliverables" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-circle-check text-emerald-600" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!deliverables.length" class="p-4 text-sm text-slate-500">No deliverables uploaded.</p></div>
+                                    </div>
+                                </div>
                             </section>
 
-                            <section class="admin-panel p-5">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider files</p><h2 class="mt-1 text-lg font-bold text-slate-950">Supporting material</h2>
-                                <div class="mt-4 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in supportingFiles" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-lines text-slate-400" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!supportingFiles.length" class="p-4 text-sm text-slate-500">No provider files uploaded.</p></div>
-                            </section>
-
-                            <section v-if="purchase.fulfillment_status === 'completed'" class="rounded-lg border border-emerald-200 bg-emerald-50 p-5 shadow-sm"><p class="text-sm font-bold text-emerald-900">Provider confirmed completion</p><p class="mt-1 text-sm text-emerald-800">{{ dateTime(purchase.provider_confirmed_at) }}</p><p v-if="purchase.provider_rating" class="mt-3 text-sm font-bold text-slate-900">Rating: {{ purchase.provider_rating }} of 5</p><p v-if="purchase.provider_feedback" class="mt-2 text-sm leading-6 text-slate-700">{{ purchase.provider_feedback }}</p></section>
+                            <section v-if="purchase.fulfillment_status === 'completed'" class="order-5 rounded-lg border border-emerald-200 bg-emerald-50 p-5 shadow-sm"><p class="text-sm font-bold text-emerald-900">Provider confirmed completion</p><p class="mt-1 text-sm text-emerald-800">{{ dateTime(purchase.provider_confirmed_at) }}</p><p v-if="purchase.provider_rating" class="mt-3 text-sm font-bold text-slate-900">Rating: {{ purchase.provider_rating }} of 5</p><p v-if="purchase.provider_feedback" class="mt-2 text-sm leading-6 text-slate-700">{{ purchase.provider_feedback }}</p></section>
                         </div>
                     </div>
                 </template>

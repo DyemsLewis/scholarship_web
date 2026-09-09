@@ -652,6 +652,8 @@ class AdminController extends Controller
         $previousStatus = $applicant->applicantAcademicVerificationStatus();
         $requestedStatus = $request->input('verification_status');
         $isReopening = $previousStatus === 'approved' && $requestedStatus === 'pending';
+        $reviewedScale = $request->input('academic_grading_scale');
+        $reviewedResultIsNumeric = AcademicRequirement::requiresNumeric($reviewedScale);
 
         $validated = $request->validate([
             'verification_status' => ['required', Rule::in(['pending', 'approved', 'rejected'])],
@@ -661,7 +663,24 @@ class AdminController extends Controller
                 'string',
                 'max:1500',
             ],
+            'academic_grading_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
+            'academic_result' => [
+                Rule::requiredIf($requestedStatus === 'approved' && $reviewedResultIsNumeric),
+                'nullable',
+                'numeric',
+                'gt:0',
+                $reviewedScale === AcademicRequirement::SCALE_GRADE_POINT ? 'max:5' : 'max:100',
+            ],
         ]);
+
+        $academicRecord = $applicant->applicantVerificationDocuments
+            ->firstWhere('document_type', 'academic_record');
+        $reviewedAcademicResult = filled($validated['academic_grading_scale'] ?? null)
+            ? [
+                'grading_scale' => $validated['academic_grading_scale'],
+                'gwa' => $reviewedResultIsNumeric ? (float) $validated['academic_result'] : null,
+            ]
+            : null;
 
         if ($validated['verification_status'] === 'approved' && ! $applicant->applicantVerificationDocuments()
             ->where('document_type', 'academic_record')
@@ -672,15 +691,26 @@ class AdminController extends Controller
         }
 
         if ($validated['verification_status'] === 'approved' && $this->academicRecordOcrService->configured()) {
-            $academicRecord = $applicant->applicantVerificationDocuments
-                ->firstWhere('document_type', 'academic_record');
-
-            if ($academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED) {
+            if ($academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED && $reviewedAcademicResult === null) {
                 return response()->json([
-                    'message' => 'The academic record must have a successful scan before its result can be verified.',
+                    'message' => 'The scan did not produce a usable result. Enter the verified academic result from the uploaded record before approving it.',
                 ], 422);
             }
         }
+
+        $previousAcademicResult = [
+            'grading_scale' => $applicant->studentProfile?->grading_scale,
+            'gwa' => $applicant->studentProfile?->gwa !== null
+                ? (float) $applicant->studentProfile->gwa
+                : null,
+        ];
+        $academicResultCorrected = $validated['verification_status'] === 'approved'
+            && $reviewedAcademicResult !== null
+            && (
+                $reviewedAcademicResult['grading_scale'] !== $previousAcademicResult['grading_scale']
+                || $reviewedAcademicResult['gwa'] !== $previousAcademicResult['gwa']
+                || $academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED
+            );
 
         $documentStatus = match ($validated['verification_status']) {
             'approved' => 'approved',
@@ -692,13 +722,22 @@ class AdminController extends Controller
             ? trim($validated['verification_notes'])
             : null;
 
-        DB::transaction(function () use ($applicant, $validated, $notes, $documentStatus, $request): void {
-            $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
+        DB::transaction(function () use ($applicant, $validated, $notes, $documentStatus, $request, $reviewedAcademicResult, $academicResultCorrected): void {
+            $profileUpdates = [
                 'verification_status' => $validated['verification_status'],
                 'verification_notes' => $notes,
                 'verified_by' => $validated['verification_status'] === 'pending' ? null : $request->user()->id,
                 'verified_at' => $validated['verification_status'] === 'approved' ? now() : null,
-            ]);
+            ];
+
+            if ($academicResultCorrected) {
+                $profileUpdates = array_merge($profileUpdates, $reviewedAcademicResult, [
+                    'academic_result_source' => 'admin_review',
+                    'academic_result_extracted_at' => now(),
+                ]);
+            }
+
+            $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], $profileUpdates);
 
             $applicant->applicantVerificationDocuments()
                 ->whereIn('document_type', ['academic_record', 'school_record'])
@@ -719,8 +758,22 @@ class AdminController extends Controller
                 'verification_status' => $validated['verification_status'],
                 'verification_notes' => $notes,
                 'verification_source' => 'admin',
+                'academic_result_corrected' => $academicResultCorrected,
+                'previous_academic_result' => $previousAcademicResult,
+                'verified_academic_result' => $academicResultCorrected ? $reviewedAcademicResult : null,
             ],
         );
+
+        if ($academicResultCorrected) {
+            ScholarshipApplication::query()
+                ->where('applicant_id', $applicant->id)
+                ->where(fn ($query) => $query
+                    ->whereNull('application_state')
+                    ->orWhereNotIn('application_state', ['closed', 'withdrawn']))
+                ->get()
+                ->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)
+                    ->syncApplication($application, 'admin_academic_result_corrected'));
+        }
 
         $message = match ($validated['verification_status']) {
             'approved' => 'Your academic record has been verified by the platform review team.',
@@ -730,6 +783,10 @@ class AdminController extends Controller
 
         if ($notes) {
             $message .= " Review note: {$notes}";
+        }
+
+        if ($academicResultCorrected) {
+            $message .= ' The academic result was corrected from the submitted record.';
         }
 
         PortalNotification::create([

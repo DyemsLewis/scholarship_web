@@ -78,6 +78,19 @@ class ApiClient {
     return _patch('/profile', payload);
   }
 
+  Future<Map<String, dynamic>> uploadProfilePhoto({
+    required String filePath,
+    String? fileName,
+  }) async {
+    return _multipartPost(
+      '/profile/photo',
+      const {},
+      fileField: 'profile_photo',
+      filePath: filePath,
+      fileName: fileName,
+    );
+  }
+
   Future<Map<String, dynamic>> documents() async {
     return _get('/documents');
   }

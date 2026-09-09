@@ -48,6 +48,12 @@ class ApplicantProfileWorkflowTest extends TestCase
             'guardian_contact' => '09171234567',
         ]);
 
+        $this->assertContains('has_profile_photo', collect($applicant->fresh()->applicantProfileReadiness()['missing'])->pluck('key'));
+
+        $applicant->studentProfile()->update([
+            'profile_photo_path' => 'profile-photos/tests/minor-applicant.jpg',
+        ]);
+
         $this->assertTrue($applicant->fresh()->applicantProfileReadiness()['complete']);
     }
 
@@ -260,6 +266,7 @@ class ApplicantProfileWorkflowTest extends TestCase
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',
+            'profile_photo_path' => 'profile-photos/tests/adult-applicant.jpg',
         ]);
 
         return $applicant->fresh();

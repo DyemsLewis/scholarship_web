@@ -63,9 +63,12 @@ class ApplicationHandlingWorkflowTest extends TestCase
             ->patchJson("/provider/applications/{$application->id}/correction", [
                 'action' => 'request',
                 'message' => 'Replace the unreadable grade record and confirm your current grade level.',
+                'targets' => ['academic_record', 'profile'],
             ])
             ->assertOk()
-            ->assertJsonPath('application.correction_status', 'requested');
+            ->assertJsonPath('application.correction_status', 'requested')
+            ->assertJsonPath('application.correction_targets.0', 'academic_record')
+            ->assertJsonPath('application.correction_targets.1', 'profile');
 
         $this->actingAs($applicant)
             ->patchJson("/dashboard/applications/{$application->id}/correction-response", [
@@ -86,6 +89,7 @@ class ApplicationHandlingWorkflowTest extends TestCase
             'id' => $application->id,
             'status' => 'under_review',
             'correction_status' => 'resolved',
+            'correction_targets' => json_encode(['academic_record', 'profile']),
             'correction_response' => 'I replaced the grade record and updated my grade level.',
         ]);
     }

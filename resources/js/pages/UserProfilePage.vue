@@ -25,7 +25,10 @@ const locationMessage = ref('');
 const user = ref(null);
 const form = ref(emptyForm());
 const profileView = ref('overview');
-const activeSection = ref('personal');
+const requestedProfileSection = new URLSearchParams(window.location.search).get('section');
+const activeSection = ref(['personal', 'academic', 'background', 'location', 'verification'].includes(requestedProfileSection)
+    ? requestedProfileSection
+    : 'personal');
 const showProviderPreview = ref(false);
 const isUploadingProfilePhoto = ref(false);
 const isDeletingProfilePhoto = ref(false);
@@ -159,6 +162,7 @@ const suffixOptions = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
 const fieldLabels = {
     first_name: 'First name',
     last_name: 'Last name',
+    has_profile_photo: 'Applicant 1x1 or 2x2 photo',
     middle_initial: 'Middle initial',
     suffix: 'Suffix',
     gender: 'Gender',
@@ -205,8 +209,8 @@ const profileSections = [
         icon: 'fa-solid fa-address-card',
         impact: 'Identity, contact, and household context.',
         required: true,
-        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'household_size', 'support_needs', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
-        requiredFields: ['first_name', 'last_name', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'guardian_name', 'guardian_relationship', 'guardian_contact'],
+        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'has_profile_photo', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'household_size', 'support_needs', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
+        requiredFields: ['first_name', 'last_name', 'has_profile_photo', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'guardian_name', 'guardian_relationship', 'guardian_contact'],
     },
     {
         id: 'academic',
@@ -357,7 +361,7 @@ const requiredProfileFields = computed(() => profileSections.flatMap((section) =
 const requiredFieldData = computed(() => requiredProfileFields.value.map((key) => ({
     key,
     label: fieldLabel(key),
-    value: form.value[key],
+    value: profileFieldValue(key),
 })));
 const completedRequiredFields = computed(() => requiredFieldData.value.filter((field) => hasValue(field.value)).length);
 const profileCompletion = computed(() => requiredFieldData.value.length === 0 ? 100 : Math.round((completedRequiredFields.value / requiredFieldData.value.length) * 100));
@@ -725,6 +729,14 @@ function hasValue(value) {
     return value !== null && value !== undefined && String(value).trim() !== '';
 }
 
+function profileFieldValue(field) {
+    if (field === 'has_profile_photo') {
+        return user.value?.has_profile_photo ? 'uploaded' : '';
+    }
+
+    return form.value[field];
+}
+
 function sectionAllFields(section) {
     return section.fields.filter((field) => isFieldRelevant(field));
 }
@@ -801,7 +813,7 @@ function isFieldRequired(field) {
 
 function sectionProgress(section) {
     const fields = section.required ? sectionRequiredFields(section) : sectionAllFields(section);
-    const completed = fields.filter((field) => hasValue(form.value[field])).length;
+    const completed = fields.filter((field) => hasValue(profileFieldValue(field))).length;
 
     return {
         completed,
@@ -813,7 +825,7 @@ function sectionProgress(section) {
 
 function sectionMissingFields(section) {
     return sectionRequiredFields(section)
-        .filter((field) => !hasValue(form.value[field]))
+        .filter((field) => !hasValue(profileFieldValue(field)))
         .map((field) => fieldLabel(field));
 }
 
@@ -1400,7 +1412,7 @@ async function uploadProfilePhoto(event) {
 async function deleteProfilePhoto() {
     const confirmed = await requestConfirmation({
         title: 'Remove applicant photo?',
-        message: 'The photo will no longer appear in your profile preview or provider application review.',
+        message: 'Removing this required photo will make your profile incomplete and prevent new application submissions until you upload another one.',
         confirmLabel: 'Remove photo',
         tone: 'danger',
     });
@@ -1752,10 +1764,16 @@ function handleBeforeUnload(event) {
     event.returnValue = '';
 }
 
-onMounted(() => {
+onMounted(async () => {
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('keydown', handleProfileEscape);
-    loadProfile();
+    await loadProfile();
+
+    if (requestedProfileSection === 'verification') {
+        openVerificationRecords();
+    } else if (['personal', 'academic', 'background', 'location'].includes(requestedProfileSection)) {
+        openProfileEditor(requestedProfileSection);
+    }
 });
 
 onBeforeUnmount(() => {
@@ -2325,7 +2343,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <div>
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <h4 :class="formPanelTitleClass">Applicant photo</h4>
-                                                <span class="rounded bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 ring-1 ring-slate-200">Optional</span>
+                                                <span class="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800 ring-1 ring-amber-200">Required</span>
                                             </div>
                                             <p :class="formPanelDescriptionClass">
                                                 Upload a recent square 1x1 or 2x2-style photo so a provider can identify the applicant during application review.

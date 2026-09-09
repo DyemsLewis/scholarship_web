@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\MobileApiToken;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
@@ -18,6 +19,11 @@ class ApplicantProfilePhotoTest extends TestCase
     {
         Storage::fake('local');
         $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->assertContains(
+            'has_profile_photo',
+            collect($applicant->applicantProfileReadiness()['missing'])->pluck('key'),
+        );
 
         $this->actingAs($applicant)
             ->withHeader('Accept', 'application/json')
@@ -36,6 +42,10 @@ class ApplicantProfilePhotoTest extends TestCase
 
         $profile = $applicant->fresh()->studentProfile;
         Storage::disk('local')->assertExists($profile->profile_photo_path);
+        $this->assertNotContains(
+            'has_profile_photo',
+            collect($applicant->fresh()->applicantProfileReadiness()['missing'])->pluck('key'),
+        );
 
         $this->actingAs($applicant)
             ->get(route('dashboard.profile.photo'))
@@ -60,6 +70,37 @@ class ApplicantProfilePhotoTest extends TestCase
 
         Storage::disk('local')->assertMissing($replacementPath);
         $this->actingAs($applicant)->get('/dashboard/profile/photo')->assertNotFound();
+        $this->assertContains(
+            'has_profile_photo',
+            collect($applicant->fresh()->applicantProfileReadiness()['missing'])->pluck('key'),
+        );
+    }
+
+    public function test_applicant_can_upload_the_required_photo_from_mobile(): void
+    {
+        Storage::fake('local');
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $plainToken = 'mobile-photo-token';
+        MobileApiToken::create([
+            'user_id' => $applicant->id,
+            'name' => 'mobile_app',
+            'token_hash' => hash('sha256', $plainToken),
+            'expires_at' => now()->addDay(),
+        ]);
+
+        $response = $this->withToken($plainToken)
+            ->post('/api/mobile/profile/photo', [
+                'profile_photo' => UploadedFile::fake()->image('mobile-applicant.jpg', 600, 600),
+            ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('user.has_profile_photo', true);
+
+        $this->assertNotContains(
+            'has_profile_photo',
+            collect($response->json('profile_readiness.missing'))->pluck('key'),
+        );
+
+        Storage::disk('local')->assertExists($applicant->fresh()->studentProfile->profile_photo_path);
     }
 
     public function test_only_the_provider_that_received_the_application_can_view_the_photo(): void

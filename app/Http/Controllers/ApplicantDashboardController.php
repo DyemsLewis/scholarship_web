@@ -1522,6 +1522,12 @@ class ApplicantDashboardController extends Controller
             'message' => "{$request->user()->name} withdrew their application for {$application->scholarship->title}.",
             'action_url' => route('provider.applications.show', $application, false),
         ]);
+        $this->notifyAdditionalProviderReviewers(
+            $application,
+            'application_withdrawn',
+            'Application withdrawn',
+            "{$request->user()->name} withdrew their application for {$application->scholarship->title}.",
+        );
 
         ActivityLog::record(
             $request->user(),
@@ -1569,13 +1575,21 @@ class ApplicantDashboardController extends Controller
         );
         $application->loadMissing('scholarship');
 
+        $correctionMessage = "{$request->user()->name} responded to the correction request for {$application->scholarship->title}.";
         PortalNotification::create([
             'user_id' => $application->scholarship->provider_id,
             'type' => 'application_correction',
             'title' => 'Applicant submitted a correction',
-            'message' => "{$request->user()->name} responded to the correction request for {$application->scholarship->title}.",
-            'action_url' => route('provider.applications.show', $application, false).'?section=documents',
+            'message' => $correctionMessage,
+            'action_url' => route('provider.applications.show', $application, false).'?section=decision',
         ]);
+        $this->notifyAdditionalProviderReviewers(
+            $application,
+            'application_correction',
+            'Applicant submitted a correction',
+            $correctionMessage,
+            'decision',
+        );
         ActivityLog::record(
             $request->user(),
             'application_correction_submitted',
@@ -1912,6 +1926,7 @@ class ApplicantDashboardController extends Controller
             'review_notes' => $application->review_notes,
             'correction_status' => $application->correction_status,
             'correction_message' => $application->correction_message,
+            'correction_targets' => $application->correction_targets ?? [],
             'correction_response' => $application->correction_response,
             'correction_requested_at' => $application->correction_requested_at?->format('M d, Y h:i A'),
             'correction_responded_at' => $application->correction_responded_at?->format('M d, Y h:i A'),
@@ -2291,6 +2306,37 @@ class ApplicantDashboardController extends Controller
         $user->unsetRelation('studentProfile');
 
         return $result;
+    }
+
+    private function notifyAdditionalProviderReviewers(
+        ScholarshipApplication $application,
+        string $type,
+        string $title,
+        string $message,
+        string $section = 'decision',
+    ): void {
+        $providerId = (int) $application->scholarship?->provider_id;
+        $recipientIds = collect([
+            $application->assigned_reviewer_id,
+            $application->correction_requested_by,
+        ])
+            ->filter()
+            ->map(fn (mixed $userId): int => (int) $userId)
+            ->unique()
+            ->reject(fn (int $userId): bool => $userId === $providerId);
+
+        User::query()
+            ->whereIn('id', $recipientIds)
+            ->where('role', 'provider')
+            ->where('parent_account_id', $providerId)
+            ->pluck('id')
+            ->each(fn (int $userId) => PortalNotification::create([
+                'user_id' => $userId,
+                'type' => $type,
+                'title' => $title,
+                'message' => $message,
+                'action_url' => route('provider.applications.show', $application, false)."?section={$section}",
+            ]));
     }
 
     private function timelinePayload(ScholarshipApplication $application): array
