@@ -3407,7 +3407,6 @@ class ProviderController extends Controller
         $validated = $this->applyProviderProgramContactDefaults($validated, $request->user());
         [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request);
-        $this->ensureScholarshipReadyForSubmission($validated, $benefits);
         $imagePath = $this->storeScholarshipImage($request);
 
         if ($imagePath === null && $request->boolean('use_provider_logo')) {
@@ -3425,6 +3424,8 @@ class ProviderController extends Controller
         }
 
         try {
+            $this->ensureScholarshipReadyForSubmission($validated, $benefits, null, $imagePath);
+
             $scholarship = DB::transaction(function () use ($validated, $imagePath, $programEvents, $benefits, $request): Scholarship {
                 $scholarship = Scholarship::create([
                     ...$validated,
@@ -3484,7 +3485,6 @@ class ProviderController extends Controller
         $validated = $this->applyProviderProgramContactDefaults($validated, $request->user(), $scholarship);
         [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request, $scholarship);
-        $this->ensureScholarshipReadyForSubmission($validated, $benefits, $scholarship);
         $benefitsChanged = $benefits !== null && app(SB::class)->changed($scholarship, $benefits);
         $this->ensureScholarshipSelectionPlanIsStable($scholarship, $validated['selection_stages']);
         $oldImagePath = $scholarship->image_path;
@@ -3493,6 +3493,20 @@ class ProviderController extends Controller
         if ($imagePath === null && $request->boolean('use_provider_logo')) {
             $imagePath = $this->copyProviderLogoForScholarship($request->user());
         }
+
+        try {
+            $this->ensureScholarshipReadyForSubmission(
+                $validated,
+                $benefits,
+                $scholarship,
+                $imagePath ?: $scholarship->image_path,
+            );
+        } catch (Throwable $error) {
+            $this->deleteScholarshipImageIfUnused($imagePath);
+
+            throw $error;
+        }
+
         $termsAccepted = $request->boolean('terms_accepted');
 
         unset($validated['image_file'], $validated['use_provider_logo'], $validated['terms_accepted'], $validated['program_events']);
@@ -3580,6 +3594,7 @@ class ProviderController extends Controller
         array $validated,
         ?array $benefits,
         ?Scholarship $scholarship = null,
+        ?string $imagePath = null,
     ): void {
         if (in_array($validated['status'], ['draft', 'closed'], true)) {
             return;
@@ -3604,6 +3619,10 @@ class ProviderController extends Controller
         }
 
         $this->addScholarshipEligibilityConsistencyErrors($errors, $value);
+
+        if (blank($imagePath)) {
+            $errors['image_file'] = 'Upload a program logo or reuse the provider logo before submitting for review.';
+        }
 
         // Do not strand an older live program that predates the expanded form.
         // Its unchanged deadline remains editable, while a new invalid value is blocked.

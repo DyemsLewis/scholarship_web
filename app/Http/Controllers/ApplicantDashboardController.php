@@ -869,7 +869,18 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
 
-        $ocrManagedGrades = $this->academicRecordOcrService->configured();
+        $user = $request->user();
+        $academicRecord = $user->applicantVerificationDocuments()
+            ->where('document_type', 'academic_record')
+            ->first();
+        $manualAcademicEntryAllowed = $this->academicRecordOcrService->configured()
+            && $academicRecord
+            && in_array($academicRecord->ocr_status, [
+                AcademicRecordOcrService::STATUS_FAILED,
+                AcademicRecordOcrService::STATUS_NEEDS_REVIEW,
+                AcademicRecordOcrService::STATUS_UNAVAILABLE,
+            ], true);
+        $ocrManagedGrades = $this->academicRecordOcrService->configured() && ! $manualAcademicEntryAllowed;
         $gradeMaximum = $request->input('grading_scale') === AcademicRequirement::SCALE_GRADE_POINT ? 5 : 100;
 
         $validated = $request->validate([
@@ -928,7 +939,6 @@ class ApplicantDashboardController extends Controller
             $validated['current_scholarship_details'] = null;
         }
 
-        $user = $request->user();
         $profileValues = [
             ...$validated,
             'middle_initial' => filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null,
@@ -936,6 +946,18 @@ class ApplicantDashboardController extends Controller
         ];
         $studentProfile = $user->studentProfile()->firstOrNew(['user_id' => $user->id]);
         $studentProfile->fill($profileValues);
+        $manualAcademicResultChanged = $manualAcademicEntryAllowed
+            && $studentProfile->isDirty(['gwa', 'grading_scale']);
+
+        if ($manualAcademicResultChanged) {
+            $hasCompleteManualResult = filled($studentProfile->grading_scale)
+                && (! AcademicRequirement::requiresNumeric($studentProfile->grading_scale) || $studentProfile->gwa !== null);
+
+            $studentProfile->fill([
+                'academic_result_source' => $hasCompleteManualResult ? 'applicant_manual' : null,
+                'academic_result_extracted_at' => null,
+            ]);
+        }
         $verifiedFields = [
             'education_level',
             'school',
@@ -1015,7 +1037,10 @@ class ApplicantDashboardController extends Controller
             'profile_updated',
             "{$user->name} updated their applicant profile.",
             $request,
-            ['verification_reset' => $verificationReset],
+            [
+                'verification_reset' => $verificationReset,
+                'manual_academic_result_entered' => $manualAcademicResultChanged,
+            ],
         );
 
         return response()->json([

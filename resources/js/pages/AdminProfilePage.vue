@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import { limitPhoneNumber } from '../support/phoneNumber';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -209,7 +210,7 @@ onMounted(loadProfile);
                                 </label>
                                 <label>
                                     <span :class="labelClass">Contact number</span>
-                                    <input v-model="form.contact_number" type="text" placeholder="0917 000 0000" :class="inputClass">
+                                    <input :value="form.contact_number" type="tel" inputmode="tel" maxlength="20" placeholder="0917 000 0000" :class="inputClass" @input="form.contact_number = limitPhoneNumber($event.target.value)">
                                     <span v-if="fieldError('contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('contact_number') }}</span>
                                 </label>
                             </div>

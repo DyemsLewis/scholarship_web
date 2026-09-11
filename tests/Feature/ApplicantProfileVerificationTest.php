@@ -119,6 +119,60 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertJsonPath('message', 'The scan did not produce a usable result. Enter the verified academic result from the uploaded record before approving it.');
     }
 
+    public function test_applicant_can_enter_an_academic_result_when_cloud_extraction_fails(): void
+    {
+        Storage::fake('local');
+        $this->enableAcademicOcr();
+        Http::fake([
+            'https://api.ocr.space/parse/image' => Http::response([
+                'ParsedResults' => [[
+                    'ParsedText' => 'School year 2026-2027 subject grades only',
+                ]],
+                'OCRExitCode' => 1,
+                'IsErroredOnProcessing' => false,
+            ]),
+        ]);
+
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'academic_record',
+                'document_file' => UploadedFile::fake()->create('manual-entry-record.pdf', 120, 'application/pdf'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('verification_documents.0.ocr_status', 'needs_review');
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', [
+                'first_name' => $applicant->first_name,
+                'last_name' => $applicant->last_name,
+                'contact_number' => $applicant->contact_number,
+                'grading_scale' => 'percentage',
+                'gwa' => 91.25,
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.gwa', '91.25')
+            ->assertJsonPath('user.grading_scale', 'percentage')
+            ->assertJsonPath('user.academic_result_source', 'applicant_manual')
+            ->assertJsonPath('user.applicant_verification_status', 'pending');
+
+        $this->assertDatabaseHas('student_profiles', [
+            'user_id' => $applicant->id,
+            'gwa' => 91.25,
+            'grading_scale' => 'percentage',
+            'academic_result_source' => 'applicant_manual',
+            'verification_status' => 'pending',
+        ]);
+
+        $this->assertDatabaseHas('applicant_verification_documents', [
+            'applicant_id' => $applicant->id,
+            'document_type' => 'academic_record',
+            'ocr_status' => 'needs_review',
+        ]);
+    }
+
     public function test_admin_can_correct_and_verify_an_academic_result_when_cloud_extraction_fails(): void
     {
         Storage::fake('local');

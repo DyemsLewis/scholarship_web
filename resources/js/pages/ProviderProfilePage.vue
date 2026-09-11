@@ -8,6 +8,7 @@ import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
+import { limitPhoneNumber } from '../support/phoneNumber';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -814,7 +815,7 @@ onBeforeUnmount(() => {
                                 </label>
                                 <label>
                                     <span :class="labelClass">Provider phone</span>
-                                    <input v-model="form.provider_contact_number" type="tel" inputmode="tel" autocomplete="organization-tel" required maxlength="20" placeholder="0917 000 0000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
+                                    <input :value="form.provider_contact_number" type="tel" inputmode="tel" autocomplete="organization-tel" required maxlength="20" placeholder="0917 000 0000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']" @input="form.provider_contact_number = limitPhoneNumber($event.target.value)">
                                     <span v-if="fieldError('provider_contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_number') }}</span>
                                 </label>
                             </div>
@@ -880,7 +881,7 @@ onBeforeUnmount(() => {
                                 </label>
                                 <label>
                                     <span :class="labelClass">Representative phone</span>
-                                    <input v-model="form.contact_number" type="tel" inputmode="tel" required maxlength="20" placeholder="0917 000 0000" :class="inputClass">
+                                    <input :value="form.contact_number" type="tel" inputmode="tel" required maxlength="20" placeholder="0917 000 0000" :class="inputClass" @input="form.contact_number = limitPhoneNumber($event.target.value)">
                                     <span v-if="fieldError('contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('contact_number') }}</span>
                                 </label>
                             </div>

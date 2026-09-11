@@ -33,6 +33,10 @@ class ScholarshipPublicationGuard
             $errors['description'] = 'Add a program description before publication.';
         }
 
+        if (blank($scholarship->image_path)) {
+            $errors['image_file'] = 'Add a program logo before publication.';
+        }
+
         if (! $scholarship->provider_terms_accepted_at) {
             $errors['terms_accepted'] = 'The provider must accept the program terms before publication.';
         }

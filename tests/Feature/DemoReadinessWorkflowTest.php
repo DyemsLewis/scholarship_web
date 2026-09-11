@@ -69,7 +69,7 @@ class DemoReadinessWorkflowTest extends TestCase
         $expectedResultsAtLabel = Carbon::parse($expectedResultsAt)->format('M d, Y');
 
         $scholarshipResponse = $this->actingAs($provider)
-            ->postJson('/provider/scholarships', [
+            ->post('/provider/scholarships', [
                 'title' => 'Core Workflow Scholarship',
                 'category' => 'Financial assistance',
                 'program_cycle' => 'School Year 2026-2027',
@@ -111,7 +111,8 @@ class DemoReadinessWorkflowTest extends TestCase
                 'expected_results_at' => $expectedResultsAt,
                 'status' => 'pending_review',
                 'terms_accepted' => true,
-            ])
+                'image_file' => UploadedFile::fake()->image('core-workflow-logo.png'),
+            ], ['Accept' => 'application/json'])
             ->assertCreated()
             ->assertJsonPath('scholarship.status', 'pending_review')
             ->assertJsonPath('scholarship.program_cycle', 'School Year 2026-2027')

@@ -475,6 +475,26 @@ class ProviderBillingTest extends TestCase
         ]);
     }
 
+    public function test_admin_cannot_set_a_past_service_target_date(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchase = $this->pendingPurchase($provider);
+        $purchase->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+            'fulfillment_status' => 'ready',
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/billing/{$purchase->id}/fulfillment", [
+                'fulfillment_status' => 'in_progress',
+                'target_due_at' => now()->subDay()->toDateString(),
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('target_due_at');
+    }
+
     public function test_service_meeting_request_requires_a_future_date_and_decline_requires_a_reason(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);

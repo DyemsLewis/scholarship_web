@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import AuthShell from '../components/AuthShell.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import ToastMessage from '../components/ToastMessage.vue';
+import { limitPhoneNumber } from '../support/phoneNumber';
 
 const formElement = ref(null);
 const isProviderRegistration = window.location.pathname.startsWith('/provider/register');
@@ -122,7 +123,7 @@ function handleMiddleInitialInput(event) {
 }
 
 function handleNumberInput(event) {
-    form.value.number = event.target.value.replace(/[^\d+\s()-]/g, '').slice(0, 20);
+    form.value.number = limitPhoneNumber(event.target.value);
 }
 
 function handleVerificationCodeInput(event) {
@@ -165,8 +166,8 @@ async function submitForm() {
 
     const numberDigits = form.value.number.replace(/\D/g, '');
 
-    if (numberDigits.length < 10 || numberDigits.length > 15) {
-        const message = 'Enter a contact number with 10 to 15 digits.';
+    if (numberDigits.length !== 11) {
+        const message = 'Enter an 11-digit contact number.';
         showToast('error', 'Registration failed', message);
         formElement.value
             ?.querySelector('#number')

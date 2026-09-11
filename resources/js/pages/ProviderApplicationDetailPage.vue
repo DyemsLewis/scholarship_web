@@ -2502,7 +2502,7 @@ onMounted(loadApplication);
                                 </dl>
                             </section>
 
-                            <section v-if="activeSection === 'applicant'" class="provider-panel overflow-hidden">
+                            <section v-if="activeSection === 'applicant'" class="provider-panel overflow-hidden lg:col-span-2">
                                 <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-4">
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Goals and involvement</p>
                                     <span class="rounded bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">Applicant-declared</span>

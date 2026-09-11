@@ -8,6 +8,7 @@ import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import { limitPhoneNumber } from '../support/phoneNumber';
 import {
     canonicalProgramPath,
     canonicalizeProgramPathList,
@@ -651,6 +652,14 @@ const schedulableSelectionStageLabel = computed(() => schedulableSelectionStages
     .join(' and '));
 const minimumAwardSlots = computed(() => Math.max(1, awardedSlotsCount.value));
 const scholarshipImagePreview = computed(() => imagePreviewUrl.value || scholarshipForm.value.imageUrl || '/uploads/scholarship-default.jpg');
+const hasSavedProgramLogo = computed(() => isEditMode.value
+    && hasText(scholarshipForm.value.imageUrl)
+    && !String(scholarshipForm.value.imageUrl).includes('/uploads/scholarship-default.jpg'));
+const hasProgramLogo = computed(() => Boolean(
+    imageFile.value
+    || (useProviderLogoSelected.value && providerProgramDefaults.value.logoUrl)
+    || hasSavedProgramLogo.value,
+));
 const officialProgramPreviewUrl = computed(() => {
     const value = String(scholarshipForm.value.officialProgramUrl || '').trim();
 
@@ -750,6 +759,12 @@ const programReadinessItems = computed(() => [
             && hasText(scholarshipForm.value.programCycle)
             && hasText(scholarshipForm.value.description),
         help: 'Title, category, program cycle, and a clear description.',
+    },
+    {
+        label: 'Program logo',
+        section: 'details',
+        complete: hasProgramLogo.value,
+        help: 'Upload a program logo or reuse the provider logo.',
     },
     {
         label: 'Support and dates',
@@ -937,6 +952,8 @@ function readinessFocusTarget(item) {
 
         return 'scholarship-description';
     }
+
+    if (item.label === 'Program logo') return 'scholarship-image';
 
     if (item.label === 'Support and dates') {
         if (scholarshipForm.value.benefits.length === 0) return 'program-benefit-type';
@@ -2486,7 +2503,7 @@ onBeforeUnmount(() => {
                                     <div class="min-w-0">
                                         <label :class="labelClass" for="scholarship-image">
                                             Program logo
-                                            <span :class="optionalHintClass">Optional</span>
+                                            <span :class="requiredHintClass">Required</span>
                                         </label>
                                         <input
                                             id="scholarship-image"
@@ -2497,7 +2514,7 @@ onBeforeUnmount(() => {
                                             @change="handleImageFile"
                                         >
                                         <div class="mt-2 flex flex-wrap items-center gap-2">
-                                            <p class="text-xs leading-5 text-slate-500">JPG, PNG, or WebP up to 4MB.</p>
+                                            <p class="text-xs leading-5 text-slate-500">Upload a JPG, PNG, or WebP up to 4MB, or reuse the provider logo.</p>
                                             <span v-if="useProviderLogoSelected" class="rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase text-emerald-800">
                                                 Using provider logo
                                             </span>
@@ -3135,12 +3152,13 @@ onBeforeUnmount(() => {
                                         <label :class="labelClass" for="scholarship-contact-number">Contact number</label>
                                         <input
                                             id="scholarship-contact-number"
-                                            v-model="scholarshipForm.contactNumber"
+                                            :value="scholarshipForm.contactNumber"
                                             type="tel"
                                             inputmode="tel"
                                             maxlength="20"
                                             placeholder="0917 123 4567"
                                             :class="inputClass"
+                                            @input="scholarshipForm.contactNumber = limitPhoneNumber($event.target.value)"
                                         >
                                     </div>
 

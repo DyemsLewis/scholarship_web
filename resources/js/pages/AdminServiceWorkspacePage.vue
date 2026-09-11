@@ -28,6 +28,9 @@ const workflowForm = ref({
 });
 const updateForm = ref({ kind: 'progress_update', message: '' });
 const meetingDecisionForm = ref({ meeting_admin_note: '' });
+const minimumTargetDate = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
 
 const supportingFiles = computed(() => purchase.value?.files?.filter((file) => file.category === 'supporting') ?? []);
 const deliverables = computed(() => purchase.value?.files?.filter((file) => file.category === 'deliverable') ?? []);
@@ -277,7 +280,7 @@ onMounted(loadWorkspace);
                                         <label class="text-sm font-bold text-slate-700">Status<select v-model="workflowForm.fulfillment_status" :disabled="purchase.fulfillment_status === 'completed'" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal disabled:bg-slate-50"><option v-if="purchase.fulfillment_status === 'completed'" value="completed">Completed</option><option v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
                                         <label class="text-sm font-bold text-slate-700">Assigned staff<select v-model="workflowForm.assigned_to" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"><option value="">Unassigned</option><option v-for="admin in assignees" :key="admin.id" :value="admin.id">{{ admin.name }}</option></select></label>
                                         <label class="text-sm font-bold text-slate-700">Priority<select v-model="workflowForm.priority" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
-                                        <label class="text-sm font-bold text-slate-700">Target completion<input v-model="workflowForm.target_due_at" type="date" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"></label>
+                                        <label class="text-sm font-bold text-slate-700">Target completion<input v-model="workflowForm.target_due_at" type="date" :min="minimumTargetDate" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"></label>
                                     </div>
 
                                     <fieldset class="mt-5 overflow-hidden rounded-md border border-slate-200">

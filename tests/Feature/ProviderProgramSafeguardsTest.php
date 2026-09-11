@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\ApplicationWorkflowService;
 use App\Services\ScholarshipEventService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
@@ -115,6 +116,7 @@ class ProviderProgramSafeguardsTest extends TestCase
             ->assertJsonValidationErrors([
                 'category',
                 'benefits',
+                'image_file',
                 'application_mode',
                 'eligibility',
                 'requirements',
@@ -246,7 +248,10 @@ class ProviderProgramSafeguardsTest extends TestCase
         $provider = $this->verifiedProvider();
 
         $response = $this->actingAs($provider)
-            ->postJson('/provider/scholarships', $this->completeSubmissionPayload())
+            ->post('/provider/scholarships', [
+                ...$this->completeSubmissionPayload(),
+                'image_file' => UploadedFile::fake()->image('program-logo.png'),
+            ], ['Accept' => 'application/json'])
             ->assertCreated()
             ->assertJsonPath('scholarship.status', 'pending_review')
             ->assertJsonPath('scholarship.handoff_mode', 'onsite')
@@ -264,11 +269,14 @@ class ProviderProgramSafeguardsTest extends TestCase
         $provider = $this->verifiedProvider();
 
         $response = $this->actingAs($provider)
-            ->postJson('/provider/scholarships', $this->completeSubmissionPayload([
-                'title' => 'Profile Review Program',
-                'application_mode' => 'provider_review',
-                'requirements' => '',
-            ]))
+            ->post('/provider/scholarships', [
+                ...$this->completeSubmissionPayload([
+                    'title' => 'Profile Review Program',
+                    'application_mode' => 'provider_review',
+                    'requirements' => '',
+                ]),
+                'image_file' => UploadedFile::fake()->image('profile-review-logo.png'),
+            ], ['Accept' => 'application/json'])
             ->assertCreated()
             ->assertJsonPath('scholarship.status', 'pending_review')
             ->assertJsonPath('scholarship.requirements', null);

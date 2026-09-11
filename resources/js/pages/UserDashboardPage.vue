@@ -234,11 +234,20 @@ const readinessItems = computed(() => {
             action: 'Upload',
         },
     }[verificationStatus] ?? null;
-    const recommendationReadiness = recommendedScholarships.value.length > 0
-        ? Math.round(recommendedScholarships.value.reduce(
-            (total, scholarship) => total + Number(scholarship.prepared_documents?.percent ?? 0),
-            0,
-        ) / recommendedScholarships.value.length)
+    const recommendationFileTotals = recommendedScholarships.value.reduce((totals, scholarship) => {
+        const required = Number(scholarship.prepared_documents?.required ?? 0);
+
+        if (required <= 0) {
+            return totals;
+        }
+
+        totals.required += required;
+        totals.uploaded += Math.min(Number(scholarship.prepared_documents?.uploaded ?? 0), required);
+
+        return totals;
+    }, { required: 0, uploaded: 0 });
+    const recommendationReadiness = recommendationFileTotals.required > 0
+        ? Math.round((recommendationFileTotals.uploaded / recommendationFileTotals.required) * 100)
         : 0;
 
     return [
@@ -263,8 +272,10 @@ const readinessItems = computed(() => {
                 label: 'Prepared files',
                 percent: recommendationReadiness,
                 detail: recommendationReadiness > 0
-                    ? 'Across your recommended programs.'
-                    : 'Start with common school files when you are ready.',
+                    ? 'Across recommended programs that require files.'
+                    : recommendationFileTotals.required > 0
+                        ? 'No required files uploaded yet.'
+                        : 'No files are currently required by your recommendations.',
                 href: '/dashboard/documents',
                 action: 'Prepare',
             },
@@ -827,7 +838,7 @@ onMounted(loadDashboard);
                                 </div>
                             </section>
 
-                            <section class="student-card flex h-full flex-col overflow-hidden xl:col-start-1 xl:row-start-2">
+                            <section class="student-card flex flex-col overflow-hidden xl:col-start-1 xl:row-start-2">
                                 <div class="flex min-h-24 flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                                     <div class="flex min-w-0 items-center gap-3">
                                         <span class="student-section-mark">
@@ -852,14 +863,14 @@ onMounted(loadDashboard);
 
                                 <div
                                     v-if="visibleApplications.length"
-                                    class="flex flex-1 flex-col divide-y divide-slate-200 xl:min-h-0 xl:snap-y xl:snap-mandatory xl:overflow-y-auto xl:overscroll-contain"
+                                    class="flex max-h-72 flex-col divide-y divide-slate-200 overflow-y-auto overscroll-contain"
                                     aria-label="Recent application progress"
                                 >
                                     <a
                                         v-for="application in visibleApplications"
                                         :key="application.id"
                                         :href="application.detail_url || `/dashboard/applications/${application.id}`"
-                                        class="group flex shrink-0 items-center p-4 transition hover:bg-slate-50 sm:p-5 xl:min-h-full xl:snap-start"
+                                        class="group flex shrink-0 items-center p-4 transition hover:bg-slate-50 sm:p-5"
                                     >
                                         <div class="flex w-full items-start gap-3">
                                             <img
@@ -961,7 +972,7 @@ onMounted(loadDashboard);
                                 </div>
                             </section>
 
-                            <section class="student-card flex h-full flex-col overflow-hidden xl:col-start-2 xl:row-start-2">
+                            <section class="student-card flex flex-col overflow-hidden xl:col-start-2 xl:row-start-2">
                                 <div class="flex min-h-24 items-center gap-3 border-b border-slate-200 p-4 sm:p-5">
                                     <span class="student-section-mark">
                                         <i class="fa-solid fa-bell text-xs" aria-hidden="true"></i>
@@ -973,12 +984,12 @@ onMounted(loadDashboard);
                                     </div>
                                 </div>
 
-                                <div class="flex flex-1 flex-col divide-y divide-slate-200 xl:min-h-0 xl:snap-y xl:snap-mandatory xl:overflow-y-auto xl:overscroll-contain" aria-label="Important updates">
+                                <div class="flex max-h-72 flex-col divide-y divide-slate-200 overflow-y-auto overscroll-contain" aria-label="Important updates">
                                     <a
                                         v-for="reminder in reminders"
                                         :key="reminder.key"
                                         :href="reminder.href"
-                                        class="group flex shrink-0 items-center gap-3 p-4 transition hover:bg-slate-50 sm:p-5 xl:min-h-full xl:snap-start"
+                                        class="group flex shrink-0 items-center gap-3 p-4 transition hover:bg-slate-50 sm:p-5"
                                         @click="openReminder($event, reminder)"
                                     >
                                         <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', reminder.key === 'clear' ? 'bg-slate-100 text-slate-700' : 'bg-amber-100 text-amber-800']">

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import { limitPhoneNumber } from '../support/phoneNumber';
 
 const accountId = window.location.pathname.match(/\/provider\/team\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
 const isEditMode = computed(() => Boolean(accountId));
@@ -74,7 +75,7 @@ function handleMiddleInitial(event) {
 }
 
 function handleContactNumber(event) {
-    form.value.contactNumber = event.target.value.replace(/[^\d+\s().-]/g, '');
+    form.value.contactNumber = limitPhoneNumber(event.target.value);
 }
 
 async function loadAccount() {
@@ -245,7 +246,7 @@ onMounted(loadAccount);
                                         type="tel"
                                         inputmode="numeric"
                                         autocomplete="tel"
-                                        pattern="[0-9+(). -]{10,30}"
+                                        maxlength="20"
                                         required
                                         placeholder="09XX XXX XXXX"
                                         :class="inputClass"

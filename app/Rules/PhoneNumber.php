@@ -19,8 +19,8 @@ class PhoneNumber implements ValidationRule
 
         $digitCount = strlen((string) preg_replace('/\D/', '', $number));
 
-        if ($digitCount < 10 || $digitCount > 15) {
-            $fail('A contact number must contain 10 to 15 digits.');
+        if ($digitCount !== 11) {
+            $fail('A contact number must contain exactly 11 digits.');
         }
     }
 }

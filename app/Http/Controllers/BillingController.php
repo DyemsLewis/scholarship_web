@@ -948,7 +948,7 @@ class BillingController extends Controller
             'fulfillment_notes' => ['nullable', 'string', 'max:2000'],
             'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
             'priority' => ['nullable', Rule::in(['low', 'normal', 'high', 'urgent'])],
-            'target_due_at' => ['nullable', 'date'],
+            'target_due_at' => ['nullable', 'date', 'after_or_equal:today'],
             'milestones' => ['nullable', 'array', 'max:12'],
             'milestones.*.id' => ['required_with:milestones', 'string', 'max:80'],
             'milestones.*.label' => ['required_with:milestones', 'string', 'max:160'],

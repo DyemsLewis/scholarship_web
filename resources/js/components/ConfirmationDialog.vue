@@ -32,7 +32,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
     <Teleport to="body">
         <div
             v-if="open"
-            class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4"
+            class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/55 p-4"
             role="presentation"
             @click.self="emit('cancel')"
         >

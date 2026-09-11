@@ -5,6 +5,7 @@ import ApplicantNextActionPanel from '../components/ApplicantNextActionPanel.vue
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
+import FilePreviewModal from '../components/FilePreviewModal.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
@@ -42,6 +43,7 @@ const applicationTermsAccepted = ref(false);
 const documentTermsAccepted = ref(false);
 const documentFileInput = ref(null);
 const activeUploadRequirement = ref('');
+const previewDocument = ref(null);
 
 const steps = [
     { label: 'Program', detail: 'Review the program', icon: 'fa-solid fa-graduation-cap' },
@@ -831,6 +833,13 @@ watch(selectedScholarship, (scholarship) => {
     <main class="student-shell">
         <ApplicantSidebar />
 
+        <FilePreviewModal
+            :file="previewDocument"
+            :title="previewDocument?.document_name || previewDocument?.original_name || 'Application file'"
+            context="Prepared application file"
+            @close="previewDocument = null"
+        />
+
         <section class="student-page">
             <div class="student-container">
                 <ApplicantPageHeader
@@ -1120,7 +1129,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 </div>
                                             </div>
                                             <div class="flex shrink-0 gap-2">
-                                                <a v-if="preparedDocumentFor(requirement)?.view_url" :href="preparedDocumentFor(requirement).view_url" target="_blank" rel="noopener" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">View</a>
+                                                <button v-if="preparedDocumentFor(requirement)?.view_url" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50" @click="previewDocument = preparedDocumentFor(requirement)">View</button>
                                                 <button type="button" :disabled="isUploadingDocument" class="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:opacity-60" @click="openDocumentUpload(requirement)">
                                                     <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>
                                                     {{ isUploadingDocument && activeUploadRequirement === requirement ? 'Uploading...' : preparedDocumentFor(requirement) ? 'Replace' : 'Upload' }}
@@ -1146,7 +1155,7 @@ watch(selectedScholarship, (scholarship) => {
                                                     <div class="min-w-0"><p class="font-bold text-slate-900">{{ requirement }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ preparedDocumentFor(requirement)?.original_name || 'Optional · upload only if useful' }}</p></div>
                                                 </div>
                                                 <div class="flex shrink-0 gap-2">
-                                                    <a v-if="preparedDocumentFor(requirement)?.view_url" :href="preparedDocumentFor(requirement).view_url" target="_blank" rel="noopener" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">View</a>
+                                                    <button v-if="preparedDocumentFor(requirement)?.view_url" type="button" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700" @click="previewDocument = preparedDocumentFor(requirement)">View</button>
                                                     <button type="button" :disabled="isUploadingDocument" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60" @click="openDocumentUpload(requirement)">{{ preparedDocumentFor(requirement) ? 'Replace' : 'Upload' }}</button>
                                                 </div>
                                             </article>

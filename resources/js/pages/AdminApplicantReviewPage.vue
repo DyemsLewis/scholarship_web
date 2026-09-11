@@ -551,16 +551,16 @@ onMounted(loadApplicant);
                                         </div>
                                         <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Applicant-declared</span>
                                     </div>
-                                    <dl class="mt-3 grid gap-4 text-sm lg:grid-cols-3">
-                                        <div>
+                                    <dl class="mt-3 divide-y divide-slate-200 text-sm">
+                                        <div class="py-3 first:pt-0">
                                             <dt class="font-semibold text-slate-500">Applicant goal</dt>
                                             <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ applicant.scholarship_goal || 'Not provided' }}</dd>
                                         </div>
-                                        <div>
+                                        <div class="py-3">
                                             <dt class="font-semibold text-slate-500">Achievements or strengths</dt>
                                             <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ applicant.achievements || 'Not provided' }}</dd>
                                         </div>
-                                        <div>
+                                        <div class="py-3 last:pb-0">
                                             <dt class="font-semibold text-slate-500">Activities and responsibilities</dt>
                                             <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ applicant.activities_and_responsibilities || 'Not provided' }}</dd>
                                         </div>

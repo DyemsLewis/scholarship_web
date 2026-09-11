@@ -338,6 +338,7 @@ class PlatformIntegritySafeguardsTest extends TestCase
             'title' => 'Integrity Test Scholarship',
             'category' => 'Financial assistance',
             'description' => 'A complete scholarship used to verify platform integrity safeguards.',
+            'image_path' => 'images/programs/tulay-aral-logo.png',
             'eligibility' => 'Open to enrolled college applicants who submit the listed records.',
             'eligible_education_levels' => 'college',
             'location_name' => 'Test Scholarship Office',

@@ -5,6 +5,7 @@ import ApplicantNextActionPanel from '../components/ApplicantNextActionPanel.vue
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
+import FilePreviewModal from '../components/FilePreviewModal.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import PreScreeningHandoffRecord from '../components/PreScreeningHandoffRecord.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
@@ -703,6 +704,13 @@ onMounted(loadApplication);
 <template>
     <main class="student-shell">
         <ApplicantSidebar />
+
+        <FilePreviewModal
+            :file="previewDocument"
+            :title="previewDocument?.document_name || previewDocument?.original_name || 'Application document'"
+            :context="application?.scholarship?.title || 'Submitted application'"
+            @close="closeDocumentPreview"
+        />
 
         <section class="student-page">
             <div class="student-container">
@@ -1781,48 +1789,5 @@ onMounted(loadApplication);
             </section>
         </div>
 
-        <div
-            v-if="previewDocument"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
-            @click.self="closeDocumentPreview"
-        >
-            <section class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
-                <header class="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
-                    <div class="min-w-0">
-                        <p class="truncate text-sm font-bold text-slate-950">
-                            {{ previewDocument.document_name }}
-                        </p>
-                        <p class="truncate text-xs text-slate-500">
-                            {{ previewDocument.original_name }}
-                        </p>
-                    </div>
-
-                    <div class="flex shrink-0 items-center gap-2">
-                        <a
-                            :href="previewDocument.download_url"
-                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                        >
-                            Download
-                        </a>
-                        <button
-                            type="button"
-                            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
-                            aria-label="Close preview"
-                            @click="closeDocumentPreview"
-                        >
-                            <i class="fa-solid fa-xmark text-sm"></i>
-                        </button>
-                    </div>
-                </header>
-
-                <div class="h-[72vh] bg-slate-100">
-                    <iframe
-                        :src="previewDocument.view_url || previewDocument.download_url"
-                        :title="previewDocument.document_name"
-                        class="h-full w-full border-0 bg-white"
-                    ></iframe>
-                </div>
-            </section>
-        </div>
     </main>
 </template>

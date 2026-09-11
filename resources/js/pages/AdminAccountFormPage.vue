@@ -6,6 +6,7 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
+import { limitPhoneNumber } from '../support/phoneNumber';
 
 const accountId = window.location.pathname.match(/\/admin\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
 const isEditMode = computed(() => Boolean(accountId));
@@ -226,7 +227,7 @@ function handleMiddleInitialInput(event) {
 }
 
 function handleNumberInput(event) {
-    form.value.contactNumber = event.target.value.replace(/[^\d+\s().-]/g, '');
+    form.value.contactNumber = limitPhoneNumber(event.target.value);
 }
 
 function handleRoleChange() {
@@ -290,8 +291,8 @@ async function saveAccount() {
 
     const numberDigits = form.value.contactNumber.replace(/\D/g, '');
 
-    if (numberDigits.length < 10) {
-        errorMessage.value = 'Enter at least 10 digits in the contact number.';
+    if (numberDigits.length !== 11) {
+        errorMessage.value = 'Enter an 11-digit contact number.';
         formElement.value
             ?.querySelector('#admin-contact-number')
             ?.setCustomValidity(errorMessage.value);
@@ -631,6 +632,7 @@ onMounted(loadAccount);
                                         inputmode="numeric"
                                         autocomplete="tel"
                                         required
+                                        maxlength="20"
                                         placeholder="09XX XXX XXXX"
                                         :class="inputClass"
                                         @input="(event) => { event.target.setCustomValidity(''); handleNumberInput(event); }"

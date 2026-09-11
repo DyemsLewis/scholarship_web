@@ -4,11 +4,13 @@ import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import FilePreviewModal from '../components/FilePreviewModal.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
+import { limitPhoneNumber } from '../support/phoneNumber';
 import {
     alsPathOptions,
     collegePathOptions,
@@ -67,6 +69,7 @@ const verificationDocumentTermsAccepted = ref(false);
 const uploadingVerificationDocumentType = ref('');
 const deletingVerificationDocumentId = ref(null);
 const rescanningAcademicDocumentId = ref(null);
+const previewDocument = ref(null);
 const preparedDocumentsCount = ref(0);
 const {
     confirmation,
@@ -262,10 +265,10 @@ const profileSections = [
     },
     {
         id: 'verification',
-        label: 'Verification',
-        detail: 'Academic record',
-        icon: 'fa-solid fa-shield-check',
-        impact: 'Upload the academic or school record used to verify matching information.',
+        label: 'Supporting evidence',
+        detail: 'Profile records',
+        icon: 'fa-solid fa-file-circle-check',
+        impact: 'Add records that support the academic and enrollment information in your profile.',
         required: false,
         fields: [],
     },
@@ -366,7 +369,7 @@ const hasGuardianDetails = computed(() => [
     form.value.guardian_email,
 ].some(hasValue) || form.value.guardian_is_account_owner);
 const visibleProfileSections = computed(() => profileSections
-    .filter((section) => !['review', 'verification'].includes(section.id)));
+    .filter((section) => section.id !== 'review'));
 const requiredProfileFields = computed(() => profileSections.flatMap((section) => sectionRequiredFields(section)));
 const requiredFieldData = computed(() => requiredProfileFields.value.map((key) => ({
     key,
@@ -384,6 +387,9 @@ const academicOcrActive = computed(() => Boolean(academicOcr.value?.configured))
 const academicScanNeedsAttention = computed(() => academicOcrActive.value
     && academicVerificationDocument.value
     && ['failed', 'needs_review', 'unavailable'].includes(academicVerificationDocument.value.ocr_status));
+const manualAcademicEntryAllowed = computed(() => academicScanNeedsAttention.value);
+const manualAcademicResultComplete = computed(() => Boolean(form.value.grading_scale)
+    && (!requiresNumericGrade.value || hasValue(form.value.gwa)));
 const schoolVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'school_record') ?? null);
 const legacyVerificationDocuments = computed(() => verificationDocuments.value
@@ -397,54 +403,19 @@ const verificationDocumentRows = computed(() => verificationDocumentOptions.valu
 const missingVerificationDocumentRows = computed(() => verificationDocumentRows.value
     .filter((row) => !row.document));
 const needsVerificationUpload = computed(() => missingVerificationDocumentRows.value.length > 0);
-const verificationSteps = computed(() => {
-    const status = profileVerificationStatus.value;
-    const hasAcademicProof = Boolean(academicVerificationDocument.value);
-
-    return [
-        {
-            number: 1,
-            label: status === 'rejected' ? 'Replace academic record' : 'Submit academic record',
-            detail: status === 'rejected'
-                ? 'Add a clearer or updated file.'
-                : hasAcademicProof
-                    ? 'Academic record submitted.'
-                    : 'Add a record supporting your saved result.',
-            state: ['pending', 'approved'].includes(status) ? 'complete' : 'current',
-        },
-        {
-            number: 2,
-            label: 'Academic review',
-            detail: status === 'approved'
-                ? 'Result checked.'
-                : status === 'pending'
-                    ? 'An authorized reviewer is checking the file.'
-                    : status === 'rejected'
-                        ? 'Restarts after resubmission.'
-                        : 'Starts after upload.',
-            state: status === 'approved' ? 'complete' : status === 'pending' ? 'current' : 'upcoming',
-        },
-        {
-            number: 3,
-            label: 'Verified',
-            detail: status === 'approved' ? 'Academic result confirmed.' : 'Shown after approval.',
-            state: status === 'approved' ? 'complete' : 'upcoming',
-        },
-    ];
-});
 const verificationUploadCopy = computed(() => {
     if (profileVerificationStatus.value === 'rejected') {
         return {
             title: 'Replace the academic record',
-            detail: 'Review the verification note, then submit a clearer or updated academic record.',
+            detail: 'Review the reviewer note, then submit a clearer or updated academic record.',
         };
     }
 
     if (profileVerificationStatus.value === 'pending') {
         if (academicScanNeedsAttention.value) {
             return {
-                title: 'Academic result needs another scan',
-                detail: academicVerificationDocument.value?.ocr_message || 'Upload a clearer record or retry the saved file.',
+                title: 'Academic result needs attention',
+                detail: 'Retry the scan, upload a clearer record, or enter the result manually below. A reviewer will still check it against your file.',
             };
         }
 
@@ -458,7 +429,7 @@ const verificationUploadCopy = computed(() => {
 
     if (profileVerificationStatus.value === 'approved') {
         return {
-            title: 'Academic record verified',
+            title: 'Academic information supported',
             detail: 'Replace it only when your academic information changes.',
         };
     }
@@ -516,14 +487,14 @@ const applicationSetupItems = computed(() => [
     },
     {
         id: 'verification',
-        label: 'Academic proof',
+        label: 'Supporting evidence',
         detail: profileVerificationStatus.value === 'approved'
-            ? 'Verified and ready for provider review.'
+            ? 'Academic information is supported and ready for provider review.'
             : profileVerificationStatus.value === 'pending'
-                ? 'Submitted and waiting for review.'
+                ? 'Records submitted and waiting for review.'
                 : profileVerificationStatus.value === 'rejected'
                     ? 'Replace the file using the reviewer note.'
-                    : 'Recommended so reviewers can confirm your academic result.',
+                    : 'Add records that support your academic and enrollment information.',
         state: profileVerificationStatus.value === 'approved'
             ? 'complete'
             : profileVerificationStatus.value === 'pending'
@@ -591,19 +562,19 @@ const profileRecommendedAction = computed(() => {
         const nextProof = missingVerificationDocumentRows.value[0];
 
         return {
-            label: verificationDocuments.value.length === 0 ? 'Upload verification files' : `Upload ${nextProof.label.toLowerCase()}`,
+            label: verificationDocuments.value.length === 0 ? 'Upload supporting records' : `Upload ${nextProof.label.toLowerCase()}`,
             section: 'verification',
             detail: verificationDocuments.value.length === 0
-                ? 'Add your academic record and school enrollment proof for reviewer confirmation.'
+                ? 'Add records supporting the academic and enrollment details in your profile.'
                 : nextProof.description,
         };
     }
 
     if (profileVerificationStatus.value === 'unsubmitted') {
         return {
-            label: 'Add academic proof',
+            label: 'Add supporting evidence',
             section: 'verification',
-            detail: 'Recommended so an authorized reviewer can confirm the academic result in your profile.',
+            detail: 'Support the academic and enrollment information saved in your profile.',
         };
     }
 
@@ -611,7 +582,7 @@ const profileRecommendedAction = computed(() => {
         return {
             label: 'Replace academic record',
             section: 'verification',
-            detail: 'Review the verification note and upload a clearer or updated academic record.',
+            detail: 'Review the reviewer note and upload a clearer or updated academic record.',
         };
     }
 
@@ -923,11 +894,6 @@ function openSection(sectionId) {
 }
 
 function openProfileEditor(sectionId = profileRecommendedAction.value.section) {
-    if (sectionId === 'verification') {
-        openVerificationRecords();
-        return;
-    }
-
     if (sectionId === 'review') {
         profileView.value = 'overview';
         return;
@@ -939,7 +905,7 @@ function openProfileEditor(sectionId = profileRecommendedAction.value.section) {
 }
 
 function openVerificationRecords() {
-    profileView.value = 'verification';
+    profileView.value = 'edit';
     openSection('verification');
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -975,11 +941,6 @@ async function goToNextSection() {
             if (!saved) {
                 return;
             }
-        }
-
-        if (needsVerificationUpload.value) {
-            openVerificationRecords();
-            return;
         }
 
         await openProfileOverview();
@@ -1413,7 +1374,7 @@ function handleMiddleInitialInput(event) {
 }
 
 function handlePhoneInput(key, event) {
-    form.value[key] = event.target.value.replace(/[^\d+\s().-]/g, '').slice(0, 20);
+    form.value[key] = limitPhoneNumber(event.target.value);
 }
 
 async function uploadProfilePhoto(event) {
@@ -1625,8 +1586,8 @@ function handleProfileLocationError(message) {
 function verificationStatusLabel(status) {
     return {
         unsubmitted: 'Not submitted',
-        pending: 'Pending review',
-        approved: 'Verified',
+        pending: 'Under review',
+        approved: 'Evidence reviewed',
         rejected: 'Needs replacement',
     }[status] ?? 'Not submitted';
 }
@@ -1694,6 +1655,18 @@ function extractedAcademicResult(document = academicVerificationDocument.value) 
         return 'Upload an academic record';
     }
 
+    if (['failed', 'needs_review', 'unavailable'].includes(document.ocr_status) && form.value.grading_scale) {
+        if (!requiresNumericGrade.value) {
+            return `${gradingScaleLabel(form.value.grading_scale)} - entered manually`;
+        }
+
+        if (hasValue(form.value.gwa)) {
+            return form.value.grading_scale === 'percentage'
+                ? `${form.value.gwa}% - entered manually`
+                : `${form.value.gwa} GWA / GPA - entered manually`;
+        }
+    }
+
     if (document.ocr_grading_scale === 'pass_fail') {
         return 'Pass / competency result';
     }
@@ -1744,7 +1717,7 @@ async function uploadVerificationDocument(documentType, event) {
     }
 
     if (!verificationDocumentTermsAccepted.value) {
-        const message = 'Agree to the document terms before uploading profile proof.';
+        const message = 'Agree to the document terms before uploading supporting evidence.';
         errorMessage.value = message;
         showPortalToast({ type: 'error', message });
         input.value = '';
@@ -1796,7 +1769,7 @@ async function deleteVerificationDocument(document) {
     const isSchoolRecord = document.document_type === 'school_record';
     const confirmed = await requestConfirmation({
         title: isAcademicRecord ? 'Remove academic record?' : (isSchoolRecord ? 'Remove school proof?' : 'Remove older proof file?'),
-        message: `${document.original_name || 'This file'} will be removed from profile proof. Its separate copy in Documents will stay available.${isAcademicRecord ? ' Your academic verification will return to not submitted.' : ''}`,
+        message: `${document.original_name || 'This file'} will be removed from supporting evidence. Its separate copy in Documents will stay available.${isAcademicRecord ? ' Your academic record review will return to not submitted.' : ''}`,
         confirmLabel: 'Remove file',
         tone: 'danger',
     });
@@ -1929,6 +1902,13 @@ watch(() => form.value.grading_scale, (scale) => {
 <template>
     <main class="student-shell">
         <ApplicantSidebar />
+
+        <FilePreviewModal
+            :file="previewDocument"
+            :title="previewDocument?.document_name || previewDocument?.original_name || 'Supporting evidence'"
+            context="Applicant supporting evidence"
+            @close="previewDocument = null"
+        />
 
         <ConfirmationDialog
             v-bind="confirmation"
@@ -2070,7 +2050,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </dl>
                                 <p class="mt-3 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
                                     <i class="fa-solid fa-file-shield mr-1.5" aria-hidden="true"></i>
-                                    Academic values are self-declared until the uploaded academic record is verified.
+                                    Academic values are applicant-declared until they are supported by a reviewed academic record.
                                 </p>
                             </section>
 
@@ -2170,7 +2150,7 @@ watch(() => form.value.grading_scale, (scale) => {
                 <ApplicantPageHeader
                     eyebrow="Applicant Profile"
                     title="Your scholarship profile"
-                    description="A reusable applicant record for matching, verification, and scholarship applications."
+                    description="A reusable applicant record for matching, supporting evidence, and scholarship applications."
                     icon="fa-solid fa-id-card"
                     action-href="/dashboard/scholarships"
                     action-label="See matches"
@@ -2209,7 +2189,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                             class="rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800"
                                         >
                                             <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
-                                            Verified
+                                            Evidence reviewed
                                         </span>
                                     </div>
                                     <p class="mt-1 text-sm font-semibold text-slate-600">{{ profileEducationSummary }}</p>
@@ -2228,7 +2208,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     @click="openVerificationRecords"
                                 >
                                     <i class="fa-solid fa-file-shield mr-2" aria-hidden="true"></i>
-                                    Verification records
+                                    Supporting evidence
                                 </button>
                                 <button
                                     type="button"
@@ -2316,8 +2296,8 @@ watch(() => form.value.grading_scale, (scale) => {
                                 <i class="fa-solid fa-file-shield" aria-hidden="true"></i>
                             </span>
                             <span class="min-w-0 flex-1">
-                                <span class="block text-sm font-bold text-slate-950">Verification records</span>
-                                <span class="mt-1 block text-xs leading-5 text-slate-500">Academic proof is managed separately from your editable profile.</span>
+                                <span class="block text-sm font-bold text-slate-950">Supporting evidence</span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-500">Records here support the academic and enrollment information in your profile.</span>
                             </span>
                             <span class="shrink-0 text-xs font-bold text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
                             <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
@@ -2352,7 +2332,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </button>
                                 <div class="min-w-0">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
-                                        {{ profileView === 'verification' ? 'Separate records' : 'Edit provider profile' }}
+                                        {{ activeSection === 'verification' ? 'Supporting records' : 'Edit applicant profile' }}
                                     </p>
                                     <h2 class="mt-1 truncate text-xl font-bold text-slate-950">{{ activeProfileSection.label }}</h2>
                                     <p class="mt-1 text-sm text-slate-500">{{ activeProfileSection.impact }}</p>
@@ -2377,7 +2357,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         <div v-if="profileView === 'edit'" class="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
                             <p class="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Choose information to edit</p>
                             <nav aria-label="Profile sections">
-                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-5">
                                     <li v-for="step in profileNavigationSteps" :key="step.id" class="min-w-0">
                                         <button
                                             type="button"
@@ -2841,7 +2821,9 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
                                     <p v-if="isFieldRelevant('grading_scale')" class="mt-3 border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
                                         {{ academicOcrActive
-                                            ? 'Your academic result is read from the record in Verification and cannot be edited here. A reviewer still checks the file before marking it verified.'
+                                            ? manualAcademicEntryAllowed
+                                                ? 'The automatic scan could not read the result. Enter the value in Supporting evidence, where it will remain pending for reviewer confirmation.'
+                                                : 'Your academic result is read from Supporting evidence and cannot be edited here. A reviewer still checks the record before accepting it.'
                                             : 'Numeric scales are kept as entered. Pass/fail and other systems are checked using supporting records.' }}
                                     </p>
                                 </div>
@@ -3036,10 +3018,10 @@ watch(() => form.value.grading_scale, (scale) => {
                         <section v-if="activeSection === 'verification'" id="profile-verification" :class="sectionCardClass">
                             <div :class="sectionHeaderClass">
                                 <div>
-                                    <p class="student-kicker">Academic evidence</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Profile proof</h3>
+                                    <p class="student-kicker">Profile records</p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Supporting evidence</h3>
                                     <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Upload your latest academic record and proof of current enrollment.
+                                        Add records that support the academic result, school, and enrollment information saved in your profile.
                                     </p>
                                 </div>
                                 <span :class="[sectionStatusPillClass, verificationStatusClass(profileVerificationStatus)]">
@@ -3047,50 +3029,24 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </span>
                             </div>
 
-                            <ol class="grid border-b border-slate-200 bg-slate-50 md:grid-cols-3 md:divide-x md:divide-slate-200">
-                                <li
-                                    v-for="step in verificationSteps"
-                                    :key="step.number"
-                                    class="flex items-start gap-3 border-b border-slate-200 p-4 last:border-b-0 md:border-b-0 sm:p-5"
+                            <div :class="[sectionBodyClass, 'space-y-4']">
+                                <div
+                                    v-if="user?.applicant_verification_notes"
+                                    :class="[
+                                        'flex items-start gap-3 rounded-lg border p-4 text-sm',
+                                        profileVerificationStatus === 'rejected'
+                                            ? 'border-rose-200 bg-rose-50 text-rose-800'
+                                            : 'border-slate-200 bg-slate-50 text-slate-700',
+                                    ]"
                                 >
-                                    <span
-                                        :class="[
-                                            'grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black',
-                                            step.state === 'complete'
-                                                ? 'bg-emerald-100 text-emerald-700'
-                                                : step.state === 'current'
-                                                    ? 'bg-slate-900 text-white'
-                                                    : 'border border-slate-300 bg-white text-slate-500',
-                                        ]"
-                                    >
-                                        <i v-if="step.state === 'complete'" class="fa-solid fa-check" aria-hidden="true"></i>
-                                        <span v-else>{{ step.number }}</span>
-                                    </span>
-                                    <div class="min-w-0">
-                                        <p class="text-sm font-bold text-slate-950">{{ step.label }}</p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ step.detail }}</p>
+                                    <i class="fa-solid fa-message mt-1 shrink-0" aria-hidden="true"></i>
+                                    <div>
+                                        <p class="font-bold">Reviewer note</p>
+                                        <p class="mt-1 leading-6">{{ user.applicant_verification_notes }}</p>
                                     </div>
-                                </li>
-                            </ol>
-
-                            <div
-                                v-if="user?.applicant_verification_notes"
-                                :class="[
-                                    'flex items-start gap-3 border-b p-4 text-sm sm:px-6',
-                                    profileVerificationStatus === 'rejected'
-                                        ? 'border-rose-200 bg-rose-50 text-rose-800'
-                                        : 'border-slate-200 bg-slate-50 text-slate-700',
-                                ]"
-                            >
-                                <i class="fa-solid fa-message mt-1 shrink-0" aria-hidden="true"></i>
-                                <div>
-                                    <p class="font-bold">Verification note</p>
-                                    <p class="mt-1 leading-6">{{ user.applicant_verification_notes }}</p>
                                 </div>
-                            </div>
 
-                            <div class="grid border-b border-slate-200 lg:grid-cols-[minmax(0,1fr)_18rem]">
-                                <div class="p-5 sm:p-6">
+                                <div :class="formPanelClass">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
                                             <h4 class="text-lg font-bold text-slate-950">{{ verificationUploadCopy.title }}</h4>
@@ -3163,16 +3119,15 @@ watch(() => form.value.grading_scale, (scale) => {
                                                     <i :class="rescanningAcademicDocumentId === row.document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate'" aria-hidden="true"></i>
                                                     {{ rescanningAcademicDocumentId === row.document.id ? 'Scanning...' : 'Retry scan' }}
                                                 </button>
-                                                <a
+                                                <button
                                                     v-if="row.document"
-                                                    :href="row.document.view_url"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
+                                                    type="button"
                                                     class="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                                    @click="previewDocument = row.document"
                                                 >
                                                     <i class="fa-solid fa-eye" aria-hidden="true"></i>
                                                     View
-                                                </a>
+                                                </button>
                                                 <label
                                                     :class="[
                                                         'inline-flex h-9 items-center gap-2 rounded-md px-3 text-xs font-bold transition',
@@ -3210,44 +3165,91 @@ watch(() => form.value.grading_scale, (scale) => {
 
                                 </div>
 
-                                <aside class="border-t border-slate-200 bg-slate-50 p-5 lg:border-l lg:border-t-0 sm:p-6">
-                                    <p class="student-kicker">What to upload</p>
-                                    <h4 class="mt-2 text-base font-bold text-slate-950">Accepted records</h4>
-                                    <ul class="mt-4 grid gap-4 text-sm text-slate-600">
-                                        <li class="flex items-start gap-3">
-                                            <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
+                                <div v-if="manualAcademicEntryAllowed" :class="formPanelClass">
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                            <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <h4 :class="formPanelTitleClass">Enter the result shown on your record</h4>
+                                            <p :class="formPanelDescriptionClass">Use the exact grading scale and result from the uploaded file. This entry stays pending until a reviewer confirms it.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-4 grid items-end gap-4 sm:grid-cols-2">
+                                        <div>
+                                            <label :class="labelClass" for="fallback-grading-scale">Grading scale</label>
+                                            <select id="fallback-grading-scale" v-model="form.grading_scale" :class="inputClass">
+                                                <option value="">Select grading scale</option>
+                                                <option v-for="option in gradingScaleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                            </select>
+                                        </div>
+                                        <div v-if="requiresNumericGrade">
+                                            <label :class="labelClass" for="fallback-academic-result">{{ gwaLabel }}</label>
+                                            <input
+                                                id="fallback-academic-result"
+                                                v-model="form.gwa"
+                                                type="number"
+                                                min="0"
+                                                :max="form.grading_scale === 'grade_point' ? 5 : 100"
+                                                step="0.01"
+                                                :placeholder="form.grading_scale === 'grade_point' ? 'Example: 1.75' : 'Example: 92.50'"
+                                                :class="inputClass"
+                                            >
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <p class="text-xs leading-5 text-slate-500">Manual entry helps matching but does not replace review of the original record.</p>
+                                        <button
+                                            type="button"
+                                            :disabled="isSaving || !manualAcademicResultComplete"
+                                            class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                                            @click="saveProfile(false)"
+                                        >
+                                            <i :class="isSaving ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-floppy-disk'" aria-hidden="true"></i>
+                                            {{ isSaving ? 'Saving...' : 'Save entered result' }}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div :class="formPanelClass">
+                                    <h4 :class="formPanelTitleClass">Accepted records</h4>
+                                    <p :class="formPanelDescriptionClass">Use recent, readable files that support the information in your profile.</p>
+                                    <ul class="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+                                        <li class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
+                                            <i class="fa-solid fa-file-lines mt-1 text-slate-700" aria-hidden="true"></i>
                                             <span>Report card, transcript, grade report, or assessment with a readable overall result.</span>
                                         </li>
-                                        <li class="flex items-start gap-3">
-                                            <i class="fa-solid fa-check mt-1 text-slate-900" aria-hidden="true"></i>
+                                        <li class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
+                                            <i class="fa-solid fa-school mt-1 text-slate-700" aria-hidden="true"></i>
                                             <span>Enrollment certificate, school ID, admission letter, or learning-center record.</span>
                                         </li>
-                                        <li class="flex items-start gap-3">
+                                        <li class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
                                             <i class="fa-solid fa-shield-halved mt-1 text-emerald-700" aria-hidden="true"></i>
                                             <span>Do not upload IDs, birth certificates, income proof, or unrelated files.</span>
                                         </li>
-                                        <li v-if="academicOcrActive" class="flex items-start gap-3">
+                                        <li v-if="academicOcrActive" class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
                                             <i class="fa-solid fa-wand-magic-sparkles mt-1 text-sky-700" aria-hidden="true"></i>
                                             <span>Use a clear file up to {{ academicOcr.max_file_size_mb }} MB. Only the extracted overall result is saved for matching.</span>
                                         </li>
                                     </ul>
-                                </aside>
-                            </div>
+                                </div>
 
-                            <div v-if="legacyVerificationDocuments.length" class="border-b border-slate-200 bg-amber-50/60 px-5 py-4 sm:px-6">
+                            <div v-if="legacyVerificationDocuments.length" class="rounded-lg border border-amber-200 bg-amber-50/60 p-4 sm:p-5">
                                 <div class="flex items-start gap-3">
                                     <i class="fa-solid fa-shield-heart mt-1 text-amber-700" aria-hidden="true"></i>
                                     <div class="min-w-0 flex-1">
                                         <p class="text-sm font-bold text-slate-950">Older proof files are no longer required</p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-600">These files were submitted under the previous verification process. You may review or remove them; the portal will not ask you to replace them.</p>
+                                        <p class="mt-1 text-xs leading-5 text-slate-600">These files were submitted under the previous profile-proof process. You may review or remove them; the portal will not ask you to replace them.</p>
                                         <div class="mt-3 grid gap-2">
                                             <div v-for="document in legacyVerificationDocuments" :key="document.id" class="flex flex-col gap-2 rounded-md border border-amber-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
                                                 <div class="min-w-0">
                                                     <p class="truncate text-xs font-bold text-slate-900">{{ document.original_name }}</p>
-                                                    <p class="mt-0.5 text-[11px] text-slate-500">Previously submitted verification file</p>
+                                                    <p class="mt-0.5 text-[11px] text-slate-500">Previously submitted supporting file</p>
                                                 </div>
                                                 <div class="flex shrink-0 gap-2">
-                                                    <a :href="document.view_url" target="_blank" rel="noopener noreferrer" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View</a>
+                                                    <button type="button" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="previewDocument = document">View</button>
                                                     <button type="button" :disabled="deletingVerificationDocumentId === document.id" class="rounded-md border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50" @click="deleteVerificationDocument(document)">Remove</button>
                                                 </div>
                                             </div>
@@ -3256,9 +3258,10 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </div>
                             </div>
 
-                            <div class="flex items-start gap-3 bg-slate-50 px-5 py-4 text-xs leading-5 text-slate-600 sm:px-6">
-                                <i class="fa-solid fa-lock mt-1 shrink-0 text-slate-500" aria-hidden="true"></i>
-                                <p>Only authorized admins and providers reviewing your submitted application can access these files.</p>
+                                <div class="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
+                                    <i class="fa-solid fa-lock mt-1 shrink-0 text-slate-500" aria-hidden="true"></i>
+                                    <p>Only authorized admins and providers reviewing your submitted application can access these files.</p>
+                                </div>
                             </div>
                         </section>
 
@@ -3466,9 +3469,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                 {{ isSaving
                                     ? 'Saving...'
                                     : visibleActiveSectionIndex >= visibleProfileSections.length - 1
-                                        ? needsVerificationUpload
-                                            ? (hasUnsavedChanges ? 'Save and upload proof' : 'Upload verification files')
-                                            : (hasUnsavedChanges ? 'Save and return' : 'Return to profile')
+                                        ? (hasUnsavedChanges ? 'Save and return' : 'Return to profile')
                                         : (hasUnsavedChanges ? 'Save and continue' : 'Next') }}
                             </button>
                         </div>
