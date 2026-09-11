@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ApplicationSchedule;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
@@ -49,6 +50,20 @@ class ProviderExamReviewWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_provider_cannot_record_a_result_before_the_activity_is_completed(): void
+    {
+        [$provider, $_applicant, $application] = $this->applicationAtStage('exam', false);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/stages/exam/result", [
+                'result' => 'passed',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('result');
+
+        $this->assertSame('exam', $application->fresh()->workflow_stage);
+    }
+
     public function test_failed_exam_requires_a_decision_reason(): void
     {
         [$provider, $_applicant, $application] = $this->applicationAtStage('exam');
@@ -93,7 +108,7 @@ class ProviderExamReviewWorkflowTest extends TestCase
         ]);
     }
 
-    private function applicationAtStage(string $stage): array
+    private function applicationAtStage(string $stage, bool $activityCompleted = true): array
     {
         $provider = User::factory()->create(['role' => 'provider']);
         $provider->providerProfile()->update(['verification_status' => 'approved']);
@@ -117,6 +132,18 @@ class ProviderExamReviewWorkflowTest extends TestCase
         $workflow = app(ApplicationWorkflowService::class);
         $application = $workflow->start($application);
         $application = $workflow->recordStageResult($application, 'screening', 'passed', $provider);
+
+        ApplicationSchedule::create([
+            'scholarship_application_id' => $application->id,
+            'type' => $stage,
+            'title' => ucfirst($stage).' activity',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'status' => $activityCompleted ? 'completed' : 'scheduled',
+            'completed_at' => $activityCompleted ? now() : null,
+            'created_by' => $provider->id,
+            'updated_by' => $provider->id,
+        ]);
 
         return [$provider, $applicant, $application];
     }

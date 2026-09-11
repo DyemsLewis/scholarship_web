@@ -365,6 +365,10 @@ class User extends Authenticatable implements MustVerifyEmail
             'provider_website' => $providerProfile?->provider_website,
             'provider_address' => $providerProfile?->provider_address,
             'provider_description' => $providerProfile?->provider_description,
+            'provider_logo_path' => $providerProfile?->logo_path,
+            'provider_logo_url' => filled($providerProfile?->logo_path)
+                ? asset(ltrim($providerProfile->logo_path, '/'))
+                : null,
             'provider_contact_email' => $providerProfile?->provider_contact_email,
             'provider_contact_number' => $providerProfile?->provider_contact_number,
             'verification_status' => $providerProfile?->verification_status,

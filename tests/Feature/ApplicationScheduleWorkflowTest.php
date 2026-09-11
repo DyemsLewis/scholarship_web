@@ -60,9 +60,29 @@ class ApplicationScheduleWorkflowTest extends TestCase
             ->exists());
     }
 
-    public function test_provider_records_a_stage_result_without_attendance_or_schedule_completion(): void
+    public function test_provider_records_a_stage_result_after_the_activity_is_completed(): void
     {
         [$provider, , $application] = $this->applicationAt('interview');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/stages/interview/result", [
+                'result' => 'passed',
+                'notes' => 'The provider confirmed the interview result.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('result');
+
+        ApplicationSchedule::create([
+            'scholarship_application_id' => $application->id,
+            'type' => 'interview',
+            'title' => 'Completed interview',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'status' => 'completed',
+            'completed_at' => now(),
+            'created_by' => $provider->id,
+            'updated_by' => $provider->id,
+        ]);
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/stages/interview/result", [
@@ -111,7 +131,7 @@ class ApplicationScheduleWorkflowTest extends TestCase
         ]);
     }
 
-    public function test_program_schedule_can_be_archived_without_gating_applicant_results(): void
+    public function test_program_schedule_can_be_completed_without_current_applicants(): void
     {
         $provider = $this->provider();
         $scholarship = $this->scholarship($provider);

@@ -850,12 +850,16 @@ onMounted(loadDashboard);
                                     </a>
                                 </div>
 
-                                <div v-if="visibleApplications.length" class="flex flex-1 flex-col divide-y divide-slate-200">
+                                <div
+                                    v-if="visibleApplications.length"
+                                    class="flex flex-1 flex-col divide-y divide-slate-200 xl:min-h-0 xl:snap-y xl:snap-mandatory xl:overflow-y-auto xl:overscroll-contain"
+                                    aria-label="Recent application progress"
+                                >
                                     <a
                                         v-for="application in visibleApplications"
                                         :key="application.id"
                                         :href="application.detail_url || `/dashboard/applications/${application.id}`"
-                                        class="group flex flex-1 items-center p-4 transition hover:bg-slate-50 sm:p-5"
+                                        class="group flex shrink-0 items-center p-4 transition hover:bg-slate-50 sm:p-5 xl:min-h-full xl:snap-start"
                                     >
                                         <div class="flex w-full items-start gap-3">
                                             <img

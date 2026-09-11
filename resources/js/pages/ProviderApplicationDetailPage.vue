@@ -232,6 +232,20 @@ const currentStageSchedule = computed(() => (
         ? schedules.value.find((schedule) => schedule.type === currentActivityType.value) ?? null
         : null
 ));
+const activityResultLocked = computed(() => Boolean(
+    currentActivityType.value && currentStageSchedule.value?.status !== 'completed',
+));
+const activityResultLockMessage = computed(() => {
+    if (!activityResultLocked.value) {
+        return '';
+    }
+
+    const activityLabel = scheduleTypeLabel(currentActivityType.value).toLowerCase();
+
+    return currentStageSchedule.value
+        ? `Mark the ${activityLabel} activity as completed before recording results.`
+        : `Publish and complete the ${activityLabel} activity before recording results.`;
+});
 const programWorkspaceAction = computed(() => {
     const waitingType = currentActivityType.value;
 
@@ -430,9 +444,9 @@ const suggestedReviewActions = computed(() => {
             confirmLabel: passCopy[2],
             icon: 'fa-solid fa-circle-check',
             tone: 'success',
-            blocked: isScreening && !documentReviewComplete.value,
-            blockedSection: 'documents',
-            blockedMessage: documentReviewBlockMessage.value,
+            blocked: (isScreening && !documentReviewComplete.value) || activityResultLocked.value,
+            blockedSection: isScreening && !documentReviewComplete.value ? 'documents' : 'decision',
+            blockedMessage: isScreening && !documentReviewComplete.value ? documentReviewBlockMessage.value : activityResultLockMessage.value,
         },
         {
             key: 'not_passed',
@@ -447,6 +461,9 @@ const suggestedReviewActions = computed(() => {
             icon: 'fa-solid fa-circle-xmark',
             tone: 'danger',
             requiresReason: true,
+            blocked: activityResultLocked.value,
+            blockedSection: 'decision',
+            blockedMessage: activityResultLockMessage.value,
         },
     ];
 });
@@ -1562,8 +1579,6 @@ onMounted(loadApplication);
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider-managed exam</p>
                                         <h3 class="mt-1 text-lg font-bold text-slate-950">{{ application.exam.title }}</h3>
                                         <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-600">
-                                            <span v-if="application.exam.duration_minutes">{{ application.exam.duration_minutes }} minutes</span>
-                                            <span v-if="application.exam.passing_score !== null">{{ Number(application.exam.passing_score) }}% passing score</span>
                                             <span>{{ labelFromKey(application.exam.delivery_mode) }}</span>
                                         </div>
                                         <p class="mt-2 text-xs leading-5 text-slate-500">Your organization conducts and grades this exam outside the portal.</p>
@@ -1773,6 +1788,22 @@ onMounted(loadApplication);
                                             <span class="mt-0.5 block text-xs leading-5 text-amber-800">{{ documentReviewBlockMessage }} Open the Documents tab to continue.</span>
                                         </span>
                                     </button>
+                                    <div
+                                        v-if="activityResultLocked"
+                                        class="mt-3 flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+                                    >
+                                        <span class="flex items-start gap-3">
+                                            <i class="fa-solid fa-lock mt-0.5 text-amber-700" aria-hidden="true"></i>
+                                            <span>
+                                                <strong class="block">Results are locked</strong>
+                                                <span class="mt-0.5 block text-xs leading-5 text-amber-800">{{ activityResultLockMessage }}</span>
+                                            </span>
+                                        </span>
+                                        <a :href="programActivityUrl" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-950 transition hover:bg-amber-100">
+                                            Manage activity
+                                            <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                        </a>
+                                    </div>
                                     <div v-if="suggestedReviewActions.length" class="mt-3 grid gap-3 md:grid-cols-2">
                                         <button
                                             v-for="action in suggestedReviewActions"

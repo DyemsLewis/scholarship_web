@@ -116,6 +116,46 @@ class ProviderBillingTest extends TestCase
         $this->assertDatabaseCount('provider_service_purchases', 0);
     }
 
+    public function test_application_cycle_checkout_records_the_requested_support_areas(): void
+    {
+        Http::fake([
+            'https://api.paymongo.com/v2/checkout_sessions' => Http::response([
+                'data' => [
+                    'id' => 'cs_test_cycle_support',
+                    'type' => 'checkout_session',
+                    'attributes' => [
+                        'checkout_url' => 'https://checkout.paymongo.com/cs_test_cycle_support',
+                        'livemode' => false,
+                    ],
+                ],
+            ]),
+        ]);
+        $provider = User::factory()->create(['role' => 'provider']);
+
+        $this->actingAs($provider)->postJson('/provider/billing/checkout', [
+            'plan_code' => 'application_cycle_support',
+            'accept_terms' => true,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('support_areas');
+
+        $response = $this->actingAs($provider)->postJson('/provider/billing/checkout', [
+            'plan_code' => 'application_cycle_support',
+            'accept_terms' => true,
+            'support_areas' => ['applicant_queues', 'stages_schedules'],
+            'support_note' => 'We need help preparing for a larger applicant intake.',
+        ])->assertCreated();
+
+        $purchase = ProviderServicePurchase::query()->findOrFail($response->json('purchase.id'));
+
+        $this->assertStringContainsString('Applicant queues and reviewer workload', $purchase->request_summary);
+        $this->assertStringContainsString('Selection stages and schedules', $purchase->request_summary);
+        $this->assertStringContainsString('larger applicant intake', $purchase->request_summary);
+        $this->assertSame(
+            'A clear, organized application cycle and action plan for the selected support areas.',
+            $purchase->requested_outcome,
+        );
+    }
+
     public function test_valid_signed_paid_webhook_confirms_payment_once_and_notifies_both_roles(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);

@@ -62,6 +62,12 @@ class BillingController extends Controller
                     'amount' => (int) $plan['amount'],
                     'currency' => config('billing.currency', 'PHP'),
                     'features' => array_values($plan['features'] ?? []),
+                    'support_areas' => collect($plan['support_areas'] ?? [])
+                        ->map(fn (string $label, string $value) => [
+                            'value' => $value,
+                            'label' => $label,
+                        ])
+                        ->values(),
                 ])
                 ->values(),
             'purchases' => $purchases->map(fn (ProviderServicePurchase $purchase) => $this->purchasePayload($purchase))->values(),
@@ -412,13 +418,34 @@ class BillingController extends Controller
         }
 
         $plans = config('billing.plans', []);
+        $cycleSupportAreas = array_keys($plans['application_cycle_support']['support_areas'] ?? []);
         $validated = $request->validate([
             'plan_code' => ['required', 'string', Rule::in(array_keys($plans))],
             'accept_terms' => ['accepted'],
+            'support_areas' => [
+                Rule::requiredIf($request->input('plan_code') === 'application_cycle_support'),
+                'array',
+                'min:1',
+                'max:6',
+            ],
+            'support_areas.*' => ['string', 'distinct', Rule::in($cycleSupportAreas)],
+            'support_note' => ['nullable', 'string', 'max:1000'],
         ]);
         $plan = $plans[$validated['plan_code']];
         $actor = $request->user();
         $owner = $actor->providerOrganizationOwner()->loadMissing('providerProfile');
+        $selectedSupportAreas = collect($validated['support_areas'] ?? [])
+            ->map(fn (string $area) => $plan['support_areas'][$area] ?? null)
+            ->filter()
+            ->values();
+        $supportNote = trim((string) ($validated['support_note'] ?? ''));
+        $requestSummary = $selectedSupportAreas->isNotEmpty()
+            ? 'Support requested: '.$selectedSupportAreas->join(', ').'.'
+            : null;
+
+        if ($requestSummary && $supportNote !== '') {
+            $requestSummary .= "\n\nProvider note: {$supportNote}";
+        }
 
         $purchase = ProviderServicePurchase::create([
             'provider_id' => $owner->id,
@@ -431,8 +458,10 @@ class BillingController extends Controller
             'fulfillment_status' => 'ready',
             'reference_number' => $this->uniqueReferenceNumber(),
             'service_terms_accepted_at' => now(),
-            'request_summary' => null,
-            'requested_outcome' => null,
+            'request_summary' => $requestSummary,
+            'requested_outcome' => $selectedSupportAreas->isNotEmpty()
+                ? 'A clear, organized application cycle and action plan for the selected support areas.'
+                : null,
             'priority' => 'normal',
             'fulfillment_notes' => 'Payment confirmed. Schedule a meeting to discuss the service details with platform support.',
             'milestones' => $this->defaultMilestones($plan),

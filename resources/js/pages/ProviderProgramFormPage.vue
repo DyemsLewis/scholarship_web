@@ -36,6 +36,7 @@ const scholarshipFormElement = ref(null);
 const imageInputElement = ref(null);
 const imageFile = ref(null);
 const imagePreviewUrl = ref('');
+const useProviderLogoSelected = ref(false);
 const providerLocationMessage = ref('');
 const providerAddressLookupTrigger = ref(0);
 const activeFormSection = ref('details');
@@ -622,6 +623,7 @@ const providerProgramDefaults = computed(() => ({
     email: String(user.value?.provider_contact_email ?? '').trim(),
     phone: String(user.value?.provider_contact_number ?? '').trim(),
     website: String(user.value?.provider_website ?? '').trim(),
+    logoUrl: String(user.value?.provider_logo_url ?? '').trim(),
 }));
 const hasProviderAddress = computed(() => Boolean(providerProgramDefaults.value.address));
 const hasProviderPublicContact = computed(() => Boolean(
@@ -806,13 +808,6 @@ const programReadinessItems = computed(() => [
         complete: scholarshipForm.value.selectionStages.includes('screening'),
         help: 'A review stage and any additional stages used by the provider.',
     },
-    ...(scholarshipForm.value.selectionStages.includes('exam') ? [{
-        label: 'Exam details',
-        section: 'selection',
-        complete: hasText(scholarshipForm.value.examDurationMinutes)
-            && hasText(scholarshipForm.value.examPassingScore),
-        help: 'Provider-managed exam duration and passing score for this program.',
-    }] : []),
     {
         label: 'Review scoring',
         section: 'selection',
@@ -1159,8 +1154,6 @@ function emptyScholarshipForm() {
         slotsAvailable: '',
         applicationMode: 'online',
         selectionStages: ['screening', 'formal_application', 'decision'],
-        examDurationMinutes: '',
-        examPassingScore: '',
         renewalPolicy: '',
         returnServiceContract: '',
         otherContractTerms: defaultCommitmentText,
@@ -1761,8 +1754,6 @@ function fillScholarshipForm(scholarship) {
         slotsAvailable: scholarship.slots_available ?? '',
         applicationMode: scholarship.application_mode === 'hybrid' ? 'onsite' : (scholarship.application_mode ?? ''),
         selectionStages: normalizeSelectionStages(scholarship.selection_stages),
-        examDurationMinutes: scholarship.exam_duration_minutes ?? '',
-        examPassingScore: scholarship.exam_passing_score ?? '',
         renewalPolicy: scholarship.renewal_policy ?? '',
         returnServiceContract: scholarship.return_service_contract ?? '',
         otherContractTerms: scholarship.other_contract_terms ?? '',
@@ -1780,6 +1771,7 @@ function fillScholarshipForm(scholarship) {
     };
     imageFile.value = null;
     imagePreviewUrl.value = '';
+    useProviderLogoSelected.value = false;
     selectedTargetPresetKey.value = inferTargetFormKey(scholarshipForm.value.eligibleEducationLevels);
     syncEligibilityOptions();
     syncCommitmentEditor();
@@ -1891,6 +1883,11 @@ function useProviderAddressForHandoff() {
 function applyProviderProfileDefaults() {
     useProviderPublicContact(false);
     useProviderAddress(false);
+
+    if (!isEditMode.value && providerProgramDefaults.value.logoUrl && !imageFile.value) {
+        scholarshipForm.value.imageUrl = providerProgramDefaults.value.logoUrl;
+        useProviderLogoSelected.value = true;
+    }
 }
 
 function addReviewCriterion() {
@@ -2018,6 +2015,7 @@ function resetScholarshipForm() {
     coverageOptionsError.value = '';
     imageFile.value = null;
     imagePreviewUrl.value = '';
+    useProviderLogoSelected.value = false;
     formError.value = '';
     providerLocationMessage.value = '';
     selectedCommitmentOption.value = 'provider_briefing';
@@ -2085,12 +2083,34 @@ function handleImageFile(event) {
     const file = event.target.files?.[0] ?? null;
 
     imageFile.value = file;
+    useProviderLogoSelected.value = !file
+        && !isEditMode.value
+        && Boolean(providerProgramDefaults.value.logoUrl);
 
     if (imagePreviewUrl.value) {
         URL.revokeObjectURL(imagePreviewUrl.value);
     }
 
     imagePreviewUrl.value = file ? URL.createObjectURL(file) : '';
+}
+
+function useProviderLogo() {
+    if (!providerProgramDefaults.value.logoUrl) {
+        return;
+    }
+
+    imageFile.value = null;
+    useProviderLogoSelected.value = true;
+    scholarshipForm.value.imageUrl = providerProgramDefaults.value.logoUrl;
+
+    if (imagePreviewUrl.value) {
+        URL.revokeObjectURL(imagePreviewUrl.value);
+        imagePreviewUrl.value = '';
+    }
+
+    if (imageInputElement.value) {
+        imageInputElement.value.value = '';
+    }
 }
 
 async function loadFormData() {
@@ -2236,12 +2256,6 @@ async function saveScholarship() {
         slots_available: scholarshipForm.value.slotsAvailable || '',
         application_mode: scholarshipForm.value.applicationMode || '',
         selection_stages: JSON.stringify(scholarshipForm.value.selectionStages),
-        exam_duration_minutes: scholarshipForm.value.selectionStages.includes('exam')
-            ? scholarshipForm.value.examDurationMinutes || ''
-            : '',
-        exam_passing_score: scholarshipForm.value.selectionStages.includes('exam')
-            ? scholarshipForm.value.examPassingScore || ''
-            : '',
         renewal_policy: scholarshipForm.value.renewalPolicy || '',
         return_service_contract: scholarshipForm.value.returnServiceContract || '',
         other_contract_terms: scholarshipForm.value.otherContractTerms || '',
@@ -2254,6 +2268,7 @@ async function saveScholarship() {
         contact_department: scholarshipForm.value.contactDepartment || '',
         deadline: scholarshipForm.value.deadline || '',
         status: scholarshipForm.value.status,
+        use_provider_logo: useProviderLogoSelected.value ? '1' : '0',
         terms_accepted: scholarshipForm.value.termsAccepted ? '1' : '',
     };
 
@@ -2481,9 +2496,23 @@ onBeforeUnmount(() => {
                                             class="w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 file:mr-2 file:rounded file:border-0 file:bg-slate-900 file:px-2.5 file:py-1.5 file:text-xs file:font-bold file:text-white hover:file:bg-slate-800"
                                             @change="handleImageFile"
                                         >
-                                        <p class="mt-1.5 text-xs leading-5 text-slate-500">
-                                            Optional JPG, PNG, or WebP up to 4MB.
-                                        </p>
+                                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                                            <p class="text-xs leading-5 text-slate-500">JPG, PNG, or WebP up to 4MB.</p>
+                                            <span v-if="useProviderLogoSelected" class="rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase text-emerald-800">
+                                                Using provider logo
+                                            </span>
+                                            <button
+                                                v-else-if="providerProgramDefaults.logoUrl"
+                                                type="button"
+                                                class="text-xs font-bold text-slate-800 underline decoration-slate-300 underline-offset-2 hover:text-amber-700"
+                                                @click="useProviderLogo"
+                                            >
+                                                Use provider logo
+                                            </button>
+                                            <a v-else href="/provider/profile" class="text-xs font-bold text-slate-800 underline decoration-slate-300 underline-offset-2 hover:text-amber-700">
+                                                Add provider logo
+                                            </a>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -3001,59 +3030,6 @@ onBeforeUnmount(() => {
                                                 <p class="text-xs text-slate-500">Selected, waitlisted, or not selected</p>
                                             </div>
                                             <span class="rounded bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 ring-1 ring-slate-200">Final</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div
-                                    v-if="activeFormSection === 'selection' && scholarshipForm.selectionStages.includes('exam')"
-                                    :class="fieldCardClass"
-                                >
-                                    <div class="flex items-start gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                            <i class="fa-solid fa-clipboard-question" aria-hidden="true"></i>
-                                        </span>
-                                        <div>
-                                            <p class="text-base font-bold text-slate-950">Exam settings</p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">
-                                                Enter the basic rules for the exam your organization will conduct and grade.
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div class="mt-4 grid gap-4 md:grid-cols-2">
-                                        <div :class="fieldStackClass">
-                                            <label :class="labelClass" for="scholarship-exam-duration">
-                                                Duration in minutes
-                                                <span :class="requiredHintClass">Required</span>
-                                            </label>
-                                            <input
-                                                id="scholarship-exam-duration"
-                                                v-model="scholarshipForm.examDurationMinutes"
-                                                type="number"
-                                                min="15"
-                                                max="480"
-                                                step="5"
-                                                placeholder="Example: 60"
-                                                :class="inputClass"
-                                            >
-                                        </div>
-
-                                        <div :class="fieldStackClass">
-                                            <label :class="labelClass" for="scholarship-exam-passing-score">
-                                                Passing score (%)
-                                                <span :class="requiredHintClass">Required</span>
-                                            </label>
-                                            <input
-                                                id="scholarship-exam-passing-score"
-                                                v-model="scholarshipForm.examPassingScore"
-                                                type="number"
-                                                min="0"
-                                                max="100"
-                                                step="0.01"
-                                                placeholder="Example: 75"
-                                                :class="inputClass"
-                                            >
                                         </div>
                                     </div>
                                 </div>

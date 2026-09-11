@@ -338,7 +338,13 @@ onMounted(loadProvider);
                     <section class="admin-panel overflow-hidden">
                         <div class="flex flex-col gap-4 border-l-4 border-l-amber-400 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                             <div class="flex min-w-0 items-center gap-3">
-                                <div class="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
+                                <img
+                                    v-if="provider.provider_logo_url"
+                                    :src="provider.provider_logo_url"
+                                    :alt="`${provider.provider_name || provider.name} logo`"
+                                    class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1 ring-1 ring-slate-200"
+                                >
+                                <div v-else class="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
                                     {{ providerInitials(provider) }}
                                 </div>
                                 <div class="min-w-0">

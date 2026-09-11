@@ -18,6 +18,7 @@ class ProviderProfile extends Model
         'provider_website',
         'provider_address',
         'provider_description',
+        'logo_path',
         'provider_contact_email',
         'provider_contact_number',
         'verification_status',

@@ -50,6 +50,7 @@ const activeWorkspaceSection = ref(['applications', 'schedule'].includes(request
 const programEvents = ref([]);
 const scheduleEditorType = ref('');
 const scheduleSaving = ref(false);
+const completingScheduleId = ref(null);
 const scheduleError = ref('');
 const scheduleForm = ref(emptyScheduleForm());
 const selectedBulkApplicationIds = ref([]);
@@ -185,12 +186,18 @@ const reviewFilterOptions = computed(() => [
 const outcomeFilterOptions = computed(() => [
     {
         value: 'selected',
-        label: 'Selected',
+        label: 'Selected recipients',
+        description: 'Applicants confirmed for available scholarship slots.',
+        icon: 'fa-solid fa-award',
+        action: 'View recipients',
         count: Number(queueFilterCounts.value.selected ?? 0),
     },
     {
         value: 'waitlisted',
-        label: 'Waitlisted',
+        label: 'Waitlisted applicants',
+        description: 'Qualified alternates who may be promoted when a slot opens.',
+        icon: 'fa-solid fa-list-ol',
+        action: 'View waitlist',
         count: Number(queueFilterCounts.value.waitlisted ?? 0),
     },
 ]);
@@ -277,7 +284,7 @@ function applicationActionLabel(application) {
     }
 
     if (applicationWaitingForActivity(application)) {
-        return applicationHasActiveSchedule(application) ? 'View activity' : 'Set activity';
+        return 'View applicant';
     }
 
     if (workflowStage(application) === 'decision') {
@@ -396,14 +403,6 @@ function showWaitingTime(application) {
         && !['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated', 'disbursed', 'renewed'].includes(application.status);
 }
 
-function applicationHasActiveSchedule(application) {
-    const stage = workflowStage(application);
-
-    return (application.schedules ?? []).some((schedule) => (
-        schedule.type === stage && schedule.status !== 'cancelled'
-    ));
-}
-
 function applicationWaitingForActivity(application) {
     const stage = workflowStage(application);
 
@@ -420,18 +419,10 @@ function applicationDetailUrl(application) {
     const detailUrl = application.detail_url || `/provider/applications/${application.id}`;
     const url = new URL(detailUrl, window.location.origin);
 
-    if (applicationWaitingForActivity(application) && application.scholarship?.id) {
-        const workspaceUrl = new URL(`/provider/programs/${application.scholarship.id}/applications`, window.location.origin);
-        workspaceUrl.searchParams.set('workspace', 'schedule');
-        workspaceUrl.searchParams.set('filter', 'waiting_activity');
-
-        return `${workspaceUrl.pathname}${workspaceUrl.search}`;
-    }
-
     url.searchParams.set('return_to', `${window.location.pathname}${window.location.search}`);
     url.searchParams.set('section', workflowClosed(application)
         ? 'history'
-        : (workflowStage(application) === 'screening' ? 'applicant' : 'decision'));
+        : (applicationWaitingForActivity(application) || workflowStage(application) === 'screening' ? 'applicant' : 'decision'));
 
     return `${url.pathname}${url.search}${url.hash}`;
 }
@@ -572,6 +563,43 @@ async function saveProgramSchedule() {
         void handledError;
     } finally {
         scheduleSaving.value = false;
+    }
+}
+
+async function completeProgramSchedule(event) {
+    if (!event || event.status === 'completed' || completingScheduleId.value) {
+        return;
+    }
+
+    const confirmed = await requestConfirmation({
+        title: `Complete ${scheduleTypeLabel(event.type)} activity?`,
+        message: 'This unlocks pass or fail decisions for applicants currently at this stage.',
+        confirmLabel: 'Mark complete',
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
+    completingScheduleId.value = event.id;
+    scheduleError.value = '';
+
+    try {
+        const response = await window.axios.patch(`/provider/scholarships/${selectedScholarshipId.value}/events/${event.id}/complete`);
+        const eventIndex = programEvents.value.findIndex((programEvent) => programEvent.id === event.id);
+
+        if (eventIndex >= 0) {
+            programEvents.value.splice(eventIndex, 1, response.data.event);
+        }
+
+        closeScheduleEditor();
+        await loadProviderData(false);
+    } catch (error) {
+        scheduleError.value = error.response?.data?.errors?.event?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to complete this activity.';
+    } finally {
+        completingScheduleId.value = null;
     }
 }
 
@@ -916,12 +944,59 @@ onMounted(loadProviderData);
                                 <textarea v-model="scheduleForm.instructions" rows="3" maxlength="3000" required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600"></textarea>
                             </div>
 
-                            <div class="mt-4 flex justify-end">
+                            <div class="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <button
+                                    v-if="scheduleEvent(scheduleForm.type)?.status === 'scheduled'"
+                                    type="button"
+                                    :disabled="Boolean(completingScheduleId) || scheduleSaving"
+                                    class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-100 disabled:opacity-60"
+                                    @click="completeProgramSchedule(scheduleEvent(scheduleForm.type))"
+                                >
+                                    {{ completingScheduleId === scheduleEvent(scheduleForm.type)?.id ? 'Completing...' : 'Mark activity complete' }}
+                                </button>
+                                <span v-else></span>
                                 <button type="submit" :disabled="scheduleSaving" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60">
                                     {{ scheduleSaving ? 'Publishing...' : 'Publish schedule' }}
                                 </button>
                             </div>
                         </form>
+                    </section>
+
+                    <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="provider-panel overflow-hidden">
+                        <div class="border-b border-slate-200 px-5 py-4">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">After final decision</p>
+                            <h3 class="mt-1 text-xl font-bold text-slate-950">Recipients and waitlist</h3>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">Keep completed selections separate from applications that still need review.</p>
+                        </div>
+                        <div class="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
+                            <button
+                                v-for="outcome in outcomeFilterOptions"
+                                :key="outcome.value"
+                                type="button"
+                                :class="[
+                                    'group flex items-center gap-3 rounded-md border p-3 text-left transition',
+                                    selectedQueueFilter === outcome.value
+                                        ? 'border-slate-900 bg-slate-900 text-white'
+                                        : 'border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-400 hover:bg-white',
+                                ]"
+                                @click="selectedQueueFilter = outcome.value"
+                            >
+                                <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md', selectedQueueFilter === outcome.value ? 'bg-white/10 text-amber-300' : 'bg-white text-slate-700 ring-1 ring-slate-200']">
+                                    <i :class="outcome.icon" aria-hidden="true"></i>
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="flex items-center justify-between gap-3">
+                                        <span class="text-sm font-bold">{{ outcome.label }}</span>
+                                        <span :class="['rounded px-2 py-0.5 text-xs font-bold', selectedQueueFilter === outcome.value ? 'bg-white/10 text-white' : 'bg-white text-slate-800 ring-1 ring-slate-200']">{{ outcome.count }}</span>
+                                    </span>
+                                    <span :class="['mt-1 block text-xs leading-5', selectedQueueFilter === outcome.value ? 'text-slate-300' : 'text-slate-500']">{{ outcome.description }}</span>
+                                    <span :class="['mt-2 inline-flex items-center gap-2 text-xs font-bold', selectedQueueFilter === outcome.value ? 'text-amber-300' : 'text-slate-800']">
+                                        {{ outcome.action }}
+                                        <i class="fa-solid fa-arrow-right text-[9px] transition group-hover:translate-x-0.5" aria-hidden="true"></i>
+                                    </span>
+                                </span>
+                            </button>
+                        </div>
                     </section>
 
                     <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="provider-panel p-5">
@@ -984,22 +1059,6 @@ onMounted(loadProviderData);
                                 >
                                     All records ({{ queueFilterCounts.all ?? 0 }})
                                 </button>
-                                <div class="inline-flex overflow-hidden rounded-md border border-slate-300 bg-white">
-                                    <button
-                                        v-for="filter in outcomeFilterOptions"
-                                        :key="filter.value"
-                                        type="button"
-                                        :class="[
-                                            'px-3 py-2.5 text-sm font-bold transition first:border-r first:border-slate-300',
-                                            selectedQueueFilter === filter.value
-                                                ? 'bg-slate-900 text-white'
-                                                : 'text-slate-700 hover:bg-slate-100',
-                                        ]"
-                                        @click="selectedQueueFilter = filter.value"
-                                    >
-                                        {{ filter.label }} ({{ filter.count }})
-                                    </button>
-                                </div>
                                 <label>
                                     <span class="sr-only">Sort applications</span>
                                     <select

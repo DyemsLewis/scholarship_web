@@ -41,6 +41,14 @@ return [
                 'Applicant queue organization',
                 'Schedule and notification check',
             ],
+            'support_areas' => [
+                'application_setup' => 'Application setup and requirements',
+                'applicant_queues' => 'Applicant queues and reviewer workload',
+                'document_review' => 'Document review process',
+                'stages_schedules' => 'Selection stages and schedules',
+                'communications' => 'Applicant updates and notifications',
+                'final_selection' => 'Final selection and waitlist handling',
+            ],
         ],
         'integration_consultation' => [
             'name' => 'Integration consultation',

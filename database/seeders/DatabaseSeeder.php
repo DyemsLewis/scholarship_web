@@ -424,8 +424,6 @@ class DatabaseSeeder extends Seeder
                     'application_mode' => 'onsite',
                     'image_path' => '/images/programs/bukas-kinabukasan-logo.png',
                     'selection_stages' => ['screening', 'formal_application', 'exam', 'interview', 'decision'],
-                    'exam_duration_minutes' => 60,
-                    'exam_passing_score' => 75,
                     'category' => 'STEM scholarship',
                     'description' => 'A competitive STEM support package combining a PHP 12,000 learning grant, an enrichment session, and pathway mentoring for senior high school learners preparing for science, engineering, computing, or technology studies.',
                     'eligibility' => 'Grade 11 or Grade 12 STEM learner from Laguna or Metro Manila with at least an 85% general average and availability for a qualifying exam and finalist interview.',

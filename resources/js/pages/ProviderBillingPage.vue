@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
@@ -14,8 +14,13 @@ const plans = ref([]);
 const purchases = ref([]);
 const selectedPlan = ref(null);
 const acceptsTerms = ref(false);
+const cycleSupportAreas = ref([]);
+const cycleSupportNote = ref('');
 const syncingReference = ref('');
 const activeView = window.location.pathname.replace(/\/$/, '').endsWith('/requests') ? 'requests' : 'services';
+const needsCycleSupportScope = computed(() => selectedPlan.value?.code === 'application_cycle_support');
+const canStartCheckout = computed(() => acceptsTerms.value
+    && (!needsCycleSupportScope.value || cycleSupportAreas.value.length > 0));
 
 function money(amount, currency = 'PHP') {
     return new Intl.NumberFormat('en-PH', {
@@ -152,6 +157,8 @@ function openPurchase(plan) {
 
     selectedPlan.value = plan;
     acceptsTerms.value = false;
+    cycleSupportAreas.value = [];
+    cycleSupportNote.value = '';
 }
 
 function closePurchase() {
@@ -161,10 +168,12 @@ function closePurchase() {
 
     selectedPlan.value = null;
     acceptsTerms.value = false;
+    cycleSupportAreas.value = [];
+    cycleSupportNote.value = '';
 }
 
 async function startCheckout() {
-    if (!selectedPlan.value || !acceptsTerms.value || isOpeningCheckout.value) {
+    if (!selectedPlan.value || !canStartCheckout.value || isOpeningCheckout.value) {
         return;
     }
 
@@ -174,6 +183,10 @@ async function startCheckout() {
         const response = await window.axios.post('/provider/billing/checkout', {
             plan_code: selectedPlan.value.code,
             accept_terms: acceptsTerms.value,
+            ...(needsCycleSupportScope.value ? {
+                support_areas: cycleSupportAreas.value,
+                support_note: cycleSupportNote.value.trim(),
+            } : {}),
         }, {
             portalToast: false,
         });
@@ -253,7 +266,7 @@ async function syncPayment(reference, { clearResult = false } = {}) {
 }
 
 function handleKeydown(event) {
-    if (event.key === 'Escape') {
+    if (event.key === 'Escape' && selectedPlan.value) {
         closePurchase();
     }
 }
@@ -389,9 +402,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                         </div>
                                         <i class="fa-solid fa-lock mt-1 text-xs text-slate-400" aria-hidden="true"></i>
                                     </div>
-                                    <button type="button" class="mt-4 w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!gateway.configured" @click="openPurchase(plan)">
-                                        {{ gateway.configured ? 'Review service' : 'Payment unavailable' }}
-                                    </button>
+                                    <div class="mt-4">
+                                        <button type="button" class="w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!gateway.configured" @click="openPurchase(plan)">
+                                            {{ gateway.configured ? 'Review service' : 'Payment unavailable' }}
+                                        </button>
+                                    </div>
                                 </div>
                             </article>
                         </div>
@@ -507,6 +522,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                     <p class="mt-1 text-sm leading-6 text-slate-700">{{ selectedPlan.best_for }}</p>
                 </div>
 
+                <section v-if="needsCycleSupportScope" class="mt-4 rounded-md border border-slate-200 p-4">
+                    <div>
+                        <p class="text-sm font-bold text-slate-950">What does your team need help with?</p>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">Select at least one area. This becomes the starting brief for the platform support team.</p>
+                    </div>
+                    <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                        <label v-for="area in selectedPlan.support_areas" :key="area.value" class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 transition hover:border-slate-400 hover:bg-white">
+                            <input v-model="cycleSupportAreas" type="checkbox" :value="area.value" class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-amber-400">
+                            <span class="text-sm font-semibold leading-5 text-slate-700">{{ area.label }}</span>
+                        </label>
+                    </div>
+                    <label class="mt-4 block">
+                        <span class="text-sm font-bold text-slate-700">Additional note <span class="font-normal text-slate-400">Optional</span></span>
+                        <textarea v-model="cycleSupportNote" rows="2" maxlength="1000" placeholder="Briefly describe the issue or current situation." class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100"></textarea>
+                    </label>
+                </section>
+
                 <section class="mt-4">
                     <p class="text-xs font-bold uppercase text-slate-500">Included in this request</p>
                     <ul class="mt-3 grid gap-2 sm:grid-cols-2">
@@ -549,7 +581,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 
                 <div class="mt-6 grid gap-3 sm:grid-cols-2">
                     <button type="button" class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="closePurchase">Cancel</button>
-                    <button type="button" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!acceptsTerms || isOpeningCheckout" @click="startCheckout">
+                    <button type="button" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!canStartCheckout || isOpeningCheckout" @click="startCheckout">
                         {{ isOpeningCheckout ? 'Opening checkout...' : 'Continue to PayMongo' }}
                     </button>
                 </div>

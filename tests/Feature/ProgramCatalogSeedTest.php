@@ -90,8 +90,8 @@ class ProgramCatalogSeedTest extends TestCase
         $this->assertStringContainsString('support package', strtolower($collegeProgram->description));
         $this->assertStringContainsString('non-cash support package', strtolower($schoolEssentialsProgram->description));
         $this->assertStringContainsString('enrichment session', strtolower($stemProgram->description));
-        $this->assertSame(60, $stemProgram->exam_duration_minutes);
-        $this->assertSame('75.00', $stemProgram->exam_passing_score);
+        $this->assertNull($stemProgram->exam_duration_minutes);
+        $this->assertNull($stemProgram->exam_passing_score);
         $this->assertNull($collegeProgram->exam_duration_minutes);
         $this->assertTrue(app(ScholarshipEligibilityService::class)
             ->evaluate($stemProgram, $student)['is_eligible']);

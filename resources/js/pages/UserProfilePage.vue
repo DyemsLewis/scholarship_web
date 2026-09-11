@@ -394,6 +394,9 @@ const verificationDocumentRows = computed(() => verificationDocumentOptions.valu
         ? academicVerificationDocument.value
         : schoolVerificationDocument.value,
 })));
+const missingVerificationDocumentRows = computed(() => verificationDocumentRows.value
+    .filter((row) => !row.document));
+const needsVerificationUpload = computed(() => missingVerificationDocumentRows.value.length > 0);
 const verificationSteps = computed(() => {
     const status = profileVerificationStatus.value;
     const hasAcademicProof = Boolean(academicVerificationDocument.value);
@@ -525,7 +528,7 @@ const applicationSetupItems = computed(() => [
             ? 'complete'
             : profileVerificationStatus.value === 'pending'
                 ? 'pending'
-                : profileVerificationStatus.value === 'rejected'
+                : profileVerificationStatus.value === 'rejected' || needsVerificationUpload.value
                     ? 'action'
                     : 'optional',
         section: 'verification',
@@ -581,6 +584,18 @@ const profileRecommendedAction = computed(() => {
             detail: gradeIsManaged
                 ? 'The portal reads your academic result from the file, then an authorized reviewer confirms it.'
                 : 'This helps providers and matching rules read your profile correctly.',
+        };
+    }
+
+    if (needsVerificationUpload.value) {
+        const nextProof = missingVerificationDocumentRows.value[0];
+
+        return {
+            label: verificationDocuments.value.length === 0 ? 'Upload verification files' : `Upload ${nextProof.label.toLowerCase()}`,
+            section: 'verification',
+            detail: verificationDocuments.value.length === 0
+                ? 'Add your academic record and school enrollment proof for reviewer confirmation.'
+                : nextProof.description,
         };
     }
 
@@ -954,6 +969,19 @@ async function goToNextSection() {
     const next = visibleProfileSections.value[visibleActiveSectionIndex.value + 1];
 
     if (!next) {
+        if (hasUnsavedChanges.value) {
+            const saved = await saveProfile(false);
+
+            if (!saved) {
+                return;
+            }
+        }
+
+        if (needsVerificationUpload.value) {
+            openVerificationRecords();
+            return;
+        }
+
         await openProfileOverview();
         return;
     }
@@ -1691,8 +1719,20 @@ function applyAcademicResponse(payload) {
     user.value = payload.user;
     verificationDocuments.value = payload.verification_documents ?? [];
     academicOcr.value = payload.academic_ocr ?? academicOcr.value;
-    form.value.gwa = payload.user?.gwa ?? '';
-    form.value.grading_scale = payload.user?.grading_scale ?? '';
+    const savedForm = savedFormSnapshot.value ? JSON.parse(savedFormSnapshot.value) : null;
+    const savedGwa = payload.user?.gwa ?? '';
+    const savedGradingScale = payload.user?.grading_scale ?? '';
+
+    form.value.gwa = savedGwa;
+    form.value.grading_scale = savedGradingScale;
+
+    if (savedForm) {
+        savedForm.gwa = savedGwa;
+        savedForm.grading_scale = savedGradingScale;
+        savedFormSnapshot.value = JSON.stringify(savedForm);
+    } else {
+        markFormSaved();
+    }
 }
 
 async function uploadVerificationDocument(documentType, event) {
@@ -2772,7 +2812,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                             <button
                                                 type="button"
                                                 class="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-left text-sm font-semibold text-slate-900 transition hover:border-amber-400 hover:bg-amber-50/40"
-                                                @click="openSection('verification')"
+                                                @click="openVerificationRecords"
                                             >
                                                 <span class="truncate">{{ extractedAcademicResult() }}</span>
                                                 <i class="fa-solid fa-file-shield shrink-0 text-amber-700" aria-hidden="true"></i>
@@ -3308,7 +3348,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <button
                                             type="button"
                                             class="flex items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50"
-                                            @click="openSection('verification')"
+                                            @click="openVerificationRecords"
                                         >
                                             <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', profileVerificationStatus === 'approved' ? 'bg-emerald-100 text-emerald-700' : profileVerificationStatus === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">
                                                 <i class="fa-solid fa-shield-check" aria-hidden="true"></i>
@@ -3426,7 +3466,9 @@ watch(() => form.value.grading_scale, (scale) => {
                                 {{ isSaving
                                     ? 'Saving...'
                                     : visibleActiveSectionIndex >= visibleProfileSections.length - 1
-                                        ? (hasUnsavedChanges ? 'Save and return' : 'Return to profile')
+                                        ? needsVerificationUpload
+                                            ? (hasUnsavedChanges ? 'Save and upload proof' : 'Upload verification files')
+                                            : (hasUnsavedChanges ? 'Save and return' : 'Return to profile')
                                         : (hasUnsavedChanges ? 'Save and continue' : 'Next') }}
                             </button>
                         </div>

@@ -21,7 +21,7 @@ class ProgramExamConfigurationTest extends TestCase
             ->assertRedirect('/provider/programs');
     }
 
-    public function test_provider_can_update_exam_details_for_its_program_only(): void
+    public function test_provider_exam_uses_schedule_and_instructions_without_score_configuration(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);
         $otherProvider = User::factory()->create(['role' => 'provider']);
@@ -38,6 +38,7 @@ class ProgramExamConfigurationTest extends TestCase
             'title' => $scholarship->title,
             'description' => $scholarship->description,
             'selection_stages' => json_encode(['exam']),
+            // Legacy clients may still send these values, but the portal no longer stores them.
             'exam_duration_minutes' => 90,
             'exam_passing_score' => 80,
             'status' => 'draft',
@@ -47,13 +48,13 @@ class ProgramExamConfigurationTest extends TestCase
         $this->actingAs($provider)
             ->putJson("/provider/scholarships/{$scholarship->id}", $payload)
             ->assertOk()
-            ->assertJsonPath('scholarship.exam_duration_minutes', 90)
-            ->assertJsonPath('scholarship.exam_passing_score', '80.00');
+            ->assertJsonMissingPath('scholarship.exam_duration_minutes')
+            ->assertJsonMissingPath('scholarship.exam_passing_score');
 
         $this->assertDatabaseHas('scholarships', [
             'id' => $scholarship->id,
-            'exam_duration_minutes' => 90,
-            'exam_passing_score' => 80,
+            'exam_duration_minutes' => null,
+            'exam_passing_score' => null,
         ]);
 
         $this->actingAs($otherProvider)
@@ -78,8 +79,8 @@ class ProgramExamConfigurationTest extends TestCase
             ->getJson("/dashboard/applications/{$application->id}/data")
             ->assertOk()
             ->assertJsonPath('application.exam', null)
-            ->assertJsonPath('application.scholarship.exam_duration_minutes', 60)
-            ->assertJsonPath('application.scholarship.exam_passing_score', '75.00');
+            ->assertJsonMissingPath('application.scholarship.exam_duration_minutes')
+            ->assertJsonMissingPath('application.scholarship.exam_passing_score');
 
         $application->update(['status' => 'exam_qualified']);
 
@@ -87,8 +88,8 @@ class ProgramExamConfigurationTest extends TestCase
             ->getJson("/dashboard/applications/{$application->id}/data")
             ->assertOk()
             ->assertJsonPath('application.exam.title', 'STEM Pathways Qualifying Exam')
-            ->assertJsonPath('application.exam.duration_minutes', 60)
-            ->assertJsonPath('application.exam.passing_score', '75.00')
+            ->assertJsonMissingPath('application.exam.duration_minutes')
+            ->assertJsonMissingPath('application.exam.passing_score')
             ->assertJsonPath('application.exam.delivery_mode', 'onsite');
     }
 }

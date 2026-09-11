@@ -1773,8 +1773,6 @@ class ApplicantDashboardController extends Controller
             'slots_available' => $scholarship->slots_available,
             'application_mode' => $scholarship->application_mode,
             'selection_stages' => $selectionStages,
-            'exam_duration_minutes' => $scholarship->exam_duration_minutes,
-            'exam_passing_score' => $scholarship->exam_passing_score,
             'program_events' => $scholarship->events
                 ->where('status', 'scheduled')
                 ->filter(fn ($event): bool => in_array($event->type, $selectionStages, true))
@@ -2021,8 +2019,6 @@ class ApplicantDashboardController extends Controller
             'assessment_type' => 'qualifying_exam',
             'image_url' => $this->scholarshipImageUrl($scholarship),
             'description' => 'The scholarship provider conducts and grades this exam outside the portal.',
-            'duration_minutes' => $scholarship->exam_duration_minutes,
-            'passing_score' => $scholarship->exam_passing_score,
             'delivery_mode' => $event?->mode ?? 'provider_managed',
             'venue' => $event?->venue ?: $event?->location_address,
             'instructions' => $event?->instructions,

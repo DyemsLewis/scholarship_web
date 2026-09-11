@@ -166,6 +166,7 @@ Route::middleware(['auth', 'provider'])
             ->name('review');
         Route::get('/profile/data', [ProviderController::class, 'profileData'])->name('profile.data');
         Route::patch('/profile', [ProviderController::class, 'updateProfile'])->name('profile.update');
+        Route::post('/profile/logo', [ProviderController::class, 'uploadProviderLogo'])->middleware(['permission:manage_profile', 'throttle:10,1'])->name('profile.logo.store');
         Route::post('/verification-documents', [ProviderController::class, 'uploadVerificationDocument'])->middleware(['permission:manage_profile', 'throttle:10,1'])->name('verification-documents.store');
         Route::get('/verification-documents/{document}/view', [ProviderController::class, 'viewVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.view');
         Route::get('/verification-documents/{document}/download', [ProviderController::class, 'downloadVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.download');

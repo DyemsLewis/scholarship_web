@@ -693,6 +693,39 @@ class ProviderController extends Controller
         ]);
     }
 
+    public function uploadProviderLogo(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_profile'), 403);
+
+        $request->validate([
+            'logo_file' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+        ]);
+
+        $providerOwner = $request->user()->providerOrganizationOwner();
+        $profile = $providerOwner->providerProfile()->firstOrCreate([
+            'user_id' => $providerOwner->id,
+        ]);
+        $oldLogoPath = $profile->logo_path;
+        $logoPath = $this->storeProviderLogo($request);
+
+        $profile->update(['logo_path' => $logoPath]);
+        $this->deleteProviderLogoIfUnused($oldLogoPath);
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_logo_updated',
+            ($profile->provider_name ?: $providerOwner->name ?: 'Provider').' updated the organization logo.',
+            $request,
+            ['provider_id' => $providerOwner->id],
+        );
+
+        return response()->json([
+            'message' => 'Provider logo updated successfully.',
+            'user' => $this->providerStaffPayload($request->user()->fresh(['providerProfile'])),
+        ]);
+    }
+
     public function uploadVerificationDocument(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -1579,6 +1612,12 @@ class ProviderController extends Controller
         abort_unless($event->scholarship_id === $scholarship->id, 404);
         abort_unless(ScholarshipSelectionPlan::isSchedulable($event->type), 404);
 
+        if ($event->status !== 'completed') {
+            throw ValidationException::withMessages([
+                'event' => 'Mark the '.ScholarshipSelectionPlan::label($event->type).' activity as completed before recording applicant results.',
+            ]);
+        }
+
         $validated = $request->validate([
             'application_ids' => ['required', 'array', 'min:1', 'max:500'],
             'application_ids.*' => ['required', 'integer', 'distinct'],
@@ -1743,6 +1782,8 @@ class ProviderController extends Controller
             'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
         ]);
         $notes = $validated['notes'] ?? $validated['review_notes'] ?? null;
+
+        $this->ensureStageActivityCompleted($application, $stage);
 
         if ($stage === 'screening') {
             $rubric = $this->requireCompleteApplicationRubric($application, $validated['rubric_scores'] ?? null);
@@ -3368,9 +3409,13 @@ class ProviderController extends Controller
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request);
         $this->ensureScholarshipReadyForSubmission($validated, $benefits);
         $imagePath = $this->storeScholarshipImage($request);
+
+        if ($imagePath === null && $request->boolean('use_provider_logo')) {
+            $imagePath = $this->copyProviderLogoForScholarship($request->user());
+        }
         $termsAccepted = $request->boolean('terms_accepted');
 
-        unset($validated['image_file'], $validated['terms_accepted'], $validated['program_events']);
+        unset($validated['image_file'], $validated['use_provider_logo'], $validated['terms_accepted'], $validated['program_events']);
         $validated['description'] = (string) ($validated['description'] ?? '');
         $validated['status'] = $validated['status'] === 'draft' ? 'draft' : 'pending_review';
 
@@ -3444,9 +3489,13 @@ class ProviderController extends Controller
         $this->ensureScholarshipSelectionPlanIsStable($scholarship, $validated['selection_stages']);
         $oldImagePath = $scholarship->image_path;
         $imagePath = $this->storeScholarshipImage($request);
+
+        if ($imagePath === null && $request->boolean('use_provider_logo')) {
+            $imagePath = $this->copyProviderLogoForScholarship($request->user());
+        }
         $termsAccepted = $request->boolean('terms_accepted');
 
-        unset($validated['image_file'], $validated['terms_accepted'], $validated['program_events']);
+        unset($validated['image_file'], $validated['use_provider_logo'], $validated['terms_accepted'], $validated['program_events']);
         $validated['description'] = $request->has('description')
             ? (string) ($validated['description'] ?? '')
             : $scholarship->description;
@@ -3670,18 +3719,6 @@ class ProviderController extends Controller
             $errors['contact_email'] = 'Add an email address or contact number for applicant questions.';
         }
 
-        $selectionStages = ScholarshipSelectionPlan::normalize($value('selection_stages'));
-
-        if (in_array('exam', $selectionStages, true)) {
-            if (blank($value('exam_duration_minutes'))) {
-                $errors['exam_duration_minutes'] = 'Add the exam duration.';
-            }
-
-            if (blank($value('exam_passing_score'))) {
-                $errors['exam_passing_score'] = 'Add the exam passing score.';
-            }
-        }
-
         if (blank($value('review_rubric'))) {
             $errors['review_rubric'] = 'Add at least one review criterion.';
         }
@@ -3820,8 +3857,6 @@ class ProviderController extends Controller
             'slots_available' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'application_mode' => ['nullable', Rule::in(['online', 'onsite', 'hybrid', 'provider_review'])],
             'selection_stages' => ['nullable', 'string', 'max:500', 'json'],
-            'exam_duration_minutes' => ['nullable', 'integer', 'between:15,480'],
-            'exam_passing_score' => ['nullable', 'numeric', 'between:0,100'],
             'program_events' => ['nullable', 'string', 'max:20000', 'json'],
             'renewal_policy' => ['nullable', 'string', 'max:2000'],
             'return_service_contract' => ['nullable', 'string', 'max:3000'],
@@ -3836,6 +3871,7 @@ class ProviderController extends Controller
             'deadline' => ['nullable', 'date'],
             'status' => ['required', Rule::in(['draft', 'pending_review', 'published', 'closed', 'rejected'])],
             'image_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'use_provider_logo' => ['nullable', 'boolean'],
             'terms_accepted' => $requiresCompleteSubmission ? ['accepted'] : ['nullable'],
             'review_rubric' => ['nullable', 'string', 'max:8000', 'json'],
             'application_questions' => ['nullable', 'string', 'max:10000', 'json'],
@@ -4016,10 +4052,9 @@ class ProviderController extends Controller
 
     private function normalizeScholarshipExamDetails(array $validated): array
     {
-        if (! in_array('exam', ScholarshipSelectionPlan::normalize($validated['selection_stages'] ?? null), true)) {
-            $validated['exam_duration_minutes'] = null;
-            $validated['exam_passing_score'] = null;
-        }
+        // Exams are scheduled and explained by providers; scoring rules are not managed by the portal.
+        $validated['exam_duration_minutes'] = null;
+        $validated['exam_passing_score'] = null;
 
         return $validated;
     }
@@ -4277,8 +4312,6 @@ class ProviderController extends Controller
             'slots_available',
             'application_mode',
             'selection_stages',
-            'exam_duration_minutes',
-            'exam_passing_score',
             'renewal_policy',
             'return_service_contract',
             'other_contract_terms',
@@ -4347,6 +4380,64 @@ class ProviderController extends Controller
                 'message' => "{$request->user()->name} submitted {$scholarship->title} for admin review.",
                 'action_url' => '/admin/reviews',
             ]));
+    }
+
+    private function storeProviderLogo(Request $request): string
+    {
+        $file = $request->file('logo_file');
+        $directory = public_path('uploads/providers');
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $filename = $file->hashName();
+        $file->move($directory, $filename);
+
+        return "uploads/providers/{$filename}";
+    }
+
+    private function copyProviderLogoForScholarship(User $actor): ?string
+    {
+        $profile = $actor->providerOrganizationOwner()->providerProfile()->first();
+        $logoPath = ltrim(str_replace('\\', '/', (string) $profile?->logo_path), '/');
+
+        if (! str_starts_with($logoPath, 'uploads/providers/')) {
+            return null;
+        }
+
+        $sourcePath = public_path($logoPath);
+
+        if (! is_file($sourcePath)) {
+            return null;
+        }
+
+        $directory = public_path('uploads/scholarships');
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $extension = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION)) ?: 'png';
+        $relativePath = 'uploads/scholarships/'.Str::uuid().".{$extension}";
+
+        return copy($sourcePath, public_path($relativePath)) ? $relativePath : null;
+    }
+
+    private function deleteProviderLogoIfUnused(?string $logoPath): void
+    {
+        $normalizedPath = ltrim(str_replace('\\', '/', (string) $logoPath), '/');
+
+        if (! str_starts_with($normalizedPath, 'uploads/providers/')
+            || Scholarship::query()->where('image_path', $normalizedPath)->exists()) {
+            return;
+        }
+
+        $absolutePath = public_path($normalizedPath);
+
+        if (is_file($absolutePath)) {
+            @unlink($absolutePath);
+        }
     }
 
     private function storeScholarshipImage(Request $request): ?string
@@ -4640,8 +4731,14 @@ class ProviderController extends Controller
             return ['pass_prescreening'];
         }
 
-        if (in_array($workflow['current_stage'], ['formal_application', 'exam', 'interview'], true)) {
+        if ($workflow['current_stage'] === 'formal_application') {
             return ['pass_stage'];
+        }
+
+        if (ScholarshipSelectionPlan::isSchedulable($workflow['current_stage'])) {
+            return $this->stageActivityIsComplete($application, $workflow['current_stage'])
+                ? ['pass_stage']
+                : [];
         }
 
         return $workflow['current_stage'] === 'decision' ? ['selected'] : [];
@@ -4699,8 +4796,6 @@ class ProviderController extends Controller
                 ?? $scholarship->applications()->whereIn('status', self::AWARD_SLOT_STATUSES)->count(),
             'application_mode' => $scholarship->application_mode,
             'selection_stages' => ScholarshipSelectionPlan::normalize($scholarship->selection_stages),
-            'exam_duration_minutes' => $scholarship->exam_duration_minutes,
-            'exam_passing_score' => $scholarship->exam_passing_score,
             'program_events' => $scholarship->events
                 ->where('status', 'scheduled')
                 ->sortBy('scheduled_at')
@@ -4755,8 +4850,6 @@ class ProviderController extends Controller
             'assessment_type' => 'qualifying_exam',
             'image_url' => $this->scholarshipImageUrl($scholarship),
             'description' => 'This exam is conducted and graded by the scholarship provider outside the portal.',
-            'duration_minutes' => $scholarship->exam_duration_minutes,
-            'passing_score' => $scholarship->exam_passing_score,
             'delivery_mode' => $event?->mode ?? 'provider_managed',
             'venue' => $event?->venue ?: $event?->location_address,
             'instructions' => $event?->instructions,
@@ -5184,26 +5277,32 @@ class ProviderController extends Controller
         }
     }
 
-    private function ensureStageParticipationReadyForApproval(ScholarshipApplication $application): void
+    private function stageActivityIsComplete(ScholarshipApplication $application, string $stage): bool
     {
-        $stageType = match ($application->status) {
-            'exam_taken', 'exam_passed' => 'exam',
-            'interview' => 'interview',
-            default => null,
-        };
-
-        if ($stageType === null) {
-            return;
+        if (! ScholarshipSelectionPlan::isSchedulable($stage)) {
+            return true;
         }
 
-        $schedule = $application->schedules()->where('type', $stageType)->first();
+        if ($application->relationLoaded('schedules')) {
+            return $application->schedules->contains(fn (ApplicationSchedule $schedule): bool => (
+                $schedule->type === $stage && $schedule->status === 'completed'
+            ));
+        }
 
-        if ($schedule?->status === 'completed' && $schedule->attendance_status === 'attended') {
+        return $application->schedules()
+            ->where('type', $stage)
+            ->where('status', 'completed')
+            ->exists();
+    }
+
+    private function ensureStageActivityCompleted(ScholarshipApplication $application, string $stage): void
+    {
+        if ($this->stageActivityIsComplete($application, $stage)) {
             return;
         }
 
         throw ValidationException::withMessages([
-            'decision' => 'Complete the '.ScholarshipSelectionPlan::label($stageType).' activity and mark the applicant as attended before approving them for the next stage.',
+            'result' => 'Mark the '.ScholarshipSelectionPlan::label($stage).' activity as completed before recording an applicant result.',
         ]);
     }
 

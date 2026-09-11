@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Scholarship;
-use App\Support\ScholarshipSelectionPlan;
 use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
 
@@ -81,18 +80,6 @@ class ScholarshipPublicationGuard
 
         if (blank($scholarship->contact_email) && blank($scholarship->contact_number)) {
             $errors['contact_email'] = 'Add an email address or contact number before publication.';
-        }
-
-        $selectionStages = ScholarshipSelectionPlan::normalize($scholarship->selection_stages);
-
-        if (in_array('exam', $selectionStages, true)) {
-            if (blank($scholarship->exam_duration_minutes)) {
-                $errors['exam_duration_minutes'] = 'Add the exam duration before publication.';
-            }
-
-            if (blank($scholarship->exam_passing_score)) {
-                $errors['exam_passing_score'] = 'Add the exam passing score before publication.';
-            }
         }
 
         if (blank($scholarship->review_rubric)) {

@@ -177,8 +177,6 @@ class ProgramSelectionWorkflowTest extends TestCase
                 'title' => $scholarship->title,
                 'description' => $scholarship->description,
                 'selection_stages' => json_encode(['exam', 'formal_application']),
-                'exam_duration_minutes' => 60,
-                'exam_passing_score' => 75,
                 'status' => $scholarship->status,
                 'terms_accepted' => true,
             ])

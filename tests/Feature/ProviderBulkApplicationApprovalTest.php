@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ApplicationDocument;
+use App\Models\ApplicationSchedule;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
@@ -79,6 +80,44 @@ class ProviderBulkApplicationApprovalTest extends TestCase
             ->assertJsonPath('updated_count', 1);
 
         $this->assertSame('awarded', $approved->fresh()->status);
+    }
+
+    public function test_bulk_stage_result_requires_the_shared_activity_to_be_completed(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $scholarship = $this->program($provider, ['screening', 'exam', 'formal_application', 'decision']);
+        $application = $this->application($scholarship, 'under_review');
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start($application);
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $provider);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/applications/bulk-advance", [
+                'application_ids' => [$application->id],
+                'target_stage' => 'pass_stage',
+            ])->assertUnprocessable()
+            ->assertJsonValidationErrors('application_ids');
+
+        ApplicationSchedule::create([
+            'scholarship_application_id' => $application->id,
+            'type' => 'exam',
+            'title' => 'Scholarship exam',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'status' => 'completed',
+            'completed_at' => now(),
+            'created_by' => $provider->id,
+            'updated_by' => $provider->id,
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/applications/bulk-advance", [
+                'application_ids' => [$application->id],
+                'target_stage' => 'pass_stage',
+            ])->assertOk()
+            ->assertJsonPath('updated_count', 1);
+
+        $this->assertSame('formal_application', $application->fresh()->workflow_stage);
     }
 
     public function test_bulk_exam_approval_keeps_document_and_program_ownership_safeguards(): void

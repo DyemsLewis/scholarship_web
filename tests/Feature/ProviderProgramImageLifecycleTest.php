@@ -13,6 +13,51 @@ class ProviderProgramImageLifecycleTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_provider_logo_can_be_uploaded_and_reused_for_a_new_program(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+        $pathsToClean = [];
+
+        try {
+            $logoResponse = $this->actingAs($provider)
+                ->post('/provider/profile/logo', [
+                    'logo_file' => UploadedFile::fake()->image('provider-logo.png', 64, 64),
+                ], ['HTTP_ACCEPT' => 'application/json'])
+                ->assertOk();
+            $providerLogoPath = $logoResponse->json('user.provider_logo_path');
+            $pathsToClean[] = $providerLogoPath;
+
+            $this->assertNotNull($providerLogoPath);
+            $this->assertFileExists(public_path($providerLogoPath));
+            $this->assertDatabaseHas('provider_profiles', [
+                'user_id' => $provider->id,
+                'logo_path' => $providerLogoPath,
+            ]);
+
+            $programResponse = $this->actingAs($provider)
+                ->postJson('/provider/scholarships', [
+                    'title' => 'Provider Logo Program',
+                    'status' => 'draft',
+                    'use_provider_logo' => true,
+                ])
+                ->assertCreated();
+            $programLogoPath = $programResponse->json('scholarship.image_path');
+            $pathsToClean[] = $programLogoPath;
+
+            $this->assertNotSame($providerLogoPath, $programLogoPath);
+            $this->assertFileExists(public_path($programLogoPath));
+        } finally {
+            foreach (array_unique(array_filter($pathsToClean)) as $path) {
+                $absolutePath = public_path($path);
+
+                if (is_file($absolutePath)) {
+                    @unlink($absolutePath);
+                }
+            }
+        }
+    }
+
     public function test_duplicated_program_uses_an_independent_logo_file(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);

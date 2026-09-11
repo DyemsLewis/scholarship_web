@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
@@ -25,6 +25,10 @@ const verificationDocumentTermsAccepted = ref(false);
 const isUploadingDocument = ref(false);
 const deletingDocumentId = ref(null);
 const previewDocument = ref(null);
+const providerLogoInput = ref(null);
+const providerLogoFile = ref(null);
+const providerLogoPreviewUrl = ref('');
+const isUploadingLogo = ref(false);
 const canManageProfile = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_profile'),
@@ -82,6 +86,7 @@ const providerInitials = computed(() => {
         .map((part) => part.charAt(0).toUpperCase())
         .join('');
 });
+const providerLogoPreview = computed(() => providerLogoPreviewUrl.value || user.value?.provider_logo_url || '');
 const representativeName = computed(() => [
     user.value?.first_name,
     user.value?.middle_initial ? `${user.value.middle_initial}.` : null,
@@ -227,6 +232,52 @@ function handleVerificationFile(event) {
     verificationDocumentFile.value = event.target.files?.[0] ?? null;
 }
 
+function handleProviderLogo(event) {
+    providerLogoFile.value = event.target.files?.[0] ?? null;
+
+    if (providerLogoPreviewUrl.value) {
+        URL.revokeObjectURL(providerLogoPreviewUrl.value);
+    }
+
+    providerLogoPreviewUrl.value = providerLogoFile.value
+        ? URL.createObjectURL(providerLogoFile.value)
+        : '';
+}
+
+async function uploadProviderLogo() {
+    if (!providerLogoFile.value || isUploadingLogo.value) {
+        return;
+    }
+
+    isUploadingLogo.value = true;
+    errorMessage.value = '';
+    validationErrors.value = {};
+    const payload = new FormData();
+    payload.append('logo_file', providerLogoFile.value);
+
+    try {
+        const response = await window.axios.post('/provider/profile/logo', payload, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        applyUser(response.data.user);
+        providerLogoFile.value = null;
+
+        if (providerLogoPreviewUrl.value) {
+            URL.revokeObjectURL(providerLogoPreviewUrl.value);
+            providerLogoPreviewUrl.value = '';
+        }
+
+        if (providerLogoInput.value) {
+            providerLogoInput.value.value = '';
+        }
+    } catch (error) {
+        validationErrors.value = error.response?.data?.errors ?? {};
+    } finally {
+        isUploadingLogo.value = false;
+    }
+}
+
 async function loadProviderProfile() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -355,6 +406,11 @@ async function saveProviderProfile(section) {
 }
 
 onMounted(loadProviderProfile);
+onBeforeUnmount(() => {
+    if (providerLogoPreviewUrl.value) {
+        URL.revokeObjectURL(providerLogoPreviewUrl.value);
+    }
+});
 </script>
 
 <template>
@@ -401,7 +457,13 @@ onMounted(loadProviderProfile);
                     <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-sm">
                         <div class="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                             <div class="flex min-w-0 items-center gap-4">
-                                <div class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-amber-300 text-lg font-black text-slate-950">
+                                <img
+                                    v-if="providerLogoPreview"
+                                    :src="providerLogoPreview"
+                                    :alt="`${user?.provider_name || 'Provider'} logo`"
+                                    class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-white/20"
+                                >
+                                <div v-else class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-amber-300 text-lg font-black text-slate-950">
                                     {{ providerInitials }}
                                 </div>
                                 <div class="min-w-0">
@@ -671,6 +733,40 @@ onMounted(loadProviderProfile);
                                 </p>
                             </div>
                             <div>
+                                <div class="mb-5 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[4rem_minmax(0,1fr)] sm:items-center">
+                                    <img
+                                        v-if="providerLogoPreview"
+                                        :src="providerLogoPreview"
+                                        alt="Provider logo preview"
+                                        class="h-14 w-14 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                    >
+                                    <div v-else class="grid h-14 w-14 place-items-center rounded-md bg-white text-sm font-black text-slate-700 ring-1 ring-slate-200">
+                                        {{ providerInitials }}
+                                    </div>
+                                    <div class="min-w-0">
+                                        <span :class="labelClass">Organization logo</span>
+                                        <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                                            <input
+                                                ref="providerLogoInput"
+                                                type="file"
+                                                accept="image/jpeg,image/png,image/webp"
+                                                :disabled="!canManageProfile || isUploadingLogo"
+                                                class="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 file:mr-2 file:rounded file:border-0 file:bg-slate-900 file:px-2.5 file:py-1.5 file:text-xs file:font-bold file:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                                                @change="handleProviderLogo"
+                                            >
+                                            <button
+                                                type="button"
+                                                :disabled="!providerLogoFile || isUploadingLogo || !canManageProfile"
+                                                class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                                @click="uploadProviderLogo"
+                                            >
+                                                {{ isUploadingLogo ? 'Uploading...' : 'Save logo' }}
+                                            </button>
+                                        </div>
+                                        <p class="mt-1.5 text-xs leading-5 text-slate-500">JPG, PNG, or WebP up to 4MB. This can be reused as a program logo.</p>
+                                        <span v-if="fieldError('logo_file')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('logo_file') }}</span>
+                                    </div>
+                                </div>
                                 <div class="grid gap-4 md:grid-cols-2">
                                 <label>
                                     <span :class="labelClass">Provider name</span>

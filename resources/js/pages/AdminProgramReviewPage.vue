@@ -260,16 +260,11 @@ const readinessChecks = computed(() => {
     }
 
     if (selectionStages.value.includes('exam')) {
-        const examDetailsComplete = hasText(current.exam_duration_minutes)
-            && hasText(current.exam_passing_score);
-
         checks.push({
             label: 'Provider-managed exam',
-            detail: examDetailsComplete
-                ? `${current.exam_duration_minutes} minutes with a ${Number(current.exam_passing_score)}% passing score.`
-                : 'Confirm the exam duration and passing score before publishing.',
-            status: examDetailsComplete ? 'Configured' : 'Needs review',
-            tone: examDetailsComplete ? 'good' : 'warn',
+            detail: 'The provider will publish the schedule and instructions from the program workspace.',
+            status: 'Included',
+            tone: 'good',
             icon: 'fa-solid fa-clipboard-question',
         });
     }
@@ -827,13 +822,7 @@ onMounted(loadScholarship);
                                                         v-if="step.key === 'exam'"
                                                         class="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold text-slate-600"
                                                     >
-                                                        <span v-if="scholarship.exam_duration_minutes" class="rounded-md bg-slate-50 px-2 py-1 ring-1 ring-slate-200">
-                                                            {{ scholarship.exam_duration_minutes }} minutes
-                                                        </span>
-                                                        <span v-if="scholarship.exam_passing_score !== null" class="rounded-md bg-slate-50 px-2 py-1 ring-1 ring-slate-200">
-                                                            {{ Number(scholarship.exam_passing_score) }}% passing
-                                                        </span>
-                                                        <span class="rounded-md bg-slate-50 px-2 py-1 ring-1 ring-slate-200">Handled by provider</span>
+                                                        <span class="rounded-md bg-slate-50 px-2 py-1 ring-1 ring-slate-200">Schedule and instructions managed by provider</span>
                                                     </div>
                                                 </div>
                                             </div>
