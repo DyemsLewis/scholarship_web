@@ -4,7 +4,7 @@ namespace App\Support;
 
 class ApplicationDecisionReason
 {
-    public const NEGATIVE_STATUSES = ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'];
+    public const NEGATIVE_STATUSES = ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated'];
 
     private const OPTIONS = [
         'complete_requirements' => 'Complete requirements',
@@ -29,6 +29,11 @@ class ApplicationDecisionReason
         'renewed_support' => 'Renewed support',
         'funds_limited' => 'Funds limited',
         'not_selected' => 'Not selected',
+        'procedure_not_followed' => 'Required procedure not followed',
+        'recipient_obligations_not_met' => 'Recipient obligations not met',
+        'program_conditions_not_met' => 'Program conditions not met',
+        'unable_to_contact_recipient' => 'Unable to contact recipient',
+        'recipient_requested_end' => 'Recipient requested to end support',
         'other' => 'Other',
     ];
 

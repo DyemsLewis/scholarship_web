@@ -6,6 +6,7 @@ import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import PreScreeningHandoffRecord from '../components/PreScreeningHandoffRecord.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
@@ -234,6 +235,7 @@ function statusLabel(status) {
         interview_failed: 'Failed interview',
         distribution_scheduled: 'Distribution scheduled',
         disbursed: 'Distributed',
+        benefits_terminated: 'Benefits stopped',
     };
 
     if (labels[status]) {
@@ -258,7 +260,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
+    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
@@ -754,7 +756,7 @@ onMounted(loadApplication);
                             <div class="shrink-0 sm:text-right">
                                 <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Current status</p>
                                 <span :class="['mt-2 inline-flex w-fit rounded-md px-3 py-1.5 text-xs font-bold uppercase', statusClass(application.status)]">
-                                    {{ workflow.final_outcome_label || workflow.application_state_label || statusLabel(application.status) }}
+                                    {{ application.status === 'benefits_terminated' ? statusLabel(application.status) : (workflow.final_outcome_label || workflow.application_state_label || statusLabel(application.status)) }}
                                 </span>
                             </div>
                         </div>
@@ -766,7 +768,7 @@ onMounted(loadApplication);
                             </div>
                             <div class="border-b border-slate-200 px-4 py-3 lg:border-b-0 lg:border-r">
                                 <dt class="text-xs font-semibold text-slate-500">Current stage</dt>
-                                <dd class="mt-1 font-bold text-slate-900">{{ application.status_progress?.current_stage_label || statusLabel(application.status) }}</dd>
+                                <dd class="mt-1 font-bold text-slate-900">{{ application.status === 'benefits_terminated' ? statusLabel(application.status) : (application.status_progress?.current_stage_label || statusLabel(application.status)) }}</dd>
                             </div>
                             <div class="border-b border-slate-200 px-4 py-3 sm:border-b-0 sm:border-r">
                                 <dt class="text-xs font-semibold text-slate-500">Required files</dt>
@@ -876,6 +878,11 @@ onMounted(loadApplication);
                                     </ol>
                                 </div>
                             </section>
+
+                            <PreScreeningHandoffRecord
+                                v-if="activeSection === 'overview' && application.pre_screening_handoff"
+                                :record="application.pre_screening_handoff"
+                            />
 
                             <details
                                 v-if="activeSection === 'overview' && formalApplicationHandoff"

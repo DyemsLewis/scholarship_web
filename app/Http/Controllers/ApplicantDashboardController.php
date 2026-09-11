@@ -23,6 +23,7 @@ use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationSchedulePayload;
+use App\Support\PreScreeningHandoffRecord;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
@@ -1892,6 +1893,7 @@ class ApplicantDashboardController extends Controller
         $workflow = $this->workflowService->payload($application);
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
+        $readiness = $this->documentReadiness($application);
         $rubricReview = ReviewRubric::result(
             $application->review_rubric_snapshot ?: ($application->scholarship?->review_rubric ?? []),
             $application->rubric_scores ?? [],
@@ -1917,7 +1919,7 @@ class ApplicantDashboardController extends Controller
             'document_checklist' => $application->document_checklist ?? [],
             'optional_document_checklist' => $application->optional_document_checklist
                 ?? $this->eligibilityService->optionalDocumentRequirements($application->scholarship),
-            'document_readiness' => $this->documentReadiness($application),
+            'document_readiness' => $readiness,
             'eligibility_score' => $application->eligibility_score,
             'eligibility_breakdown' => $application->eligibility_breakdown,
             'documents' => $application->documents->map(fn (ApplicationDocument $document) => $this->documentPayload($document))->values(),
@@ -1948,6 +1950,7 @@ class ApplicantDashboardController extends Controller
             'distribution_instructions' => $application->distribution_instructions,
             'requires_student_response' => false,
             'can_respond' => false,
+            'pre_screening_handoff' => PreScreeningHandoffRecord::make($application, $workflow, $readiness, $dss),
             'formal_application_handoff' => $this->formalApplicationHandoffPayload($application),
             'schedules' => $application->schedules
                 ->sortBy('scheduled_at')

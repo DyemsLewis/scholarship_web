@@ -28,8 +28,35 @@ const negrosIslandProvinces = [
 ];
 const requestCache = new Map();
 
+export function cleanPhilippineLocationName(value) {
+    const name = String(value ?? '');
+
+    if (!/[ÃÂ]/.test(name)) {
+        return name;
+    }
+
+    try {
+        const bytes = Uint8Array.from(Array.from(name), (character) => {
+            const codePoint = character.codePointAt(0);
+
+            if (codePoint > 255) {
+                throw new RangeError('Location name is not Latin-1 mojibake.');
+            }
+
+            return codePoint;
+        });
+
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch (error) {
+        return name
+            .replaceAll('Ã±', 'ñ')
+            .replaceAll('Ã‘', 'Ñ')
+            .replaceAll('Â', '');
+    }
+}
+
 function normalizedName(value) {
-    return String(value ?? '')
+    return cleanPhilippineLocationName(value)
         .toLowerCase()
         .replace(/\bcity of\b/g, '')
         .replace(/\bcity\b/g, '')
@@ -61,11 +88,15 @@ async function fetchPsgc(path) {
 function toOptions(items, excludedTypes = []) {
     return items
         .filter((item) => item?.name && !excludedTypes.includes(item.type))
-        .map((item) => ({
-            code: String(item.code),
-            value: item.name,
-            label: item.name,
-        }))
+        .map((item) => {
+            const name = cleanPhilippineLocationName(item.name);
+
+            return {
+                code: String(item.code),
+                value: name,
+                label: name,
+            };
+        })
         .sort((left, right) => left.label.localeCompare(right.label));
 }
 

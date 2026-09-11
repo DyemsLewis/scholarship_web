@@ -158,7 +158,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded'].includes(status)) {
+    if (['rejected', 'not_awarded', 'benefits_terminated'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 

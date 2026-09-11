@@ -616,6 +616,19 @@ const allOptionalDocumentRequirements = computed(() => [...new Set([
     ...scholarshipForm.value.optionalRequirements,
     ...customOptionalDocumentRequirements.value,
 ])].filter((requirement) => !allDocumentRequirements.value.includes(requirement)));
+const providerProgramDefaults = computed(() => ({
+    organizationName: String(user.value?.provider_name ?? '').trim(),
+    address: String(user.value?.provider_address ?? '').trim(),
+    email: String(user.value?.provider_contact_email ?? '').trim(),
+    phone: String(user.value?.provider_contact_number ?? '').trim(),
+    website: String(user.value?.provider_website ?? '').trim(),
+}));
+const hasProviderAddress = computed(() => Boolean(providerProgramDefaults.value.address));
+const hasProviderPublicContact = computed(() => Boolean(
+    providerProgramDefaults.value.email
+    || providerProgramDefaults.value.phone
+    || providerProgramDefaults.value.website,
+));
 const postQualificationRequirementItems = computed(() =>
     splitRequirementText(scholarshipForm.value.postQualificationRequirements));
 const selectedRequirementCount = computed(() => allDocumentRequirements.value.length);
@@ -1829,6 +1842,57 @@ function useProgramLocationForHandoff() {
     scholarshipForm.value.handoffLocationAddress = scholarshipForm.value.locationAddress;
 }
 
+function useProviderPublicContact(overwrite = true) {
+    const defaults = providerProgramDefaults.value;
+
+    if (defaults.email && (overwrite || !hasText(scholarshipForm.value.contactEmail))) {
+        scholarshipForm.value.contactEmail = defaults.email;
+    }
+
+    if (defaults.phone && (overwrite || !hasText(scholarshipForm.value.contactNumber))) {
+        scholarshipForm.value.contactNumber = defaults.phone;
+    }
+
+    if (defaults.website && (overwrite || !hasText(scholarshipForm.value.officialProgramUrl))) {
+        scholarshipForm.value.officialProgramUrl = defaults.website;
+    }
+}
+
+function useProviderAddress(overwrite = true) {
+    const defaults = providerProgramDefaults.value;
+    let addressChanged = false;
+
+    if (defaults.organizationName && (overwrite || !hasText(scholarshipForm.value.locationName))) {
+        scholarshipForm.value.locationName = defaults.organizationName;
+    }
+
+    if (defaults.address && (overwrite || !hasText(scholarshipForm.value.locationAddress))) {
+        addressChanged = scholarshipForm.value.locationAddress !== defaults.address;
+        scholarshipForm.value.locationAddress = defaults.address;
+    }
+
+    if (addressChanged) {
+        scholarshipForm.value.latitude = '';
+        scholarshipForm.value.longitude = '';
+        providerLocationMessage.value = 'Provider profile address added. Set the map pin to confirm this program location.';
+    }
+}
+
+function useProviderAddressForHandoff() {
+    const defaults = providerProgramDefaults.value;
+
+    if (defaults.organizationName) {
+        scholarshipForm.value.handoffLocationName = defaults.organizationName;
+    }
+
+    scholarshipForm.value.handoffLocationAddress = defaults.address;
+}
+
+function applyProviderProfileDefaults() {
+    useProviderPublicContact(false);
+    useProviderAddress(false);
+}
+
 function addReviewCriterion() {
     if (scholarshipForm.value.reviewRubric.length >= 6) {
         return;
@@ -1958,6 +2022,7 @@ function resetScholarshipForm() {
     providerLocationMessage.value = '';
     selectedCommitmentOption.value = 'provider_briefing';
     customCommitmentText.value = '';
+    applyProviderProfileDefaults();
 
     if (imageInputElement.value) {
         imageInputElement.value.value = '';
@@ -2043,6 +2108,7 @@ async function loadFormData() {
             fillScholarshipForm(scholarshipResponse.data.scholarship);
         } else {
             restoreLocalDraft();
+            applyProviderProfileDefaults();
         }
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load scholarship form.';
@@ -3026,15 +3092,26 @@ onBeforeUnmount(() => {
                                 </div>
 
                                 <div v-show="activeFormSection === 'details'" :class="[sectionCardClass, 'grid items-stretch gap-4 lg:grid-cols-2']">
-                                    <div class="lg:col-span-2">
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Public contact</p>
-                                        <p class="mt-1 text-base font-bold text-slate-950">
-                                            Where applicants can ask questions
-                                            <span :class="requiredHintClass">Email or number required</span>
-                                        </p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Use the official contact applicants should reach for program questions. These fields start with the public contact saved in your provider profile.
-                                        </p>
+                                    <div class="flex flex-col gap-3 lg:col-span-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Public contact</p>
+                                            <p class="mt-1 text-base font-bold text-slate-950">
+                                                Where applicants can ask questions
+                                                <span :class="requiredHintClass">Email or number required</span>
+                                            </p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">
+                                                New programs use the public contact and website saved in your provider profile. You can still change them for this program.
+                                            </p>
+                                        </div>
+                                        <button
+                                            v-if="hasProviderPublicContact"
+                                            type="button"
+                                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                            @click="useProviderPublicContact()"
+                                        >
+                                            <i class="fa-solid fa-building" aria-hidden="true"></i>
+                                            Use provider profile
+                                        </button>
                                     </div>
 
                                     <div :class="fieldStackClass">
@@ -3486,15 +3563,26 @@ onBeforeUnmount(() => {
                                         </p>
                                     </div>
 
-                                    <button
-                                        id="scholarship-map-toggle"
-                                        type="button"
-                                        class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                                        @click="openLocationMap"
-                                    >
-                                        <i class="fa-solid fa-map-location-dot mr-1.5" aria-hidden="true"></i>
-                                        {{ scholarshipForm.latitude ? 'Review map pin' : 'Set map pin' }}
-                                    </button>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <button
+                                            v-if="hasProviderAddress"
+                                            type="button"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                            @click="useProviderAddress()"
+                                        >
+                                            <i class="fa-solid fa-building mr-1.5" aria-hidden="true"></i>
+                                            Use provider address
+                                        </button>
+                                        <button
+                                            id="scholarship-map-toggle"
+                                            type="button"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                            @click="openLocationMap"
+                                        >
+                                            <i class="fa-solid fa-map-location-dot mr-1.5" aria-hidden="true"></i>
+                                            {{ scholarshipForm.latitude ? 'Review map pin' : 'Set map pin' }}
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
@@ -3781,9 +3869,19 @@ onBeforeUnmount(() => {
                                             <div :class="fieldStackClass">
                                                 <div class="flex items-center justify-between gap-3">
                                                     <label :class="labelClass" for="scholarship-handoff-location-name">Office or venue</label>
-                                                    <button type="button" class="mb-1.5 text-xs font-bold text-sky-700 hover:underline" @click="useProgramLocationForHandoff">
-                                                        Use program address
-                                                    </button>
+                                                    <div class="mb-1.5 flex flex-wrap justify-end gap-x-3 gap-y-1">
+                                                        <button
+                                                            v-if="hasProviderAddress"
+                                                            type="button"
+                                                            class="text-xs font-bold text-sky-700 hover:underline"
+                                                            @click="useProviderAddressForHandoff"
+                                                        >
+                                                            Use provider address
+                                                        </button>
+                                                        <button type="button" class="text-xs font-bold text-sky-700 hover:underline" @click="useProgramLocationForHandoff">
+                                                            Use program address
+                                                        </button>
+                                                    </div>
                                                 </div>
                                                 <input
                                                     id="scholarship-handoff-location-name"

@@ -1,4 +1,4 @@
-export const negativeDecisionStatuses = ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'];
+export const negativeDecisionStatuses = ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated'];
 
 export const decisionReasonOptions = [
     { value: '', label: 'No reason selected' },
@@ -24,5 +24,10 @@ export const decisionReasonOptions = [
     { value: 'renewed_support', label: 'Renewed support' },
     { value: 'funds_limited', label: 'Funds limited' },
     { value: 'not_selected', label: 'Not selected' },
+    { value: 'procedure_not_followed', label: 'Required procedure not followed' },
+    { value: 'recipient_obligations_not_met', label: 'Recipient obligations not met' },
+    { value: 'program_conditions_not_met', label: 'Program conditions not met' },
+    { value: 'unable_to_contact_recipient', label: 'Unable to contact recipient' },
+    { value: 'recipient_requested_end', label: 'Recipient requested to end support' },
     { value: 'other', label: 'Other' },
 ];

@@ -806,7 +806,7 @@ class ApplicationWorkflowService
             $status === 'interview' => 'interview',
             $status === 'approved' => 'formal_application',
             in_array($status, ['waitlisted'], true) => 'decision',
-            in_array($status, ['rejected', 'exam_failed', 'interview_failed', 'not_awarded', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed', 'withdrawn'], true) => 'complete',
+            in_array($status, ['rejected', 'exam_failed', 'interview_failed', 'not_awarded', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed', 'benefits_terminated', 'withdrawn'], true) => 'complete',
             default => 'screening',
         };
 
@@ -819,7 +819,7 @@ class ApplicationWorkflowService
     {
         return match (true) {
             $status === 'withdrawn' => 'withdrawn',
-            in_array($status, ['rejected', 'exam_failed', 'interview_failed', 'not_awarded', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed'], true) => 'closed',
+            in_array($status, ['rejected', 'exam_failed', 'interview_failed', 'not_awarded', 'awarded', 'distribution_scheduled', 'disbursed', 'renewed', 'benefits_terminated'], true) => 'closed',
             $status === 'waitlisted' => 'awaiting_decision',
             $status === 'submitted' => 'submitted',
             in_array($status, ['under_review', 'qualified', 'shortlisted'], true) => 'under_review',
@@ -830,7 +830,7 @@ class ApplicationWorkflowService
     private function inferFinalOutcome(?string $status): ?string
     {
         return match (true) {
-            in_array($status, ['awarded', 'distribution_scheduled', 'disbursed', 'renewed'], true) => 'selected',
+            in_array($status, ['awarded', 'distribution_scheduled', 'disbursed', 'renewed', 'benefits_terminated'], true) => 'selected',
             $status === 'waitlisted' => 'waitlisted',
             in_array($status, ['not_awarded', 'exam_failed', 'interview_failed'], true) => 'not_selected',
             default => null,

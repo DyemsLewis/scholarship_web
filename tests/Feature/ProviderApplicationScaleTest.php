@@ -191,6 +191,11 @@ class ProviderApplicationScaleTest extends TestCase
         $makeApplication('formal_application');
         $makeApplication('decision');
         $makeApplication('complete', 'closed', 'selected');
+        $waitlisted = $makeApplication('decision', 'awaiting_decision', 'waitlisted');
+        $waitlisted->update([
+            'status' => 'waitlisted',
+            'waitlist_position' => 1,
+        ]);
 
         ApplicationSchedule::create([
             'scholarship_application_id' => $scheduledInterview->id,
@@ -215,8 +220,10 @@ class ProviderApplicationScaleTest extends TestCase
             ->assertJsonPath('filter_counts.needs_review', 1)
             ->assertJsonPath('filter_counts.waiting_activity', 2)
             ->assertJsonPath('filter_counts.ready_result', 2)
-            ->assertJsonPath('filter_counts.final_decision', 1)
-            ->assertJsonPath('filter_counts.all', 7)
+            ->assertJsonPath('filter_counts.final_decision', 2)
+            ->assertJsonPath('filter_counts.selected', 1)
+            ->assertJsonPath('filter_counts.waitlisted', 1)
+            ->assertJsonPath('filter_counts.all', 8)
             ->assertJsonPath('activity_waiting_counts.exam', 1)
             ->assertJsonPath('activity_waiting_counts.interview', 1);
 
@@ -233,7 +240,20 @@ class ProviderApplicationScaleTest extends TestCase
         $this->actingAs($provider)
             ->getJson('/provider/applications/data?filter=final_decision')
             ->assertOk()
-            ->assertJsonCount(1, 'applications')
+            ->assertJsonCount(2, 'applications')
             ->assertJsonPath('applications.0.workflow_stage', 'decision');
+
+        $this->actingAs($provider)
+            ->getJson('/provider/applications/data?filter=selected')
+            ->assertOk()
+            ->assertJsonCount(1, 'applications')
+            ->assertJsonPath('applications.0.final_outcome', 'selected');
+
+        $this->actingAs($provider)
+            ->getJson('/provider/applications/data?filter=waitlisted')
+            ->assertOk()
+            ->assertJsonCount(1, 'applications')
+            ->assertJsonPath('applications.0.status', 'waitlisted')
+            ->assertJsonPath('applications.0.waitlist_position', 1);
     }
 }

@@ -328,6 +328,7 @@ function statusLabel(status) {
         interview_failed: 'Failed interview',
         distribution_scheduled: 'Distribution scheduled',
         disbursed: 'Distributed',
+        benefits_terminated: 'Benefits stopped',
     };
 
     if (labels[status]) {
@@ -340,6 +341,10 @@ function statusLabel(status) {
 }
 
 function applicationStatusLabel(application) {
+    if (application?.status === 'benefits_terminated') {
+        return statusLabel(application.status);
+    }
+
     return application?.workflow?.final_outcome_label
         ?? application?.workflow?.current_stage_label
         ?? statusLabel(application?.status);
@@ -390,7 +395,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
+    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 

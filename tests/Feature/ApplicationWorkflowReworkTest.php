@@ -116,7 +116,12 @@ class ApplicationWorkflowReworkTest extends TestCase
         $this->actingAs($application->applicant)
             ->getJson("/dashboard/applications/{$application->id}/data")
             ->assertOk()
-            ->assertJsonPath('application.formal_application_handoff', null);
+            ->assertJsonPath('application.formal_application_handoff', null)
+            ->assertJsonPath('application.pre_screening_handoff.next_step.stage', 'exam')
+            ->assertJsonPath(
+                'application.pre_screening_handoff.next_step.instructions',
+                'Wait for the provider to publish the exam schedule and instructions.',
+            );
 
         $application = $workflow->recordStageResult($application, 'exam', 'passed', $provider);
 
@@ -162,6 +167,53 @@ class ApplicationWorkflowReworkTest extends TestCase
         );
         $this->assertSame('withdrawn', $withdrawnApplication->application_state);
         $this->assertSame('complete', $withdrawnApplication->workflow_stage);
+    }
+
+    public function test_pre_screening_handoff_record_is_shared_with_applicant_and_provider_from_the_submission_snapshot(): void
+    {
+        [$provider, $application] = $this->application();
+        $application->scholarship->update([
+            'handoff_mode' => 'onsite',
+            'handoff_instructions' => 'Bring the listed originals to the scholarship office.',
+            'handoff_deadline' => now()->addWeek()->toDateString(),
+            'handoff_location_name' => 'Scholarship Office',
+            'handoff_location_address' => 'Dasmarinas City, Cavite',
+        ]);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start($application);
+        $submittedName = data_get($application->submission_snapshot, 'current.applicant.name');
+
+        $this->actingAs($application->applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.pre_screening_handoff', null);
+
+        $application = $workflow->recordStageResult(
+            $application,
+            'screening',
+            'passed',
+            $provider,
+            'Eligibility and required files were reviewed.',
+            'passed_prescreening',
+        );
+        $application->applicant->update(['name' => 'Updated General Profile Name']);
+
+        $this->actingAs($application->applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.pre_screening_handoff.record_id', 'PS-'.str_pad((string) $application->id, 6, '0', STR_PAD_LEFT))
+            ->assertJsonPath('application.pre_screening_handoff.applicant.name', $submittedName)
+            ->assertJsonPath('application.pre_screening_handoff.review.required_files', 0)
+            ->assertJsonPath('application.pre_screening_handoff.review.accepted_files', 0)
+            ->assertJsonPath('application.pre_screening_handoff.decision.note', 'Eligibility and required files were reviewed.')
+            ->assertJsonPath('application.pre_screening_handoff.next_step.stage', 'formal_application')
+            ->assertJsonPath('application.pre_screening_handoff.next_step.mode_label', 'On-site formal application');
+
+        $this->actingAs($provider)
+            ->getJson("/provider/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.pre_screening_handoff.applicant.name', $submittedName)
+            ->assertJsonPath('application.pre_screening_handoff.next_step.location', 'Scholarship Office - Dasmarinas City, Cavite');
     }
 
     private function application(array $stages = ['screening', 'formal_application', 'decision']): array

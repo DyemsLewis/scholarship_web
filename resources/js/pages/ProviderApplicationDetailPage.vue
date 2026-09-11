@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import ApplicantProfileProofModal from '../components/ApplicantProfileProofModal.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
+import PreScreeningHandoffRecord from '../components/PreScreeningHandoffRecord.vue';
 import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
@@ -48,6 +49,9 @@ const showCorrectionForm = ref(false);
 const correctionMessage = ref('');
 const correctionTargets = ref([]);
 const isHandlingCorrection = ref(false);
+const showBenefitTerminationForm = ref(false);
+const isStoppingBenefits = ref(false);
+const benefitTerminationForm = ref({ reason: '', explanation: '' });
 const isVerifyingAcademicRecord = ref(false);
 const reviewedAcademicScale = ref('');
 const reviewedAcademicResult = ref('');
@@ -89,6 +93,14 @@ const correctionTargetOptions = [
     { value: 'application_files', label: 'Application files', icon: 'fa-solid fa-file-arrow-up' },
     { value: 'other', label: 'Other information', icon: 'fa-solid fa-ellipsis' },
 ];
+const benefitTerminationReasonOptions = decisionReasonOptions.filter((option) => [
+    'procedure_not_followed',
+    'recipient_obligations_not_met',
+    'program_conditions_not_met',
+    'unable_to_contact_recipient',
+    'recipient_requested_end',
+    'other',
+].includes(option.value));
 
 function safeProviderUrl(value) {
     if (!value) {
@@ -156,6 +168,7 @@ const customStatusLabels = {
     interview_failed: 'Failed interview',
     distribution_scheduled: 'Distribution scheduled',
     disbursed: 'Distributed',
+    benefits_terminated: 'Benefits stopped',
     for_exam: 'Meets exam eligibility',
     exam_completed: 'Exam completed',
     passed_exam: 'Passed exam',
@@ -452,7 +465,9 @@ const reviewSubmitLabel = computed(() => {
     return 'Save notes and scores';
 });
 const completedStageMessage = computed(() => workflow.value.final_outcome_label
-    ? `Final outcome: ${workflow.value.final_outcome_label}. No further decision is required.`
+    ? application.value?.status === 'benefits_terminated'
+        ? 'The original selection remains in history, but future scholarship benefits have been stopped.'
+        : `Final outcome: ${workflow.value.final_outcome_label}. No further selection decision is required.`
     : 'This application has no pending provider action.');
 const decisionPanelTitle = computed(() => {
     if (workflow.value.application_state === 'withdrawn') {
@@ -479,6 +494,9 @@ const decisionPanelDescription = computed(() => {
 const canRequestCorrection = computed(() => application.value
     && !workflow.value.is_closed
     && !['requested', 'submitted'].includes(application.value.correction_status));
+const canStopBenefits = computed(() => application.value
+    && workflow.value.final_outcome === 'selected'
+    && ['awarded', 'distribution_scheduled', 'disbursed', 'renewed'].includes(application.value.status));
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
 const requiredDocuments = computed(() => documentRequirements(application.value?.scholarship?.requirements));
 const applicationRequirements = computed(() => {
@@ -585,7 +603,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
+    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
@@ -878,6 +896,15 @@ function applyApplication(payload) {
     );
 }
 
+function resetBenefitTerminationForm() {
+    showBenefitTerminationForm.value = false;
+    benefitTerminationForm.value = { reason: '', explanation: '' };
+}
+
+function decisionReasonLabel(reason) {
+    return decisionReasonOptions.find((option) => option.value === reason)?.label ?? statusLabel(reason);
+}
+
 function openDocumentReview(document) {
     selectedDocument.value = document;
     documentReviewError.value = '';
@@ -1160,6 +1187,69 @@ async function updateStatus() {
         void handledError;
     } finally {
         updatingId.value = null;
+    }
+}
+
+async function stopBenefits() {
+    if (!application.value || !canStopBenefits.value || isStoppingBenefits.value) {
+        return;
+    }
+
+    const reason = benefitTerminationForm.value.reason;
+    const explanation = benefitTerminationForm.value.explanation.trim();
+
+    if (!reason) {
+        errorMessage.value = 'Select why future benefits are being stopped.';
+        return;
+    }
+
+    if (explanation.length < 10) {
+        errorMessage.value = 'Add a short explanation of at least 10 characters for the applicant and audit record.';
+        return;
+    }
+
+    const confirmed = await requestConfirmation({
+        title: 'Stop future scholarship benefits?',
+        message: `This will notify ${application.value.applicant?.name || 'the applicant'} and record the reason in application history. Benefits already released are not reversed.`,
+        confirmLabel: 'Stop future benefits',
+        tone: 'danger',
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
+    isStoppingBenefits.value = true;
+    errorMessage.value = '';
+
+    try {
+        const response = await window.axios.patch(
+            `/provider/applications/${application.value.id}/status`,
+            {
+                status: 'benefits_terminated',
+                decision_reason: reason,
+                outcome_notes: explanation,
+            },
+            { portalToast: false },
+        );
+
+        applyApplication(response.data.application);
+        resetBenefitTerminationForm();
+        showPortalToast({
+            title: 'Benefits stopped',
+            message: 'The applicant was notified and the reason was added to application history.',
+        });
+    } catch (error) {
+        const message = error.response?.data?.errors?.decision_reason?.[0]
+            ?? error.response?.data?.errors?.outcome_notes?.[0]
+            ?? error.response?.data?.errors?.status?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to stop future benefits.';
+
+        errorMessage.value = message;
+        showPortalToast({ type: 'error', title: 'Benefits not changed', message });
+    } finally {
+        isStoppingBenefits.value = false;
     }
 }
 
@@ -1501,7 +1591,7 @@ onMounted(loadApplication);
                                     <div class="shrink-0 sm:text-right">
                                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Current stage</p>
                                         <span :class="['mt-1 inline-flex rounded-md px-2.5 py-1.5 text-xs font-bold uppercase', statusClass(application.status)]">
-                                            {{ workflow.current_stage_label || statusLabel(application.status) }}
+                                            {{ application.status === 'benefits_terminated' ? statusLabel(application.status) : (workflow.current_stage_label || statusLabel(application.status)) }}
                                         </span>
                                     </div>
                                 </div>
@@ -1727,6 +1817,99 @@ onMounted(loadApplication);
                                     </div>
                                     <div v-else class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
                                         {{ completedStageMessage }}
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="canStopBenefits || application.status === 'benefits_terminated'"
+                                    class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white"
+                                >
+                                    <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="flex min-w-0 items-start gap-3">
+                                            <span :class="[
+                                                'grid h-10 w-10 shrink-0 place-items-center rounded-md',
+                                                application.status === 'benefits_terminated'
+                                                    ? 'bg-rose-100 text-rose-700'
+                                                    : 'bg-slate-100 text-slate-700',
+                                            ]">
+                                                <i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i>
+                                            </span>
+                                            <div class="min-w-0">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <p class="font-bold text-slate-950">Recipient support</p>
+                                                    <span :class="[
+                                                        'rounded px-2 py-1 text-[10px] font-bold uppercase',
+                                                        application.status === 'benefits_terminated'
+                                                            ? 'bg-rose-100 text-rose-700'
+                                                            : 'bg-emerald-100 text-emerald-700',
+                                                    ]">
+                                                        {{ application.status === 'benefits_terminated' ? 'Stopped' : 'Active' }}
+                                                    </span>
+                                                </div>
+                                                <p class="mt-1 text-sm leading-6 text-slate-600">
+                                                    {{ application.status === 'benefits_terminated' ? 'Future benefits stopped' : 'Recipient support is active' }}
+                                                </p>
+                                                <p v-if="application.status === 'benefits_terminated'" class="mt-1 text-sm leading-6 text-slate-700">
+                                                    {{ application.outcome_notes || 'The provider ended future support for this recipient.' }}
+                                                </p>
+                                                <p v-if="application.status === 'benefits_terminated' && application.decision_reason" class="mt-2 text-xs font-bold text-rose-800">
+                                                    Reason: {{ decisionReasonLabel(application.decision_reason) }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            v-if="canStopBenefits && !showBenefitTerminationForm"
+                                            type="button"
+                                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                                            @click="showBenefitTerminationForm = true"
+                                        >
+                                            <i class="fa-solid fa-ban text-xs" aria-hidden="true"></i>
+                                            Stop future benefits
+                                        </button>
+                                    </div>
+
+                                    <div v-if="canStopBenefits && showBenefitTerminationForm" class="grid gap-4 border-t border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+                                        <div class="md:col-span-2">
+                                            <p class="font-bold text-slate-950">Stop future recipient support</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-600">Provide a clear reason before notifying the applicant. Benefits already released will remain in the record.</p>
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass">Reason <span class="text-rose-600">*</span></label>
+                                            <select v-model="benefitTerminationForm.reason" :class="inputClass">
+                                                <option value="">Select a reason</option>
+                                                <option v-for="option in benefitTerminationReasonOptions" :key="option.value" :value="option.value">
+                                                    {{ option.label }}
+                                                </option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label :class="labelClass">Explanation for the applicant <span class="text-rose-600">*</span></label>
+                                            <textarea
+                                                v-model="benefitTerminationForm.explanation"
+                                                rows="3"
+                                                maxlength="2000"
+                                                placeholder="Explain the procedure or condition that was not followed."
+                                                :class="inputClass"
+                                            ></textarea>
+                                        </div>
+                                        <div class="flex flex-wrap gap-2 md:col-span-2">
+                                            <button
+                                                type="button"
+                                                :disabled="isStoppingBenefits"
+                                                class="rounded-md bg-rose-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-rose-800 disabled:opacity-60"
+                                                @click="stopBenefits"
+                                            >
+                                                {{ isStoppingBenefits ? 'Saving...' : 'Confirm and notify applicant' }}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :disabled="isStoppingBenefits"
+                                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                                                @click="resetBenefitTerminationForm"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -2120,6 +2303,12 @@ onMounted(loadApplication);
                             v-if="activeSection === 'applicant' || activeSection === 'history'"
                             :class="activeSection === 'applicant' ? 'grid gap-5 lg:grid-cols-2' : 'space-y-5'"
                         >
+                            <PreScreeningHandoffRecord
+                                v-if="activeSection === 'applicant' && application.pre_screening_handoff"
+                                :record="application.pre_screening_handoff"
+                                class="lg:col-span-2"
+                            />
+
                             <section v-if="activeSection === 'history' && application.status_progress" class="provider-panel p-5">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Progress

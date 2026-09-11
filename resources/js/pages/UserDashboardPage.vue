@@ -453,7 +453,7 @@ function activeSchedule(application) {
 
 function isClosedApplication(application) {
     return Boolean(application?.workflow?.is_closed)
-        || ['rejected', 'not_awarded', 'awarded', 'withdrawn', 'exam_failed', 'interview_failed'].includes(application?.status);
+        || ['rejected', 'not_awarded', 'awarded', 'withdrawn', 'exam_failed', 'interview_failed', 'benefits_terminated'].includes(application?.status);
 }
 
 function applicationPriority(application) {
@@ -511,6 +511,7 @@ function applicationNextAction(application) {
         distribution_scheduled: 'You were selected. Review the provider result and follow-up instructions.',
         disbursed: 'The provider recorded the scholarship reward as distributed.',
         renewed: 'Your scholarship support was renewed.',
+        benefits_terminated: 'The provider stopped future scholarship benefits. Open the application to review the reason.',
         rejected: 'You did not qualify in pre-screening. Review the provider note.',
         not_awarded: 'The review finished without an award. Check the provider note.',
         exam_failed: 'Review the provider note for the exam result.',
@@ -519,6 +520,10 @@ function applicationNextAction(application) {
 }
 
 function applicationStatusLabel(application) {
+    if (application?.status === 'benefits_terminated') {
+        return statusLabel(application.status);
+    }
+
     return application?.workflow?.final_outcome_label
         ?? application?.workflow?.current_stage_label
         ?? statusLabel(application?.status);
@@ -536,6 +541,7 @@ function statusLabel(status) {
         interview_failed: 'Failed interview',
         distribution_scheduled: 'Selected',
         disbursed: 'Distributed',
+        benefits_terminated: 'Benefits stopped',
     };
 
     if (labels[status]) {
@@ -552,7 +558,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
+    if (['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 

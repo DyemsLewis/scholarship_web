@@ -686,7 +686,7 @@ class DecisionSupportService
             'exam_scheduled' => 84,
             'exam_qualified' => 80,
             'under_review' => 75,
-            'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'withdrawn' => 10,
+            'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated', 'withdrawn' => 10,
             default => 60,
         };
     }
@@ -739,7 +739,7 @@ class DecisionSupportService
             return 'Award outcome is already recorded.';
         }
 
-        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'withdrawn'], true)) {
+        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated', 'withdrawn'], true)) {
             return 'Application is closed; review notes explain the final decision.';
         }
 
@@ -798,7 +798,7 @@ class DecisionSupportService
     {
         return match ($status) {
             'approved', 'awarded', 'disbursed', 'renewed', 'exam_passed' => 'success',
-            'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'withdrawn' => 'danger',
+            'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated', 'withdrawn' => 'danger',
             'under_review', 'qualified', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled', 'waitlisted' => 'info',
             default => 'warning',
         };
@@ -825,6 +825,7 @@ class DecisionSupportService
             'distribution_scheduled' => 'Reward distribution is scheduled; follow the provider instructions.',
             'disbursed' => 'Scholarship support has been released.',
             'renewed' => 'Scholarship renewal has been recorded.',
+            'benefits_terminated' => 'The provider stopped future scholarship benefits. Review the recorded reason and provider explanation.',
             'rejected' => 'This pre-screening submission did not qualify for the next stage. Check the provider note.',
             'not_awarded' => 'The provider recorded that the formal process ended without an award.',
             'withdrawn' => 'You withdrew this application. No further review action is required.',
@@ -863,6 +864,7 @@ class DecisionSupportService
             'interview_failed' => 'Failed interview',
             'distribution_scheduled' => 'Distribution scheduled',
             'disbursed' => 'Distributed',
+            'benefits_terminated' => 'Benefits stopped',
             'for_exam' => 'Meets exam eligibility',
             'exam_completed' => 'Exam completed',
             'passed_exam' => 'Passed exam',

@@ -23,7 +23,7 @@ const legacyQueueAliases = {
     decided: 'all',
 };
 const normalizedRequestedQueueFilter = legacyQueueAliases[requestedQueueFilter] ?? requestedQueueFilter;
-const queueFilterValues = ['needs_review', 'waiting_activity', 'ready_result', 'final_decision', 'all'];
+const queueFilterValues = ['needs_review', 'waiting_activity', 'ready_result', 'final_decision', 'selected', 'waitlisted', 'all'];
 const queueSortValues = ['priority', 'dss', 'documents', 'oldest'];
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -40,7 +40,7 @@ const selectedQueueSort = ref(queueSortValues.includes(requestedQueueSort) ? req
 const applicationSearch = ref(pageSearchParams.get('search') ?? '');
 const applicationPage = ref(Number.isInteger(requestedApplicationPage) && requestedApplicationPage > 0 ? requestedApplicationPage : 1);
 const applicationPagination = ref({ current_page: 1, last_page: 1, per_page: 10, total: 0, from: null, to: null });
-const queueFilterCounts = ref({ needs_review: 0, waiting_activity: 0, ready_result: 0, final_decision: 0, all: 0 });
+const queueFilterCounts = ref({ needs_review: 0, waiting_activity: 0, ready_result: 0, final_decision: 0, selected: 0, waitlisted: 0, all: 0 });
 const activityWaitingCounts = ref({});
 const totalProviderApplications = ref(0);
 const applicationsPerPage = 10;
@@ -182,11 +182,25 @@ const reviewFilterOptions = computed(() => [
         count: Number(queueFilterCounts.value.final_decision ?? 0),
     },
 ]);
+const outcomeFilterOptions = computed(() => [
+    {
+        value: 'selected',
+        label: 'Selected',
+        count: Number(queueFilterCounts.value.selected ?? 0),
+    },
+    {
+        value: 'waitlisted',
+        label: 'Waitlisted',
+        count: Number(queueFilterCounts.value.waitlisted ?? 0),
+    },
+]);
 const emptyQueueMessage = computed(() => ({
     needs_review: 'No applicants currently need pre-screening review.',
     waiting_activity: 'No applicants are waiting for an exam or interview.',
     ready_result: 'No completed activities or formal handoffs need a result.',
     final_decision: 'No applicants are waiting for a final decision.',
+    selected: 'No applicants have been selected yet.',
+    waitlisted: 'No applicants are currently waitlisted.',
     all: 'No applicants match this search.',
 }[selectedQueueFilter.value]));
 const rankedApplications = computed(() => {
@@ -222,6 +236,7 @@ const customStatusLabels = {
     interview_failed: 'Failed interview',
     distribution_scheduled: 'Award release scheduled',
     disbursed: 'Distributed',
+    benefits_terminated: 'Benefits stopped',
     for_exam: 'Meets exam eligibility',
     exam_completed: 'Exam completed',
     passed_exam: 'Passed exam',
@@ -247,6 +262,10 @@ function workflowClosed(application) {
 }
 
 function applicationQueueLabel(application) {
+    if (application?.status === 'benefits_terminated') {
+        return statusLabel(application.status);
+    }
+
     return application?.workflow?.final_outcome_label
         ?? application?.workflow?.current_stage_label
         ?? statusLabel(application?.status);
@@ -331,7 +350,7 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed'].includes(status)) {
+    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
@@ -374,7 +393,7 @@ function documentIssueCount(application) {
 
 function showWaitingTime(application) {
     return Number(application.waiting_days ?? 0) > 0
-        && !['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'disbursed', 'renewed'].includes(application.status);
+        && !['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated', 'disbursed', 'renewed'].includes(application.status);
 }
 
 function applicationHasActiveSchedule(application) {
@@ -952,7 +971,7 @@ onMounted(loadProviderData);
                                     class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                                 >
                             </label>
-                            <div class="flex flex-col gap-2 sm:flex-row">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                                 <button
                                     type="button"
                                     :class="[
@@ -965,6 +984,22 @@ onMounted(loadProviderData);
                                 >
                                     All records ({{ queueFilterCounts.all ?? 0 }})
                                 </button>
+                                <div class="inline-flex overflow-hidden rounded-md border border-slate-300 bg-white">
+                                    <button
+                                        v-for="filter in outcomeFilterOptions"
+                                        :key="filter.value"
+                                        type="button"
+                                        :class="[
+                                            'px-3 py-2.5 text-sm font-bold transition first:border-r first:border-slate-300',
+                                            selectedQueueFilter === filter.value
+                                                ? 'bg-slate-900 text-white'
+                                                : 'text-slate-700 hover:bg-slate-100',
+                                        ]"
+                                        @click="selectedQueueFilter = filter.value"
+                                    >
+                                        {{ filter.label }} ({{ filter.count }})
+                                    </button>
+                                </div>
                                 <label>
                                     <span class="sr-only">Sort applications</span>
                                     <select

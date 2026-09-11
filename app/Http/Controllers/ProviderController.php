@@ -27,6 +27,7 @@ use App\Support\ApplicationDecisionReason;
 use App\Support\ApplicationSchedulePayload;
 use App\Support\CsvExport;
 use App\Support\LearnerProgramPath;
+use App\Support\PreScreeningHandoffRecord;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipEligibilityCondition;
 use App\Support\ScholarshipEventPayload;
@@ -1039,6 +1040,8 @@ class ProviderController extends Controller
                 'waiting_activity',
                 'ready_result',
                 'final_decision',
+                'selected',
+                'waitlisted',
                 'pending_review',
                 'document_issues',
                 'active_stages',
@@ -1288,6 +1291,26 @@ class ProviderController extends Controller
             return;
         }
 
+        if ($filter === 'selected') {
+            $query->where(function (Builder $query): void {
+                $query
+                    ->where('final_outcome', 'selected')
+                    ->orWhereIn('status', ['awarded', 'distribution_scheduled', 'disbursed', 'renewed', 'benefits_terminated']);
+            });
+
+            return;
+        }
+
+        if ($filter === 'waitlisted') {
+            $query->where(function (Builder $query): void {
+                $query
+                    ->where('final_outcome', 'waitlisted')
+                    ->orWhere('status', 'waitlisted');
+            });
+
+            return;
+        }
+
         if ($filter === 'document_issues') {
             $driver = DB::connection()->getDriverName();
             $checklistLength = in_array($driver, ['mysql', 'mariadb'], true)
@@ -1377,7 +1400,7 @@ class ProviderController extends Controller
     {
         $counts = ['all' => (clone $baseQuery)->count()];
 
-        foreach (['needs_review', 'waiting_activity', 'ready_result', 'final_decision'] as $filter) {
+        foreach (['needs_review', 'waiting_activity', 'ready_result', 'final_decision', 'selected', 'waitlisted'] as $filter) {
             $query = clone $baseQuery;
             $this->applyProviderApplicationFilter($query, $filter);
             $counts[$filter] = $query->count();
@@ -2609,6 +2632,7 @@ class ProviderController extends Controller
                 'not_awarded',
                 'disbursed',
                 'renewed',
+                'benefits_terminated',
                 'rejected',
             ])],
             'decision_reason' => [
@@ -2619,7 +2643,13 @@ class ProviderController extends Controller
             ],
             'review_notes' => ['nullable', 'string', 'max:1500'],
             'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
-            'outcome_notes' => ['nullable', 'string', 'max:2000'],
+            'outcome_notes' => [
+                Rule::requiredIf($request->input('status') === 'benefits_terminated'),
+                'nullable',
+                'string',
+                'min:10',
+                'max:2000',
+            ],
             'outcome_at' => ['nullable', 'date'],
             'distribution_scheduled_for' => $request->input('status') === 'distribution_scheduled'
                 ? ['required', 'date', 'after_or_equal:today']
@@ -2634,9 +2664,10 @@ class ProviderController extends Controller
         $previousStatus = $application->status;
         $isPostSelectionUpdate = $workflow['final_outcome'] === 'selected'
             && match ($previousStatus) {
-                'awarded' => $validated['status'] === 'distribution_scheduled',
-                'distribution_scheduled' => $validated['status'] === 'disbursed',
-                'disbursed' => $validated['status'] === 'renewed',
+                'awarded' => in_array($validated['status'], ['distribution_scheduled', 'benefits_terminated'], true),
+                'distribution_scheduled' => in_array($validated['status'], ['disbursed', 'benefits_terminated'], true),
+                'disbursed' => in_array($validated['status'], ['renewed', 'benefits_terminated'], true),
+                'renewed' => $validated['status'] === 'benefits_terminated',
                 default => false,
             };
 
@@ -2765,7 +2796,9 @@ class ProviderController extends Controller
                     'from_status' => $previousStatus,
                     'to_status' => $validated['status'],
                     'decision_reason' => $validated['decision_reason'] ?? null,
-                    'review_notes' => $validated['review_notes'] ?? null,
+                    'review_notes' => $validated['status'] === 'benefits_terminated'
+                        ? ($validated['outcome_notes'] ?? null)
+                        : ($validated['review_notes'] ?? null),
                     'changed_at' => now(),
                 ]);
             }
@@ -2887,9 +2920,10 @@ class ProviderController extends Controller
             'interview' => ['approved', 'interview_failed'],
             'approved' => ['waitlisted', 'awarded', 'not_awarded'],
             'waitlisted' => ['approved', 'awarded', 'not_awarded'],
-            'awarded' => ['distribution_scheduled'],
-            'distribution_scheduled' => ['disbursed'],
-            'disbursed' => ['renewed'],
+            'awarded' => ['distribution_scheduled', 'benefits_terminated'],
+            'distribution_scheduled' => ['disbursed', 'benefits_terminated'],
+            'disbursed' => ['renewed', 'benefits_terminated'],
+            'renewed' => ['benefits_terminated'],
             default => [],
         };
 
@@ -3142,6 +3176,7 @@ class ProviderController extends Controller
                 'interview_failed',
                 'disbursed',
                 'renewed',
+                'benefits_terminated',
             ]),
             'under_review' => $recipientQuery->whereIn('status', [
                 'submitted',
@@ -4470,6 +4505,7 @@ class ProviderController extends Controller
             ),
             'requires_student_response' => false,
             'can_receive_student_response' => false,
+            'pre_screening_handoff' => PreScreeningHandoffRecord::make($application, $workflow, $readiness, $dss),
             'schedules' => $application->schedules
                 ->sortBy('scheduled_at')
                 ->map(fn (ApplicationSchedule $schedule) => ApplicationSchedulePayload::make($schedule))
@@ -5471,6 +5507,11 @@ class ProviderController extends Controller
                 'title' => 'Reward distribution scheduled',
                 'message' => "Your scholarship reward for {$programTitle} is scheduled for {$distributionDate}. Open the application to review provider instructions.",
             ],
+            'benefits_terminated' => [
+                'type' => 'application_outcome',
+                'title' => 'Scholarship benefits stopped',
+                'message' => "The provider stopped future scholarship benefits for {$programTitle}. Open your application to review the recorded reason and provider explanation.",
+            ],
             'rejected' => [
                 'type' => 'application_status',
                 'title' => 'Pre-screening not qualified',
@@ -5483,7 +5524,7 @@ class ProviderController extends Controller
             ],
         };
 
-        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed'], true) && filled($decisionReason)) {
+        if (in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated'], true) && filled($decisionReason)) {
             $payload['message'] .= " Reason: {$this->statusLabel($decisionReason)}.";
         }
 
@@ -5503,6 +5544,7 @@ class ProviderController extends Controller
             'exam_passed' => 'Passed exam',
             'exam_failed' => 'Failed exam',
             'interview_failed' => 'Failed interview',
+            'benefits_terminated' => 'Benefits stopped',
             'for_exam' => 'Meets exam eligibility',
             'exam_completed' => 'Exam completed',
             'passed_exam' => 'Passed exam',
