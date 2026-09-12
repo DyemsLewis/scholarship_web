@@ -838,7 +838,7 @@ onMounted(loadDashboard);
                                 </div>
                             </section>
 
-                            <section class="student-card flex flex-col overflow-hidden xl:col-start-1 xl:row-start-2">
+                            <section class="student-card flex flex-col overflow-hidden xl:col-start-1 xl:row-start-2 xl:self-start">
                                 <div class="flex min-h-24 flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                                     <div class="flex min-w-0 items-center gap-3">
                                         <span class="student-section-mark">
@@ -972,7 +972,7 @@ onMounted(loadDashboard);
                                 </div>
                             </section>
 
-                            <section class="student-card flex flex-col overflow-hidden xl:col-start-2 xl:row-start-2">
+                            <section class="student-card flex flex-col overflow-hidden xl:col-start-2 xl:row-start-2 xl:self-start">
                                 <div class="flex min-h-24 items-center gap-3 border-b border-slate-200 p-4 sm:p-5">
                                     <span class="student-section-mark">
                                         <i class="fa-solid fa-bell text-xs" aria-hidden="true"></i>
@@ -984,7 +984,7 @@ onMounted(loadDashboard);
                                     </div>
                                 </div>
 
-                                <div class="flex max-h-72 flex-col divide-y divide-slate-200 overflow-y-auto overscroll-contain" aria-label="Important updates">
+                                <div class="flex max-h-72 flex-col divide-y divide-slate-200 overflow-y-auto overscroll-contain xl:max-h-44" aria-label="Important updates">
                                     <a
                                         v-for="reminder in reminders"
                                         :key="reminder.key"

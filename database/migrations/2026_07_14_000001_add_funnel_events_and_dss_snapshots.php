@@ -46,9 +46,9 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['scholarship_application_id', 'input_hash'], 'dss_snapshot_application_input_unique');
-            $table->index(['scholarship_id', 'calculated_at']);
-            $table->index(['applicant_id', 'calculated_at']);
-            $table->index(['methodology_version', 'calculated_at']);
+            $table->index(['scholarship_id', 'calculated_at'], 'dss_snapshot_scholarship_date_index');
+            $table->index(['applicant_id', 'calculated_at'], 'dss_snapshot_applicant_date_index');
+            $table->index(['methodology_version', 'calculated_at'], 'dss_snapshot_methodology_date_index');
         });
     }
 

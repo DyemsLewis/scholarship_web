@@ -31,8 +31,8 @@ return new class extends Migration
             $table->string('terms_version')->nullable();
             $table->timestamps();
 
-            $table->unique(['applicant_id', 'document_type']);
-            $table->index(['applicant_id', 'status']);
+            $table->unique(['applicant_id', 'document_type'], 'app_verification_applicant_type_unique');
+            $table->index(['applicant_id', 'status'], 'app_verification_applicant_status_index');
         });
     }
 
