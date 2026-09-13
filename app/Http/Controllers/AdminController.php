@@ -898,6 +898,8 @@ class AdminController extends Controller
                     ? array_values(array_unique($validated['permissions']))
                     : null,
                 'password' => $validated['password'],
+                'must_reset_password' => $validated['role'] === 'admin',
+                'password_reset_required_at' => $validated['role'] === 'admin' ? now() : null,
             ]);
 
             match ($user->role) {
@@ -928,21 +930,53 @@ class AdminController extends Controller
             ],
         );
 
+        $emailVerificationSent = null;
+
         if ($user->isAdmin()) {
             PortalNotification::create([
                 'user_id' => $user->id,
                 'type' => 'staff_account_created',
                 'title' => 'Your staff account is ready',
-                'message' => "Your Scholarship Portal {$user->account_title} account has been created. Username: {$user->username}. Sign in using the temporary password provided to you. You can update your email, username, and contact details in Profile. Use Forgot Password if you need to change your password.",
+                'message' => "Your Scholarship Portal {$user->account_title} account has been created. Username: {$user->username}. Sign in using the temporary password, verify your email, and create a new password before entering the workspace.",
                 'action_url' => '/login',
                 'deduplication_key' => "staff_account_created:{$user->id}",
+            ]);
+
+            $emailVerificationSent = true;
+
+            try {
+                $user->sendEmailVerificationNotification();
+            } catch (Throwable $error) {
+                $emailVerificationSent = false;
+                ActivityLog::record(
+                    $user,
+                    'email_verification_email_failed',
+                    "Email verification link could not be sent to {$user->email}.",
+                    $request,
+                    ['error' => $error->getMessage()],
+                );
+            }
+
+            PortalNotification::updateOrCreate([
+                'user_id' => $user->id,
+                'type' => 'email_verification',
+                'title' => 'Verify your email address',
+            ], [
+                'message' => $emailVerificationSent
+                    ? 'A verification link was sent to your email. Verify it before replacing your temporary password.'
+                    : 'Your email is not verified. Resend the verification link from the account setup page.',
+                'action_url' => '/account/setup',
+                'read_at' => null,
             ]);
         }
 
         return response()->json([
             'message' => $user->isAdmin()
-                ? 'Staff account created. A welcome email was queued; share the temporary password securely.'
+                ? ($emailVerificationSent
+                    ? 'Staff account created. Share the temporary password securely; a verification email was sent.'
+                    : 'Staff account created, but the verification email could not be sent. The user can resend it after signing in.')
                 : 'Account created successfully.',
+            'email_verification_sent' => $emailVerificationSent,
             'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ], 201);
     }

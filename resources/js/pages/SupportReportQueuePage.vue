@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSectionNav from '../components/AdminSectionNav.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
@@ -17,7 +18,15 @@ const errorMessage = ref('');
 const actionError = ref('');
 const selectedStatus = ref('open');
 const selectedReport = ref(null);
+const previewAttachment = ref(null);
 const reports = ref([]);
+const providerCategories = ref([]);
+const providerPrograms = ref([]);
+const showProviderReportForm = ref(false);
+const isSubmittingProviderReport = ref(false);
+const providerReportError = ref('');
+const providerReportFile = ref(null);
+const providerReportForm = ref(emptyProviderReportForm());
 const counts = ref({ open: 0, resolved: 0, all: 0 });
 const pagination = ref({
     current_page: 1,
@@ -26,22 +35,32 @@ const pagination = ref({
 });
 
 const pageCopy = computed(() => ({
-    eyebrow: isAdmin ? 'Platform Support' : 'Program Support',
-    title: isAdmin ? 'Applicant reports' : 'Reported issues',
+    eyebrow: isAdmin ? 'Platform Support' : 'Provider Support',
+    title: isAdmin ? 'Applicant and provider reports' : 'Reports and support',
     description: isAdmin
         ? 'Review concerns submitted by applicants and coordinate program reports with providers.'
-        : 'Handle applicant concerns connected to programs managed by your organization.',
+        : 'Handle applicant concerns and track problems your organization sends to platform support.',
     queueEyebrow: isAdmin ? 'Report Review Queue' : 'Issue Queue',
-    queueTitle: isAdmin ? 'Review applicant concerns' : 'Respond to program concerns',
+    queueTitle: isAdmin ? 'Review submitted concerns' : 'Applicant concerns and your reports',
     queueDescription: isAdmin
         ? 'Open a report to review its details and record the platform support response.'
-        : 'Open a report to review the concern and record your organization response.',
+        : 'Respond to applicant concerns or check the progress of a report sent by your team.',
 }));
 const statusFilters = computed(() => [
-    { value: 'open', label: 'Needs action', count: counts.value.open },
+    { value: 'open', label: isAdmin ? 'Needs action' : 'Open', count: counts.value.open },
     { value: 'resolved', label: 'Completed', count: counts.value.resolved },
     { value: 'all', label: 'All reports', count: counts.value.all },
 ]);
+
+function emptyProviderReportForm() {
+    return {
+        category: 'technical',
+        scholarshipId: '',
+        context: '',
+        subject: '',
+        description: '',
+    };
+}
 
 function statusClass(status) {
     return status === 'resolved'
@@ -74,6 +93,18 @@ function reportInitials(report) {
         .slice(0, 2)
         .map((part) => part.charAt(0).toUpperCase())
         .join('');
+}
+
+function reporterName(report) {
+    if (report.submitted_by_provider) {
+        return report.applicant?.name || 'Provider team';
+    }
+
+    return report.applicant?.name || 'Applicant';
+}
+
+function reporterType(report) {
+    return report.submitted_by_provider ? 'Provider report' : 'Applicant report';
 }
 
 function handlingMessage(report) {
@@ -111,12 +142,69 @@ async function loadReports(page = 1) {
         });
 
         reports.value = response.data.reports ?? [];
+        providerCategories.value = response.data.categories ?? providerCategories.value;
+        providerPrograms.value = response.data.programs ?? providerPrograms.value;
         counts.value = response.data.counts ?? counts.value;
         pagination.value = response.data.pagination ?? pagination.value;
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load applicant reports.';
     } finally {
         isLoading.value = false;
+    }
+}
+
+function openProviderReportForm() {
+    providerReportForm.value = emptyProviderReportForm();
+    providerReportFile.value = null;
+    providerReportError.value = '';
+    showProviderReportForm.value = true;
+}
+
+function closeProviderReportForm() {
+    if (isSubmittingProviderReport.value) {
+        return;
+    }
+
+    showProviderReportForm.value = false;
+    providerReportError.value = '';
+}
+
+function selectProviderReportFile(event) {
+    providerReportFile.value = event.target.files?.[0] ?? null;
+}
+
+async function submitProviderReport() {
+    isSubmittingProviderReport.value = true;
+    providerReportError.value = '';
+
+    const payload = new FormData();
+    payload.append('category', providerReportForm.value.category);
+    payload.append('subject', providerReportForm.value.subject);
+    payload.append('description', providerReportForm.value.description);
+
+    if (providerReportForm.value.scholarshipId) {
+        payload.append('scholarship_id', providerReportForm.value.scholarshipId);
+    }
+
+    if (providerReportForm.value.context.trim()) {
+        payload.append('context', providerReportForm.value.context.trim());
+    }
+
+    if (providerReportFile.value) {
+        payload.append('attachment_file', providerReportFile.value);
+    }
+
+    try {
+        await window.axios.post('/provider/reports', payload);
+        showProviderReportForm.value = false;
+        selectedStatus.value = 'open';
+        await loadReports(1);
+    } catch (error) {
+        providerReportError.value = Object.values(error.response?.data?.errors ?? {})[0]?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to submit this report.';
+    } finally {
+        isSubmittingProviderReport.value = false;
     }
 }
 
@@ -137,6 +225,10 @@ function closeReport() {
 
     selectedReport.value = null;
     actionError.value = '';
+}
+
+function openReportAttachment(report) {
+    previewAttachment.value = report.attachment ?? null;
 }
 
 async function updateStatus(report) {
@@ -172,10 +264,16 @@ onMounted(() => loadReports());
                             <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ pageCopy.title }}</h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
                         </div>
-                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50" @click="loadReports(pagination.current_page)">
-                            <i class="fa-solid fa-rotate-right text-xs" aria-hidden="true"></i>
-                            Refresh reports
-                        </button>
+                        <div class="flex flex-col gap-2 sm:flex-row">
+                            <button v-if="!isAdmin" type="button" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="openProviderReportForm">
+                                <i class="fa-solid fa-circle-exclamation text-amber-300" aria-hidden="true"></i>
+                                Report a problem
+                            </button>
+                            <button type="button" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50" @click="loadReports(pagination.current_page)">
+                                <i class="fa-solid fa-rotate-right text-xs" aria-hidden="true"></i>
+                                Refresh reports
+                            </button>
+                        </div>
                     </div>
                 </header>
 
@@ -233,7 +331,8 @@ onMounted(() => loadReports());
                                 </div>
                                 <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">{{ report.description }}</p>
                                 <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
-                                    <span>{{ report.applicant?.name || 'Applicant' }}</span>
+                                    <span>{{ reporterName(report) }}</span>
+                                    <span>{{ reporterType(report) }}</span>
                                     <span>{{ report.category_label }}</span>
                                     <span v-if="report.privacy_request_type_label" class="text-amber-700">{{ report.privacy_request_type_label }}</span>
                                     <span v-if="report.program">{{ report.program.title }}</span>
@@ -256,7 +355,7 @@ onMounted(() => loadReports());
 
                     <div v-else class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
                         <p class="text-sm font-bold text-slate-900">No reports in this view</p>
-                        <p class="mt-1 text-sm leading-6 text-slate-500">Choose another status or wait for a new applicant concern.</p>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Choose another status or submit a report when your team encounters a problem.</p>
                     </div>
 
                     <div v-if="pagination.last_page > 1" class="mt-4 flex items-center justify-between gap-3">
@@ -289,6 +388,86 @@ onMounted(() => loadReports());
 
     <Teleport to="body">
         <div
+            v-if="!isAdmin && showProviderReportForm"
+            class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="provider-report-form-title"
+            @click.self="closeProviderReportForm"
+        >
+            <form class="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" @submit.prevent="submitProviderReport">
+                <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
+                    <div class="flex items-start gap-3">
+                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
+                            <i class="fa-solid fa-life-ring" aria-hidden="true"></i>
+                        </span>
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Platform support</p>
+                            <h2 id="provider-report-form-title" class="mt-1 text-xl font-bold text-slate-950">Report a problem</h2>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">Tell the admin what happened and where it occurred.</p>
+                        </div>
+                    </div>
+                    <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-300 text-slate-600 transition hover:bg-slate-50" aria-label="Close report form" @click="closeProviderReportForm">
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                    </button>
+                </header>
+
+                <div class="overflow-y-auto bg-slate-50 p-5 sm:p-6">
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <label>
+                            <span class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Problem type</span>
+                            <select v-model="providerReportForm.category" required class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-amber-500">
+                                <option v-for="category in providerCategories" :key="category.value" :value="category.value" class="bg-white text-slate-900">{{ category.label }}</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Affected program <span class="font-normal normal-case tracking-normal text-slate-400">(optional)</span></span>
+                            <select v-model="providerReportForm.scholarshipId" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-amber-500">
+                                <option value="" class="bg-white text-slate-900">General platform concern</option>
+                                <option v-for="program in providerPrograms" :key="program.id" :value="program.id" class="bg-white text-slate-900">{{ program.title }}</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <label class="mt-4 block">
+                        <span class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Affected page or application <span class="font-normal normal-case tracking-normal text-slate-400">(optional)</span></span>
+                        <input v-model="providerReportForm.context" type="text" maxlength="255" placeholder="Example: Applications page or Application #24" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500">
+                    </label>
+
+                    <label class="mt-4 block">
+                        <span class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Short subject</span>
+                        <input v-model="providerReportForm.subject" type="text" minlength="5" maxlength="150" required placeholder="Briefly name the problem" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500">
+                    </label>
+
+                    <label class="mt-4 block">
+                        <span class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">What happened?</span>
+                        <textarea v-model="providerReportForm.description" rows="5" minlength="10" maxlength="2000" required placeholder="Describe what you were doing, what went wrong, and what you expected to happen." class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm leading-6 text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500"></textarea>
+                    </label>
+
+                    <label class="mt-4 block rounded-md border border-dashed border-slate-300 bg-white p-4">
+                        <span class="flex items-center gap-2 text-sm font-bold text-slate-900">
+                            <i class="fa-regular fa-image text-amber-700" aria-hidden="true"></i>
+                            Screenshot or PDF <span class="font-normal text-slate-400">(optional)</span>
+                        </span>
+                        <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" class="mt-3 block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:font-bold file:text-white" @change="selectProviderReportFile">
+                        <span class="mt-2 block text-xs text-slate-500">JPG, PNG, WebP, or PDF up to 5MB.</span>
+                    </label>
+
+                    <p v-if="providerReportError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{{ providerReportError }}</p>
+                </div>
+
+                <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+                    <button type="button" :disabled="isSubmittingProviderReport" class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" @click="closeProviderReportForm">Cancel</button>
+                    <button type="submit" :disabled="isSubmittingProviderReport" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60">
+                        {{ isSubmittingProviderReport ? 'Sending...' : 'Send to admin support' }}
+                    </button>
+                </footer>
+            </form>
+        </div>
+    </Teleport>
+
+    <Teleport to="body">
+        <div
             v-if="selectedReport"
             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
             role="dialog"
@@ -306,7 +485,7 @@ onMounted(() => loadReports());
                             <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">{{ selectedReport.category_label }}</p>
                             <h2 id="support-report-detail-title" class="mt-1 text-xl font-bold text-slate-950 sm:text-2xl">{{ selectedReport.subject }}</h2>
                             <p class="mt-1 text-sm text-slate-500">
-                                {{ selectedReport.applicant?.name || 'Applicant' }}
+                                {{ reporterName(selectedReport) }} - {{ reporterType(selectedReport) }}
                                 <span v-if="selectedReport.program"> - {{ selectedReport.program.title }}</span>
                             </p>
                         </div>
@@ -356,13 +535,21 @@ onMounted(() => loadReports());
                         <p v-if="selectedReport.privacy_request_type_label" class="mt-3 inline-flex rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
                             {{ selectedReport.privacy_request_type_label }}
                         </p>
+                        <div v-if="selectedReport.context" class="mt-3 rounded-md bg-slate-50 px-3 py-2.5">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Affected area</p>
+                            <p class="mt-1 text-sm font-semibold text-slate-800">{{ selectedReport.context }}</p>
+                        </div>
                         <p class="mt-3 whitespace-pre-line text-sm leading-7 text-slate-700">{{ selectedReport.description }}</p>
+                        <button v-if="selectedReport.attachment" type="button" class="mt-4 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50" @click="openReportAttachment(selectedReport)">
+                            <i class="fa-solid fa-paperclip text-amber-700" aria-hidden="true"></i>
+                            View attachment
+                        </button>
                     </section>
 
                     <dl class="mt-4 grid gap-3 sm:grid-cols-2">
                         <div class="rounded-md border border-slate-200 bg-white p-3">
-                            <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Applicant</dt>
-                            <dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedReport.applicant?.name || 'Applicant' }}</dd>
+                            <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Submitted by</dt>
+                            <dd class="mt-1 text-sm font-bold text-slate-950">{{ reporterName(selectedReport) }}</dd>
                             <dd class="mt-1 text-xs text-slate-500">{{ selectedReport.applicant?.email || 'Email not available' }}</dd>
                         </div>
                         <div class="rounded-md border border-slate-200 bg-white p-3">
@@ -377,13 +564,16 @@ onMounted(() => loadReports());
 
                 <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                     <p class="text-xs font-semibold text-slate-500">
-                        Updating this changes only the {{ isAdmin ? 'platform' : 'provider' }} handling state.
+                        {{ selectedReport.can_update_status
+                            ? `Updating this changes only the ${isAdmin ? 'platform' : 'provider'} handling state.`
+                            : 'Platform support controls this report status. Your team can track updates here.' }}
                     </p>
                     <div class="flex flex-col-reverse gap-2 sm:flex-row">
                         <button type="button" :disabled="updatingId === selectedReport.id" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" @click="closeReport">
                             Close
                         </button>
                         <button
+                            v-if="selectedReport.can_update_status"
                             type="button"
                             :disabled="updatingId === selectedReport.id"
                             :class="[
@@ -403,4 +593,11 @@ onMounted(() => loadReports());
             </section>
         </div>
     </Teleport>
+
+    <FilePreviewModal
+        :file="previewAttachment"
+        title="Support report attachment"
+        context="Submitted with this report"
+        @close="previewAttachment = null"
+    />
 </template>

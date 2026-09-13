@@ -33,7 +33,7 @@ const applicationsPage = ref(1);
 const documentDescriptions = {
     'Latest report card or grades': 'Your latest available school grades or report card.',
     'Certificate of enrollment': 'Current proof that you are enrolled in school.',
-    'School ID': 'A clear copy or photo of your current school ID.',
+    'Recent school ID': 'A clear copy or photo of your most recent school ID.',
     'Proof of income': 'A recent income certificate, payslip, or similar household income proof.',
     'Certificate of indigency': 'A current certificate issued by your barangay or local office.',
     'Birth certificate': 'A clear copy of your birth certificate.',

@@ -232,13 +232,13 @@ class DatabaseSeeder extends Seeder
                     'requirements' => implode("\n", [
                         'Certificate of enrollment',
                         'Latest report card or grades',
-                        'School ID',
+                        'Recent school ID',
                         'Proof of income',
                     ]),
                     'post_qualification_requirements' => implode("\n", [
                         'Original certificate of enrollment',
                         'Original latest report card',
-                        'Valid school ID',
+                        'Recent school ID',
                         'Provider formal application form',
                     ]),
                     'handoff_location_name' => 'Tulay Aral Community Desk',
@@ -379,7 +379,7 @@ class DatabaseSeeder extends Seeder
                     'post_qualification_requirements' => implode("\n", [
                         'Original learner enrollment record',
                         'Latest report card or grades',
-                        'Learner school ID when available',
+                        'Recent learner school ID when available',
                         'Parent or guardian valid ID',
                         'Provider formal application form signed by the guardian',
                     ]),
@@ -447,13 +447,13 @@ class DatabaseSeeder extends Seeder
                     'requirements' => implode("\n", [
                         'Certificate of enrollment',
                         'Latest report card or grades',
-                        'School ID',
+                        'Recent school ID',
                         'Recommendation letter',
                     ]),
                     'post_qualification_requirements' => implode("\n", [
                         'Original certificate of enrollment',
                         'Original latest report card',
-                        'Valid school ID',
+                        'Recent school ID',
                         'Provider formal application form',
                     ]),
                     'handoff_location_name' => 'Bukas Kinabukasan Learning Hub',
@@ -505,7 +505,7 @@ class DatabaseSeeder extends Seeder
                         'location_address' => 'Barangay Nueva, San Pedro City, Laguna',
                         'latitude' => 14.3595000,
                         'longitude' => 121.0473000,
-                        'instructions' => 'Qualified applicants should bring a school ID, pencil, and the exam schedule notice. Arrive at least 20 minutes before the exam.',
+                        'instructions' => 'Qualified applicants should bring a recent school ID, pencil, and the exam schedule notice. Arrive at least 20 minutes before the exam.',
                     ],
                     [
                         'type' => 'interview',

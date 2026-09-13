@@ -284,6 +284,26 @@ class AuthController extends Controller
             ], 403);
         }
 
+        if ($request->user()->isManagedAccount()
+            && (! $request->user()->hasVerifiedEmail() || $request->user()->must_reset_password)) {
+            ActivityLog::record(
+                $request->user(),
+                'managed_account_setup_started',
+                "{$request->user()->name} signed in to complete staff account setup.",
+                $request,
+            );
+
+            return response()->json([
+                'message' => $request->user()->hasVerifiedEmail()
+                    ? 'Create a new password to finish setting up your staff account.'
+                    : 'Verify your email address to continue setting up your staff account.',
+                'redirect' => route('account.setup', absolute: false),
+                'email_verified' => $request->user()->hasVerifiedEmail(),
+                'must_reset_password' => (bool) $request->user()->must_reset_password,
+                'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+            ]);
+        }
+
         if ($request->user()->must_reset_password) {
             $reset = app(PasswordResetLinkService::class)->prepare($request->user(), $request);
 
@@ -341,12 +361,19 @@ class AuthController extends Controller
                 ->where('title', 'Verify your email address')
                 ->update(['read_at' => now()]);
 
+            $setupRequired = $user->isManagedAccount() && $user->must_reset_password;
             PortalNotification::create([
                 'user_id' => $user->id,
                 'type' => 'email_verified',
                 'title' => 'Email verified',
-                'message' => 'Your email address has been verified successfully.',
-                'action_url' => $user->isProvider() ? '/provider' : '/dashboard',
+                'message' => $setupRequired
+                    ? 'Your email address is verified. Create a new password to finish setting up your staff account.'
+                    : 'Your email address has been verified successfully.',
+                'action_url' => $setupRequired ? '/account/setup' : match (true) {
+                    $user->isAdmin() => '/admin',
+                    $user->isProvider() => '/provider',
+                    default => '/dashboard',
+                },
             ]);
 
             ActivityLog::record(
@@ -355,6 +382,10 @@ class AuthController extends Controller
                 "{$user->name} verified their email address.",
                 $request,
             );
+        }
+
+        if ($request->user()?->is($user)) {
+            Auth::guard('web')->setUser($user->fresh());
         }
 
         if ($request->expectsJson()) {
@@ -366,6 +397,10 @@ class AuthController extends Controller
 
         if (! $request->user()) {
             return redirect('/login?verified=1');
+        }
+
+        if ($request->user()->is($user) && $user->isManagedAccount() && $user->must_reset_password) {
+            return redirect('/account/setup?verified=1');
         }
 
         $redirect = match (true) {
@@ -407,6 +442,77 @@ class AuthController extends Controller
                 : 'Unable to send the verification email right now. Check the mail settings and try again.',
             'email_verified' => false,
             'email_verification_sent' => $emailVerificationSent,
+        ]);
+    }
+
+    public function accountSetupData(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        abort_unless($user?->isManagedAccount(), 403);
+
+        return response()->json([
+            'user' => $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+            'step' => $user->hasVerifiedEmail() ? 'password' : 'verification',
+        ]);
+    }
+
+    public function completeAccountSetup(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        abort_unless($user?->isManagedAccount(), 403);
+
+        if (! $user->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => 'Verify your email address before creating a new password.',
+            ], 422);
+        }
+
+        if (! $user->must_reset_password) {
+            return response()->json([
+                'message' => 'Your staff account setup is already complete.',
+                'redirect' => $user->isAdmin() ? '/admin' : '/provider',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        if (Hash::check($validated['password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => 'Choose a new password instead of reusing the temporary password.',
+            ]);
+        }
+
+        $user->forceFill([
+            'password' => $validated['password'],
+            'must_reset_password' => false,
+            'password_reset_required_at' => null,
+        ])->save();
+
+        DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+
+        ActivityLog::record(
+            $user,
+            'managed_account_setup_completed',
+            "{$user->name} verified their email and replaced the temporary password.",
+            $request,
+        );
+
+        PortalNotification::create([
+            'user_id' => $user->id,
+            'type' => 'password_changed',
+            'title' => 'Staff account setup complete',
+            'message' => 'Your email is verified and your temporary password has been replaced.',
+            'action_url' => $user->isAdmin() ? '/admin' : '/provider',
+        ]);
+
+        return response()->json([
+            'message' => 'Account setup complete. You can now use your staff workspace.',
+            'redirect' => $user->isAdmin() ? '/admin' : '/provider',
+            'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ]);
     }
 

@@ -24,6 +24,15 @@ class SupportReport extends Model
         'security_incident' => 'Report possible unauthorized access',
     ];
 
+    public const PROVIDER_CATEGORIES = [
+        'technical' => 'Technical problem',
+        'account' => 'Account or access concern',
+        'program' => 'Program or application workflow',
+        'service' => 'Service or payment concern',
+        'data' => 'Data or export concern',
+        'other' => 'Other platform concern',
+    ];
+
     protected $fillable = [
         'applicant_id',
         'scholarship_id',
@@ -33,6 +42,11 @@ class SupportReport extends Model
         'privacy_request_type',
         'subject',
         'description',
+        'context',
+        'attachment_path',
+        'attachment_original_name',
+        'attachment_mime_type',
+        'attachment_size',
         'status',
         'provider_status',
         'provider_resolved_by',

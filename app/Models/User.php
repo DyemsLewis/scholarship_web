@@ -443,6 +443,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'last_name' => 'Last name',
             'has_profile_photo' => 'Applicant 1x1 or 2x2 photo',
             'contact_number' => 'Contact number',
+            'account_managed_by' => 'Account manager',
             'birthdate' => 'Birthdate',
             'citizenship_status' => 'Citizenship declaration',
         ];
@@ -450,6 +451,7 @@ class User extends Authenticatable implements MustVerifyEmail
         $fields += [
             'education_level' => 'Education level',
             'school' => 'School / learning institution',
+            'enrollment_status' => 'Enrollment status',
         ];
 
         if ($requiresCoursePath) {
@@ -473,6 +475,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
         $fields += [
             'income_bracket' => 'Household income bracket',
+            'household_size' => 'Household size',
             'city' => 'City / municipality',
             'province' => 'Province',
             'region' => 'Region',
@@ -480,10 +483,10 @@ class User extends Authenticatable implements MustVerifyEmail
 
         if ($requiresGuardian) {
             $fields += [
-                'account_managed_by' => 'Account manager',
                 'guardian_name' => 'Guardian name',
                 'guardian_relationship' => 'Guardian relationship',
                 'guardian_contact' => 'Guardian contact',
+                'guardian_email' => 'Guardian email',
             ];
         }
 

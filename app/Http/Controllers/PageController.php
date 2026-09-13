@@ -64,6 +64,11 @@ class PageController extends Controller
 
     public function accountSetup(Request $request): View|RedirectResponse
     {
+        if ($request->user()?->isManagedAccount()
+            && (! $request->user()->hasVerifiedEmail() || $request->user()->must_reset_password)) {
+            return view('account-setup');
+        }
+
         if ($request->user()?->isAdmin()) {
             return redirect()->route('admin.index');
         }

@@ -6,6 +6,13 @@ import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import {
+    citiesForLocation,
+    findLocationOption,
+    findPhilippineRegion,
+    philippineRegionOptions,
+    provincesForRegion,
+} from '../support/philippineLocations';
 
 const appElement = document.getElementById('app');
 const pageSearchParams = new URLSearchParams(window.location.search);
@@ -53,6 +60,11 @@ const scheduleSaving = ref(false);
 const completingScheduleId = ref(null);
 const scheduleError = ref('');
 const scheduleForm = ref(emptyScheduleForm());
+const scheduleProvinceOptions = ref([]);
+const scheduleCityOptions = ref([]);
+const scheduleLocationError = ref('');
+const isLoadingScheduleProvinces = ref(false);
+const isLoadingScheduleCities = ref(false);
 const selectedBulkApplicationIds = ref([]);
 const bulkAdvanceTarget = ref('pass_prescreening');
 const bulkAdvancing = ref(false);
@@ -69,6 +81,7 @@ const minimumScheduleDateTime = new Date(Date.now() - new Date().getTimezoneOffs
     .slice(0, 16);
 let queueReloadTimer = null;
 let providerLoadRequestId = 0;
+let scheduleLocationRequestId = 0;
 
 const scheduleTypeCatalog = [
     { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question', help: 'Provider-managed exam schedule' },
@@ -82,6 +95,11 @@ const scheduleModeOptions = [
 ];
 const selectedScholarshipId = computed(() => selectedScholarshipContext.value?.id || initialScholarshipId);
 const hasProgramContext = computed(() => Boolean(selectedScholarshipId.value));
+const scheduleMapAddress = computed(() => {
+    const structuredAddress = composeScheduleAddress(scheduleForm.value);
+
+    return structuredAddress || scheduleForm.value.locationAddress;
+});
 const canManagePrograms = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_programs'),
@@ -453,11 +471,163 @@ function emptyScheduleForm(type = '') {
         mode: 'onsite',
         venue: '',
         locationAddress: '',
+        addressLine: '',
+        barangay: '',
+        city: '',
+        province: '',
+        region: '',
         latitude: '',
         longitude: '',
         onlineUrl: '',
         instructions: '',
     };
+}
+
+function composeScheduleAddress(form) {
+    return [form.addressLine, form.barangay, form.city, form.province, form.region]
+        .map((part) => String(part ?? '').trim())
+        .filter(Boolean)
+        .join(', ');
+}
+
+function splitScheduleAddress(value) {
+    const parts = String(value ?? '')
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
+    const fields = {
+        addressLine: '',
+        barangay: '',
+        city: '',
+        province: '',
+        region: '',
+    };
+    const region = findPhilippineRegion(parts.at(-1));
+
+    if (region) {
+        fields.region = region.value;
+        parts.pop();
+    }
+
+    if (parts.length >= 2) {
+        fields.province = parts.pop() ?? '';
+        fields.city = parts.pop() ?? '';
+    }
+
+    if (parts.length && /^(barangay|brgy\.?)(\s|$)/i.test(parts.at(-1))) {
+        fields.barangay = parts.pop() ?? '';
+    }
+
+    fields.addressLine = parts.join(', ');
+
+    return fields;
+}
+
+function syncScheduleAddress({ clearCoordinates = true } = {}) {
+    scheduleForm.value.locationAddress = composeScheduleAddress(scheduleForm.value);
+
+    if (clearCoordinates) {
+        scheduleForm.value.latitude = '';
+        scheduleForm.value.longitude = '';
+    }
+}
+
+async function loadScheduleCities(requestId = scheduleLocationRequestId) {
+    const region = findPhilippineRegion(scheduleForm.value.region);
+    const province = findLocationOption(scheduleProvinceOptions.value, scheduleForm.value.province);
+
+    scheduleCityOptions.value = [];
+
+    if (!region || !province) {
+        return;
+    }
+
+    isLoadingScheduleCities.value = true;
+
+    try {
+        const cities = await citiesForLocation(region.code, province.code);
+
+        if (requestId === scheduleLocationRequestId) {
+            scheduleCityOptions.value = cities;
+        }
+    } catch (error) {
+        if (requestId === scheduleLocationRequestId) {
+            scheduleLocationError.value = 'City and municipality options could not be loaded. Check your connection and try again.';
+        }
+    } finally {
+        if (requestId === scheduleLocationRequestId) {
+            isLoadingScheduleCities.value = false;
+        }
+    }
+}
+
+async function loadScheduleLocationHierarchy({ resetProvince = false, resetCity = false } = {}) {
+    const requestId = ++scheduleLocationRequestId;
+    const region = findPhilippineRegion(scheduleForm.value.region);
+
+    scheduleLocationError.value = '';
+    scheduleProvinceOptions.value = [];
+    scheduleCityOptions.value = [];
+
+    if (resetProvince) {
+        scheduleForm.value.province = '';
+    }
+
+    if (resetProvince || resetCity) {
+        scheduleForm.value.city = '';
+    }
+
+    if (!region) {
+        syncScheduleAddress({ clearCoordinates: false });
+        return;
+    }
+
+    scheduleForm.value.region = region.value;
+    isLoadingScheduleProvinces.value = true;
+
+    try {
+        const provinces = await provincesForRegion(region.code);
+
+        if (requestId !== scheduleLocationRequestId) {
+            return;
+        }
+
+        scheduleProvinceOptions.value = provinces;
+
+        if (region.value === 'NCR') {
+            scheduleForm.value.province = 'Metro Manila';
+        }
+
+        await loadScheduleCities(requestId);
+    } catch (error) {
+        if (requestId === scheduleLocationRequestId) {
+            scheduleLocationError.value = 'Province options could not be loaded. Check your connection and select the region again.';
+        }
+    } finally {
+        if (requestId === scheduleLocationRequestId) {
+            isLoadingScheduleProvinces.value = false;
+            syncScheduleAddress({ clearCoordinates: false });
+        }
+    }
+}
+
+function handleScheduleRegionChange() {
+    scheduleForm.value.latitude = '';
+    scheduleForm.value.longitude = '';
+    loadScheduleLocationHierarchy({ resetProvince: true });
+}
+
+function handleScheduleProvinceChange() {
+    const requestId = ++scheduleLocationRequestId;
+
+    scheduleForm.value.city = '';
+    scheduleLocationError.value = '';
+    syncScheduleAddress();
+    loadScheduleCities(requestId);
+}
+
+function handleScheduleAddressChange() {
+    syncScheduleAddress();
 }
 
 function scheduleTypeLabel(type) {
@@ -486,7 +656,7 @@ function defaultScheduleDetails(type) {
         longitude: scholarship.longitude ?? '',
         instructions: {
             exam: 'Review the provider exam instructions and arrive or sign in at least 15 minutes before the scheduled time.',
-            interview: 'Bring a valid school ID and be ready to discuss your application and scholarship goals.',
+            interview: 'Bring your recent school ID and be ready to discuss your application and scholarship goals.',
         }[type] ?? '',
     };
 }
@@ -494,6 +664,8 @@ function defaultScheduleDetails(type) {
 function openScheduleEditor(type) {
     const existing = scheduleEvent(type);
     const defaults = defaultScheduleDetails(type);
+    const locationAddress = existing?.location_address ?? defaults.locationAddress ?? '';
+    const addressFields = splitScheduleAddress(locationAddress);
 
     scheduleForm.value = existing
         ? {
@@ -502,29 +674,55 @@ function openScheduleEditor(type) {
             scheduledAt: existing.scheduled_at ?? '',
             mode: existing.mode ?? 'onsite',
             venue: existing.venue ?? '',
-            locationAddress: existing.location_address ?? '',
+            locationAddress,
+            ...addressFields,
             latitude: existing.latitude ?? '',
             longitude: existing.longitude ?? '',
             onlineUrl: existing.online_url ?? '',
             instructions: existing.instructions ?? '',
         }
-        : { ...emptyScheduleForm(type), ...defaults, type };
+        : { ...emptyScheduleForm(type), ...defaults, ...addressFields, type };
     scheduleEditorType.value = type;
     scheduleError.value = '';
+    loadScheduleLocationHierarchy();
 }
 
 function closeScheduleEditor() {
     scheduleEditorType.value = '';
     scheduleForm.value = emptyScheduleForm();
+    scheduleProvinceOptions.value = [];
+    scheduleCityOptions.value = [];
+    scheduleLocationError.value = '';
 }
 
 function handleSchedulePinPicked(location) {
+    const address = location.address ?? {};
+    const resolvedRegion = findPhilippineRegion(address.region || address.state || scheduleForm.value.region);
+
     scheduleForm.value.latitude = location.latitude;
     scheduleForm.value.longitude = location.longitude;
-
-    if (location.displayName) {
-        scheduleForm.value.locationAddress = location.displayName;
-    }
+    scheduleForm.value.addressLine = [address.house_number, address.road]
+        .filter(Boolean)
+        .join(' ') || address.building || scheduleForm.value.addressLine;
+    scheduleForm.value.barangay = address.neighbourhood
+        || address.suburb
+        || address.quarter
+        || address.village
+        || scheduleForm.value.barangay;
+    scheduleForm.value.city = address.city
+        || address.municipality
+        || address.town
+        || address.city_district
+        || scheduleForm.value.city;
+    scheduleForm.value.province = address.province
+        || address.state_district
+        || address.county
+        || scheduleForm.value.province;
+    scheduleForm.value.region = resolvedRegion?.value || scheduleForm.value.region;
+    scheduleForm.value.locationAddress = composeScheduleAddress(scheduleForm.value)
+        || location.displayName
+        || scheduleForm.value.locationAddress;
+    loadScheduleLocationHierarchy();
 }
 
 async function saveProgramSchedule() {
@@ -543,7 +741,7 @@ async function saveProgramSchedule() {
             scheduled_at: scheduleForm.value.scheduledAt,
             mode: scheduleForm.value.mode,
             venue: scheduleForm.value.venue || null,
-            location_address: scheduleForm.value.locationAddress || null,
+            location_address: scheduleMapAddress.value || null,
             latitude: scheduleForm.value.latitude || null,
             longitude: scheduleForm.value.longitude || null,
             online_url: scheduleForm.value.onlineUrl || null,
@@ -906,19 +1104,48 @@ onMounted(loadProviderData);
                                 </div>
                             </div>
 
-                            <div v-if="['onsite', 'hybrid'].includes(scheduleForm.mode)" class="mt-4 grid gap-4 md:grid-cols-2">
-                                <div>
+                            <div v-if="['onsite', 'hybrid'].includes(scheduleForm.mode)" class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                                <div class="md:col-span-2 xl:col-span-4">
                                     <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Event venue</label>
                                     <input v-model="scheduleForm.venue" type="text" maxlength="500" required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
                                 </div>
                                 <div>
-                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Event address</label>
-                                    <input v-model="scheduleForm.locationAddress" type="text" maxlength="1000" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
-                                    <p class="mt-2 text-xs leading-5 text-slate-500">This can differ from the provider office or program address.</p>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Region</label>
+                                    <select v-model="scheduleForm.region" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600" @change="handleScheduleRegionChange">
+                                        <option value="">Select region</option>
+                                        <option v-if="scheduleForm.region && !findPhilippineRegion(scheduleForm.region)" :value="scheduleForm.region">{{ scheduleForm.region }}</option>
+                                        <option v-for="region in philippineRegionOptions" :key="region.code" :value="region.value">{{ region.label }}</option>
+                                    </select>
                                 </div>
-                                <div class="overflow-hidden rounded-md md:col-span-2">
+                                <div>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Province</label>
+                                    <select v-model="scheduleForm.province" :disabled="!scheduleForm.region || isLoadingScheduleProvinces" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600 disabled:bg-slate-100" @change="handleScheduleProvinceChange">
+                                        <option value="">{{ isLoadingScheduleProvinces ? 'Loading provinces...' : 'Select province' }}</option>
+                                        <option v-if="scheduleForm.province && !findLocationOption(scheduleProvinceOptions, scheduleForm.province)" :value="scheduleForm.province">{{ scheduleForm.province }}</option>
+                                        <option v-for="province in scheduleProvinceOptions" :key="province.code" :value="province.value">{{ province.label }}</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">City / municipality</label>
+                                    <select v-model="scheduleForm.city" :disabled="!scheduleForm.province || isLoadingScheduleCities" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600 disabled:bg-slate-100" @change="handleScheduleAddressChange">
+                                        <option value="">{{ isLoadingScheduleCities ? 'Loading cities...' : 'Select city or municipality' }}</option>
+                                        <option v-if="scheduleForm.city && !findLocationOption(scheduleCityOptions, scheduleForm.city)" :value="scheduleForm.city">{{ scheduleForm.city }}</option>
+                                        <option v-for="city in scheduleCityOptions" :key="city.code" :value="city.value">{{ city.label }}</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Barangay</label>
+                                    <input v-model="scheduleForm.barangay" type="text" maxlength="255" placeholder="Barangay" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600" @input="handleScheduleAddressChange">
+                                </div>
+                                <div class="md:col-span-2 xl:col-span-4">
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Street / building address</label>
+                                    <input v-model="scheduleForm.addressLine" type="text" maxlength="500" placeholder="Building, house number, and street" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600" @input="handleScheduleAddressChange">
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">Use the exact activity location. It can differ from the provider office or program address.</p>
+                                </div>
+                                <p v-if="scheduleLocationError" class="text-xs font-semibold text-rose-600 md:col-span-2 xl:col-span-4">{{ scheduleLocationError }}</p>
+                                <div class="overflow-hidden rounded-md md:col-span-2 xl:col-span-4">
                                     <LeafletMapPreview
-                                        :address="scheduleForm.locationAddress"
+                                        :address="scheduleMapAddress"
                                         :latitude="scheduleForm.latitude"
                                         :longitude="scheduleForm.longitude"
                                         :title="scheduleForm.venue || 'Program activity location'"
@@ -1089,7 +1316,8 @@ onMounted(loadProviderData);
                                     :href="exportApplicationsUrl"
                                     class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                                 >
-                                    Export applicants
+                                    <i class="fa-solid fa-file-excel mr-1.5" aria-hidden="true"></i>
+                                    Export Excel
                                 </a>
                             </div>
                         </div>

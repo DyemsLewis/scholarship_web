@@ -25,7 +25,6 @@ use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationDecisionReason;
 use App\Support\ApplicationSchedulePayload;
-use App\Support\CsvExport;
 use App\Support\LearnerProgramPath;
 use App\Support\PreScreeningHandoffRecord;
 use App\Support\ReviewRubric;
@@ -33,6 +32,7 @@ use App\Support\ScholarshipEligibilityCondition;
 use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
+use App\Support\XlsxExport;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -264,6 +264,8 @@ class ProviderController extends Controller
                 'account_title' => $validated['account_title'],
                 'permissions' => array_values(array_unique($validated['permissions'])),
                 'password' => $validated['password'],
+                'must_reset_password' => true,
+                'password_reset_required_at' => now(),
             ]);
 
             $ownerProfile = $owner->providerProfile;
@@ -304,13 +306,43 @@ class ProviderController extends Controller
             'user_id' => $account->id,
             'type' => 'staff_account_created',
             'title' => 'Your provider staff account is ready',
-            'message' => "Your {$providerName} {$teamRole} account has been created. Username: {$account->username}. Sign in using the temporary password provided to you. You can update your email, username, and contact details in Profile. Use Forgot Password if you need to change your password.",
+            'message' => "Your {$providerName} {$teamRole} account has been created. Username: {$account->username}. Sign in using the temporary password, verify your email, and create a new password before entering the workspace.",
             'action_url' => '/login',
             'deduplication_key' => "staff_account_created:{$account->id}",
         ]);
 
+        $emailVerificationSent = true;
+
+        try {
+            $account->sendEmailVerificationNotification();
+        } catch (Throwable $error) {
+            $emailVerificationSent = false;
+            ActivityLog::record(
+                $account,
+                'email_verification_email_failed',
+                "Email verification link could not be sent to {$account->email}.",
+                $request,
+                ['error' => $error->getMessage()],
+            );
+        }
+
+        PortalNotification::updateOrCreate([
+            'user_id' => $account->id,
+            'type' => 'email_verification',
+            'title' => 'Verify your email address',
+        ], [
+            'message' => $emailVerificationSent
+                ? 'A verification link was sent to your email. Verify it before replacing your temporary password.'
+                : 'Your email is not verified. Resend the verification link from the account setup page.',
+            'action_url' => '/account/setup',
+            'read_at' => null,
+        ]);
+
         return response()->json([
-            'message' => 'Team account created. A welcome email was queued; share the temporary password securely.',
+            'message' => $emailVerificationSent
+                ? 'Team account created. Share the temporary password securely; a verification email was sent to the team member.'
+                : 'Team account created, but the verification email could not be sent. The team member can resend it after signing in.',
+            'email_verification_sent' => $emailVerificationSent,
             'account' => $this->providerTeamAccountPayload($account->fresh('providerProfile')),
         ], 201);
     }
@@ -1101,7 +1133,7 @@ class ProviderController extends Controller
             ->withAvg('applications as average_dss_score', 'dss_score')
             ->latest()
             ->get();
-        $reviewers = $this->providerApplicationReviewers($providerId);
+        $reviewers = $this->providerApplicationReviewers($providerId, $request->user());
         $applicationsBase = ScholarshipApplication::query()
             ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId));
 
@@ -2067,8 +2099,15 @@ class ProviderController extends Controller
             'assigned_reviewer_id' => ['nullable', 'integer'],
         ]);
         $reviewerId = $validated['assigned_reviewer_id'] ?? null;
+
+        if ($request->user()->isManagedAccount() && (int) $reviewerId === $providerId) {
+            throw ValidationException::withMessages([
+                'assigned_reviewer_id' => 'Team members cannot assign an application to the provider owner or representative.',
+            ]);
+        }
+
         $reviewer = $reviewerId
-            ? $this->providerApplicationReviewers($providerId)->firstWhere('id', $reviewerId)
+            ? $this->providerApplicationReviewers($providerId, $request->user())->firstWhere('id', $reviewerId)
             : null;
 
         if ($reviewerId && ! $reviewer) {
@@ -3119,55 +3158,107 @@ class ProviderController extends Controller
         $providerId = $provider->providerOrganizationId();
         $selectedScholarship = $this->requestedProviderScholarship($request);
         $filename = $selectedScholarship
-            ? "provider-applications-program-{$selectedScholarship->id}.csv"
-            : 'provider-applications.csv';
+            ? "provider-applications-program-{$selectedScholarship->id}.xlsx"
+            : 'provider-applications.xlsx';
+        $tempPath = tempnam(sys_get_temp_dir(), 'provider-applications-');
 
-        return response()->streamDownload(function () use ($providerId, $selectedScholarship) {
-            $handle = fopen('php://output', 'w');
-            CsvExport::writeRow($handle, ['ID', 'Scholarship', 'Applicant', 'Email', 'Contact Number', 'Status', 'DSS Score', 'DSS Recommendation', 'Eligibility Score', 'Decision Reason', 'Awarded Amount', 'Distribution Date', 'Distribution Instructions', 'Outcome Date', 'Outcome Notes', 'Readiness %', 'Submitted At', 'Documents Confirmed', 'Uploaded Documents', 'Applicant Notes', 'Review Notes']);
+        abort_if($tempPath === false, 500, 'Unable to prepare the applicant export.');
 
-            $query = ScholarshipApplication::query()
-                ->with(['applicant.studentProfile', 'documents', 'scholarship'])
-                ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId));
+        $headers = [
+            'Application ID',
+            'Scholarship',
+            'Applicant',
+            'Email',
+            'Contact Number',
+            'Current Stage',
+            'Final Outcome',
+            'Match Score',
+            'Match Recommendation',
+            'Document Readiness %',
+            'Documents Requiring Action',
+            'Missing Required Documents',
+            'Decision Reason',
+            'Assigned Reviewer',
+            'Waitlist Position',
+            'Submitted At',
+            'Review Notes',
+        ];
+        $query = ScholarshipApplication::query()
+            ->with(['applicant.studentProfile', 'documents', 'assignedReviewer', 'reviewer', 'scholarship'])
+            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId));
 
-            if ($selectedScholarship) {
-                $query->where('scholarship_id', $selectedScholarship->id);
-            }
+        if ($selectedScholarship) {
+            $query->where('scholarship_id', $selectedScholarship->id);
+        }
 
-            $query->orderBy('id')
-                ->chunk(200, function ($applications) use ($handle) {
-                    foreach ($applications as $application) {
-                        app(DecisionSupportService::class)->syncApplication($application);
-                        $readiness = $this->documentReadiness($application);
+        $owner = $provider->providerOrganizationOwner();
+        $owner->loadMissing('providerProfile');
+        $providerName = $owner->providerProfile?->provider_name ?: $owner->name;
+        $scope = $selectedScholarship?->title ?: 'All scholarship programs';
+        $subtitle = "Provider: {$providerName} | Scope: {$scope} | Exported: ".now()->format('M d, Y h:i A');
 
-                        CsvExport::writeRow($handle, [
-                            $application->id,
-                            $application->scholarship?->title,
-                            $application->applicant?->name,
-                            $application->applicant?->email,
-                            $application->applicant?->contact_number,
-                            $application->status,
-                            $application->dss_score,
-                            $application->dss_recommendation,
-                            $application->eligibility_score,
-                            $application->decision_reason,
-                            $application->awarded_amount,
-                            $application->distribution_scheduled_for?->format('Y-m-d'),
-                            $application->distribution_instructions,
-                            $application->outcome_at?->format('Y-m-d'),
-                            $application->outcome_notes,
-                            $readiness['percent'],
-                            $application->submitted_at?->format('Y-m-d H:i:s'),
-                            implode('; ', $application->document_checklist ?? []),
-                            $application->documents->count().' uploaded',
-                            $application->notes,
-                            $application->review_notes,
-                        ]);
-                    }
-                });
+        try {
+            XlsxExport::create(
+                $tempPath,
+                'Applicant Review Report',
+                $subtitle,
+                $headers,
+                $query->orderBy('id')->lazyById(200)->map(
+                    fn (ScholarshipApplication $application): array => $this->providerApplicationExportRow($application),
+                ),
+            );
+        } catch (Throwable $error) {
+            @unlink($tempPath);
+            throw $error;
+        }
 
-            fclose($handle);
-        }, $filename, ['Content-Type' => 'text/csv']);
+        return response()->download($tempPath, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    private function providerApplicationExportRow(ScholarshipApplication $application): array
+    {
+        $application->loadMissing(['applicant.studentProfile', 'documents', 'assignedReviewer', 'reviewer']);
+        $dss = app(DecisionSupportService::class)->syncApplication($application, 'provider_export');
+        $workflow = $this->workflowService->payload($application);
+        $readiness = $this->documentReadiness($application);
+        $documents = $application->documents->sortBy('id');
+        $documentsRequiringAction = $documents
+            ->filter(fn (ApplicationDocument $document): bool => $document->status !== 'accepted')
+            ->map(fn (ApplicationDocument $document): string => "{$document->document_name} ({$this->documentStatusLabel($document->status)})")
+            ->values()
+            ->implode('; ');
+
+        return [
+            $application->id,
+            $application->scholarship?->title,
+            $application->applicant?->name,
+            $application->applicant?->email,
+            $application->applicant?->contact_number,
+            $workflow['current_stage_label'] ?? null,
+            $workflow['final_outcome_label'] ?? 'Not decided',
+            $dss['score'] ?? $application->dss_score,
+            $dss['label'] ?? Str::headline((string) $application->dss_recommendation),
+            $readiness['accepted_percent'] ?? 0,
+            $documentsRequiringAction,
+            implode('; ', $readiness['missing'] ?? []),
+            ApplicationDecisionReason::label($application->decision_reason),
+            $application->assignedReviewer?->name ?? $application->reviewer?->name,
+            $application->waitlist_position,
+            $application->submitted_at?->format('Y-m-d H:i:s'),
+            $application->review_notes,
+        ];
+    }
+
+    private function documentStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'accepted' => 'Accepted',
+            'rejected' => 'Rejected',
+            'needs_replacement' => 'Needs replacement',
+            default => 'Pending review',
+        };
     }
 
     public function scholarships(Request $request): JsonResponse
@@ -4997,7 +5088,7 @@ class ProviderController extends Controller
         ];
     }
 
-    private function providerApplicationReviewers(int $providerId)
+    private function providerApplicationReviewers(int $providerId, ?User $assigner = null)
     {
         return User::query()
             ->with(['providerProfile', 'parentAccount.providerProfile'])
@@ -5009,7 +5100,8 @@ class ProviderController extends Controller
             ->get()
             ->filter(fn (User $reviewer) => $reviewer->isActive()
                 && $reviewer->providerOrganizationOwner()->isActive()
-                && $reviewer->hasPortalPermission('review_applications'))
+                && $reviewer->hasPortalPermission('review_applications')
+                && (! $assigner?->isManagedAccount() || $reviewer->id !== $providerId))
             ->sortBy(fn (User $reviewer) => sprintf(
                 '%d-%s',
                 $reviewer->id === $providerId ? 0 : 1,

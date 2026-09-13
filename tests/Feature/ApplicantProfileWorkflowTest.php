@@ -19,6 +19,7 @@ class ApplicantProfileWorkflowTest extends TestCase
             'birthdate' => '2012-05-10',
             'education_level' => 'college',
             'school' => 'Sample University',
+            'enrollment_status' => 'Enrolled',
             'course_or_strand' => 'BS Information Technology',
             'year_level' => '1st year',
             'academic_year' => '2026-2027',
@@ -26,6 +27,7 @@ class ApplicantProfileWorkflowTest extends TestCase
             'gwa' => 90,
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',
+            'household_size' => 5,
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',
@@ -46,6 +48,7 @@ class ApplicantProfileWorkflowTest extends TestCase
             'guardian_name' => 'Maria Applicant',
             'guardian_relationship' => 'Mother',
             'guardian_contact' => '09171234567',
+            'guardian_email' => 'guardian@example.test',
         ]);
 
         $this->assertContains('has_profile_photo', collect($applicant->fresh()->applicantProfileReadiness()['missing'])->pluck('key'));
@@ -70,6 +73,30 @@ class ApplicantProfileWorkflowTest extends TestCase
             ->patchJson('/dashboard/profile', ['birthdate' => now()->subYears(101)->toDateString()])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('birthdate');
+    }
+
+    public function test_account_household_and_enrollment_context_are_required_for_profile_readiness(): void
+    {
+        $applicant = $this->completeAdultApplicant();
+        $applicant->studentProfile()->update([
+            'account_managed_by' => null,
+            'enrollment_status' => null,
+            'income_bracket' => null,
+            'household_size' => null,
+        ]);
+
+        $missingFields = collect($applicant->fresh()->applicantProfileReadiness()['missing'])->pluck('key');
+
+        $this->assertContains('account_managed_by', $missingFields);
+        $this->assertContains('enrollment_status', $missingFields);
+        $this->assertContains('income_bracket', $missingFields);
+        $this->assertContains('household_size', $missingFields);
+        $this->assertNotContains('guardian_email', $missingFields);
+
+        $applicant->studentProfile()->update(['account_managed_by' => 'parent_guardian']);
+        $guardianManagedMissingFields = collect($applicant->fresh()->applicantProfileReadiness()['missing'])->pluck('key');
+
+        $this->assertContains('guardian_email', $guardianManagedMissingFields);
     }
 
     public function test_profile_endpoint_returns_catalog_matches_and_saved_preferences(): void
@@ -120,6 +147,28 @@ class ApplicantProfileWorkflowTest extends TestCase
         $this->assertTrue(collect($scholarships)->every(
             fn (array $scholarship): bool => $scholarship['eligibility_match']['is_eligible'] === true,
         ));
+    }
+
+    public function test_new_applicant_recommendations_are_not_ready_before_completing_profile(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $scholarship = $this->publishedScholarship($provider, 'Open Opportunity', 'Financial assistance');
+
+        $dashboard = $this->actingAs($applicant)
+            ->getJson('/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('profile_readiness.complete', false)
+            ->assertJsonPath('recommendations_ready', false);
+
+        $catalogIds = collect($this->actingAs($applicant)
+            ->getJson('/dashboard/scholarships/data')
+            ->assertOk()
+            ->json('scholarships'))
+            ->pluck('id');
+
+        $this->assertTrue($catalogIds->contains($scholarship->id));
+        $this->assertTrue(collect($dashboard->json('scholarships'))->pluck('id')->contains($scholarship->id));
     }
 
     public function test_dashboard_returns_only_unread_action_alerts(): void
@@ -254,8 +303,10 @@ class ApplicantProfileWorkflowTest extends TestCase
         $applicant = User::factory()->create();
         $applicant->studentProfile()->update([
             'birthdate' => '2000-05-10',
+            'account_managed_by' => 'learner',
             'education_level' => 'college',
             'school' => 'Sample University',
+            'enrollment_status' => 'Enrolled',
             'course_or_strand' => 'BS Information Technology',
             'year_level' => '1st year',
             'academic_year' => '2026-2027',
@@ -263,6 +314,7 @@ class ApplicantProfileWorkflowTest extends TestCase
             'gwa' => 90,
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',
+            'household_size' => 4,
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',

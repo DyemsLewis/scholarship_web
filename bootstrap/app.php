@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureManagedAccountSetupIsComplete;
 use App\Http\Middleware\EnsureProviderIsApproved;
 use App\Http\Middleware\EnsureUserHasPermission;
 use App\Http\Middleware\EnsureUserIsAdmin;
@@ -25,6 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             EnsureAccountIsActive::class,
+            EnsureManagedAccountSetupIsComplete::class,
         ]);
 
         $middleware->alias([

@@ -6,12 +6,100 @@ use App\Models\Scholarship;
 use App\Models\SupportReport;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class SupportReportRoutingTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_provider_can_report_a_platform_problem_and_track_admin_resolution(): void
+    {
+        Mail::fake();
+        Storage::fake('local');
+        $provider = User::factory()->create(['role' => 'provider']);
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Community Learning Grant',
+            'description' => 'A program used to test provider support reports.',
+            'status' => 'published',
+        ]);
+
+        $response = $this->actingAs($provider)
+            ->post('/provider/reports', [
+                'category' => 'technical',
+                'scholarship_id' => $scholarship->id,
+                'context' => 'Applications page',
+                'subject' => 'Applicant table will not load',
+                'description' => 'The applications table remains blank after refreshing the page.',
+                'attachment_file' => UploadedFile::fake()->image('applications-error.png'),
+            ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('report.submitted_by_provider', true)
+            ->assertJsonPath('report.can_update_status', false)
+            ->assertJsonPath('report.sent_to', 'Platform support');
+
+        $report = SupportReport::query()->firstOrFail();
+
+        $this->assertDatabaseHas('support_reports', [
+            'id' => $report->id,
+            'applicant_id' => $provider->id,
+            'provider_id' => $provider->id,
+            'scholarship_id' => $scholarship->id,
+            'assigned_role' => 'admin',
+            'admin_status' => 'open',
+            'provider_status' => 'not_required',
+            'context' => 'Applications page',
+        ]);
+        Storage::disk('local')->assertExists($report->attachment_path);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $admin->id,
+            'type' => 'support_report',
+            'title' => 'New provider support report',
+        ]);
+
+        $this->actingAs($provider)
+            ->getJson('/provider/reports/data')
+            ->assertOk()
+            ->assertJsonPath('reports.0.id', $report->id)
+            ->assertJsonPath('reports.0.attachment.original_name', 'applications-error.png');
+
+        $this->actingAs($otherProvider)
+            ->getJson('/provider/reports/data')
+            ->assertOk()
+            ->assertJsonCount(0, 'reports');
+
+        $this->actingAs($provider)
+            ->get("/provider/reports/{$report->id}/attachment")
+            ->assertOk();
+        $this->actingAs($otherProvider)
+            ->get("/provider/reports/{$report->id}/attachment")
+            ->assertForbidden();
+        $this->actingAs($admin)
+            ->get("/admin/reports/{$report->id}/attachment")
+            ->assertOk();
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/reports/{$report->id}/status", ['status' => 'resolved'])
+            ->assertForbidden();
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/reports/{$report->id}/status", ['status' => 'resolved'])
+            ->assertOk()
+            ->assertJsonPath('report.overall_status', 'resolved');
+
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $provider->id,
+            'type' => 'support_report_status',
+            'action_url' => '/provider/reports',
+        ]);
+    }
 
     public function test_program_report_is_shared_with_the_program_provider_and_admin(): void
     {

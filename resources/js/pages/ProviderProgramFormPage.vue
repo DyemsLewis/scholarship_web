@@ -314,7 +314,7 @@ const documentRequirementOptions = [
     'Certificate of enrollment',
     'Latest report card or grades',
     'Transcript of records',
-    'School ID',
+    'Recent school ID',
     'Birth certificate',
     'Good moral certificate',
     'Barangay certificate of residency',
@@ -337,7 +337,7 @@ const targetApplicantPresets = [
         years: 'Any grade or year level',
         locations: 'Nationwide',
         eligibility: 'Open to Filipino learners who meet the document, academic, location, and income requirements listed by the provider.',
-        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'School ID'],
+        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'Recent school ID'],
     },
     {
         key: 'early_basic',
@@ -363,7 +363,7 @@ const targetApplicantPresets = [
         years: 'Grade 7\nGrade 8\nGrade 9\nGrade 10',
         locations: 'Nationwide',
         eligibility: 'Open to Junior High School learners who meet the provider requirements and maintain the required general average.',
-        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'School ID', 'Proof of income'],
+        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'Recent school ID', 'Proof of income'],
     },
     {
         key: 'senior_high',
@@ -376,7 +376,7 @@ const targetApplicantPresets = [
         years: 'Grade 11\nGrade 12',
         locations: 'Nationwide',
         eligibility: 'Open to Senior High School learners in eligible tracks or strands who meet the academic and document requirements.',
-        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'School ID', 'Proof of income'],
+        requirements: ['Certificate of enrollment', 'Latest report card or grades', 'Recent school ID', 'Proof of income'],
     },
     {
         key: 'college',
@@ -389,7 +389,7 @@ const targetApplicantPresets = [
         years: '1st year\n2nd year\n3rd year\n4th year\n5th year\nGraduating',
         locations: 'Nationwide',
         eligibility: 'Open to college or university students enrolled in eligible degree programs and year levels.',
-        requirements: ['Certificate of enrollment', 'Transcript of records', 'School ID', 'Proof of income'],
+        requirements: ['Certificate of enrollment', 'Transcript of records', 'Recent school ID', 'Proof of income'],
     },
     {
         key: 'tvet',
@@ -402,7 +402,7 @@ const targetApplicantPresets = [
         years: 'NC I\nNC II\nNC III\nNC IV\nFirst term\nSecond term',
         locations: 'Nationwide',
         eligibility: 'Open to TVET or vocational learners enrolled in eligible training programs or qualifications.',
-        requirements: ['Certificate of enrollment', 'School ID', 'Proof of income', 'Good moral certificate'],
+        requirements: ['Certificate of enrollment', 'Recent school ID', 'Proof of income', 'Good moral certificate'],
     },
     {
         key: 'als',
@@ -1150,7 +1150,7 @@ function emptyScholarshipForm() {
         requirements: [
             'Certificate of enrollment',
             'Latest report card or grades',
-            'School ID',
+            'Recent school ID',
             'Proof of income',
         ],
         customRequirements: '',
@@ -1817,7 +1817,7 @@ function selectCommonRequirements() {
     scholarshipForm.value.requirements = [
         'Certificate of enrollment',
         'Latest report card or grades',
-        'School ID',
+        'Recent school ID',
         'Proof of income',
     ];
     scholarshipForm.value.optionalRequirements = [];

@@ -223,7 +223,7 @@ const profileSections = [
         impact: 'Identity, contact, and household context.',
         required: true,
         fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'has_profile_photo', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'household_size', 'support_needs', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
-        requiredFields: ['first_name', 'last_name', 'has_profile_photo', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'guardian_name', 'guardian_relationship', 'guardian_contact'],
+        requiredFields: ['first_name', 'last_name', 'has_profile_photo', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'household_size', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'],
     },
     {
         id: 'academic',
@@ -233,7 +233,7 @@ const profileSections = [
         impact: 'Matching details.',
         required: true,
         fields: ['education_level', 'school', 'school_type', 'learner_reference_number', 'course_or_strand', 'year_level', 'enrollment_status', 'academic_year', 'academic_term', 'grading_scale', 'gwa'],
-        requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'academic_year', 'academic_term', 'grading_scale', 'gwa'],
+        requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'enrollment_status', 'academic_year', 'academic_term', 'grading_scale', 'gwa'],
     },
     {
         id: 'background',
@@ -775,7 +775,7 @@ function isFieldRelevant(field) {
 
 function isFieldRequired(field) {
     if (field === 'account_managed_by') {
-        return needsGuardianContext.value;
+        return true;
     }
 
     if (field === 'course_or_strand') {
@@ -794,11 +794,11 @@ function isFieldRequired(field) {
         return requiresGrades.value;
     }
 
-    if (['guardian_name', 'guardian_relationship', 'guardian_contact'].includes(field)) {
+    if (['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'].includes(field)) {
         return needsGuardianContext.value;
     }
 
-    if (['guardian_email', 'guardian_is_account_owner'].includes(field)) {
+    if (field === 'guardian_is_account_owner') {
         return false;
     }
 
@@ -2547,9 +2547,9 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <div>
                                             <label :class="labelClass" for="profile-account-manager">
                                                 Who manages this account?
-                                                <span class="font-normal text-slate-400">{{ needsGuardianContext ? '(required)' : '(optional)' }}</span>
+                                                <span class="font-normal text-slate-400">(required)</span>
                                             </label>
-                                            <select id="profile-account-manager" v-model="form.account_managed_by" :class="inputClass">
+                                            <select id="profile-account-manager" v-model="form.account_managed_by" required :class="inputClass">
                                                 <option value="">Select account manager</option>
                                                 <option v-for="option in accountManagerOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                                             </select>
@@ -2563,20 +2563,21 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                         <div class="grid gap-4 sm:grid-cols-2">
                                             <div>
-                                                <label :class="labelClass" for="profile-income">Household income bracket</label>
-                                                <select id="profile-income" v-model="form.income_bracket" :class="inputClass">
+                                                <label :class="labelClass" for="profile-income">Household income bracket <span class="font-normal text-slate-400">(required)</span></label>
+                                                <select id="profile-income" v-model="form.income_bracket" required :class="inputClass">
                                                     <option value="">Select income bracket</option>
                                                     <option v-for="option in incomeOptions" :key="option" :value="option">{{ option }}</option>
                                                 </select>
                                             </div>
                                             <div>
-                                                <label :class="labelClass" for="profile-household-size">Household size <span class="font-normal text-slate-400">(optional)</span></label>
+                                                <label :class="labelClass" for="profile-household-size">Household size <span class="font-normal text-slate-400">(required)</span></label>
                                                 <input
                                                     id="profile-household-size"
                                                     v-model="form.household_size"
                                                     type="number"
                                                     min="1"
                                                     max="30"
+                                                    required
                                                     placeholder="Number of people"
                                                     :class="inputClass"
                                                 >
@@ -2612,8 +2613,8 @@ watch(() => form.value.grading_scale, (scale) => {
                                             <input id="profile-guardian-contact" :value="form.guardian_contact" maxlength="20" placeholder="09XX XXX XXXX" :class="inputClass" @input="handlePhoneInput('guardian_contact', $event)">
                                         </div>
                                         <div>
-                                            <label :class="labelClass" for="profile-guardian-email">Guardian email <span class="font-normal text-slate-400">(optional)</span></label>
-                                            <input id="profile-guardian-email" v-model="form.guardian_email" type="email" placeholder="guardian@example.com" :class="inputClass">
+                                            <label :class="labelClass" for="profile-guardian-email">Guardian email <span v-if="needsGuardianContext" class="font-normal text-slate-400">(required)</span></label>
+                                            <input id="profile-guardian-email" v-model="form.guardian_email" type="email" :required="needsGuardianContext" placeholder="guardian@example.com" :class="inputClass">
                                         </div>
                                     </div>
                                     <label class="mt-4 flex cursor-pointer items-start gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600">
@@ -2719,8 +2720,8 @@ watch(() => form.value.grading_scale, (scale) => {
                                             <input id="profile-school" v-model="form.school" placeholder="School or learning center" :class="inputClass">
                                         </div>
                                         <div>
-                                            <label :class="labelClass" for="profile-enrollment">Enrollment status <span class="font-normal text-slate-400">(optional)</span></label>
-                                            <select id="profile-enrollment" v-model="form.enrollment_status" :class="inputClass">
+                                            <label :class="labelClass" for="profile-enrollment">Enrollment status <span class="font-normal text-slate-400">(required)</span></label>
+                                            <select id="profile-enrollment" v-model="form.enrollment_status" required :class="inputClass">
                                                 <option value="">Select status</option>
                                                 <option v-for="option in enrollmentOptions" :key="option" :value="option">{{ option }}</option>
                                             </select>
@@ -3223,7 +3224,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </li>
                                         <li class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
                                             <i class="fa-solid fa-school mt-1 text-slate-700" aria-hidden="true"></i>
-                                            <span>Enrollment certificate, school ID, admission letter, or learning-center record.</span>
+                                            <span>Enrollment certificate, recent school ID, admission letter, or learning-center record.</span>
                                         </li>
                                         <li class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
                                             <i class="fa-solid fa-shield-halved mt-1 text-emerald-700" aria-hidden="true"></i>

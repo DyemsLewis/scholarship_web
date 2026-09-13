@@ -23,6 +23,8 @@ Route::post('/webhooks/paymongo', [BillingController::class, 'webhook'])->middle
 Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])->middleware(['signed', 'throttle:6,1'])->name('verification.verify');
 Route::post('/email/verification-notification', [AuthController::class, 'resendVerificationEmail'])->middleware(['auth', 'throttle:6,1'])->name('verification.send');
 Route::get('/account/setup', [PageController::class, 'accountSetup'])->middleware('auth')->name('account.setup');
+Route::get('/account/setup/data', [AuthController::class, 'accountSetupData'])->middleware('auth')->name('account.setup.data');
+Route::post('/account/setup/password', [AuthController::class, 'completeAccountSetup'])->middleware(['auth', 'throttle:6,1'])->name('account.setup.password');
 Route::get('/dashboard', [ApplicantDashboardController::class, 'index'])->middleware('auth')->name('dashboard');
 Route::get('/dashboard/scholarships', [ApplicantDashboardController::class, 'scholarships'])->middleware('auth')->name('dashboard.scholarships');
 Route::get('/dashboard/scholarships/data', [ApplicantDashboardController::class, 'scholarshipsData'])->middleware('auth')->name('dashboard.scholarships.data');
@@ -89,6 +91,7 @@ Route::middleware(['auth', 'admin'])
         Route::get('/logs', [AdminController::class, 'logs'])->middleware('permission:view_logs')->name('logs');
         Route::get('/reports', [SupportReportController::class, 'adminPage'])->middleware('permission:manage_reports')->name('reports');
         Route::get('/reports/data', [SupportReportController::class, 'adminData'])->middleware('permission:manage_reports')->name('reports.data');
+        Route::get('/reports/{report}/attachment', [SupportReportController::class, 'viewAttachment'])->middleware('permission:manage_reports')->name('reports.attachment');
         Route::patch('/reports/{report}/status', [SupportReportController::class, 'updateStatus'])->middleware('permission:manage_reports')->name('reports.status');
         Route::get('/billing', [BillingController::class, 'adminPage'])->middleware('permission:manage_billing')->name('billing');
         Route::get('/billing/data', [BillingController::class, 'adminData'])->middleware('permission:manage_billing')->name('billing.data');
@@ -159,6 +162,8 @@ Route::middleware(['auth', 'provider'])
         Route::post('/billing/{purchase}/reopen', [BillingController::class, 'reopenProviderService'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.reopen');
         Route::get('/reports', [SupportReportController::class, 'providerPage'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports');
         Route::get('/reports/data', [SupportReportController::class, 'providerData'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.data');
+        Route::post('/reports', [SupportReportController::class, 'storeProvider'])->middleware(['permission:manage_reports', 'provider.approved', 'throttle:6,1'])->name('reports.store');
+        Route::get('/reports/{report}/attachment', [SupportReportController::class, 'viewAttachment'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.attachment');
         Route::patch('/reports/{report}/status', [SupportReportController::class, 'updateStatus'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.status');
         Route::redirect('/insights', '/provider/applications?filter=needs_review')->name('insights.redirect');
         Route::redirect('/review', '/provider/applications?filter=needs_review')

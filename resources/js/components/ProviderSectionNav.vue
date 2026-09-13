@@ -48,8 +48,8 @@ const catalog = {
         },
         {
             href: '/provider/reports',
-            label: 'Reported issues',
-            description: 'Applicant program concerns',
+            label: 'Reports',
+            description: 'Applicant and provider concerns',
             icon: 'fa-solid fa-circle-exclamation',
             permission: 'manage_reports',
         },

@@ -6,8 +6,11 @@ use App\Mail\PortalNotificationMail;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 class RolePermissionAccountTest extends TestCase
@@ -17,6 +20,7 @@ class RolePermissionAccountTest extends TestCase
     public function test_primary_admin_can_create_an_admin_with_limited_permissions(): void
     {
         Mail::fake();
+        Notification::fake();
         $admin = User::factory()->create(['role' => 'admin']);
 
         $response = $this->actingAs($admin)->postJson('/admin/users', [
@@ -37,6 +41,8 @@ class RolePermissionAccountTest extends TestCase
 
         $this->assertSame($admin->id, $staff->parent_account_id);
         $this->assertSame(['manage_reviews'], $staff->permissions);
+        $this->assertFalse($staff->hasVerifiedEmail());
+        $this->assertTrue($staff->must_reset_password);
         $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $staff->id,
             'type' => 'staff_account_created',
@@ -44,8 +50,15 @@ class RolePermissionAccountTest extends TestCase
         ]);
         Mail::assertQueued(PortalNotificationMail::class, fn (PortalNotificationMail $mail) => (
             $mail->hasTo($staff->email)
-            && str_contains($mail->notificationMessage, 'Profile')
+            && str_contains($mail->notificationMessage, 'temporary password')
         ));
+        Notification::assertSentTo($staff, VerifyEmail::class);
+
+        $staff->forceFill([
+            'email_verified_at' => now(),
+            'must_reset_password' => false,
+            'password_reset_required_at' => null,
+        ])->save();
 
         $this->actingAs($staff)->get('/admin/reviews')->assertOk();
         $this->actingAs($staff)->get('/admin/manage-users')->assertForbidden();
@@ -84,6 +97,7 @@ class RolePermissionAccountTest extends TestCase
     public function test_provider_team_account_uses_organization_programs_and_enforced_permissions(): void
     {
         Mail::fake();
+        Notification::fake();
         $provider = User::factory()->create(['role' => 'provider']);
         $provider->providerProfile()->update(['verification_status' => 'approved']);
 
@@ -104,6 +118,8 @@ class RolePermissionAccountTest extends TestCase
 
         $this->assertSame($provider->id, $staff->parent_account_id);
         $this->assertSame(['manage_programs'], $staff->permissions);
+        $this->assertFalse($staff->hasVerifiedEmail());
+        $this->assertTrue($staff->must_reset_password);
         $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $staff->id,
             'type' => 'staff_account_created',
@@ -111,8 +127,15 @@ class RolePermissionAccountTest extends TestCase
         ]);
         Mail::assertQueued(PortalNotificationMail::class, fn (PortalNotificationMail $mail) => (
             $mail->hasTo($staff->email)
-            && str_contains($mail->notificationMessage, 'Profile')
+            && str_contains($mail->notificationMessage, 'temporary password')
         ));
+        Notification::assertSentTo($staff, VerifyEmail::class);
+
+        $staff->forceFill([
+            'email_verified_at' => now(),
+            'must_reset_password' => false,
+            'password_reset_required_at' => null,
+        ])->save();
 
         $programResponse = $this->actingAs($staff)->postJson('/provider/scholarships', [
             'title' => 'Team Managed Draft',
@@ -144,6 +167,73 @@ class RolePermissionAccountTest extends TestCase
 
         $this->actingAs($staff)->get('/provider/applications')->assertForbidden();
         $this->actingAs($staff)->get('/provider/reports')->assertForbidden();
+    }
+
+    public function test_new_provider_team_member_verifies_email_before_replacing_temporary_password(): void
+    {
+        Mail::fake();
+        Notification::fake();
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+
+        $response = $this->actingAs($provider)->postJson('/provider/team/accounts', [
+            'first_name' => 'New',
+            'last_name' => 'Reviewer',
+            'middle_initial' => 'T',
+            'email' => 'new.reviewer@example.test',
+            'username' => 'new.reviewer',
+            'contact_number' => '09171234559',
+            'account_title' => 'application_reviewer',
+            'permissions' => ['review_applications'],
+            'password' => 'temporary123',
+            'password_confirmation' => 'temporary123',
+        ])->assertCreated();
+
+        $staff = User::query()->findOrFail($response->json('account.id'));
+        $this->postJson('/logout')->assertOk();
+
+        $this->postJson('/login', [
+            'email' => $staff->email,
+            'password' => 'temporary123',
+        ])->assertOk()
+            ->assertJsonPath('redirect', '/account/setup')
+            ->assertJsonPath('email_verified', false);
+
+        $this->get('/provider')->assertRedirect('/account/setup');
+        $this->getJson('/account/setup/data')
+            ->assertOk()
+            ->assertJsonPath('step', 'verification');
+
+        $this->postJson('/account/setup/password', [
+            'password' => 'new-password123',
+            'password_confirmation' => 'new-password123',
+        ])->assertUnprocessable();
+
+        $verificationUrl = URL::temporarySignedRoute('verification.verify', now()->addHour(), [
+            'id' => $staff->id,
+            'hash' => sha1($staff->email),
+        ]);
+
+        $this->get($verificationUrl)->assertRedirect('/account/setup?verified=1');
+        $this->assertTrue($staff->fresh()->hasVerifiedEmail());
+
+        $this->postJson('/account/setup/password', [
+            'password' => 'temporary123',
+            'password_confirmation' => 'temporary123',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('password');
+
+        $this->postJson('/account/setup/password', [
+            'password' => 'new-password123',
+            'password_confirmation' => 'new-password123',
+        ])->assertOk()
+            ->assertJsonPath('redirect', '/provider');
+
+        $staff->refresh();
+        $this->assertTrue($staff->hasVerifiedEmail());
+        $this->assertFalse($staff->must_reset_password);
+        $this->get('/provider')->assertOk();
     }
 
     public function test_provider_staff_can_update_personal_credentials_without_editing_organization_details(): void

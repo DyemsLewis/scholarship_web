@@ -439,9 +439,11 @@ class DemoReadinessWorkflowTest extends TestCase
     {
         $applicant->studentProfile()->update([
             'birthdate' => '2005-06-01',
+            'account_managed_by' => 'learner',
             'citizenship_status' => 'filipino',
             'education_level' => 'college',
             'school' => 'Demo University',
+            'enrollment_status' => 'Enrolled',
             'course_or_strand' => 'BS Information Technology',
             'year_level' => '1st year',
             'academic_year' => '2026-2027',
@@ -449,6 +451,7 @@ class DemoReadinessWorkflowTest extends TestCase
             'gwa' => 90,
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',
+            'household_size' => 4,
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',

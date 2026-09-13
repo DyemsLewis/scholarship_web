@@ -1477,7 +1477,7 @@ class MobileAuthController extends Controller
         $commonDocuments = [
             'Certificate of enrollment',
             'Latest report card or grades',
-            'School ID',
+            'Recent school ID',
             'Proof of income',
             'Certificate of indigency',
             'Parent or guardian valid ID',

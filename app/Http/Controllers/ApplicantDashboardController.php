@@ -209,6 +209,7 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
 
+        $profileReadiness = $request->user()->applicantProfileReadiness();
         $scholarships = $this->publishedScholarships()
             ->get()
             ->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $request->user()))
@@ -227,7 +228,8 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'user' => $this->userPayload($request),
-            'profile_readiness' => $request->user()->applicantProfileReadiness(),
+            'profile_readiness' => $profileReadiness,
+            'recommendations_ready' => $profileReadiness['complete'],
             'stats' => $this->statsPayload($request),
             'scholarships' => $scholarships,
             'applications' => $applications->map(fn (ScholarshipApplication $application) => $this->applicationPayload($application))->values(),
@@ -2109,7 +2111,7 @@ class ApplicantDashboardController extends Controller
         return [
             'Latest report card or grades',
             'Certificate of enrollment',
-            'School ID',
+            'Recent school ID',
             'Proof of income',
             'Certificate of indigency',
             'Birth certificate',

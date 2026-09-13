@@ -1502,7 +1502,7 @@ onMounted(loadApplication);
 
                     <div :class="usesDetailSidebar ? 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]' : 'block'">
                         <div v-if="activeSection !== 'applicant'" class="flex flex-col gap-5">
-                            <section v-if="activeSection === 'eligibility'" class="provider-panel order-1 overflow-hidden">
+                            <section v-if="activeSection === 'eligibility'" class="provider-panel order-2 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Eligibility check</p>
@@ -2121,100 +2121,108 @@ onMounted(loadApplication);
                                 </p>
                             </section>
 
-                            <section v-if="activeSection === 'eligibility'" class="provider-panel order-2 overflow-hidden">
-                                <div class="border-b border-slate-200 p-5">
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Decision support</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">How the current data was interpreted</h3>
-                                    <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-                                        DSS organizes the published criteria and available applicant data for pre-screening. It never approves, rejects, or ranks applicants by itself.
-                                    </p>
-                                </div>
-
-                                <div class="grid lg:grid-cols-[15rem_minmax(0,1fr)]">
-                                    <div class="bg-slate-950 p-5 text-white">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300">Suitability guidance</p>
-                                        <p class="mt-2 text-4xl font-bold">{{ application.dss_score ?? 0 }}%</p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-400">Profile suitability, not probability of approval</p>
-                                        <div class="mt-4 flex flex-wrap gap-2">
-                                            <span class="rounded-md bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase text-white">
-                                                {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
-                                            </span>
-                                            <span :class="['rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', comparisonStateClass(dssComparison.state)]">
-                                                {{ dssComparison.label }}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div class="p-5">
-                                        <p class="text-sm font-bold leading-6 text-slate-950">
-                                            {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'DSS reviewed the current application data.' }}
-                                        </p>
-                                        <p class="mt-2 text-sm leading-6 text-slate-600">
-                                            {{ application.dss_explanation?.score_interpretation || 'Confirm the profile comparison against submitted evidence.' }}
-                                        </p>
-                                        <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Recommended reviewer action</p>
-                                            <p class="mt-1 text-sm font-semibold leading-6 text-slate-800">
-                                                {{ application.dss_explanation?.next_action || 'Review eligibility, documents, and notes before deciding.' }}
+                            <section v-if="activeSection === 'eligibility'" class="provider-panel order-1 overflow-hidden">
+                                <div class="flex flex-col gap-4 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
+                                    <div class="flex min-w-0 items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                            <i class="fa-solid fa-scale-balanced" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Decision support</p>
+                                            <h3 class="mt-1 text-xl font-bold text-slate-950">Pre-screening guidance</h3>
+                                            <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                                                A summary of the profile, published rules, and available files. The provider still makes the decision.
                                             </p>
                                         </div>
                                     </div>
+
+                                    <div class="flex shrink-0 items-center gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+                                        <div>
+                                            <p class="text-2xl font-bold leading-none text-slate-950">{{ application.dss_score ?? 0 }}%</p>
+                                            <p class="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Suitability</p>
+                                        </div>
+                                        <div class="border-l border-slate-200 pl-4">
+                                            <p class="text-sm font-bold text-slate-900">
+                                                {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
+                                            </p>
+                                            <p class="mt-1 text-xs text-slate-500">Guidance only</p>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div class="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-4">
-                                    <div class="bg-white p-3"><p class="text-xs font-bold text-emerald-700">Met</p><p class="mt-1 text-xs leading-5 text-slate-500">The profile value matches the published rule.</p></div>
-                                    <div class="bg-white p-3"><p class="text-xs font-bold text-rose-700">Not met</p><p class="mt-1 text-xs leading-5 text-slate-500">The current value does not match the rule.</p></div>
-                                    <div class="bg-white p-3"><p class="text-xs font-bold text-amber-700">Missing information</p><p class="mt-1 text-xs leading-5 text-slate-500">The system cannot compare this criterion yet.</p></div>
-                                    <div class="bg-white p-3"><p class="text-xs font-bold text-slate-700">Not applicable</p><p class="mt-1 text-xs leading-5 text-slate-500">The program leaves this criterion open.</p></div>
-                                </div>
+                                <div class="p-5">
+                                    <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]">
+                                        <div>
+                                            <p class="text-sm font-bold leading-6 text-slate-950">
+                                                {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'The available application data was compared.' }}
+                                            </p>
+                                            <p class="mt-1 text-sm leading-6 text-slate-600">
+                                                {{ application.dss_explanation?.score_interpretation || 'Confirm the comparison against the applicant profile and submitted evidence.' }}
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md border-l-4 border-amber-400 bg-amber-50 px-4 py-3">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800">Reviewer check</p>
+                                            <p class="mt-1 text-sm font-semibold leading-6 text-slate-800">
+                                                {{ application.dss_explanation?.next_action || 'Review eligibility and supporting files before deciding.' }}
+                                            </p>
+                                        </div>
+                                    </div>
 
-                                <div class="border-t border-slate-200 p-5">
-                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <p class="text-xs leading-5 text-slate-500">
-                                            Comparison completeness: <strong class="text-slate-700">{{ dssComparison.completeness }}%</strong>
-                                        </p>
+                                    <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
+                                        <span><strong class="text-emerald-700">{{ dssComparison.met }}</strong> met</span>
+                                        <span><strong class="text-rose-700">{{ dssComparison.not_met }}</strong> not met</span>
+                                        <span><strong class="text-amber-700">{{ dssComparison.missing }}</strong> missing</span>
+                                        <span><strong class="text-slate-800">{{ dssComparison.manual_review }}</strong> manual review</span>
+                                        <span><strong class="text-slate-800">{{ dssComparison.not_applicable }}</strong> unrestricted</span>
+                                    </div>
+
+                                    <div class="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                            <span :class="['rounded-md px-2.5 py-1 font-bold', comparisonStateClass(dssComparison.state)]">{{ dssComparison.label }}</span>
+                                            <span>Comparison completeness: <strong class="text-slate-700">{{ dssComparison.completeness }}%</strong></span>
+                                        </div>
                                         <button
                                             type="button"
                                             class="w-fit rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                                             @click="showDssDetails = !showDssDetails"
                                         >
-                                            {{ showDssDetails ? 'Hide calculation' : 'Show calculation' }}
+                                            {{ showDssDetails ? 'Hide calculation' : 'View calculation' }}
                                         </button>
                                     </div>
 
                                     <div v-if="showDssDetails && (application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length)" class="mt-4 grid gap-3 md:grid-cols-2">
-                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
-                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Strengths</p>
-                                        <div class="mt-2 grid gap-2">
+                                        <div class="rounded-md border border-slate-200 bg-white p-3">
+                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Matched information</p>
+                                            <div class="mt-2 grid gap-2">
                                                 <p v-for="item in application.dss_explanation?.strengths ?? []" :key="item" class="flex items-start gap-2 text-sm leading-6 text-slate-600">
-                                                    <i class="fa-solid fa-check mt-1.5 text-[10px] text-emerald-600" aria-hidden="true"></i><span>{{ item }}</span>
-                                            </p>
+                                                    <i class="fa-solid fa-check mt-1.5 text-[10px] text-emerald-600" aria-hidden="true"></i>
+                                                    <span>{{ item }}</span>
+                                                </p>
+                                            </div>
                                         </div>
-                                    </div>
-                                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
-                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Needs attention</p>
-                                        <div class="mt-2 grid gap-2">
+                                        <div class="rounded-md border border-slate-200 bg-white p-3">
+                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Needs reviewer attention</p>
+                                            <div class="mt-2 grid gap-2">
                                                 <p v-for="item in application.dss_explanation?.needs_attention ?? []" :key="item" class="flex items-start gap-2 text-sm leading-6 text-slate-600">
-                                                    <i class="fa-solid fa-circle-exclamation mt-1.5 text-[10px] text-amber-600" aria-hidden="true"></i><span>{{ item }}</span>
-                                            </p>
+                                                    <i class="fa-solid fa-circle-exclamation mt-1.5 text-[10px] text-amber-600" aria-hidden="true"></i>
+                                                    <span>{{ item }}</span>
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                    <div v-if="showDssDetails && dssCriteria.length" class="mt-4 grid gap-3 lg:grid-cols-3">
-                                    <div v-for="criterion in dssCriteria" :key="criterion.key" class="rounded-md border border-slate-200 bg-slate-50 p-3">
-                                        <div class="flex items-center justify-between gap-3">
-                                            <p class="font-bold text-slate-950">{{ criterion.label }}</p>
-                                                <p class="text-xs font-bold text-slate-500">Weight {{ criterion.weight }}%</p>
-                                        </div>
-                                        <p class="mt-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
+                                    <div v-if="showDssDetails && dssCriteria.length" class="mt-3 grid gap-3 lg:grid-cols-3">
+                                        <div v-for="criterion in dssCriteria" :key="criterion.key" class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                            <div class="flex items-center justify-between gap-3">
+                                                <p class="font-bold text-slate-950">{{ criterion.label }}</p>
+                                                <p class="text-xs font-bold text-slate-500">{{ criterion.weight }}% weight</p>
+                                            </div>
+                                            <p class="mt-2 text-xs font-bold text-slate-700">
                                                 {{ criterion.score }}% result = {{ criterion.weighted_score }} points
-                                        </p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            {{ criterion.note }}
-                                        </p>
+                                            </p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">{{ criterion.note }}</p>
+                                        </div>
                                     </div>
-                                </div>
 
                                     <p v-if="showDssDetails" class="mt-4 text-xs leading-5 text-slate-500">
                                         Methodology version {{ application.dss_breakdown?.methodology_version || 'current' }}. {{ application.dss_breakdown?.decision_notice }}

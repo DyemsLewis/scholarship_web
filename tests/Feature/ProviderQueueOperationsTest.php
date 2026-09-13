@@ -81,6 +81,68 @@ class ProviderQueueOperationsTest extends TestCase
             ->assertJsonValidationErrors('assigned_reviewer_id');
     }
 
+    public function test_managed_team_member_cannot_assign_an_application_to_the_provider_owner(): void
+    {
+        Mail::fake();
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $teamMember = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'account_title' => 'application_reviewer',
+            'permissions' => ['review_applications'],
+        ]);
+        $otherReviewer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'account_title' => 'application_reviewer',
+            'permissions' => ['review_applications'],
+        ]);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Managed Reviewer Assignment Program',
+            'description' => 'Tests owner assignment restrictions for managed team members.',
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now()->subDay(),
+        ]);
+
+        $reviewerIds = collect($this->actingAs($teamMember)
+            ->getJson('/provider/applications/data')
+            ->assertOk()
+            ->json('reviewers'))
+            ->pluck('id')
+            ->all();
+
+        $this->assertNotContains($provider->id, $reviewerIds);
+        $this->assertContains($teamMember->id, $reviewerIds);
+        $this->assertContains($otherReviewer->id, $reviewerIds);
+
+        $this->actingAs($teamMember)
+            ->patchJson("/provider/applications/{$application->id}/reviewer", [
+                'assigned_reviewer_id' => $provider->id,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('assigned_reviewer_id');
+
+        $this->assertDatabaseHas('scholarship_applications', [
+            'id' => $application->id,
+            'assigned_reviewer_id' => null,
+        ]);
+
+        $this->actingAs($teamMember)
+            ->patchJson("/provider/applications/{$application->id}/reviewer", [
+                'assigned_reviewer_id' => $otherReviewer->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.assigned_reviewer.id', $otherReviewer->id);
+    }
+
     public function test_provider_queue_exposes_program_usage_waiting_time_and_replaced_file_signal(): void
     {
         Mail::fake();

@@ -18,20 +18,27 @@ const scholarships = ref([]);
 const applications = ref([]);
 const actionAlerts = ref([]);
 const nextSteps = ref([]);
+const recommendationsReady = computed(() => profileReadiness.value.complete === true);
 
-const recommendedScholarships = computed(() => scholarships.value
-    .filter((scholarship) => scholarship.eligibility_match?.is_eligible === true)
-    .sort((first, second) => {
-        const scoreDifference = Number(second.eligibility_match?.score ?? 0)
-            - Number(first.eligibility_match?.score ?? 0);
+const recommendedScholarships = computed(() => {
+    if (!recommendationsReady.value) {
+        return [];
+    }
 
-        if (scoreDifference !== 0) {
-            return scoreDifference;
-        }
+    return scholarships.value
+        .filter((scholarship) => scholarship.eligibility_match?.is_eligible === true)
+        .sort((first, second) => {
+            const scoreDifference = Number(second.eligibility_match?.score ?? 0)
+                - Number(first.eligibility_match?.score ?? 0);
 
-        return Number(first.has_applied) - Number(second.has_applied);
-    })
-    .slice(0, 3));
+            if (scoreDifference !== 0) {
+                return scoreDifference;
+            }
+
+            return Number(first.has_applied) - Number(second.has_applied);
+        })
+        .slice(0, 3);
+});
 
 const scheduledActivities = computed(() => applications.value
     .filter((application) => !isClosedApplication(application))
@@ -765,8 +772,12 @@ onMounted(loadDashboard);
                                         </span>
                                         <div class="min-w-0">
                                             <p class="student-kicker">Recommended for you</p>
-                                            <h3 class="mt-1 text-lg font-bold text-slate-950">Eligible scholarships</h3>
-                                            <p class="mt-1 text-sm text-slate-500">Ranked using your applicant profile.</p>
+                                            <h3 class="mt-1 text-lg font-bold text-slate-950">
+                                                {{ recommendationsReady ? 'Eligible scholarships' : 'Set up your matches' }}
+                                            </h3>
+                                            <p class="mt-1 text-sm text-slate-500">
+                                                {{ recommendationsReady ? 'Ranked using your applicant profile.' : 'Complete your profile before we rank scholarships.' }}
+                                            </p>
                                         </div>
                                     </div>
                                     <a href="/dashboard/scholarships" class="inline-flex w-fit shrink-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 hover:text-slate-950">
@@ -829,10 +840,14 @@ onMounted(loadDashboard);
 
                                 <div v-else class="flex flex-1 p-5">
                                     <div class="student-empty-state w-full self-center">
-                                        <p class="text-sm font-bold text-slate-900">No eligible scholarships yet</p>
-                                        <p class="mt-1 text-sm leading-6 text-slate-500">Complete or update your profile to improve matching.</p>
-                                        <a href="/dashboard/profile" class="mt-3 inline-flex rounded-md bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-800">
-                                            Review profile
+                                        <p class="text-sm font-bold text-slate-900">
+                                            {{ recommendationsReady ? 'No eligible scholarships yet' : 'Complete your profile to see matches' }}
+                                        </p>
+                                        <p class="mt-1 text-sm leading-6 text-slate-500">
+                                            {{ recommendationsReady ? 'Browse all programs or update your profile when your information changes.' : 'Your education, grade level, academic record, and location are needed for reliable recommendations.' }}
+                                        </p>
+                                        <a :href="recommendationsReady ? '/dashboard/scholarships' : '/dashboard/profile'" class="mt-3 inline-flex rounded-md bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-800">
+                                            {{ recommendationsReady ? 'Browse scholarships' : 'Complete profile' }}
                                         </a>
                                     </div>
                                 </div>
@@ -924,11 +939,13 @@ onMounted(loadDashboard);
                                     </a>
                                 </div>
 
-                                <div v-else class="flex flex-1 p-5">
-                                    <div class="student-empty-state w-full self-center">
-                                        <p class="text-sm font-bold text-slate-900">No applications yet</p>
-                                        <p class="mt-1 text-sm leading-6 text-slate-500">Choose an eligible scholarship when you are ready to start pre-screening.</p>
-                                        <a href="/dashboard/scholarships" class="mt-3 inline-flex rounded-md bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-800">
+                                <div v-else class="p-4">
+                                    <div class="flex flex-col gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-900">No applications yet</p>
+                                            <p class="mt-0.5 text-xs leading-5 text-slate-500">Choose an eligible scholarship when you are ready to apply.</p>
+                                        </div>
+                                        <a href="/dashboard/scholarships" class="inline-flex w-fit shrink-0 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">
                                             Find scholarships
                                         </a>
                                     </div>

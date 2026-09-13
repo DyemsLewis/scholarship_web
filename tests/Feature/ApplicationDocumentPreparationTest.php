@@ -40,7 +40,7 @@ class ApplicationDocumentPreparationTest extends TestCase
         $this->assertSame([
             'Latest report card or grades',
             'Certificate of enrollment',
-            'School ID',
+            'Recent school ID',
             'Proof of income',
             'Certificate of indigency',
             'Birth certificate',
@@ -238,6 +238,7 @@ class ApplicationDocumentPreparationTest extends TestCase
         $applicant = User::factory()->create();
         $applicant->studentProfile()->update([
             'birthdate' => '2005-06-01',
+            'account_managed_by' => 'learner',
             'education_level' => 'college',
             'school' => 'Demo University',
             'school_type' => 'public',
@@ -249,6 +250,7 @@ class ApplicationDocumentPreparationTest extends TestCase
             'gwa' => 90,
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',
+            'household_size' => 4,
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',
