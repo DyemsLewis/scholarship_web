@@ -851,6 +851,15 @@ function scheduleProviderDataLoad(delay = 0) {
     queueReloadTimer = window.setTimeout(() => loadProviderData(false), delay);
 }
 
+function reviewersForApplication(application) {
+    const programId = Number(application.scholarship?.id);
+
+    return reviewers.value.filter((reviewer) => (
+        reviewer.program_access_mode !== 'selected'
+        || (reviewer.assigned_program_ids ?? []).map(Number).includes(programId)
+    ));
+}
+
 async function assignReviewer(application, event) {
     const previousReviewerId = application.assigned_reviewer?.id ?? '';
     const selectedReviewerId = event.target.value ? Number(event.target.value) : null;
@@ -1417,7 +1426,7 @@ onMounted(loadProviderData);
                                 </div>
 
                                 <div :class="['flex w-full shrink-0 gap-2 lg:w-72 lg:justify-center', hasProgramContext ? 'pl-11 lg:pl-0' : 'pl-14 lg:pl-0']">
-                                    <label v-if="canAssignReviewers" class="min-w-0 flex-1 lg:w-44 lg:flex-none">
+                                    <label v-if="canAssignReviewers && reviewersForApplication(application).length" class="min-w-0 flex-1 lg:w-44 lg:flex-none">
                                         <span class="sr-only">Assigned reviewer for {{ application.applicant?.name || 'applicant' }}</span>
                                         <select
                                             :value="application.assigned_reviewer?.id ?? ''"
@@ -1426,7 +1435,7 @@ onMounted(loadProviderData);
                                             @change="assignReviewer(application, $event)"
                                         >
                                             <option value="">Unassigned</option>
-                                            <option v-for="reviewer in reviewers" :key="reviewer.id" :value="reviewer.id">
+                                            <option v-for="reviewer in reviewersForApplication(application)" :key="reviewer.id" :value="reviewer.id">
                                                 {{ reviewer.name }} - {{ reviewer.role_label }}
                                             </option>
                                         </select>

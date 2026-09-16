@@ -49,6 +49,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'role',
         'account_title',
         'permissions',
+        'assigned_program_ids',
         'password',
         'account_status',
         'must_reset_password',
@@ -84,6 +85,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'terms_accepted_at' => 'datetime',
             'privacy_accepted_at' => 'datetime',
             'permissions' => 'array',
+            'assigned_program_ids' => 'array',
         ];
     }
 
@@ -237,6 +239,40 @@ class User extends Authenticatable implements MustVerifyEmail
         $owner?->loadMissing('providerProfile');
 
         return $owner ?? $this;
+    }
+
+    public function hasLimitedProviderProgramAccess(): bool
+    {
+        return $this->isProvider()
+            && $this->isManagedAccount()
+            && is_array($this->assigned_program_ids);
+    }
+
+    public function assignedProviderProgramIds(): array
+    {
+        return collect($this->assigned_program_ids ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function canAccessProviderProgram(Scholarship|int|null $program): bool
+    {
+        if (! $this->isProvider() || $program === null) {
+            return false;
+        }
+
+        $programId = $program instanceof Scholarship ? (int) $program->id : (int) $program;
+        $providerId = $program instanceof Scholarship ? (int) $program->provider_id : null;
+
+        if ($providerId !== null && $providerId !== $this->providerOrganizationId()) {
+            return false;
+        }
+
+        return ! $this->hasLimitedProviderProgramAccess()
+            || in_array($programId, $this->assignedProviderProgramIds(), true);
     }
 
     public function isSuspended(): bool

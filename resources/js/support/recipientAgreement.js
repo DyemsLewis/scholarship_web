@@ -61,7 +61,7 @@ export function agreementClarity(scholarship) {
         },
         {
             key: 'commitment',
-            label: 'Recipient commitment',
+            label: 'What the provider expects',
             value: noCommitment ? 'The provider states that no recipient commitment applies.' : agreement.commitment_text,
             complete: commitmentDisclosed,
             missing: 'The recipient duty has not been clearly explained.',

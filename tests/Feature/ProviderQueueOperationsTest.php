@@ -143,6 +143,50 @@ class ProviderQueueOperationsTest extends TestCase
             ->assertJsonPath('application.assigned_reviewer.id', $otherReviewer->id);
     }
 
+    public function test_provider_cannot_assign_a_reviewer_outside_their_program_scope(): void
+    {
+        Mail::fake();
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $assignedProgram = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Reviewer Assigned Program',
+            'description' => 'The only program available to the reviewer.',
+            'status' => 'published',
+        ]);
+        $restrictedProgram = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Reviewer Restricted Program',
+            'description' => 'A program outside the reviewer assignment.',
+            'status' => 'published',
+        ]);
+        $reviewer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'account_title' => 'application_reviewer',
+            'permissions' => ['review_applications'],
+            'assigned_program_ids' => [$assignedProgram->id],
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $restrictedProgram->id,
+            'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/reviewer", [
+                'assigned_reviewer_id' => $reviewer->id,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('assigned_reviewer_id');
+
+        $this->assertDatabaseHas('scholarship_applications', [
+            'id' => $application->id,
+            'assigned_reviewer_id' => null,
+        ]);
+    }
+
     public function test_provider_queue_exposes_program_usage_waiting_time_and_replaced_file_signal(): void
     {
         Mail::fake();

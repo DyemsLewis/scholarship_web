@@ -11,6 +11,8 @@ const isLoading = ref(Boolean(accountId));
 const isSaving = ref(false);
 const errorMessage = ref('');
 const formElement = ref(null);
+const availablePrograms = ref([]);
+const canAssignAllPrograms = ref(true);
 
 const allPermissions = [
     { value: 'manage_programs', label: 'Manage programs', description: 'Create, edit, duplicate, and submit scholarship programs.' },
@@ -60,6 +62,8 @@ function emptyForm() {
         contactNumber: '',
         accountTitle: 'program_coordinator',
         permissions: ['manage_programs'],
+        programAccessMode: 'all',
+        assignedProgramIds: [],
         password: '',
         passwordConfirmation: '',
     };
@@ -79,15 +83,23 @@ function handleContactNumber(event) {
 }
 
 async function loadAccount() {
-    if (!accountId) {
-        applyRolePreset();
-        return;
-    }
-
     isLoading.value = true;
 
     try {
-        const response = await window.axios.get(`/provider/team/accounts/${accountId}`);
+        const response = await window.axios.get(accountId
+            ? `/provider/team/accounts/${accountId}`
+            : '/provider/team/data');
+        availablePrograms.value = response.data.available_programs ?? [];
+        canAssignAllPrograms.value = response.data.can_assign_all_programs !== false;
+
+        if (!accountId) {
+            if (!canAssignAllPrograms.value) {
+                form.value.programAccessMode = 'selected';
+            }
+            applyRolePreset();
+            return;
+        }
+
         const account = response.data.account;
         form.value = {
             firstName: account.first_name ?? '',
@@ -98,6 +110,8 @@ async function loadAccount() {
             contactNumber: account.contact_number ?? '',
             accountTitle: account.team_role ?? 'program_coordinator',
             permissions: [...(account.permissions ?? [])],
+            programAccessMode: account.program_access_mode ?? 'all',
+            assignedProgramIds: [...(account.assigned_program_ids ?? [])],
             password: '',
             passwordConfirmation: '',
         };
@@ -120,6 +134,11 @@ async function saveAccount() {
         return;
     }
 
+    if (form.value.programAccessMode === 'selected' && !form.value.assignedProgramIds.length) {
+        errorMessage.value = 'Select at least one program or allow access to all programs.';
+        return;
+    }
+
     const hasPassword = Boolean(form.value.password || form.value.passwordConfirmation);
 
     if ((!isEditMode.value || hasPassword) && form.value.password !== form.value.passwordConfirmation) {
@@ -137,6 +156,10 @@ async function saveAccount() {
         contact_number: form.value.contactNumber,
         account_title: form.value.accountTitle,
         permissions: form.value.permissions,
+        program_access_mode: form.value.programAccessMode,
+        assigned_program_ids: form.value.programAccessMode === 'selected'
+            ? form.value.assignedProgramIds
+            : [],
     };
 
     if (!isEditMode.value || hasPassword) {
@@ -348,6 +371,62 @@ onMounted(loadAccount);
                                     </label>
                                 </div>
                                 <p v-if="form.permissions.length === 0" class="mt-2 text-xs font-semibold text-rose-700">Select at least one permission.</p>
+                            </div>
+
+                            <div class="mt-5 border-t border-slate-200 pt-5">
+                                <div>
+                                    <p class="text-sm font-bold text-slate-900">Program access</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">Limit which scholarship programs this team member can open and manage.</p>
+                                </div>
+
+                                <div class="mt-3 grid gap-2 md:grid-cols-2">
+                                    <label
+                                        v-for="option in [
+                                            { value: 'all', label: 'All organization programs', detail: 'Includes programs created later.' },
+                                            { value: 'selected', label: 'Selected programs only', detail: 'Access stays limited to the programs checked below.' },
+                                        ]"
+                                        :key="option.value"
+                                        :class="[
+                                            'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition',
+                                            option.value === 'all' && !canAssignAllPrograms ? 'cursor-not-allowed opacity-50' : '',
+                                            form.programAccessMode === option.value
+                                                ? 'border-amber-400 bg-amber-50'
+                                                : 'border-slate-200 bg-slate-50 hover:border-slate-300',
+                                        ]"
+                                    >
+                                        <input
+                                            v-model="form.programAccessMode"
+                                            type="radio"
+                                            :value="option.value"
+                                            :disabled="option.value === 'all' && !canAssignAllPrograms"
+                                            class="mt-1 h-4 w-4 border-slate-300 text-slate-900 focus:ring-amber-400 disabled:cursor-not-allowed"
+                                        >
+                                        <span>
+                                            <span class="block text-sm font-bold text-slate-900">{{ option.label }}</span>
+                                            <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ option.detail }}</span>
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <p v-if="!canAssignAllPrograms" class="mt-2 text-xs font-semibold text-slate-500">
+                                    You can delegate only the programs assigned to your account.
+                                </p>
+
+                                <div v-if="form.programAccessMode === 'selected'" class="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
+                                    <label
+                                        v-for="program in availablePrograms"
+                                        :key="program.id"
+                                        class="flex cursor-pointer items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0 hover:bg-slate-50"
+                                    >
+                                        <input v-model="form.assignedProgramIds" type="checkbox" :value="program.id" class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-amber-400">
+                                        <span class="min-w-0 flex-1">
+                                            <span class="block truncate text-sm font-bold text-slate-900">{{ program.title }}</span>
+                                            <span class="mt-0.5 block text-xs font-semibold capitalize text-slate-500">{{ program.status }}</span>
+                                        </span>
+                                    </label>
+                                    <p v-if="availablePrograms.length === 0" class="px-4 py-4 text-sm text-slate-500">Create a program before limiting this account to selected programs.</p>
+                                </div>
+                                <p v-if="form.programAccessMode === 'selected' && form.assignedProgramIds.length === 0" class="mt-2 text-xs font-semibold text-rose-700">Select at least one program.</p>
                             </div>
                         </div>
                     </section>

@@ -176,6 +176,12 @@ onMounted(loadTeam);
                                         No delegated access
                                     </span>
                                 </div>
+                                <p class="mt-2 text-xs font-semibold text-slate-500">
+                                    <i class="fa-solid fa-layer-group mr-1 text-slate-400" aria-hidden="true"></i>
+                                    {{ account.program_access_mode === 'selected'
+                                        ? `${account.assigned_programs?.length ?? 0} assigned program${(account.assigned_programs?.length ?? 0) === 1 ? '' : 's'}`
+                                        : 'All organization programs' }}
+                                </p>
                             </div>
 
                             <div class="flex w-full gap-2 xl:w-48 xl:justify-self-center">

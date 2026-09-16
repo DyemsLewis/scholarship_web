@@ -140,7 +140,7 @@ class ProviderController extends Controller
         }
 
         abort_unless($request->user()->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
 
         return view('provider-program-workspace', [
             'scholarship' => $scholarship,
@@ -182,7 +182,7 @@ class ProviderController extends Controller
         }
 
         abort_unless($request->user()->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
 
         return view('provider-applications', [
             'scholarship' => $scholarship,
@@ -196,7 +196,7 @@ class ProviderController extends Controller
         }
 
         abort_unless($request->user()->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         return view('provider-application-detail', [
             'application' => $application,
@@ -254,6 +254,8 @@ class ProviderController extends Controller
             ],
             'accounts' => $accounts->map(fn (User $account) => $this->providerTeamAccountPayload($account))->values(),
             'available_permissions' => $this->grantableProviderPermissions($request->user()),
+            'available_programs' => $this->providerAssignablePrograms($request->user()),
+            'can_assign_all_programs' => ! $request->user()->hasLimitedProviderProgramAccess(),
         ]);
     }
 
@@ -265,6 +267,8 @@ class ProviderController extends Controller
         return response()->json([
             'account' => $this->providerTeamAccountPayload($account->loadMissing('providerProfile')),
             'available_permissions' => $this->grantableProviderPermissions($request->user()),
+            'available_programs' => $this->providerAssignablePrograms($request->user()),
+            'can_assign_all_programs' => ! $request->user()->hasLimitedProviderProgramAccess(),
         ]);
     }
 
@@ -285,6 +289,7 @@ class ProviderController extends Controller
                 'role' => 'provider',
                 'account_title' => $validated['account_title'],
                 'permissions' => array_values(array_unique($validated['permissions'])),
+                'assigned_program_ids' => $validated['assigned_program_ids'],
                 'password' => $validated['password'],
                 'must_reset_password' => true,
                 'password_reset_required_at' => now(),
@@ -319,6 +324,7 @@ class ProviderController extends Controller
                 'created_user_id' => $account->id,
                 'provider_id' => $owner->id,
                 'permissions' => $account->permissions,
+                'assigned_program_ids' => $account->assigned_program_ids,
             ],
         );
 
@@ -385,6 +391,7 @@ class ProviderController extends Controller
                 'username' => $validated['username'],
                 'account_title' => $validated['account_title'],
                 'permissions' => array_values(array_unique($validated['permissions'])),
+                'assigned_program_ids' => $validated['assigned_program_ids'],
                 ...filled($validated['password'] ?? null) ? ['password' => $validated['password']] : [],
             ]);
 
@@ -398,6 +405,8 @@ class ProviderController extends Controller
                 'middle_initial' => $middleInitial,
                 'contact_number' => $validated['contact_number'],
             ]);
+
+            $this->unassignInaccessibleApplications($account->fresh());
         });
 
         ActivityLog::record(
@@ -405,7 +414,11 @@ class ProviderController extends Controller
             'provider_team_account_updated',
             "{$actor->name} updated provider team account {$account->email}.",
             $request,
-            ['updated_user_id' => $account->id, 'permissions' => $account->permissions],
+            [
+                'updated_user_id' => $account->id,
+                'permissions' => $account->permissions,
+                'assigned_program_ids' => $account->assigned_program_ids,
+            ],
         );
 
         return response()->json([
@@ -433,6 +446,8 @@ class ProviderController extends Controller
             'suspended_by' => $suspended ? $actor->id : null,
             'suspension_reason' => $suspended ? 'Suspended by the provider organization.' : null,
         ])->save();
+
+        $this->unassignInaccessibleApplications($account->fresh());
 
         ActivityLog::record(
             $actor,
@@ -471,16 +486,14 @@ class ProviderController extends Controller
             ->where('provider_id', $providerId)
             ->count();
 
-        $scholarships = Scholarship::query()
-            ->where('provider_id', $providerId)
+        $scholarships = $this->providerScholarshipsQuery($provider)
             ->withCount($this->providerProgramCountRelations())
             ->latest()
             ->get();
         $canReviewApplications = $provider->hasPortalPermission('review_applications')
             && $providerOwner->hasVerifiedEmail()
             && $providerOwner->providerProfile?->isVerified();
-        $applicationsBase = ScholarshipApplication::query()
-            ->whereHas('scholarship', fn (Builder $query) => $query->where('provider_id', $providerId));
+        $applicationsBase = $this->providerApplicationsQuery($provider);
         $applicationWorkflowCounts = $canReviewApplications
             ? $this->providerApplicationFilterCounts($applicationsBase)
             : [
@@ -960,14 +973,12 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
 
         $providerId = $request->user()->providerOrganizationId();
-        $scholarships = Scholarship::query()
-            ->where('provider_id', $providerId)
+        $scholarships = $this->providerScholarshipsQuery($request->user())
             ->withCount($this->providerProgramCountRelations())
             ->latest()
             ->get();
-        $applications = ScholarshipApplication::query()
+        $applications = $this->providerApplicationsQuery($request->user())
             ->with(['applicant.studentProfile', 'documents.reviewer', 'scholarship'])
-            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId))
             ->latest('submitted_at')
             ->get();
         $applications->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)->syncApplication($application));
@@ -1148,16 +1159,14 @@ class ProviderController extends Controller
         $sort = $validated['sort'] ?? 'priority';
         $search = trim((string) ($validated['search'] ?? ''));
         $perPage = (int) ($validated['per_page'] ?? 10);
-        $scholarships = Scholarship::query()
-            ->where('provider_id', $providerId)
+        $scholarships = $this->providerScholarshipsQuery($request->user())
             ->withCount($this->providerProgramCountRelations())
             ->withAvg('applications as average_match_score', 'eligibility_score')
             ->withAvg('applications as average_dss_score', 'dss_score')
             ->latest()
             ->get();
         $reviewers = $this->providerApplicationReviewers($providerId, $request->user());
-        $applicationsBase = ScholarshipApplication::query()
-            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId));
+        $applicationsBase = $this->providerApplicationsQuery($request->user());
 
         if ($selectedScholarship) {
             $applicationsBase->where('scholarship_id', $selectedScholarship->id);
@@ -1221,7 +1230,7 @@ class ProviderController extends Controller
                 'average_dss_score' => round((float) (clone $applicationsBase)->avg('dss_score'), 1),
                 'pending_documents' => ApplicationDocument::query()
                     ->where('status', 'pending')
-                    ->whereHas('application.scholarship', fn ($query) => $query->where('provider_id', $providerId))
+                    ->whereHas('application.scholarship', fn (Builder $query) => $this->applyProviderScholarshipScope($query, $request->user()))
                     ->count(),
             ],
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship))->values(),
@@ -1522,7 +1531,7 @@ class ProviderController extends Controller
     public function applicationDetailData(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         $application->load(['applicant.studentProfile', 'documents.reviewer', 'assignedReviewer.providerProfile', 'statusHistories.actor', 'scholarship']);
         app(DecisionSupportService::class)->syncApplication($application);
@@ -1538,7 +1547,7 @@ class ProviderController extends Controller
     public function upsertScholarshipEvent(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
 
         $validated = $request->validate([
             'type' => ['required', Rule::in(ScholarshipSelectionPlan::SCHEDULABLE_STAGES)],
@@ -1602,7 +1611,7 @@ class ProviderController extends Controller
         ScholarshipEvent $event,
     ): JsonResponse {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
         abort_unless($event->scholarship_id === $scholarship->id, 404);
 
         if ($event->scheduled_at?->isFuture()) {
@@ -1662,7 +1671,7 @@ class ProviderController extends Controller
         ScholarshipEvent $event,
     ): JsonResponse {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
         abort_unless($event->scholarship_id === $scholarship->id, 404);
         abort_unless(ScholarshipSelectionPlan::isSchedulable($event->type), 404);
 
@@ -1779,7 +1788,7 @@ class ProviderController extends Controller
     public function decideApplication(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['approve', 'reject'])],
@@ -1819,7 +1828,7 @@ class ProviderController extends Controller
         string $stage,
     ): JsonResponse {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
         abort_unless(in_array($stage, ['screening', 'formal_application', 'exam', 'interview'], true), 404);
 
         $validated = $request->validate([
@@ -1925,7 +1934,7 @@ class ProviderController extends Controller
         ScholarshipApplication $application,
     ): JsonResponse {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         $validated = $request->validate([
             'outcome' => ['required', Rule::in(ApplicationWorkflowService::FINAL_OUTCOMES)],
@@ -1990,7 +1999,7 @@ class ProviderController extends Controller
     public function bulkAdvanceApplications(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
 
         $validated = $request->validate([
             'application_ids' => ['required', 'array', 'min:1', 'max:100'],
@@ -2115,7 +2124,7 @@ class ProviderController extends Controller
 
         $providerId = $request->user()->providerOrganizationId();
 
-        abort_unless($application->scholarship?->provider_id === $providerId, 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         $validated = $request->validate([
             'assigned_reviewer_id' => ['nullable', 'integer'],
@@ -2135,6 +2144,12 @@ class ProviderController extends Controller
         if ($reviewerId && ! $reviewer) {
             throw ValidationException::withMessages([
                 'assigned_reviewer_id' => 'Choose an active reviewer from this provider organization.',
+            ]);
+        }
+
+        if ($reviewer && ! $reviewer->canAccessProviderProgram($application->scholarship)) {
+            throw ValidationException::withMessages([
+                'assigned_reviewer_id' => 'This reviewer is not assigned to this program.',
             ]);
         }
 
@@ -2184,7 +2199,7 @@ class ProviderController extends Controller
     public function upsertApplicationSchedule(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         $validated = $request->validate([
             'type' => ['required', Rule::in(ScholarshipSelectionPlan::SCHEDULABLE_STAGES)],
@@ -2323,7 +2338,7 @@ class ProviderController extends Controller
         ApplicationSchedule $schedule,
     ): JsonResponse {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
         abort_unless($schedule->scholarship_application_id === $application->id, 404);
 
         $validated = $request->validate([
@@ -2396,7 +2411,7 @@ class ProviderController extends Controller
         ApplicantVerificationDocument $document,
     ) {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
         abort_unless($document->applicant_id === $application->applicant_id, 403);
         abort_unless(in_array($document->document_type, ['academic_record', 'school_record'], true), 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
@@ -2410,7 +2425,7 @@ class ProviderController extends Controller
     public function viewApplicantProfilePhoto(Request $request, ScholarshipApplication $application)
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         $profile = $application->applicant?->studentProfile;
         abort_unless($profile?->profile_photo_path, 404);
@@ -2429,7 +2444,7 @@ class ProviderController extends Controller
     public function verifyApplicantProfile(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         $applicant = $application->applicant;
         abort_unless($applicant?->isApplicant(), 404);
@@ -2580,7 +2595,7 @@ class ProviderController extends Controller
     public function handleApplicationCorrection(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         $validated = $request->validate([
             'action' => ['required', Rule::in(['request', 'resolve'])],
@@ -2638,7 +2653,7 @@ class ProviderController extends Controller
     public function handleApplicationWaitlist(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         $validated = $request->validate([
             'action' => ['required', Rule::in(['waitlist', 'promote', 'restore'])],
@@ -2711,7 +2726,7 @@ class ProviderController extends Controller
     public function updateApplicationStatus(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($application->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
         $outcomeStatuses = ['awarded', 'not_awarded', 'disbursed', 'renewed'];
         $validated = $request->validate([
@@ -3083,7 +3098,7 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
 
         $document->load('application.scholarship');
-        abort_unless($document->application?->scholarship?->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($document->application?->scholarship), 403);
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['pending', 'accepted', 'rejected', 'needs_replacement'])],
@@ -3205,9 +3220,8 @@ class ProviderController extends Controller
             'Submitted At',
             'Review Notes',
         ];
-        $query = ScholarshipApplication::query()
-            ->with(['applicant.studentProfile', 'documents', 'assignedReviewer', 'reviewer', 'scholarship'])
-            ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerId));
+        $query = $this->providerApplicationsQuery($provider)
+            ->with(['applicant.studentProfile', 'documents', 'assignedReviewer', 'reviewer', 'scholarship']);
 
         if ($selectedScholarship) {
             $query->where('scholarship_id', $selectedScholarship->id);
@@ -3287,8 +3301,7 @@ class ProviderController extends Controller
     {
         abort_unless($request->user()?->isProvider(), 403);
 
-        $scholarships = Scholarship::query()
-            ->where('provider_id', $request->user()->providerOrganizationId())
+        $scholarships = $this->providerScholarshipsQuery($request->user())
             ->with('events')
             ->withCount($this->providerProgramCountRelations())
             ->latest()
@@ -3302,7 +3315,7 @@ class ProviderController extends Controller
     public function storeScholarshipAnnouncement(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
 
         $validated = $request->validate([
             'audience' => ['required', Rule::in([
@@ -3399,7 +3412,7 @@ class ProviderController extends Controller
     public function showScholarship(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
 
         $scholarship->load(['announcements.publisher', 'events']);
         $providerOwner = $request->user()->providerOrganizationOwner()->loadMissing('providerProfile');
@@ -3459,7 +3472,7 @@ class ProviderController extends Controller
     public function duplicateScholarship(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
         $this->ensureProviderCanPost($request);
 
         $copiedImagePath = $this->copyScholarshipImage($scholarship->image_path);
@@ -3488,6 +3501,7 @@ class ProviderController extends Controller
         }
 
         $duplicate->loadCount('bookmarks');
+        $this->includeProgramInStaffScope($request->user(), $duplicate);
 
         ActivityLog::record(
             $request->user(),
@@ -3566,6 +3580,8 @@ class ProviderController extends Controller
             $this->notifyAdminsScholarshipSubmitted($request, $scholarship);
         }
 
+        $this->includeProgramInStaffScope($request->user(), $scholarship);
+
         ActivityLog::record(
             $request->user(),
             'scholarship_created',
@@ -3585,7 +3601,7 @@ class ProviderController extends Controller
     public function updateScholarship(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless($scholarship->provider_id === $request->user()->providerOrganizationId(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
         $this->ensureProviderCanPost($request);
 
         $validated = $this->validateScholarship($request);
@@ -5109,10 +5125,46 @@ class ProviderController extends Controller
             return null;
         }
 
-        return Scholarship::query()
-            ->where('provider_id', $request->user()->providerOrganizationId())
+        return $this->providerScholarshipsQuery($request->user())
             ->withCount($this->providerProgramCountRelations())
             ->findOrFail($scholarshipId);
+    }
+
+    private function providerScholarshipsQuery(User $actor): Builder
+    {
+        return $this->applyProviderScholarshipScope(Scholarship::query(), $actor);
+    }
+
+    private function applyProviderScholarshipScope(Builder $query, User $actor): Builder
+    {
+        $query->where('provider_id', $actor->providerOrganizationId());
+
+        if ($actor->hasLimitedProviderProgramAccess()) {
+            $query->whereIn('scholarships.id', $actor->assignedProviderProgramIds());
+        }
+
+        return $query;
+    }
+
+    private function providerApplicationsQuery(User $actor): Builder
+    {
+        return ScholarshipApplication::query()
+            ->whereHas('scholarship', fn (Builder $query) => $this->applyProviderScholarshipScope($query, $actor));
+    }
+
+    private function includeProgramInStaffScope(User $actor, Scholarship $scholarship): void
+    {
+        if (! $actor->hasLimitedProviderProgramAccess()) {
+            return;
+        }
+
+        $actor->forceFill([
+            'assigned_program_ids' => collect($actor->assignedProviderProgramIds())
+                ->push($scholarship->id)
+                ->unique()
+                ->values()
+                ->all(),
+        ])->save();
     }
 
     private function reviewNavigationPayload(
@@ -5226,6 +5278,34 @@ class ProviderController extends Controller
             ->values();
     }
 
+    private function unassignInaccessibleApplications(User $account): void
+    {
+        $assignments = ScholarshipApplication::query()
+            ->where('assigned_reviewer_id', $account->id);
+
+        if (! $account->isActive() || ! $account->hasPortalPermission('review_applications')) {
+            $assignments->update(['assigned_reviewer_id' => null]);
+
+            return;
+        }
+
+        if (! $account->hasLimitedProviderProgramAccess()) {
+            return;
+        }
+
+        $programIds = $account->assignedProviderProgramIds();
+
+        if ($programIds === []) {
+            $assignments->update(['assigned_reviewer_id' => null]);
+
+            return;
+        }
+
+        $assignments
+            ->whereNotIn('scholarship_id', $programIds)
+            ->update(['assigned_reviewer_id' => null]);
+    }
+
     private function applicationReviewerPayload(User $reviewer, int $providerId): array
     {
         $reviewer->loadMissing('providerProfile');
@@ -5245,6 +5325,8 @@ class ProviderController extends Controller
             'role_label' => $isOwner
                 ? 'Provider owner'
                 : (self::PROVIDER_TEAM_ROLES[$reviewer->account_title] ?? 'Team member'),
+            'program_access_mode' => $reviewer->hasLimitedProviderProgramAccess() ? 'selected' : 'all',
+            'assigned_program_ids' => $reviewer->assignedProviderProgramIds(),
         ];
     }
 
@@ -5288,8 +5370,44 @@ class ProviderController extends Controller
             'account_title' => ['required', 'string', Rule::in(array_keys(self::PROVIDER_TEAM_ROLES))],
             'permissions' => ['required', 'array', 'min:1'],
             'permissions.*' => ['required', 'string', 'distinct', Rule::in($permissions)],
+            'program_access_mode' => ['required', Rule::in(['all', 'selected'])],
+            'assigned_program_ids' => [
+                Rule::excludeIf($request->input('program_access_mode') !== 'selected'),
+                'required',
+                'array',
+                'min:1',
+            ],
+            'assigned_program_ids.*' => ['integer', 'distinct'],
             'password' => [$account ? 'nullable' : 'required', 'string', 'min:8', 'confirmed'],
         ]);
+
+        $assignedProgramIds = collect($validated['assigned_program_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values();
+
+        if ($request->user()->hasLimitedProviderProgramAccess() && $validated['program_access_mode'] === 'all') {
+            throw ValidationException::withMessages([
+                'program_access_mode' => 'You can only assign programs that you can access.',
+            ]);
+        }
+
+        if ($validated['program_access_mode'] === 'selected') {
+            $validProgramCount = $this->providerScholarshipsQuery($request->user())
+                ->whereIn('id', $assignedProgramIds)
+                ->count();
+
+            if ($validProgramCount !== $assignedProgramIds->count()) {
+                throw ValidationException::withMessages([
+                    'assigned_program_ids' => 'Select only programs owned by your organization.',
+                ]);
+            }
+        }
+
+        $validated['assigned_program_ids'] = $validated['program_access_mode'] === 'selected'
+            ? $assignedProgramIds->all()
+            : null;
 
         $preset = self::PROVIDER_TEAM_ROLE_PERMISSION_PRESETS[$validated['account_title']] ?? null;
 
@@ -5331,6 +5449,18 @@ class ProviderController extends Controller
                 403,
                 'You cannot manage a team account with broader permissions than your own.',
             );
+
+            if ($actor->hasLimitedProviderProgramAccess()) {
+                abort_unless(
+                    $account->hasLimitedProviderProgramAccess()
+                        && array_diff(
+                            $account->assignedProviderProgramIds(),
+                            $actor->assignedProviderProgramIds(),
+                        ) === [],
+                    403,
+                    'You cannot manage a team account with broader program access than your own.',
+                );
+            }
         }
     }
 
@@ -5364,8 +5494,37 @@ class ProviderController extends Controller
             'name' => $name ?: ($account->username ?: $account->email),
             'team_role' => $account->account_title,
             'team_role_label' => self::PROVIDER_TEAM_ROLES[$account->account_title] ?? 'Team member',
+            'program_access_mode' => $account->hasLimitedProviderProgramAccess() ? 'selected' : 'all',
+            'assigned_program_ids' => $account->assignedProviderProgramIds(),
+            'assigned_programs' => $account->hasLimitedProviderProgramAccess()
+                ? Scholarship::query()
+                    ->where('provider_id', $account->providerOrganizationId())
+                    ->whereIn('id', $account->assignedProviderProgramIds())
+                    ->orderBy('title')
+                    ->get(['id', 'title', 'status'])
+                    ->map(fn (Scholarship $scholarship) => [
+                        'id' => $scholarship->id,
+                        'title' => $scholarship->title,
+                        'status' => $scholarship->status,
+                    ])
+                    ->values()
+                : [],
             'created_at' => $account->created_at?->format('M d, Y'),
         ];
+    }
+
+    private function providerAssignablePrograms(User $actor): array
+    {
+        return $this->providerScholarshipsQuery($actor)
+            ->orderBy('title')
+            ->get(['id', 'title', 'status'])
+            ->map(fn (Scholarship $scholarship) => [
+                'id' => $scholarship->id,
+                'title' => $scholarship->title,
+                'status' => $scholarship->status,
+            ])
+            ->values()
+            ->all();
     }
 
     private function mapUrl(Scholarship $scholarship): ?string

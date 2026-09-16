@@ -110,6 +110,8 @@ class RolePermissionAccountTest extends TestCase
             'contact_number' => '09171234569',
             'account_title' => 'program_coordinator',
             'permissions' => ['manage_programs', 'manage_reports'],
+            'program_access_mode' => 'all',
+            'assigned_program_ids' => [],
             'password' => 'password123',
             'password_confirmation' => 'password123',
         ])->assertCreated();
@@ -186,6 +188,8 @@ class RolePermissionAccountTest extends TestCase
             'contact_number' => '09171234559',
             'account_title' => 'application_reviewer',
             'permissions' => ['review_applications'],
+            'program_access_mode' => 'all',
+            'assigned_program_ids' => [],
             'password' => 'temporary123',
             'password_confirmation' => 'temporary123',
         ])->assertCreated();
@@ -280,6 +284,8 @@ class RolePermissionAccountTest extends TestCase
             'contact_number' => '09171234560',
             'account_title' => 'custom',
             'permissions' => ['manage_programs', 'manage_reports'],
+            'program_access_mode' => 'all',
+            'assigned_program_ids' => [],
             'password' => 'password123',
             'password_confirmation' => 'password123',
         ])->assertCreated();
@@ -316,6 +322,123 @@ class RolePermissionAccountTest extends TestCase
             ->getJson('/provider/scholarships')
             ->assertOk()
             ->assertJsonCount(0, 'scholarships');
+    }
+
+    public function test_provider_can_limit_a_team_member_to_selected_programs(): void
+    {
+        Mail::fake();
+        Notification::fake();
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+        $assignedProgram = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Assigned Program',
+            'description' => 'A program assigned to one team member.',
+            'status' => 'draft',
+        ]);
+        $restrictedProgram = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Restricted Program',
+            'description' => 'A program outside the team member scope.',
+            'status' => 'draft',
+        ]);
+
+        $response = $this->actingAs($provider)->postJson('/provider/team/accounts', [
+            'first_name' => 'Scoped',
+            'last_name' => 'Coordinator',
+            'middle_initial' => 'P',
+            'email' => 'scoped.coordinator@example.test',
+            'username' => 'scoped.coordinator',
+            'contact_number' => '09171234558',
+            'account_title' => 'program_coordinator',
+            'permissions' => ['manage_programs'],
+            'program_access_mode' => 'selected',
+            'assigned_program_ids' => [$assignedProgram->id],
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])->assertCreated()
+            ->assertJsonPath('account.program_access_mode', 'selected')
+            ->assertJsonPath('account.assigned_program_ids.0', $assignedProgram->id);
+
+        $staff = User::query()->findOrFail($response->json('account.id'));
+        $staff->forceFill([
+            'email_verified_at' => now(),
+            'must_reset_password' => false,
+            'password_reset_required_at' => null,
+        ])->save();
+
+        $this->actingAs($staff)
+            ->getJson('/provider/scholarships')
+            ->assertOk()
+            ->assertJsonCount(1, 'scholarships')
+            ->assertJsonPath('scholarships.0.id', $assignedProgram->id);
+
+        $this->actingAs($staff)
+            ->getJson("/provider/scholarships/{$assignedProgram->id}")
+            ->assertOk();
+
+        $this->actingAs($staff)
+            ->getJson("/provider/scholarships/{$restrictedProgram->id}")
+            ->assertForbidden();
+    }
+
+    public function test_limited_provider_manager_cannot_delegate_broader_program_access(): void
+    {
+        Mail::fake();
+        Notification::fake();
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $assignedProgram = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Manager Assigned Program',
+            'description' => 'The program available to the delegated manager.',
+            'status' => 'draft',
+        ]);
+        $restrictedProgram = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Manager Restricted Program',
+            'description' => 'A program outside the delegated manager scope.',
+            'status' => 'draft',
+        ]);
+        $manager = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'account_title' => 'manager',
+            'permissions' => ['manage_team'],
+            'assigned_program_ids' => [$assignedProgram->id],
+        ]);
+
+        $basePayload = [
+            'first_name' => 'Limited',
+            'last_name' => 'Staff',
+            'middle_initial' => 'L',
+            'email' => 'limited.staff@example.test',
+            'username' => 'limited.staff',
+            'contact_number' => '09171234557',
+            'account_title' => 'custom',
+            'permissions' => ['manage_team'],
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ];
+
+        $this->actingAs($manager)
+            ->postJson('/provider/team/accounts', [
+                ...$basePayload,
+                'program_access_mode' => 'all',
+                'assigned_program_ids' => [],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('program_access_mode');
+
+        $this->actingAs($manager)
+            ->postJson('/provider/team/accounts', [
+                ...$basePayload,
+                'program_access_mode' => 'selected',
+                'assigned_program_ids' => [$restrictedProgram->id],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('assigned_program_ids');
     }
 
     public function test_managed_accounts_stop_when_their_primary_account_is_suspended(): void

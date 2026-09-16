@@ -20,6 +20,9 @@ const statusClass = computed(() => clarity.value.complete
 const statusIcon = computed(() => clarity.value.complete
     ? 'fa-solid fa-circle-check'
     : 'fa-solid fa-circle-exclamation');
+const supportCheck = computed(() => clarity.value.checks.find((check) => check.key === 'support'));
+const expectationCheck = computed(() => clarity.value.checks.find((check) => check.key === 'commitment'));
+const detailChecks = computed(() => clarity.value.checks.filter((check) => !['support', 'commitment'].includes(check.key)));
 </script>
 
 <template>
@@ -30,9 +33,11 @@ const statusIcon = computed(() => clarity.value.complete
                     <i class="fa-solid fa-file-signature" aria-hidden="true"></i>
                 </span>
                 <div>
-                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Recipient agreement preview</p>
-                    <h3 class="mt-1 text-lg font-bold text-slate-950">{{ reviewer ? 'Commitment disclosure check' : 'Check the terms before you agree' }}</h3>
-                    <p class="mt-1 text-xs leading-5 text-slate-500">{{ recipientCommitmentLabels[clarity.agreement.commitment_type] || 'Recipient commitment' }}</p>
+                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Scholarship exchange</p>
+                    <h3 class="mt-1 text-lg font-bold text-slate-950">{{ reviewer ? 'Review what each side provides' : 'What the provider expects from recipients' }}</h3>
+                    <p class="mt-1 text-xs leading-5 text-slate-500">
+                        {{ reviewer ? 'Compare the support package with the recipient expectation before approving the program.' : 'Compare what you receive with any activity, service, or reporting expected after selection.' }}
+                    </p>
                 </div>
             </div>
             <span :class="['inline-flex w-fit items-center gap-2 rounded-md px-3 py-1.5 text-xs font-bold ring-1 ring-inset', statusClass]">
@@ -41,8 +46,35 @@ const statusIcon = computed(() => clarity.value.complete
             </span>
         </header>
 
+        <div class="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-2 sm:p-5">
+            <article :class="['rounded-lg border p-4', supportCheck?.complete ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50']">
+                <div class="flex items-center gap-2">
+                    <span class="grid h-8 w-8 place-items-center rounded-md bg-white text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                        <i class="fa-solid fa-gift" aria-hidden="true"></i>
+                    </span>
+                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Applicant receives</p>
+                </div>
+                <p :class="['mt-3 text-sm font-bold leading-6', supportCheck?.complete ? 'text-slate-950' : 'text-amber-950']">
+                    {{ supportCheck?.complete ? supportCheck.value : supportCheck?.missing }}
+                </p>
+            </article>
+
+            <article :class="['rounded-lg border p-4', expectationCheck?.complete ? 'border-slate-300 bg-slate-50' : 'border-amber-200 bg-amber-50']">
+                <div class="flex items-center gap-2">
+                    <span class="grid h-8 w-8 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-inset ring-slate-200">
+                        <i class="fa-solid fa-handshake-angle" aria-hidden="true"></i>
+                    </span>
+                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Provider expects</p>
+                </div>
+                <p :class="['mt-3 whitespace-pre-line text-sm font-bold leading-6', expectationCheck?.complete ? 'text-slate-950' : 'text-amber-950']">
+                    {{ expectationCheck?.complete ? expectationCheck.value : expectationCheck?.missing }}
+                </p>
+                <p class="mt-2 text-xs font-semibold text-slate-500">{{ recipientCommitmentLabels[clarity.agreement.commitment_type] || 'Recipient expectation' }}</p>
+            </article>
+        </div>
+
         <div class="divide-y divide-slate-200">
-            <div v-for="check in clarity.checks" :key="check.key" class="grid gap-2 p-4 sm:grid-cols-[13rem_minmax(0,1fr)] sm:gap-4">
+            <div v-for="check in detailChecks" :key="check.key" class="grid gap-2 p-4 sm:grid-cols-[13rem_minmax(0,1fr)] sm:gap-4">
                 <div class="flex items-center gap-2">
                     <i :class="check.complete ? 'fa-solid fa-check-circle text-emerald-700' : 'fa-solid fa-circle-question text-amber-700'" aria-hidden="true"></i>
                     <p class="text-sm font-bold text-slate-900">{{ check.label }}</p>
@@ -54,7 +86,8 @@ const statusIcon = computed(() => clarity.value.complete
         </div>
 
         <footer class="border-t border-slate-200 bg-amber-50/70 px-4 py-3 text-xs leading-5 text-slate-600">
-            This guide checks whether important terms are disclosed. It does not decide legal fairness or replace independent advice.
+            {{ reviewer ? 'Check whether the expectation is clearly disclosed and reasonably connected to the listed support. Return vague or incomplete terms for clarification.' : 'Consider whether the expectation is reasonable for the support offered, and ask the provider about anything unclear before continuing.' }}
+            This guide supports transparency but does not make a legal fairness determination or replace independent advice.
             Basis:
             <a href="https://lawphil.net/statutes/repacts/ra1949/ra_386_1949.html" target="_blank" rel="noopener noreferrer" class="font-bold text-slate-800 underline decoration-amber-400 underline-offset-2">Civil Code contract principles</a>,
             <a href="https://lawphil.net/statutes/repacts/ra1994/ra_7687_1994.html" target="_blank" rel="noopener noreferrer" class="font-bold text-slate-800 underline decoration-amber-400 underline-offset-2">DOST scholarship service obligations</a>, and

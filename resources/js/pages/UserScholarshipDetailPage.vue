@@ -702,7 +702,7 @@ onMounted(loadScholarship);
                                     <div>
                                         <p class="student-kicker">Provider purpose</p>
                                         <h2 class="mt-1 text-xl font-bold text-slate-950">Why this scholarship is offered</h2>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">These are the outcomes the provider intends to support through this program.</p>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">This explains why the provider created the scholarship. Any contribution expected from recipients is disclosed separately below.</p>
                                     </div>
                                 </div>
 

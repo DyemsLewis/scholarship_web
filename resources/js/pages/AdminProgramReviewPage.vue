@@ -716,7 +716,7 @@ onMounted(loadScholarship);
                             <section v-if="activeReviewSection === 'offer'" class="border-t border-slate-200 p-5">
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Provider purpose</p>
                                 <h4 class="mt-1 text-lg font-bold text-slate-950">Intended program outcomes</h4>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that the stated purpose is clear, relevant to the program, and does not promise unsupported results.</p>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">Confirm why the scholarship is being provided, then compare the separate recipient expectation with the support offered.</p>
 
                                 <div v-if="selectedProviderObjectives.length" class="mt-4 grid gap-2 sm:grid-cols-2">
                                     <div v-for="objective in selectedProviderObjectives" :key="objective.value" class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
