@@ -3,8 +3,10 @@ import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
+import RecipientAgreementPanel from '../components/RecipientAgreementPanel.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import { labelFromKey } from '../support/display';
+import { providerObjectiveDetails } from '../support/providerObjectives';
 
 const appElement = document.getElementById('app');
 const scholarshipId = appElement?.dataset.scholarshipId;
@@ -64,6 +66,7 @@ const reviewStatusOptions = [
 const documentItems = computed(() => splitItems(scholarship.value?.requirements));
 const optionalDocumentItems = computed(() => splitItems(scholarship.value?.optional_requirements));
 const postQualificationDocumentItems = computed(() => splitItems(scholarship.value?.post_qualification_requirements));
+const selectedProviderObjectives = computed(() => providerObjectiveDetails(scholarship.value?.provider_objectives));
 const applicationQuestions = computed(() => Array.isArray(scholarship.value?.application_questions)
     ? scholarship.value.application_questions
     : []);
@@ -138,6 +141,12 @@ const eligibilityRules = computed(() => {
     return [
         { label: 'Academic requirement', value: academicRequirementLabel(current) },
         { label: 'Income requirement', value: current.income_requirement || 'No income restriction' },
+        {
+            label: 'Other scholarship support',
+            value: current.exclude_current_scholarship_recipients
+                ? 'Applicants receiving another scholarship are not eligible'
+                : 'No restriction',
+        },
         { label: 'Location eligibility', value: current.eligible_locations || 'No location restriction' },
     ];
 });
@@ -148,18 +157,13 @@ const workflowSteps = computed(() => selectionStages.value.map((stage, index) =>
     number: index + 1,
     event: programEvents.value.find((event) => event.type === stage) ?? null,
 })));
-const contractSections = computed(() => [
-    { label: 'Possible renewal requirement', value: scholarship.value?.renewal_policy },
-    { label: 'Possible service commitment', value: scholarship.value?.return_service_contract },
-    { label: 'Commitment preview', value: scholarship.value?.other_contract_terms },
-].filter((section) => hasText(section.value)));
 const hasLocationDetails = computed(() => Boolean(
     scholarship.value?.location_name
     || scholarship.value?.location_address
     || scholarship.value?.eligible_locations
     || scholarship.value?.map_url,
 ));
-const hasTermsOrLocation = computed(() => contractSections.value.length > 0 || hasLocationDetails.value);
+const hasTermsOrLocation = computed(() => Boolean(scholarship.value) || hasLocationDetails.value);
 const isProviderVerified = computed(() => scholarship.value?.provider_verification_status === 'approved');
 const readinessChecks = computed(() => {
     const current = scholarship.value ?? {};
@@ -199,6 +203,15 @@ const readinessChecks = computed(() => {
             status: hasText(current.deadline) ? 'Provided' : 'Review',
             tone: hasText(current.deadline) ? 'good' : 'warn',
             icon: 'fa-regular fa-calendar',
+        },
+        {
+            label: 'Recipient support period',
+            detail: hasText(current.support_starts_at) && hasText(current.support_ends_at)
+                ? `Benefits are expected to run from ${current.support_starts_at} through ${current.support_ends_at}.`
+                : 'Ask the provider to state when recipient support begins and ends.',
+            status: hasText(current.support_starts_at) && hasText(current.support_ends_at) ? 'Provided' : 'Missing',
+            tone: hasText(current.support_starts_at) && hasText(current.support_ends_at) ? 'good' : 'warn',
+            icon: 'fa-solid fa-calendar-days',
         },
         {
             label: 'Required documents',
@@ -701,6 +714,30 @@ onMounted(loadScholarship);
                             </section>
 
                             <section v-if="activeReviewSection === 'offer'" class="border-t border-slate-200 p-5">
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Provider purpose</p>
+                                <h4 class="mt-1 text-lg font-bold text-slate-950">Intended program outcomes</h4>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that the stated purpose is clear, relevant to the program, and does not promise unsupported results.</p>
+
+                                <div v-if="selectedProviderObjectives.length" class="mt-4 grid gap-2 sm:grid-cols-2">
+                                    <div v-for="objective in selectedProviderObjectives" :key="objective.value" class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-amber-800 ring-1 ring-slate-200">
+                                            <i :class="objective.icon" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">{{ objective.label }}</p>
+                                            <p class="mt-0.5 text-xs leading-5 text-slate-500">{{ objective.detail }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p v-else class="mt-4 rounded-md bg-slate-50 px-4 py-3 text-sm text-slate-500 ring-1 ring-slate-200">No structured provider objective was selected.</p>
+
+                                <div v-if="scholarship.provider_objective_notes" class="mt-3 border-l-4 border-amber-300 bg-amber-50 px-4 py-3">
+                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-800">Provider explanation</p>
+                                    <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ scholarship.provider_objective_notes }}</p>
+                                </div>
+                            </section>
+
+                            <section v-if="activeReviewSection === 'offer'" class="border-t border-slate-200 p-5">
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Eligibility</p>
                                 <h4 class="mt-1 text-lg font-bold text-slate-950">Who can apply</h4>
                                 <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that the rules match the provider's intended applicants.</p>
@@ -948,16 +985,7 @@ onMounted(loadScholarship);
                                 <h4 class="mt-1 text-lg font-bold text-slate-950">What recipients should know</h4>
 
                                 <div class="mt-4 grid gap-5 lg:grid-cols-2">
-                                    <section v-if="contractSections.length">
-                                        <h5 class="text-sm font-bold text-slate-950">Possible recipient commitments</h5>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">These are previews for applicants. Final terms should be explained after acceptance.</p>
-                                        <div class="mt-2 divide-y divide-slate-200 rounded-md border border-slate-200">
-                                            <div v-for="term in contractSections" :key="term.label" class="p-3">
-                                                <p class="text-xs font-semibold text-slate-500">{{ term.label }}</p>
-                                                <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ term.value }}</p>
-                                            </div>
-                                        </div>
-                                    </section>
+                                    <RecipientAgreementPanel :scholarship="scholarship" reviewer />
 
                                     <section v-if="hasLocationDetails">
                                         <h5 class="text-sm font-bold text-slate-950">Program location</h5>

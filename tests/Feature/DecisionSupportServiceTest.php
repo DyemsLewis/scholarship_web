@@ -109,6 +109,68 @@ class DecisionSupportServiceTest extends TestCase
         $this->assertFalse($eligibility['condition_results'][0]['is_blocking']);
     }
 
+    public function test_provider_can_exclude_applicants_receiving_another_scholarship(): void
+    {
+        [, $applicant, $scholarship] = $this->application([
+            'exclude_current_scholarship_recipients' => true,
+        ]);
+        $applicant->studentProfile()->update([
+            'current_scholarship_status' => 'receiving',
+            'current_scholarship_details' => 'Existing education allowance',
+        ]);
+
+        $eligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship, $applicant->fresh());
+        $criterion = collect($eligibility['criteria'])->firstWhere('key', 'current_scholarship_support');
+
+        $this->assertFalse($eligibility['is_eligible']);
+        $this->assertSame('fail', $criterion['status']);
+        $this->assertContains('current_scholarship_support', collect($eligibility['blocking_criteria'])->pluck('key'));
+
+        $applicant->studentProfile()->update([
+            'current_scholarship_status' => 'pending',
+        ]);
+        $updatedEligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship, $applicant->fresh());
+
+        $this->assertTrue($updatedEligibility['is_eligible']);
+        $this->assertSame('pass', collect($updatedEligibility['criteria'])->firstWhere('key', 'current_scholarship_support')['status']);
+    }
+
+    public function test_platform_awards_are_detected_automatically_and_terminated_benefits_are_ignored(): void
+    {
+        [, $applicant, $targetScholarship] = $this->application([
+            'exclude_current_scholarship_recipients' => true,
+        ]);
+        $applicant->studentProfile()->update([
+            'current_scholarship_status' => 'none',
+        ]);
+        $otherScholarship = Scholarship::create([
+            'provider_id' => User::factory()->create(['role' => 'provider'])->id,
+            'title' => 'Existing Portal Award',
+            'description' => 'An award used to verify automatic overlap detection.',
+            'status' => 'published',
+        ]);
+        $activeAward = ScholarshipApplication::create([
+            'scholarship_id' => $otherScholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'awarded',
+            'final_outcome' => 'selected',
+            'submitted_at' => now(),
+        ]);
+
+        $eligibility = (new ScholarshipEligibilityService())->evaluate($targetScholarship, $applicant->fresh());
+        $criterion = collect($eligibility['criteria'])->firstWhere('key', 'current_scholarship_support');
+
+        $this->assertFalse($eligibility['is_eligible']);
+        $this->assertSame('fail', $criterion['status']);
+        $this->assertStringContainsString('Existing Portal Award', $criterion['student_value']);
+
+        $activeAward->update(['status' => 'benefits_terminated']);
+        $updatedEligibility = (new ScholarshipEligibilityService())->evaluate($targetScholarship, $applicant->fresh());
+
+        $this->assertTrue($updatedEligibility['is_eligible']);
+        $this->assertSame('pass', collect($updatedEligibility['criteria'])->firstWhere('key', 'current_scholarship_support')['status']);
+    }
+
     public function test_provider_progress_and_documents_do_not_change_suitability(): void
     {
         [$application, $applicant] = $this->application([

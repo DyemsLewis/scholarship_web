@@ -1411,7 +1411,7 @@ onMounted(loadApplication);
                     {{ errorMessage }}
                 </div>
 
-                <div v-else-if="application" class="mt-6 space-y-5">
+                <div v-else-if="application" class="mt-4 space-y-4">
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
@@ -1419,14 +1419,14 @@ onMounted(loadApplication);
                         <div class="border-b border-slate-200 px-4 py-3">
                             <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Review steps</p>
                         </div>
-                        <nav class="grid gap-1 p-1.5 sm:grid-cols-2 xl:grid-cols-4" aria-label="Applicant review steps">
+                        <nav class="grid gap-1 p-1 sm:grid-cols-2 xl:grid-cols-4" aria-label="Applicant review steps">
                             <button
                                 v-for="(section, index) in primaryDetailSections"
                                 :key="section.key"
                                 type="button"
                                 :aria-current="activeSection === section.key ? 'step' : undefined"
                                 :class="[
-                                    'flex min-w-0 items-center gap-3 rounded-md px-3 py-3 text-left transition',
+                                    'flex min-w-0 items-center gap-2.5 rounded-md px-3 py-2.5 text-left transition',
                                     activeSection === section.key
                                         ? 'bg-slate-950 text-white'
                                         : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
@@ -1441,16 +1441,8 @@ onMounted(loadApplication);
                                 >
                                     <i :class="section.icon" aria-hidden="true"></i>
                                 </span>
-                                <span class="min-w-0">
-                                    <span class="flex items-center gap-2">
-                                        <span class="block truncate text-sm font-bold">{{ section.label }}</span>
-                                        <span :class="['shrink-0 text-[9px] font-bold uppercase tracking-[0.12em]', activeSection === section.key ? 'text-slate-300' : 'text-slate-400']">
-                                            Step {{ index + 1 }}
-                                        </span>
-                                    </span>
-                                    <span :class="['mt-0.5 block truncate text-xs', activeSection === section.key ? 'text-slate-300' : 'text-slate-500']">
-                                        {{ sectionSummary(section.key) }}
-                                    </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate text-sm font-bold">{{ index + 1 }}. {{ section.label }}</span>
                                 </span>
                             </button>
                         </nav>
@@ -1472,7 +1464,6 @@ onMounted(loadApplication);
                             >
                                 <i :class="section.icon" aria-hidden="true"></i>
                                 {{ section.label }}
-                                <span class="font-semibold text-slate-400">{{ sectionSummary(section.key) }}</span>
                             </button>
                         </nav>
                     </section>
@@ -2499,9 +2490,18 @@ onMounted(loadApplication);
                                         <dd v-if="application.applicant?.address && application.applicant?.location" class="mt-1 text-xs text-slate-500">{{ application.applicant.location }}</dd>
                                     </div>
                                     <div class="sm:col-span-2">
-                                        <dt class="font-semibold text-slate-500">Current scholarship support</dt>
+                                        <dt class="font-semibold text-slate-500">Outside-platform scholarship declaration</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.current_scholarship_status || 'not provided') }}</dd>
                                         <dd v-if="application.applicant?.current_scholarship_details" class="mt-1 text-xs leading-5 text-slate-500">{{ application.applicant.current_scholarship_details }}</dd>
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <dt class="font-semibold text-slate-500">Other active awards detected by the portal</dt>
+                                        <dd v-if="application.applicant?.platform_active_scholarships?.length" class="mt-2 flex flex-wrap gap-2">
+                                            <span v-for="record in application.applicant.platform_active_scholarships" :key="record.application_id" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
+                                                {{ record.title }} · {{ labelFromKey(record.status) }}
+                                            </span>
+                                        </dd>
+                                        <dd v-else class="mt-1 font-bold text-slate-950">No other active portal award detected</dd>
                                     </div>
                                     <div class="sm:col-span-2 rounded-md bg-slate-50 p-3">
                                         <dt class="font-semibold text-slate-500">Study support needed</dt>

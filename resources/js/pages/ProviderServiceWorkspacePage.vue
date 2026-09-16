@@ -196,7 +196,7 @@ onMounted(loadWorkspace);
                     <a href="/provider/billing/requests" class="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-950">
                         <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to your requests
                     </a>
-                    <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                             <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Service workspace</p>
                             <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ purchase?.plan_name ?? 'Provider service' }}</h1>
@@ -214,7 +214,7 @@ onMounted(loadWorkspace);
                 <div v-else-if="errorMessage || !purchase" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
 
                 <template v-else>
-                    <section class="provider-panel mt-5 flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <section class="provider-panel mt-4 flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div class="flex flex-wrap gap-x-8 gap-y-3">
                             <div>
                                 <p class="text-xs font-semibold text-slate-500">Assigned support</p>
@@ -228,24 +228,24 @@ onMounted(loadWorkspace);
                         <p class="text-xs font-semibold text-slate-500">{{ completedMilestones }} of {{ purchase.milestones?.length ?? 0 }} steps complete</p>
                     </section>
 
-                    <div v-if="purchase.status !== 'paid'" class="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+                    <div v-if="purchase.status !== 'paid'" class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                         Payment must be confirmed before this workspace can be updated. Return to Services to continue or check the payment status.
                     </div>
 
-                    <div class="mt-5 space-y-4">
+                    <div class="mt-4 space-y-4">
                         <div class="flex flex-col gap-4">
 
                             <section class="provider-panel order-2 overflow-hidden">
-                                <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6">
+                                <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Progress</p>
                                         <h2 class="mt-1 text-xl font-bold text-slate-950">Service steps</h2>
-                                        <p class="mt-2 text-sm text-slate-600">Track what platform support has finished after your meeting.</p>
+                                        <p class="mt-1 text-sm text-slate-600">Track completed support work.</p>
                                     </div>
                                     <span class="w-fit rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">{{ completedMilestones }} of {{ purchase.milestones?.length ?? 0 }} completed</span>
                                 </div>
                                 <ol class="divide-y divide-slate-200">
-                                    <li v-for="(item, index) in purchase.milestones" :key="item.id" class="flex items-center gap-3 px-5 py-4 sm:px-6">
+                                    <li v-for="(item, index) in purchase.milestones" :key="item.id" class="flex items-center gap-3 px-4 py-3 sm:px-5">
                                         <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold', item.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">
                                             <i v-if="item.completed" class="fa-solid fa-check" aria-hidden="true"></i>
                                             <span v-else>{{ index + 1 }}</span>
@@ -257,19 +257,19 @@ onMounted(loadWorkspace);
                             </section>
 
                             <section class="provider-panel order-1 overflow-hidden">
-                                <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+                                <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
                                     <div class="flex items-start gap-3">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i></span>
                                         <div>
                                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Next step</p>
                                             <h2 class="mt-1 text-xl font-bold text-slate-950">Schedule your service meeting</h2>
-                                            <p class="mt-2 text-sm leading-6 text-slate-600">Choose when and how to meet. Your team and platform support will discuss the work during the meeting.</p>
+                                            <p class="mt-1 text-sm leading-6 text-slate-600">Choose a preferred time and meeting format.</p>
                                         </div>
                                     </div>
                                     <span v-if="purchase.meeting_status" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold capitalize', meetingStatusClass(purchase.meeting_status)]">{{ purchase.meeting_status }}</span>
                                 </div>
 
-                                <div class="p-5 sm:p-6">
+                                <div class="p-4 sm:p-5">
                                     <div v-if="purchase.meeting_scheduled_for" class="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
                                         <div>
                                             <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Preferred schedule</p>
@@ -314,11 +314,11 @@ onMounted(loadWorkspace);
                             </section>
 
                             <section class="provider-panel order-3 overflow-hidden">
-                                <div class="border-b border-slate-200 p-5 sm:p-6">
+                                <div class="border-b border-slate-200 p-4 sm:px-5">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Files</p>
                                     <h2 class="mt-1 text-xl font-bold text-slate-950">Supporting files and deliverables</h2>
                                 </div>
-                                <div class="grid gap-5 p-5 sm:p-6 lg:grid-cols-2">
+                                <div class="grid gap-4 p-4 sm:p-5 lg:grid-cols-2">
                                     <div class="min-w-0">
                                         <h3 class="text-sm font-bold text-slate-950">Files from your team</h3>
                                         <div class="mt-3 divide-y divide-slate-200 rounded-md border border-slate-200">
@@ -350,7 +350,7 @@ onMounted(loadWorkspace);
                             </section>
 
                             <section class="provider-panel order-4 overflow-hidden">
-                                <div class="border-b border-slate-200 p-5 sm:p-6">
+                                <div class="border-b border-slate-200 p-4 sm:px-5">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Updates</p>
                                     <h2 class="mt-1 text-xl font-bold text-slate-950">Service history</h2>
                                 </div>

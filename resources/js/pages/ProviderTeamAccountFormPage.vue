@@ -170,7 +170,7 @@ onMounted(loadAccount);
                         <div>
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Team Access</p>
                             <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ isEditMode ? 'Edit team account' : 'Create team account' }}</h1>
-                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Add the staff member's details, choose a role, and set their provider access.</p>
+                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Set staff details, role, and access.</p>
                         </div>
                         <a href="/provider/team" class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100">
                             <i class="fa-solid fa-arrow-left mr-2" aria-hidden="true"></i>

@@ -220,29 +220,37 @@ onMounted(() => loadFinance());
                         <p class="mt-1 text-sm text-slate-500">Try another period or search term.</p>
                     </div>
                     <div v-else class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                        <table class="min-w-[900px] table-fixed divide-y divide-slate-200 text-left text-sm">
+                            <colgroup>
+                                <col class="w-36">
+                                <col>
+                                <col class="w-52">
+                                <col class="w-40">
+                                <col class="w-32">
+                                <col class="w-36">
+                            </colgroup>
                             <thead class="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
                                 <tr>
-                                    <th class="px-5 py-3 font-bold">Receipt</th>
-                                    <th class="px-5 py-3 font-bold">Provider</th>
-                                    <th class="px-5 py-3 font-bold">Service</th>
-                                    <th class="px-5 py-3 font-bold">Paid</th>
-                                    <th class="px-5 py-3 font-bold">Amount</th>
-                                    <th class="px-5 py-3 text-right font-bold">Action</th>
+                                    <th class="px-4 py-2.5 text-center font-bold">Receipt</th>
+                                    <th class="px-4 py-2.5 font-bold">Provider</th>
+                                    <th class="px-4 py-2.5 font-bold">Service</th>
+                                    <th class="px-4 py-2.5 text-center font-bold">Paid</th>
+                                    <th class="px-4 py-2.5 text-center font-bold">Amount</th>
+                                    <th class="px-4 py-2.5 text-center font-bold">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="receipt in receipts" :key="receipt.id" class="hover:bg-slate-50/70">
-                                    <td class="whitespace-nowrap px-5 py-4 font-mono text-xs font-bold text-slate-700">{{ receipt.receipt_number }}</td>
-                                    <td class="px-5 py-4">
-                                        <p class="font-bold text-slate-950">{{ receipt.provider }}</p>
-                                        <p class="mt-0.5 text-xs text-slate-500">{{ receipt.provider_email }}</p>
+                                    <td class="whitespace-nowrap px-4 py-3 text-center font-mono text-xs font-bold text-slate-700">{{ receipt.receipt_number }}</td>
+                                    <td class="px-4 py-3">
+                                        <p class="line-clamp-2 font-bold leading-5 text-slate-950">{{ receipt.provider }}</p>
+                                        <p class="mt-0.5 truncate text-xs text-slate-500">{{ receipt.provider_email }}</p>
                                     </td>
-                                    <td class="px-5 py-4 font-semibold text-slate-700">{{ receipt.service }}</td>
-                                    <td class="whitespace-nowrap px-5 py-4 text-xs text-slate-600">{{ dateTime(receipt.paid_at) }}</td>
-                                    <td class="whitespace-nowrap px-5 py-4 font-black text-slate-950">{{ money(receipt.amount, receipt.currency) }}</td>
-                                    <td class="px-5 py-4 text-right">
-                                        <button type="button" class="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="selectedReceipt = receipt">
+                                    <td class="px-4 py-3 text-xs font-semibold leading-5 text-slate-700">{{ receipt.service }}</td>
+                                    <td class="whitespace-nowrap px-4 py-3 text-center text-xs text-slate-600">{{ dateTime(receipt.paid_at) }}</td>
+                                    <td class="whitespace-nowrap px-4 py-3 text-center font-bold text-slate-950">{{ money(receipt.amount, receipt.currency) }}</td>
+                                    <td class="px-4 py-3 text-center">
+                                        <button type="button" class="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="selectedReceipt = receipt">
                                             View receipt <i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>
                                         </button>
                                     </td>

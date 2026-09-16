@@ -176,6 +176,7 @@ const comparisonRows = [
     { key: 'match', label: 'Profile match', icon: 'fa-solid fa-gauge-high' },
     { key: 'benefits', label: 'Benefits', icon: 'fa-solid fa-gift' },
     { key: 'deadline', label: 'Application dates', icon: 'fa-regular fa-calendar' },
+    { key: 'support_period', label: 'Support period', icon: 'fa-solid fa-calendar-days' },
     { key: 'target', label: 'Eligible learners', icon: 'fa-solid fa-user-graduate' },
     { key: 'academic', label: 'Academic rule', icon: 'fa-solid fa-chart-line' },
     { key: 'documents', label: 'Document readiness', icon: 'fa-solid fa-folder-open' },
@@ -225,6 +226,7 @@ function benefitDetailLine(benefit) {
             : null,
         benefit.coverage_label,
         benefit.frequency_label,
+        benefit.duration,
     ].filter(Boolean);
 
     return details.length
@@ -271,6 +273,11 @@ function comparisonValue(scholarship, key) {
         const opening = scholarship.application_opens_at ? `Opens ${scholarship.application_opens_at}` : 'Open now';
 
         return `${opening} / ${deadlineLabel(scholarship)}`;
+    }
+    if (key === 'support_period') {
+        return scholarship.support_starts_at && scholarship.support_ends_at
+            ? `${scholarship.support_starts_at} - ${scholarship.support_ends_at}`
+            : 'Not fully announced';
     }
     if (key === 'target') return targetApplicantLabel(scholarship);
     if (key === 'academic') return academicRequirementLabel(scholarship);
@@ -1271,6 +1278,19 @@ onBeforeUnmount(() => {
                         <p class="mt-4 text-sm leading-6 text-slate-600">
                             {{ previewScholarship.description || 'Open the full scholarship page to review the complete program information.' }}
                         </p>
+
+                        <div class="mt-4 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-200 text-xs text-amber-900">
+                                <i class="fa-solid fa-calendar-days" aria-hidden="true"></i>
+                            </span>
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-800">Recipient support period</p>
+                                <p class="mt-1 text-sm font-bold text-slate-950">
+                                    {{ previewScholarship.support_starts_at && previewScholarship.support_ends_at ? `${previewScholarship.support_starts_at} - ${previewScholarship.support_ends_at}` : 'Exact dates not yet announced' }}
+                                </p>
+                                <p class="mt-1 text-xs leading-5 text-slate-600">This is separate from the application deadline shown above.</p>
+                            </div>
+                        </div>
 
                         <div :class="['mt-4 flex items-start gap-3 rounded-md border p-3', previewScholarship.eligibility_match?.is_eligible === false ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50']">
                             <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', previewScholarship.eligibility_match?.is_eligible === false ? 'bg-rose-100 text-rose-700' : 'bg-slate-950 text-amber-300']">

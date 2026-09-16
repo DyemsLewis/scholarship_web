@@ -239,8 +239,11 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
         $provider->providerProfile()->update(['verification_status' => 'approved']);
         $scholarship = Scholarship::create([
             'provider_id' => $provider->id,
+            'image_path' => 'uploads/scholarships/workflow-test.png',
             'title' => 'Workflow Test Scholarship',
             'description' => 'Used to test scholarship workflow integrity.',
+            'provider_objectives' => [],
+            'eligibility_conditions' => [],
             'status' => 'published',
             'selection_stages' => ['screening', 'formal_application', 'decision'],
             'contact_email' => $provider->providerProfile->provider_contact_email,
@@ -283,6 +286,7 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',
             'household_size' => 4,
+            'current_scholarship_status' => 'none',
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',

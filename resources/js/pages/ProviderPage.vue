@@ -358,7 +358,7 @@ onMounted(loadProviderData);
                                 Welcome, {{ providerName }}
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Move from organization setup to applicant outcomes through one clear scholarship workflow.
+                                Manage programs, reviews, and applicant outcomes.
                             </p>
                         </div>
                     </div>
@@ -375,14 +375,14 @@ onMounted(loadProviderData);
                 <div v-else class="provider-content-stack">
                     <section
                         :class="[
-                            'relative overflow-hidden rounded-lg border p-5 shadow-sm sm:p-6',
+                            'relative overflow-hidden rounded-lg border p-4 shadow-sm sm:p-5',
                             user?.can_post_scholarships
                                 ? 'border-slate-800 bg-slate-950 text-white'
                                 : 'border-amber-200 bg-amber-50',
                         ]"
                     >
                         <div v-if="user?.can_post_scholarships" class="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border-[42px] border-amber-300/10"></div>
-                        <div class="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex min-w-0 items-start gap-4">
                                 <span
                                     :class="[
@@ -445,7 +445,7 @@ onMounted(loadProviderData);
                                     :key="queue.key"
                                     :href="queue.href"
                                     :class="[
-                                        'group flex min-h-28 items-start gap-3 border-slate-200 px-5 py-4 transition hover:bg-slate-50',
+                                        'group flex min-h-24 items-start gap-3 border-slate-200 px-4 py-3.5 transition hover:bg-slate-50',
                                         index < applicantWorkQueues.length - 1 ? 'border-b' : '',
                                         index === 2 ? 'sm:border-b-0' : '',
                                         index % 2 === 0 ? 'sm:border-r' : '',
@@ -512,7 +512,7 @@ onMounted(loadProviderData);
                             <div>
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program cycle</p>
                                 <h3 class="mt-1 text-lg font-bold text-slate-950">Programs in motion</h3>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Each row opens the next useful action for that program.</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Open a program to continue its next action.</p>
                             </div>
                             <div class="flex gap-2">
                                 <a v-if="user?.can_post_scholarships && canManagePrograms" href="/provider/programs/create" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">New program</a>

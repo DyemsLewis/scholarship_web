@@ -164,7 +164,7 @@ onMounted(loadInsights);
                                 Review center
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Start with applicant files that need attention, then use the summaries for additional context.
+                                Review document packets and program progress.
                             </p>
                         </div>
                         <a href="/provider/applications" class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800">
@@ -181,8 +181,8 @@ onMounted(loadInsights);
                     {{ errorMessage }}
                 </div>
 
-                <div v-else class="mt-6 flex flex-col gap-6">
-                    <section class="order-3 grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+                <div v-else class="mt-4 flex flex-col gap-4">
+                    <section class="order-3 grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
                         <article class="provider-panel p-5">
                             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                 Application Funnel
@@ -253,7 +253,7 @@ onMounted(loadInsights);
                                     Applicant document packets
                                 </h3>
                                 <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Review all uploaded files for one application together instead of working through a long file-by-file list.
+                                    Open one applicant packet to review its files together.
                                 </p>
                             </div>
                             <div class="flex shrink-0 items-center gap-2">
@@ -282,30 +282,30 @@ onMounted(loadInsights);
                         </div>
 
                         <div v-else class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
-                            <div class="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 xl:grid">
+                            <div class="hidden grid-cols-[minmax(0,1fr)_20rem_8rem] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 xl:grid">
                                 <span>Applicant</span>
-                                <span>Files</span>
-                                <span>Action</span>
+                                <span class="text-center">Files</span>
+                                <span class="text-center">Action</span>
                             </div>
                             <article
                                 v-for="packet in documentReviewQueue"
                                 :key="packet.application_id"
-                                class="grid gap-3 border-b border-slate-200 p-4 last:border-b-0 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] xl:items-center"
+                                class="grid gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0 xl:grid-cols-[minmax(0,1fr)_20rem_8rem] xl:items-center"
                             >
                                 <div class="flex min-w-0 gap-3">
                                     <img
                                         :src="packet.scholarship_image_url || '/uploads/scholarship-default.jpg'"
                                         :alt="packet.scholarship || 'Scholarship'"
-                                        class="h-11 w-11 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                        class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                     >
                                     <div class="min-w-0">
-                                        <h4 class="truncate text-sm font-bold text-slate-950">{{ packet.applicant || 'Applicant' }}</h4>
+                                        <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ packet.applicant || 'Applicant' }}</h4>
                                         <p class="mt-1 truncate text-xs font-semibold text-amber-700">{{ packet.scholarship || 'Scholarship' }}</p>
                                         <p class="mt-1 truncate text-xs text-slate-500">{{ packet.applicant_email }} - Submitted {{ packet.submitted_at || 'recently' }}</p>
                                     </div>
                                 </div>
 
-                                <div class="min-w-0 max-w-md">
+                                <div class="min-w-0 max-w-md xl:mx-auto xl:w-full">
                                     <div class="flex items-center justify-between gap-4">
                                         <p class="text-sm font-bold text-slate-950">{{ packet.files_count }} uploaded</p>
                                         <p class="shrink-0 text-xs font-semibold text-slate-500">
@@ -330,7 +330,7 @@ onMounted(loadInsights);
 
                                 <a
                                     :href="packet.review_url"
-                                    class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800"
+                                    class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 xl:justify-self-center"
                                 >
                                     Review files
                                     <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>

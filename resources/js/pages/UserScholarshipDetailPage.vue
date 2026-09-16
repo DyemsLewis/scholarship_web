@@ -5,8 +5,10 @@ import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import RecipientAgreementPanel from '../components/RecipientAgreementPanel.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import { labelFromKey } from '../support/display';
+import { providerObjectiveDetails } from '../support/providerObjectives';
 import { selectionPlanFor } from '../support/selectionPlan';
 
 const appElement = document.getElementById('app');
@@ -53,6 +55,7 @@ const optionalDocumentItems = computed(() => scholarship.value?.application_mode
     : documentRequirements(scholarship.value?.optional_requirements));
 const postQualificationDocumentItems = computed(() =>
     documentRequirements(scholarship.value?.post_qualification_requirements));
+const selectedProviderObjectives = computed(() => providerObjectiveDetails(scholarship.value?.provider_objectives));
 const documentRequirementSummary = computed(() => scholarship.value?.application_mode === 'provider_review'
     ? 'No files required for the initial review'
     : (hasDocumentRequirements.value
@@ -182,10 +185,14 @@ const keyFacts = computed(() => {
             detail: current.slots_available ? 'Planned recipients' : 'Ask the provider for availability',
         },
         {
-            icon: 'fa-solid fa-paper-plane',
-            label: 'How to start',
-            value: applicationModeLabel(current.application_mode),
-            detail: documentRequirementSummary.value,
+            icon: 'fa-solid fa-calendar-days',
+            label: 'Support period',
+            value: current.support_starts_at && current.support_ends_at
+                ? `${current.support_starts_at} - ${current.support_ends_at}`
+                : 'Not fully announced',
+            detail: current.support_ends_at
+                ? `Recipient support is expected to end on ${current.support_ends_at}`
+                : 'Ask the provider when this cycle of support ends',
         },
     ];
 });
@@ -209,6 +216,13 @@ const fitHighlights = computed(() => {
             items: yearLevelCheck?.status === 'info' ? [] : criteriaItems(current.eligible_year_levels),
         },
         { icon: 'fa-solid fa-wallet', label: 'Household income', value: eligibilityRuleLabel('income', current.income_requirement) },
+        {
+            icon: 'fa-solid fa-award',
+            label: 'Other scholarship support',
+            value: current.exclude_current_scholarship_recipients
+                ? 'Must not currently receive another scholarship'
+                : 'No restriction',
+        },
         { icon: 'fa-solid fa-location-dot', label: 'Location coverage', value: eligibilityRuleLabel('location', current.eligible_locations) },
         { icon: 'fa-solid fa-chart-line', label: 'Academic requirement', value: academicRequirementLabel(current) },
     ];
@@ -259,12 +273,6 @@ const applyPanelDescription = computed(() => {
 
     return 'Your profile can start pre-screening. Review the details once more before submitting.';
 });
-const hasContractDetails = computed(() => Boolean(
-    scholarship.value?.renewal_policy
-    || scholarship.value?.return_service_contract
-    || scholarship.value?.other_contract_terms,
-));
-
 function formatAmount(amount) {
     if (amount === null || amount === undefined || amount === '') {
         return 'Amount not set';
@@ -683,6 +691,42 @@ onMounted(loadScholarship);
                                 <ScholarshipBenefitsPanel class="mt-5" :benefits="scholarship.benefits" uniform />
                             </article>
 
+                            <article
+                                v-if="selectedProviderObjectives.length || scholarship.provider_objective_notes"
+                                class="student-card overflow-hidden"
+                            >
+                                <div class="flex items-start gap-3 border-b border-slate-200 bg-amber-50/70 p-5 sm:p-6">
+                                    <span class="student-section-mark">
+                                        <i class="fa-solid fa-bullseye" aria-hidden="true"></i>
+                                    </span>
+                                    <div>
+                                        <p class="student-kicker">Provider purpose</p>
+                                        <h2 class="mt-1 text-xl font-bold text-slate-950">Why this scholarship is offered</h2>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">These are the outcomes the provider intends to support through this program.</p>
+                                    </div>
+                                </div>
+
+                                <div class="grid gap-px bg-slate-200 sm:grid-cols-2">
+                                    <div
+                                        v-for="objective in selectedProviderObjectives"
+                                        :key="objective.value"
+                                        class="flex items-start gap-3 bg-white p-4"
+                                    >
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
+                                            <i :class="objective.icon" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">{{ objective.label }}</p>
+                                            <p class="mt-0.5 text-xs leading-5 text-slate-500">{{ objective.detail }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p v-if="scholarship.provider_objective_notes" class="border-t border-slate-200 px-5 py-4 text-sm leading-6 text-slate-700 sm:px-6">
+                                    {{ scholarship.provider_objective_notes }}
+                                </p>
+                            </article>
+
                             <article id="eligibility" class="student-card scroll-mt-6 p-5 sm:p-6">
                                 <div class="student-section-head">
                                     <div class="flex items-start gap-3">
@@ -981,35 +1025,7 @@ onMounted(loadScholarship);
 
                             </article>
 
-                            <details v-if="hasContractDetails" class="group student-card overflow-hidden">
-                                <summary class="flex cursor-pointer list-none items-center justify-between gap-4 p-5 sm:p-6">
-                                    <span class="flex items-start gap-3">
-                                        <span class="student-section-mark">
-                                            <i class="fa-solid fa-file-signature" aria-hidden="true"></i>
-                                        </span>
-                                        <span>
-                                            <span class="student-kicker block">Possible recipient commitments</span>
-                                            <span class="mt-1 block text-lg font-bold text-slate-950">What may apply after acceptance</span>
-                                            <span class="mt-1 block text-sm text-slate-500">For awareness only. The provider will explain the final agreement if you are accepted.</span>
-                                        </span>
-                                    </span>
-                                    <i class="fa-solid fa-chevron-down text-sm text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
-                                </summary>
-                                <div class="grid gap-3 border-t border-slate-200 bg-slate-50 p-5 text-sm sm:p-6">
-                                    <div v-if="scholarship.renewal_policy" class="rounded-md bg-white p-4 ring-1 ring-slate-200">
-                                        <p class="font-bold text-slate-950">Possible renewal requirement</p>
-                                        <p class="mt-1 leading-6 text-slate-600">{{ scholarship.renewal_policy }}</p>
-                                    </div>
-                                    <div v-if="scholarship.return_service_contract" class="rounded-md bg-white p-4 ring-1 ring-slate-200">
-                                        <p class="font-bold text-slate-950">Possible service commitment</p>
-                                        <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">{{ scholarship.return_service_contract }}</p>
-                                    </div>
-                                    <div v-if="scholarship.other_contract_terms" class="rounded-md bg-white p-4 ring-1 ring-slate-200">
-                                        <p class="font-bold text-slate-950">Commitment preview</p>
-                                        <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">{{ scholarship.other_contract_terms }}</p>
-                                    </div>
-                                </div>
-                            </details>
+                            <RecipientAgreementPanel :scholarship="scholarship" />
 
                         </section>
 

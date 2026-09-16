@@ -25,7 +25,6 @@ const academicScaleOptions = [
 const requestedSection = new URLSearchParams(window.location.search).get('section');
 const reviewSections = [
     { key: 'profile', label: 'Applicant record', icon: 'fa-solid fa-user-graduate' },
-    { key: 'proof', label: 'Evidence', icon: 'fa-solid fa-file-lines' },
     { key: 'oversight', label: 'Review history', icon: 'fa-solid fa-shield-halved' },
     { key: 'decision', label: 'Decision', icon: 'fa-solid fa-gavel' },
 ];
@@ -34,6 +33,11 @@ const activeReviewSectionIndex = computed(() => reviewSections.findIndex((sectio
 const previousReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value - 1] ?? null);
 const nextReviewSection = computed(() => reviewSections[activeReviewSectionIndex.value + 1] ?? null);
 const academicRecord = computed(() => academicVerificationDocument(applicant.value));
+const schoolRecord = computed(() => applicant.value?.verification_documents?.find(
+    (document) => document.document_type === 'school_record',
+) ?? null);
+const profileEvidenceDocuments = computed(() => [schoolRecord.value, academicRecord.value].filter(Boolean));
+const profileEvidenceReady = computed(() => Boolean(academicRecord.value));
 const savedAcademicResult = computed(() => academicResultLabel(applicant.value));
 const academicScanRequired = computed(() => Boolean(applicant.value?.academic_scan_required));
 const academicScanReady = computed(() => !academicScanRequired.value || academicRecord.value?.ocr_status === 'succeeded');
@@ -75,8 +79,8 @@ const reviewFocus = computed(() => {
     if (status === 'approved') {
         return {
             eyebrow: 'Verification complete',
-            title: 'The saved academic result is verified',
-            description: 'Open the audit trail to review who verified it and the recorded decision history.',
+            title: 'The applicant profile is supported by submitted records',
+            description: 'The school and academic information was checked against the available evidence.',
             icon: 'fa-solid fa-check',
             section: 'oversight',
             action: 'View audit trail',
@@ -86,21 +90,21 @@ const reviewFocus = computed(() => {
     if (status === 'rejected') {
         return {
             eyebrow: 'Applicant action needed',
-            title: 'A replacement academic record was requested',
-            description: 'Review the current evidence and decision note while waiting for the applicant to upload a replacement.',
+            title: 'Replacement supporting evidence was requested',
+            description: 'Review the current records and decision note while waiting for the applicant to upload a replacement.',
             icon: 'fa-solid fa-rotate',
-            section: 'proof',
-            action: 'View evidence',
+            section: 'profile',
+            action: 'View record and evidence',
         };
     }
 
     return {
         eyebrow: 'Review needed',
-        title: 'Compare the saved result with the academic record',
-        description: 'Open the submitted evidence, confirm that it supports the saved academic result, then record the decision.',
+        title: 'Compare the profile with the submitted records',
+        description: 'Confirm that the school and academic information is supported before recording the profile decision.',
         icon: 'fa-solid fa-arrow-right',
-        section: 'proof',
-        action: 'Open evidence',
+        section: 'profile',
+        action: 'Open record and evidence',
     };
 });
 
@@ -249,7 +253,7 @@ function applicantInitials(currentApplicant) {
 }
 
 function applicantActionOptions(currentApplicant) {
-    if (!academicVerificationDocument(currentApplicant)) {
+    if (!profileEvidenceReady.value) {
         return [];
     }
 
@@ -259,7 +263,7 @@ function applicantActionOptions(currentApplicant) {
     if (status !== 'approved' && (academicScanReady.value || reviewedAcademicResultReady.value)) {
         actions.push({
             status: 'approved',
-            label: 'Verify academic result',
+            label: 'Verify profile information',
             className: 'bg-slate-950 text-white hover:bg-slate-800',
         });
     }
@@ -310,8 +314,8 @@ async function updateApplicant(verificationStatus) {
         return;
     }
 
-    if (!academicVerificationDocument(applicant.value)) {
-        decisionError.value = 'The applicant must upload an academic record before verification.';
+    if (!profileEvidenceReady.value) {
+        decisionError.value = 'The applicant must upload an academic record before profile verification.';
         return;
     }
 
@@ -367,34 +371,44 @@ onMounted(loadApplicant);
 
         <section class="admin-page">
             <div class="admin-container">
+                <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
+                    <a href="/admin/reviews?type=applicants" class="font-bold text-slate-600 transition hover:text-slate-950">Applicant reviews</a>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
+                    <span class="truncate font-semibold text-slate-950">{{ applicant?.name || applicant?.username || 'Applicant record' }}</span>
+                </nav>
+
                 <header class="admin-hero">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                        <div class="max-w-3xl">
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Applicant review</p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">Verify academic information</h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Compare the applicant's saved result with the academic record, then record a clear decision.</p>
+                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ applicant?.name || applicant?.username || 'Verify academic information' }}</h2>
+                            <p class="mt-3 text-sm leading-6 text-slate-600">Compare the applicant's profile with the submitted school and academic records, then record a clear decision.</p>
+                            <div v-if="applicant" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
+                                <span>{{ applicant.email || 'Email not provided' }}</span>
+                                <span>{{ applicant.contact_number || 'Contact not provided' }}</span>
+                                <span>{{ statusLabel(applicant.education_level || 'Education not provided') }}</span>
+                            </div>
                         </div>
-                        <div class="flex flex-wrap gap-2">
-                            <a
-                                href="/admin/reviews?type=applicants"
-                                class="inline-flex items-center rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                            >
-                                Back to reviews
-                            </a>
+                        <div v-if="applicant" class="flex flex-wrap items-center gap-2 lg:justify-end">
+                            <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(applicantReviewStatus(applicant))]">
+                                {{ applicantReviewStatusLabel(applicant) }}
+                            </span>
                             <button
                                 type="button"
-                                class="w-fit rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                                class="grid h-10 w-10 place-items-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
+                                aria-label="Refresh applicant record"
                                 @click="loadApplicant"
                             >
-                                Refresh
+                                <i class="fa-solid fa-rotate text-xs" aria-hidden="true"></i>
                             </button>
                             <button
                                 v-if="academicRecord && activeReviewSection !== 'decision'"
                                 type="button"
-                                class="w-fit rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                class="inline-flex w-fit items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                                 @click="selectReviewSection('decision')"
                             >
                                 Record decision
+                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                             </button>
                         </div>
                     </div>
@@ -409,11 +423,48 @@ onMounted(loadApplicant);
                     <p class="mt-1 text-sm leading-6 text-rose-700">{{ loadError }}</p>
                 </div>
 
-                <div v-else class="mt-6 space-y-4">
+                <div v-else class="mt-4 space-y-4">
+                        <section class="admin-panel overflow-hidden">
+                            <div class="border-b border-slate-200 px-4 py-3">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Review steps</p>
+                            </div>
+                            <nav class="grid gap-1 p-1 sm:grid-cols-3" aria-label="Academic verification sections">
+                                <button
+                                    v-for="(section, index) in reviewSections"
+                                    :key="section.key"
+                                    type="button"
+                                    :aria-current="activeReviewSection === section.key ? 'step' : undefined"
+                                    :class="[
+                                        'flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
+                                        activeReviewSection === section.key
+                                            ? 'bg-slate-950 text-white'
+                                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                                    ]"
+                                    @click="selectReviewSection(section.key)"
+                                >
+                                    <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', activeReviewSection === section.key ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-600']"><i :class="section.icon" aria-hidden="true"></i></span>
+                                    <span class="min-w-0">
+                                        <span class="block text-sm font-bold">{{ index + 1 }}. {{ section.label }}</span>
+                                        <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
+                                            <template v-if="section.key === 'profile'">Identity and school record</template>
+                                            <template v-else-if="section.key === 'oversight'">Source and decision activity</template>
+                                            <template v-else>{{ applicantReviewStatusLabel(applicant) }}</template>
+                                        </span>
+                                    </span>
+                                </button>
+                            </nav>
+                        </section>
+
                         <section class="admin-panel overflow-hidden">
                             <div class="flex flex-col gap-4 border-l-4 border-l-amber-400 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                                 <div class="flex min-w-0 items-center gap-3">
-                                    <div class="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
+                                    <img
+                                        v-if="applicant.profile_photo_url"
+                                        :src="applicant.profile_photo_url"
+                                        :alt="`${applicant.name || applicant.username || 'Applicant'} profile photo`"
+                                        class="h-12 w-12 shrink-0 rounded-md bg-white object-cover ring-1 ring-slate-200"
+                                    >
+                                    <div v-else class="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
                                         {{ applicantInitials(applicant) }}
                                     </div>
                                     <div class="min-w-0">
@@ -472,35 +523,6 @@ onMounted(loadApplicant);
                             </div>
                         </section>
 
-                        <section class="admin-panel overflow-hidden">
-                            <nav class="grid gap-1 p-1 sm:grid-cols-2 xl:grid-cols-4" aria-label="Academic verification sections">
-                                <button
-                                    v-for="section in reviewSections"
-                                    :key="section.key"
-                                    type="button"
-                                    :aria-current="activeReviewSection === section.key ? 'step' : undefined"
-                                    :class="[
-                                        'flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
-                                        activeReviewSection === section.key
-                                            ? 'bg-slate-950 text-white'
-                                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
-                                    ]"
-                                    @click="selectReviewSection(section.key)"
-                                >
-                                    <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', activeReviewSection === section.key ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-600']"><i :class="section.icon" aria-hidden="true"></i></span>
-                                    <span class="min-w-0">
-                                        <span class="block text-sm font-bold">{{ section.label }}</span>
-                                        <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
-                                            <template v-if="section.key === 'profile'">Identity and school record</template>
-                                            <template v-else-if="section.key === 'proof'">{{ academicRecord ? 'Record submitted' : 'No academic record' }}</template>
-                                            <template v-else-if="section.key === 'oversight'">Source and decision activity</template>
-                                            <template v-else>{{ applicantReviewStatusLabel(applicant) }}</template>
-                                        </span>
-                                    </span>
-                                </button>
-                            </nav>
-                        </section>
-
                         <article v-if="activeReviewSection === 'profile'" id="applicant-details" class="admin-panel scroll-mt-6 overflow-hidden">
                             <div class="flex items-start gap-3 border-b border-slate-200 p-5">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
@@ -539,30 +561,6 @@ onMounted(loadApplicant);
                                         <div class="rounded-md bg-slate-50 p-3">
                                             <dt class="font-semibold text-slate-500">Citizenship</dt>
                                             <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(applicant.citizenship_status || 'not provided') }}</dd>
-                                        </div>
-                                    </dl>
-                                </section>
-
-                                <section class="border-t border-slate-200 pt-5">
-                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Applicant background</p>
-                                            <h4 class="mt-1 text-base font-bold text-slate-950">Goals and involvement</h4>
-                                        </div>
-                                        <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Applicant-declared</span>
-                                    </div>
-                                    <dl class="mt-3 divide-y divide-slate-200 text-sm">
-                                        <div class="py-3 first:pt-0">
-                                            <dt class="font-semibold text-slate-500">Applicant goal</dt>
-                                            <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ applicant.scholarship_goal || 'Not provided' }}</dd>
-                                        </div>
-                                        <div class="py-3">
-                                            <dt class="font-semibold text-slate-500">Achievements or strengths</dt>
-                                            <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ applicant.achievements || 'Not provided' }}</dd>
-                                        </div>
-                                        <div class="py-3 last:pb-0">
-                                            <dt class="font-semibold text-slate-500">Activities and responsibilities</dt>
-                                            <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ applicant.activities_and_responsibilities || 'Not provided' }}</dd>
                                         </div>
                                     </dl>
                                 </section>
@@ -621,13 +619,6 @@ onMounted(loadApplicant);
                                         </div>
                                     </dl>
 
-                                    <div class="mt-4 flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-800">Saved academic result</p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-600">This is the applicant-entered value that must match the evidence.</p>
-                                        </div>
-                                        <p class="text-xl font-black text-slate-950">{{ savedAcademicResult }}</p>
-                                    </div>
                                 </section>
 
                                 <section v-if="hasGuardianDetails" class="border-t border-slate-200 pt-5">
@@ -660,7 +651,20 @@ onMounted(loadApplicant);
                             </div>
                         </article>
 
-                        <article v-if="activeReviewSection === 'proof'" id="verification-files" class="admin-panel scroll-mt-6 p-5">
+                        <article v-if="activeReviewSection === 'profile'" class="admin-panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                    <i class="fa-solid fa-chart-line" aria-hidden="true"></i>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-800">Saved academic result</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-600">Applicant-provided value to compare with the academic evidence.</p>
+                                </div>
+                            </div>
+                            <p class="text-xl font-black text-slate-950">{{ savedAcademicResult }}</p>
+                        </article>
+
+                        <article v-if="activeReviewSection === 'profile'" id="verification-files" class="admin-panel scroll-mt-6 p-5">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                 <div class="flex items-start gap-3">
                                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-file-lines" aria-hidden="true"></i></span>
@@ -689,18 +693,21 @@ onMounted(loadApplicant);
                                             <p class="truncate text-sm font-bold text-slate-950">{{ documentTypeLabel(document.document_type) }}</p>
                                             <p class="mt-1 truncate text-xs text-slate-500">{{ document.original_name }} - {{ formatFileSize(document.size) }}</p>
                                             <p class="mt-1 text-xs text-slate-500">Uploaded {{ document.uploaded_at || 'recently' }}</p>
-                                            <div v-if="academicScanRequired && document.document_type === 'academic_record'" class="mt-2 flex flex-wrap items-center gap-2">
-                                                <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', academicScanStatusClass(document.ocr_status)]">
-                                                    {{ academicScanStatusLabel(document.ocr_status) }}
-                                                </span>
-                                                <strong v-if="document.ocr_status === 'succeeded'" class="text-xs text-slate-900">
-                                                    {{ extractedAcademicResult(document) }}
-                                                </strong>
-                                                <p v-if="document.ocr_message" class="basis-full text-xs leading-5 text-slate-500">{{ document.ocr_message }}</p>
-                                            </div>
                                         </div>
                                     </div>
-                                    <div class="flex shrink-0 items-center gap-2">
+                                    <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                                        <div
+                                            v-if="academicScanRequired && document.document_type === 'academic_record'"
+                                            class="flex items-center gap-2"
+                                            :title="document.ocr_message || undefined"
+                                        >
+                                            <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', academicScanStatusClass(document.ocr_status)]">
+                                                {{ academicScanStatusLabel(document.ocr_status) }}
+                                            </span>
+                                            <strong v-if="document.ocr_status === 'succeeded'" class="whitespace-nowrap text-xs text-slate-900">
+                                                {{ extractedAcademicResult(document) }}
+                                            </strong>
+                                        </div>
                                         <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', documentStatusClass(document.status)]">
                                             {{ statusLabel(document.status || 'submitted') }}
                                         </span>
@@ -828,8 +835,8 @@ onMounted(loadApplicant);
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-gavel" aria-hidden="true"></i></span>
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>
-                                    <h3 class="mt-1 text-xl font-bold text-slate-950">Academic verification decision</h3>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">Approve the saved result, request a clearer record, or reopen it when another review is needed.</p>
+                                    <h3 class="mt-1 text-xl font-bold text-slate-950">Profile verification decision</h3>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that the applicant's school and academic profile is supported by the submitted records, or request a replacement.</p>
                                 </div>
                             </div>
                             <span :class="['shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(applicantReviewStatus(applicant))]">
@@ -837,13 +844,26 @@ onMounted(loadApplicant);
                             </span>
                         </div>
 
-                        <div v-if="academicRecord" class="w-full">
-                            <div class="mt-4 flex flex-col gap-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700 ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between">
-                                <div class="flex items-center gap-3">
-                                    <i class="fa-solid fa-file-circle-check text-slate-500" aria-hidden="true"></i>
-                                    <span><strong class="text-slate-900">Academic record ready.</strong> Compare it with {{ savedAcademicResult }} before deciding.</span>
+                        <div v-if="profileEvidenceReady" class="w-full">
+                            <div class="mt-4 overflow-hidden rounded-md border border-slate-200">
+                                <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                                    <p class="text-sm font-bold text-slate-950">Supporting records to check</p>
+                                    <p class="mt-0.5 text-xs leading-5 text-slate-500">Open the available records before verifying the profile. Verification confirms supported school and academic details, not every personal claim.</p>
                                 </div>
-                                <button type="button" class="w-fit shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="openDocumentPreview(academicRecord)">View academic record</button>
+                                <div class="divide-y divide-slate-200">
+                                    <div v-for="document in profileEvidenceDocuments" :key="document.id" class="flex items-center justify-between gap-3 px-4 py-3">
+                                        <div class="flex min-w-0 items-center gap-3">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
+                                                <i class="fa-solid fa-file-circle-check" aria-hidden="true"></i>
+                                            </span>
+                                            <div class="min-w-0">
+                                                <p class="text-sm font-bold text-slate-950">{{ documentTypeLabel(document.document_type) }}</p>
+                                                <p class="mt-0.5 truncate text-xs text-slate-500">{{ document.original_name }}</p>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="w-fit shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="openDocumentPreview(document)">Review file</button>
+                                    </div>
+                                </div>
                             </div>
 
                             <p v-if="academicScanRequired && !academicScanReady" class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
@@ -851,8 +871,8 @@ onMounted(loadApplicant);
                             </p>
 
                             <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
-                                <p class="text-sm font-bold text-slate-950">Verified academic result</p>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Correct the value only after comparing it with the uploaded academic record.</p>
+                                <p class="text-sm font-bold text-slate-950">Academic result check</p>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">Confirm or correct this part of the profile after reviewing the academic record.</p>
                                 <div class="mt-3 grid gap-3 sm:grid-cols-2">
                                     <label class="block">
                                         <span class="mb-1.5 block text-xs font-bold text-slate-700">Grading scale</span>
@@ -887,7 +907,7 @@ onMounted(loadApplicant);
                                 v-model="reviewNote"
                                 rows="4"
                                 maxlength="1500"
-                                placeholder="Add context or explain what academic information or file must be corrected."
+                                placeholder="Add context or explain which profile information or supporting record must be corrected."
                                 class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                                 @input="decisionError = ''"
                             ></textarea>
@@ -896,7 +916,7 @@ onMounted(loadApplicant);
                                 {{ decisionError }}
                             </p>
 
-                            <div class="mt-4 grid gap-2">
+                            <div class="mt-4 grid gap-2 sm:auto-cols-fr sm:grid-flow-col">
                                 <button
                                     v-for="action in applicantActionOptions(applicant)"
                                     :key="action.status"
@@ -914,7 +934,7 @@ onMounted(loadApplicant);
                         </div>
 
                         <div v-else class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
-                            Wait for the applicant to upload an academic record before making a verification decision.
+                            The applicant must upload an academic record before the profile can be verified. School enrollment proof can provide additional support when available.
                         </div>
                     </section>
 

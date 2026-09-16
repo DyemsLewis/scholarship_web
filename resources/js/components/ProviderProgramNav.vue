@@ -85,14 +85,14 @@ onBeforeUnmount(() => window.removeEventListener('hashchange', updateHash));
 </script>
 
 <template>
-    <nav class="mt-5 flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Program workspace navigation">
+    <nav class="mt-4 flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm" aria-label="Program workspace navigation">
         <a
             v-for="link in links"
             :key="link.key"
             :href="link.href"
             :aria-current="activeKey === link.key ? 'page' : undefined"
             :class="[
-                'inline-flex min-w-fit flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-bold transition',
+                'inline-flex min-w-fit flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition',
                 activeKey === link.key
                     ? 'bg-slate-950 text-white shadow-sm'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',

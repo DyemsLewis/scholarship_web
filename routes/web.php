@@ -86,6 +86,7 @@ Route::middleware(['auth', 'admin'])
         Route::get('/providers/{provider}/review/data', [AdminController::class, 'providerReviewData'])->middleware('permission:manage_reviews')->whereNumber('provider')->name('providers.review.data');
         Route::get('/applicants/{applicant}/review', [AdminController::class, 'applicantReview'])->middleware('permission:manage_reviews')->whereNumber('applicant')->name('applicants.review.show');
         Route::get('/applicants/{applicant}/review/data', [AdminController::class, 'applicantReviewData'])->middleware('permission:manage_reviews')->whereNumber('applicant')->name('applicants.review.data');
+        Route::get('/applicants/{applicant}/profile-photo', [AdminController::class, 'viewApplicantProfilePhoto'])->middleware('permission:manage_reviews')->whereNumber('applicant')->name('applicants.profile-photo.view');
         Route::get('/scholarships/{scholarship}/review', [AdminController::class, 'scholarshipReview'])->middleware('permission:manage_reviews')->name('scholarships.review.show');
         Route::get('/scholarships/{scholarship}/review/data', [AdminController::class, 'scholarshipReviewData'])->middleware('permission:manage_reviews')->name('scholarships.review.data');
         Route::get('/logs', [AdminController::class, 'logs'])->middleware('permission:view_logs')->name('logs');

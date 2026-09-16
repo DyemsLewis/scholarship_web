@@ -167,7 +167,7 @@ function programPrimaryAction(scholarship) {
     return {
         label: scholarship.status === 'closed'
             ? 'View records'
-            : (scholarship.status === 'pending_review' ? 'View status' : 'Open control center'),
+            : (scholarship.status === 'pending_review' ? 'View status' : 'Manage'),
         href: `/provider/programs/${scholarship.id}`,
     };
 }
@@ -218,7 +218,7 @@ onMounted(loadProviderData);
                                 Scholarship programs
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Follow each program from setup and admin review through applicant management and closing.
+                                Create, publish, and manage each scholarship program.
                             </p>
                         </div>
 
@@ -264,12 +264,12 @@ onMounted(loadProviderData);
                         </a>
                     </div>
 
-                    <section class="provider-panel p-5">
+                    <section class="provider-panel p-4 sm:p-5">
                         <div>
                             <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program lifecycle</p>
-                            <h3 class="mt-1 text-xl font-bold text-slate-950">Programs by current stage</h3>
+                            <h3 class="mt-1 text-lg font-bold text-slate-950">Programs by stage</h3>
                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                Choose a stage, then continue the next required action for a program.
+                                Filter programs and continue the next action.
                             </p>
                         </div>
 
@@ -279,7 +279,7 @@ onMounted(loadProviderData);
                                 :key="option.value"
                                 type="button"
                                 :class="[
-                                    'flex min-h-24 items-start gap-3 rounded-md border p-3 text-left transition',
+                                    'flex min-h-20 items-start gap-3 rounded-md border p-3 text-left transition',
                                     statusFilter === option.value
                                         ? 'border-slate-900 bg-slate-900 text-white'
                                         : 'border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-400 hover:bg-white',
@@ -331,45 +331,57 @@ onMounted(loadProviderData);
 
                         <template v-else>
                             <div v-if="filteredScholarships.length" class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                                <div class="hidden grid-cols-[minmax(0,1fr)_7rem_10rem_8rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 lg:grid">
+                                    <span>Program</span>
+                                    <span class="text-center">Applicants</span>
+                                    <span class="text-center">Status</span>
+                                    <span class="text-center">Action</span>
+                                </div>
                                 <article
                                     v-for="scholarship in filteredScholarships"
                                     :key="scholarship.id"
-                                    class="flex flex-wrap items-center gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:flex-nowrap sm:px-4"
+                                    class="grid gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1fr)_7rem_10rem_8rem] lg:items-center"
                                 >
-                                    <img
-                                        :src="scholarship.image_url"
-                                        :alt="scholarship.title"
-                                        class="h-11 w-11 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
-                                    >
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex min-w-0 items-center gap-2">
-                                            <h4 class="truncate text-sm font-bold text-slate-950 sm:text-base">
-                                                {{ scholarship.title }}
-                                            </h4>
-                                            <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', programStatusClass(scholarship.status)]">
-                                                {{ programStatusLabel(scholarship.status) }}
-                                            </span>
-                                        </div>
-                                        <p class="mt-1 truncate text-xs leading-5 text-slate-500">
-                                            {{ scholarship.category || 'Uncategorized' }}
-                                            <span class="mx-1 text-slate-300">&middot;</span>
-                                            {{ targetApplicantLabel(scholarship) }}
-                                            <template v-if="canReviewApplications && ['published', 'closed'].includes(scholarship.status)">
+                                    <div class="flex min-w-0 items-center gap-3">
+                                        <img
+                                            :src="scholarship.image_url"
+                                            :alt="scholarship.title"
+                                            class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                        >
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex min-w-0 items-start gap-2">
+                                                <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">
+                                                    {{ scholarship.title }}
+                                                </h4>
+                                                <span :class="['inline-flex shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase lg:hidden', programStatusClass(scholarship.status)]">
+                                                    {{ programStatusLabel(scholarship.status) }}
+                                                </span>
+                                            </div>
+                                            <p class="mt-1 truncate text-xs leading-5 text-slate-500">
+                                                {{ scholarship.category || 'Uncategorized' }}
                                                 <span class="mx-1 text-slate-300">&middot;</span>
-                                                {{ scholarship.applications_count ?? 0 }} applicant{{ Number(scholarship.applications_count ?? 0) === 1 ? '' : 's' }}
-                                            </template>
-                                            <span v-if="scholarship.deadline" class="hidden sm:inline"><span class="mx-1 text-slate-300">&middot;</span>{{ programDeadlineLabel(scholarship.deadline) }}</span>
-                                        </p>
+                                                {{ targetApplicantLabel(scholarship) }}
+                                                <span v-if="scholarship.deadline" class="hidden sm:inline"><span class="mx-1 text-slate-300">&middot;</span>{{ programDeadlineLabel(scholarship.deadline) }}</span>
+                                            </p>
+                                        </div>
                                     </div>
-                                    <span
-                                        v-if="canReviewApplications && Number(scholarship.pending_review_applications_count ?? 0) > 0"
-                                        class="hidden shrink-0 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800 md:inline-flex"
-                                    >
-                                        {{ scholarship.pending_review_applications_count }} to review
-                                    </span>
+                                    <div class="flex items-center justify-between gap-3 lg:block lg:text-center">
+                                        <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Applicants</span>
+                                        <span class="text-sm font-bold text-slate-950">
+                                            {{ canReviewApplications ? Number(scholarship.applications_count ?? 0) : '-' }}
+                                        </span>
+                                    </div>
+                                    <div class="hidden min-w-0 flex-col items-center gap-1.5 text-center lg:flex">
+                                        <span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', programStatusClass(scholarship.status)]">
+                                            {{ programStatusLabel(scholarship.status) }}
+                                        </span>
+                                        <span v-if="canReviewApplications && Number(scholarship.pending_review_applications_count ?? 0) > 0" class="text-[11px] font-bold text-amber-700">
+                                            {{ scholarship.pending_review_applications_count }} to review
+                                        </span>
+                                    </div>
                                     <a
                                         :href="programPrimaryAction(scholarship).href"
-                                        class="ml-14 inline-flex w-full shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 sm:ml-0 sm:w-auto"
+                                        class="ml-14 inline-flex w-auto shrink-0 items-center justify-center rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800 sm:ml-0 lg:justify-self-center"
                                     >
                                         {{ programPrimaryAction(scholarship).label }}
                                         <i class="fa-solid fa-arrow-right ml-2 text-[10px]" aria-hidden="true"></i>

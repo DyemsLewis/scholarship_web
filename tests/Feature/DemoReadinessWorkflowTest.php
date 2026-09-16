@@ -65,8 +65,12 @@ class DemoReadinessWorkflowTest extends TestCase
         $applicationOpensAt = now()->subDay()->toDateString();
         $deadline = now()->addMonth()->toDateString();
         $expectedResultsAt = now()->addMonth()->addWeeks(2)->toDateString();
+        $supportStartsAt = now()->addMonths(2)->toDateString();
+        $supportEndsAt = now()->addYear()->toDateString();
         $applicationOpensAtLabel = Carbon::parse($applicationOpensAt)->format('M d, Y');
         $expectedResultsAtLabel = Carbon::parse($expectedResultsAt)->format('M d, Y');
+        $supportStartsAtLabel = Carbon::parse($supportStartsAt)->format('M d, Y');
+        $supportEndsAtLabel = Carbon::parse($supportEndsAt)->format('M d, Y');
 
         $scholarshipResponse = $this->actingAs($provider)
             ->post('/provider/scholarships', [
@@ -109,6 +113,8 @@ class DemoReadinessWorkflowTest extends TestCase
                 'application_opens_at' => $applicationOpensAt,
                 'deadline' => $deadline,
                 'expected_results_at' => $expectedResultsAt,
+                'support_starts_at' => $supportStartsAt,
+                'support_ends_at' => $supportEndsAt,
                 'status' => 'pending_review',
                 'terms_accepted' => true,
                 'image_file' => UploadedFile::fake()->image('core-workflow-logo.png'),
@@ -126,6 +132,8 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertJsonPath('scholarship.program_cycle', 'School Year 2026-2027')
             ->assertJsonPath('scholarship.application_opens_at', $applicationOpensAtLabel)
             ->assertJsonPath('scholarship.expected_results_at', $expectedResultsAtLabel)
+            ->assertJsonPath('scholarship.support_starts_at', $supportStartsAtLabel)
+            ->assertJsonPath('scholarship.support_ends_at', $supportEndsAtLabel)
             ->assertJsonPath('scholarship.contact_department', 'Scholarship Office')
             ->assertJsonPath('scholarship.provider_contact_email', 'programs@example.test')
             ->assertJsonPath('scholarship.application_questions.0.prompt', 'How would this scholarship support your studies?')
@@ -152,6 +160,8 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertJsonPath('scholarship.program_cycle', 'School Year 2026-2027')
             ->assertJsonPath('scholarship.application_opens_at', $applicationOpensAtLabel)
             ->assertJsonPath('scholarship.expected_results_at', $expectedResultsAtLabel)
+            ->assertJsonPath('scholarship.support_starts_at', $supportStartsAtLabel)
+            ->assertJsonPath('scholarship.support_ends_at', $supportEndsAtLabel)
             ->assertJsonPath('scholarship.contact_person', 'Program Coordinator')
             ->assertJsonPath('scholarship.benefits.0.duration', 'Current program cycle');
 
@@ -452,6 +462,7 @@ class DemoReadinessWorkflowTest extends TestCase
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',
             'household_size' => 4,
+            'current_scholarship_status' => 'none',
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',

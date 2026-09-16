@@ -441,7 +441,7 @@ onBeforeUnmount(() => {
                         Organization and account
                     </h2>
                     <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                        Update public organization details or manage the proof used for provider verification.
+                        Manage organization details, verification, and representative access.
                     </p>
                 </header>
 
@@ -451,12 +451,12 @@ onBeforeUnmount(() => {
                     Loading provider profile...
                 </div>
 
-                <div v-else class="mt-6 grid gap-5">
+                <div v-else class="mt-4 grid gap-4">
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
                     <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-sm">
-                        <div class="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                        <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                             <div class="flex min-w-0 items-center gap-4">
                                 <img
                                     v-if="providerLogoPreview"
@@ -474,7 +474,7 @@ onBeforeUnmount(() => {
                                     <h3 class="mt-1 truncate font-display text-2xl font-bold text-white">
                                         {{ user?.provider_name || user?.name || 'Provider' }}
                                     </h3>
-                                    <p class="mt-1 line-clamp-2 max-w-2xl text-sm leading-6 text-slate-300">
+                                    <p class="mt-1 line-clamp-1 max-w-2xl text-sm leading-6 text-slate-300">
                                         {{ user?.provider_description || 'Add a short organization description so applicants know who provides the scholarship.' }}
                                     </p>
                                 </div>
@@ -514,7 +514,7 @@ onBeforeUnmount(() => {
                             type="button"
                             :aria-current="activeProfileSection === 'details' ? 'page' : undefined"
                             :class="[
-                                'flex items-center gap-3 rounded-md px-4 py-3 text-left transition',
+                                'flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
                                 activeProfileSection === 'details'
                                     ? 'bg-slate-950 text-white'
                                     : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
@@ -526,14 +526,13 @@ onBeforeUnmount(() => {
                             </span>
                             <span>
                                 <span class="block text-sm font-bold">Provider details</span>
-                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'details' ? 'text-slate-300' : 'text-slate-500']">Organization identity and public contacts</span>
                             </span>
                         </button>
                         <button
                             type="button"
                             :aria-current="activeProfileSection === 'verification' ? 'page' : undefined"
                             :class="[
-                                'flex items-center gap-3 rounded-md px-4 py-3 text-left transition',
+                                'flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
                                 activeProfileSection === 'verification'
                                     ? 'bg-slate-950 text-white'
                                     : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
@@ -548,14 +547,13 @@ onBeforeUnmount(() => {
                                     Verification
                                     <span :class="['rounded px-2 py-0.5 text-[9px] uppercase', verificationClass(user?.verification_status)]">{{ verificationLabel(user?.verification_status) }}</span>
                                 </span>
-                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'verification' ? 'text-slate-300' : 'text-slate-500']">Organization proof and admin review</span>
                             </span>
                         </button>
                         <button
                             type="button"
                             :aria-current="activeProfileSection === 'representative' ? 'page' : undefined"
                             :class="[
-                                'flex items-center gap-3 rounded-md px-4 py-3 text-left transition',
+                                'flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
                                 activeProfileSection === 'representative'
                                     ? 'bg-slate-950 text-white'
                                     : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
@@ -567,7 +565,6 @@ onBeforeUnmount(() => {
                             </span>
                             <span>
                                 <span class="block text-sm font-bold">Representative account</span>
-                                <span :class="['mt-0.5 block text-xs', activeProfileSection === 'representative' ? 'text-slate-300' : 'text-slate-500']">Private login and contact details</span>
                             </span>
                         </button>
                     </nav>

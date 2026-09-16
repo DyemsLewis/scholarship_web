@@ -390,14 +390,14 @@ onMounted(loadReviewData);
                             <article
                                 v-for="provider in visibleReviewItems"
                                 :key="provider.id"
-                                class="flex items-center gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
+                                class="flex items-center gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
                             >
-                                <div class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
+                                <div class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
                                     {{ providerInitials(provider) }}
                                 </div>
                                 <div class="min-w-0 flex-1">
                                     <div class="flex min-w-0 items-center gap-2">
-                                        <h4 class="truncate text-sm font-bold text-slate-950 sm:text-base">
+                                        <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">
                                             {{ provider.provider_name || provider.name }}
                                         </h4>
                                         <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', statusClass(provider.verification_status)]">
@@ -414,7 +414,7 @@ onMounted(loadReviewData);
                                 </div>
                                 <a
                                     :href="providerReviewUrl(provider)"
-                                    class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                    class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800"
                                 >
                                     Review
                                 </a>
@@ -469,16 +469,16 @@ onMounted(loadReviewData);
                                 v-for="scholarship in visibleReviewItems"
                                 :id="`program-${scholarship.id}`"
                                 :key="scholarship.id"
-                                class="flex items-center gap-3 border-b border-slate-200 px-3 py-3 last:border-b-0 sm:px-4"
+                                class="flex items-center gap-3 border-b border-slate-200 px-3 py-2.5 last:border-b-0 sm:px-4"
                             >
                                 <img
                                     :src="scholarship.image_url || '/uploads/scholarship-default.jpg'"
                                     :alt="scholarship.title"
-                                    class="h-11 w-11 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                    class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1 ring-1 ring-slate-200"
                                 >
                                 <div class="min-w-0 flex-1">
                                     <div class="flex min-w-0 items-center gap-2">
-                                        <p class="truncate text-sm font-bold text-slate-950 sm:text-base">{{ scholarship.title }}</p>
+                                        <p class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ scholarship.title }}</p>
                                         <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', statusClass(scholarship.status)]">
                                             {{ statusLabel(scholarship.status) }}
                                         </span>
@@ -491,7 +491,7 @@ onMounted(loadReviewData);
                                 </div>
                                 <a
                                     :href="reviewProgramUrl(scholarship)"
-                                    class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                    class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800"
                                 >
                                     Review
                                 </a>
@@ -545,14 +545,14 @@ onMounted(loadReviewData);
                             <article
                                 v-for="applicant in visibleReviewItems"
                                 :key="applicant.id"
-                                class="flex items-center gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
+                                class="flex items-center gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
                             >
-                                <div class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
+                                <div class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
                                     {{ applicantInitials(applicant) }}
                                 </div>
                                 <div class="min-w-0 flex-1">
                                     <div class="flex min-w-0 items-center gap-2">
-                                        <h4 class="truncate text-sm font-bold text-slate-950 sm:text-base">{{ applicant.name || applicant.username }}</h4>
+                                        <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ applicant.name || applicant.username }}</h4>
                                         <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', statusClass(applicantReviewStatus(applicant))]">
                                             {{ applicantReviewStatusLabel(applicant) }}
                                         </span>
@@ -573,7 +573,7 @@ onMounted(loadReviewData);
 
                                 <a
                                     :href="applicantReviewUrl(applicant)"
-                                    class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                    class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800"
                                 >
                                     Open record
                                 </a>

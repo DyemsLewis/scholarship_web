@@ -171,9 +171,9 @@ onMounted(() => loadLogs());
                         <article
                             v-for="entry in entries"
                             :key="entry.id"
-                            class="flex items-start gap-3 border-b border-slate-200 p-4 transition last:border-b-0 hover:bg-slate-50"
+                            class="flex items-start gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
                         >
-                            <div :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm', actionClass(entry.action)]">
+                            <div :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md text-xs', actionClass(entry.action)]">
                                 <i :class="['fa-solid', actionIcon(entry.action)]" aria-hidden="true"></i>
                             </div>
 
@@ -181,7 +181,7 @@ onMounted(() => loadLogs());
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <h4 class="text-sm font-bold text-slate-950 sm:text-base">{{ entry.description }}</h4>
+                                            <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ entry.description }}</h4>
                                             <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', actionClass(entry.action)]">
                                                 {{ actionLabel(entry.action) }}
                                             </span>
@@ -193,7 +193,7 @@ onMounted(() => loadLogs());
                                     </div>
                                     <time class="shrink-0 text-xs font-semibold text-slate-400">{{ entry.created_at }}</time>
                                 </div>
-                                <p v-if="entry.metadata_summary" class="mt-2 line-clamp-2 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+                                <p v-if="entry.metadata_summary" class="mt-1.5 line-clamp-2 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs leading-5 text-slate-500">
                                     {{ entry.metadata_summary }}
                                 </p>
                             </div>

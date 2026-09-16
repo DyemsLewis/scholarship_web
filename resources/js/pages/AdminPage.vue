@@ -183,7 +183,7 @@ onMounted(loadAdminData);
                                 v-for="signal in platformSignals"
                                 :key="signal.label"
                                 :href="signal.href"
-                                class="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50"
+                                class="group flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50 sm:px-5"
                             >
                                 <span :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-md', signalClass(signal.tone)]">
                                     <i :class="[signal.icon, 'text-xs']"></i>
@@ -219,7 +219,7 @@ onMounted(loadAdminData);
                                     v-for="program in programs"
                                     :key="program.id"
                                     :href="`/admin/scholarships/${program.id}/review`"
-                                    class="flex min-w-0 items-center gap-3 bg-white p-3 transition hover:bg-slate-50"
+                                    class="flex min-w-0 items-center gap-3 bg-white px-3 py-2.5 transition hover:bg-slate-50"
                                 >
                                     <img :src="program.image_url || '/uploads/scholarship-default.jpg'" :alt="program.title" class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1 ring-1 ring-slate-200">
                                     <span class="min-w-0 flex-1">
@@ -255,7 +255,7 @@ onMounted(loadAdminData);
                                 <div
                                     v-for="user in recentUsers"
                                     :key="user.id"
-                                    class="flex flex-col gap-2 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                                    class="flex flex-col gap-2 bg-white px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
                                 >
                                     <div class="min-w-0">
                                         <p class="truncate text-sm font-bold text-slate-950">

@@ -100,6 +100,117 @@ class ProviderProgramSafeguardsTest extends TestCase
         $this->assertSame('Must not hold another active scholarship.', $scholarship->eligibility_conditions[1]['statement']);
     }
 
+    public function test_provider_can_exclude_current_scholarship_recipients(): void
+    {
+        $provider = $this->verifiedProvider();
+
+        $response = $this->actingAs($provider)
+            ->postJson('/provider/scholarships', [
+                'title' => 'No Overlapping Support Draft',
+                'exclude_current_scholarship_recipients' => true,
+                'status' => 'draft',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('scholarship.exclude_current_scholarship_recipients', true);
+
+        $this->assertDatabaseHas('scholarships', [
+            'id' => $response->json('scholarship.id'),
+            'exclude_current_scholarship_recipients' => true,
+        ]);
+    }
+
+    public function test_provider_can_save_a_recipient_support_period(): void
+    {
+        $provider = $this->verifiedProvider();
+        $startsAt = now()->addMonths(2)->toDateString();
+        $endsAt = now()->addYear()->toDateString();
+
+        $this->actingAs($provider)
+            ->postJson('/provider/scholarships', [
+                'title' => 'Support Period Draft',
+                'support_starts_at' => $startsAt,
+                'support_ends_at' => $endsAt,
+                'status' => 'draft',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('scholarship.support_starts_at', $startsAt)
+            ->assertJsonPath('scholarship.support_ends_at', $endsAt);
+
+        $scholarship = Scholarship::query()->where('title', 'Support Period Draft')->firstOrFail();
+
+        $this->assertSame($startsAt, $scholarship->support_starts_at?->toDateString());
+        $this->assertSame($endsAt, $scholarship->support_ends_at?->toDateString());
+    }
+
+    public function test_support_end_date_cannot_be_before_support_start_date(): void
+    {
+        $provider = $this->verifiedProvider();
+
+        $this->actingAs($provider)
+            ->postJson('/provider/scholarships', $this->completeSubmissionPayload([
+                'support_starts_at' => now()->addYear()->toDateString(),
+                'support_ends_at' => now()->addMonths(2)->toDateString(),
+            ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('support_ends_at');
+    }
+
+    public function test_provider_can_save_program_objectives_and_applicant_facing_notes(): void
+    {
+        $provider = $this->verifiedProvider();
+
+        $response = $this->actingAs($provider)
+            ->postJson('/provider/scholarships', [
+                'title' => 'Purpose-Led Scholarship Draft',
+                'provider_objectives' => json_encode([
+                    'education_access',
+                    'priority_skills',
+                    'unsupported_claim',
+                ]),
+                'provider_objective_notes' => 'This program supports access to education and preparation for local technology pathways.',
+                'status' => 'draft',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('scholarship.provider_objectives', [
+                'education_access',
+                'priority_skills',
+            ])
+            ->assertJsonPath(
+                'scholarship.provider_objective_notes',
+                'This program supports access to education and preparation for local technology pathways.',
+            );
+
+        $scholarship = Scholarship::findOrFail($response->json('scholarship.id'));
+
+        $this->assertSame(['education_access', 'priority_skills'], $scholarship->provider_objectives);
+    }
+
+    public function test_provider_can_save_a_structured_recipient_agreement_preview(): void
+    {
+        $provider = $this->verifiedProvider();
+        $agreement = [
+            'commitment_type' => 'service',
+            'duration' => 'One community activity before the end of the school year.',
+            'noncompliance_consequence' => 'The provider reviews the circumstances before deciding whether remaining support continues.',
+            'exit_or_exception_process' => 'The recipient may request an adjustment for health, family, or academic circumstances.',
+        ];
+
+        $response = $this->actingAs($provider)
+            ->postJson('/provider/scholarships', [
+                'title' => 'Agreement Preview Draft',
+                'return_service_contract' => 'Complete one community learning activity.',
+                'recipient_agreement' => json_encode($agreement),
+                'status' => 'draft',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('scholarship.recipient_agreement.commitment_type', 'service')
+            ->assertJsonPath('scholarship.recipient_agreement.duration', $agreement['duration']);
+
+        $scholarship = Scholarship::findOrFail($response->json('scholarship.id'));
+
+        $this->assertSame($agreement, $scholarship->recipient_agreement);
+    }
+
     public function test_incomplete_program_cannot_be_submitted_for_review(): void
     {
         $provider = $this->verifiedProvider();
@@ -576,6 +687,8 @@ class ProviderProgramSafeguardsTest extends TestCase
             'longitude' => 121.0437,
             'contact_email' => 'scholarships@example.test',
             'deadline' => now()->addMonth()->toDateString(),
+            'support_starts_at' => now()->addMonths(2)->toDateString(),
+            'support_ends_at' => now()->addYear()->toDateString(),
             'status' => 'pending_review',
             'terms_accepted' => true,
             ...$overrides,

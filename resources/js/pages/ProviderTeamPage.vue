@@ -99,7 +99,7 @@ onMounted(loadTeam);
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Team & Access</p>
                             <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Accounts and access</h1>
                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                Give each staff member only the portal access needed for their work at {{ organization?.name ?? 'your organization' }}.
+                                Manage staff roles and permissions for {{ organization?.name ?? 'your organization' }}.
                             </p>
                         </div>
                         <a href="/provider/team/accounts/create" class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800">
@@ -138,14 +138,14 @@ onMounted(loadTeam);
                         <p class="mt-1 text-sm text-slate-500">Create one when another staff member needs provider access.</p>
                     </div>
                     <div v-else class="divide-y divide-slate-200">
-                        <article v-for="account in accounts" :key="account.id" class="grid gap-3 p-4 transition hover:bg-slate-50 sm:p-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_auto] lg:items-center">
+                        <article v-for="account in accounts" :key="account.id" class="grid gap-3 px-4 py-3 transition hover:bg-slate-50 xl:grid-cols-[minmax(18rem,1fr)_20rem_12rem] xl:items-center">
                             <div class="flex min-w-0 items-center gap-3">
-                                <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-900 text-xs font-black text-amber-200">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-[11px] font-black text-amber-200">
                                     {{ accountInitials(account.name) }}
                                 </span>
                                 <div class="min-w-0">
                                     <div class="flex flex-wrap items-center gap-2">
-                                        <h3 class="truncate text-sm font-bold text-slate-950">{{ account.name }}</h3>
+                                        <h3 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ account.name }}</h3>
                                         <span class="rounded bg-amber-100 px-2 py-1 text-[0.68rem] font-bold text-amber-800">
                                             {{ account.team_role_label }}
                                         </span>
@@ -163,9 +163,9 @@ onMounted(loadTeam);
                                 </div>
                             </div>
 
-                            <div>
+                            <div class="xl:text-center">
                                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Permissions</p>
-                                <div class="mt-2 flex flex-wrap gap-1.5">
+                                <div class="mt-2 flex flex-wrap gap-1.5 xl:justify-center">
                                     <span v-for="permission in (account.permissions || []).slice(0, 2)" :key="permission" class="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">
                                         {{ permissionLabels[permission] ?? permission }}
                                     </span>
@@ -178,9 +178,9 @@ onMounted(loadTeam);
                                 </div>
                             </div>
 
-                            <div class="flex gap-2 lg:justify-end">
-                                <a :href="`/provider/team/accounts/${account.id}/edit`" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100">Edit</a>
-                                <button type="button" :disabled="updatingId === account.id" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60" @click="toggleStatus(account)">
+                            <div class="flex w-full gap-2 xl:w-48 xl:justify-self-center">
+                                <a :href="`/provider/team/accounts/${account.id}/edit`" class="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-100">Edit</a>
+                                <button type="button" :disabled="updatingId === account.id" class="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60" @click="toggleStatus(account)">
                                     {{ updatingId === account.id ? 'Updating...' : account.account_status === 'suspended' ? 'Reactivate' : 'Suspend' }}
                                 </button>
                             </div>

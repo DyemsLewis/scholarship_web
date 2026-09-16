@@ -310,8 +310,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                 {{ activeView === 'requests' ? 'Your support requests' : 'Support services for your team' }}
                             </h1>
                             <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                <template v-if="activeView === 'requests'">Track payments, support progress, meetings, and completed requests for {{ organization?.name ?? 'your organization' }}.</template>
-                                <template v-else>Request one-time help when {{ organization?.name ?? 'your organization' }} needs guidance with setup, application operations, or integration.</template>
+                                <template v-if="activeView === 'requests'">Track payment and support progress.</template>
+                                <template v-else>Request optional, one-time help for your provider workspace.</template>
                             </p>
                         </div>
                         <a
@@ -362,7 +362,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                             <div>
                                 <p class="text-xs font-bold uppercase text-amber-700">Available support</p>
                                 <h2 class="mt-1 text-xl font-bold text-slate-950">Choose the help you need</h2>
-                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Review the scope and one-time price before opening secure checkout.</p>
+                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Review the scope and one-time price.</p>
                             </div>
                             <p class="text-xs font-semibold text-slate-500">No subscription required</p>
                         </div>
@@ -417,7 +417,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                             <div>
                                 <p class="text-xs font-bold uppercase text-amber-700">Your requests</p>
                                 <h2 class="mt-1 text-xl font-bold text-slate-950">Payment and support progress</h2>
-                                <p class="mt-1 text-sm leading-6 text-slate-500">Each request shows its current stage and what happens next.</p>
+                                <p class="mt-1 text-sm leading-6 text-slate-500">See each request's current stage.</p>
                             </div>
                             <span class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">{{ purchases.length }} request{{ purchases.length === 1 ? '' : 's' }}</span>
                         </div>
@@ -437,7 +437,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                         </div>
 
                         <div v-else class="divide-y divide-slate-200">
-                            <article v-for="purchase in purchases" :key="purchase.id" class="grid gap-4 px-5 py-4 transition hover:bg-slate-50/70 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,1.35fr)_auto] lg:items-center">
+                            <article v-for="purchase in purchases" :key="purchase.id" class="grid gap-3 px-4 py-3 transition hover:bg-slate-50/70 xl:grid-cols-[minmax(16rem,1fr)_minmax(20rem,1.25fr)_13rem] xl:items-center">
                                 <div class="min-w-0">
                                     <p class="truncate text-sm font-bold text-slate-950">{{ purchase.plan_name }}</p>
                                     <p class="mt-1 font-mono text-[11px] text-slate-500">{{ purchase.reference_number }}</p>
@@ -454,7 +454,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                     <p class="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{{ purchaseProgress(purchase).description }}</p>
                                 </div>
 
-                                <div class="lg:text-right">
+                                <div class="w-full xl:w-52 xl:text-right">
                                     <p class="text-sm font-black text-slate-950">{{ money(purchase.amount, purchase.currency) }}</p>
                                     <p class="mt-1 whitespace-nowrap text-[11px] text-slate-500">{{ purchase.paid_at ? `Paid ${dateTime(purchase.paid_at)}` : `Requested ${dateTime(purchase.created_at)}` }}</p>
                                     <div v-if="purchase.status === 'pending'" class="mt-2 flex items-center gap-2 lg:justify-end">

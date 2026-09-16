@@ -225,59 +225,24 @@ onMounted(loadAdminData);
                     </div>
 
                     <div v-else-if="users.length" class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                        <div class="hidden grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_12rem_5.5rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 lg:grid">
+                            <span>Account</span>
+                            <span class="text-center">Role</span>
+                            <span class="text-center">Access</span>
+                            <span class="text-center">Verification</span>
+                            <span class="text-center">Action</span>
+                        </div>
                         <article
                             v-for="user in users"
                             :key="user.id"
-                            class="flex flex-col gap-4 border-b border-slate-200 p-4 transition last:border-b-0 hover:bg-slate-50 lg:flex-row lg:items-center"
+                            class="grid gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_12rem_5.5rem] lg:items-center"
                         >
-                            <div class="flex min-w-0 flex-1 items-start gap-3">
-                                <div class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold tracking-[0.08em] text-white">
+                            <div class="flex min-w-0 items-center gap-3">
+                                <div class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold tracking-[0.08em] text-white">
                                     {{ userInitials(user) }}
                                 </div>
                                 <div class="min-w-0 flex-1">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <h4 class="truncate text-sm font-bold text-slate-950 sm:text-base">{{ user.name }}</h4>
-                                        <span
-                                            :class="[
-                                                'rounded-md px-2 py-1 text-[10px] font-bold uppercase',
-                                                user.role === 'admin'
-                                                    ? 'bg-amber-100 text-amber-800'
-                                                    : user.role === 'provider'
-                                                        ? 'bg-slate-200 text-slate-700'
-                                                        : 'bg-emerald-100 text-emerald-800'
-                                            ]"
-                                        >
-                                            {{ roleLabel(user.role) }}
-                                        </span>
-                                        <span
-                                            :class="[
-                                                'rounded-md px-2 py-1 text-[10px] font-bold uppercase',
-                                                user.account_status === 'suspended'
-                                                    ? 'bg-rose-100 text-rose-800'
-                                                    : 'bg-emerald-100 text-emerald-800'
-                                            ]"
-                                        >
-                                            {{ statusLabel(user.account_status) }}
-                                        </span>
-                                        <span
-                                            v-if="user.must_reset_password"
-                                            class="rounded-md bg-slate-900 px-2 py-1 text-[10px] font-bold uppercase text-white"
-                                        >
-                                            Reset required
-                                        </span>
-                                        <span v-if="!user.email_verified" class="rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">
-                                            Email unverified
-                                        </span>
-                                        <span
-                                            v-if="user.role === 'applicant'"
-                                            :title="applicantVerificationState(user.applicant_verification_status).label"
-                                            :aria-label="applicantVerificationState(user.applicant_verification_status).label"
-                                            :class="['inline-grid h-6 w-6 shrink-0 place-items-center rounded-md text-xs', applicantVerificationState(user.applicant_verification_status).className]"
-                                        >
-                                            <i :class="applicantVerificationState(user.applicant_verification_status).icon" aria-hidden="true"></i>
-                                            <span class="sr-only">{{ applicantVerificationState(user.applicant_verification_status).label }}</span>
-                                        </span>
-                                    </div>
+                                    <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ user.name }}</h4>
                                     <p class="mt-1 truncate text-xs leading-5 text-slate-500">
                                         {{ user.email }}
                                         <template v-if="user.username">
@@ -292,10 +257,76 @@ onMounted(loadAdminData);
                                 </div>
                             </div>
 
-                            <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+                            <div class="flex items-center justify-between gap-3 lg:block lg:text-center">
+                                <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Role</span>
+                                <span
+                                    :class="[
+                                        'inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase',
+                                        user.role === 'admin'
+                                            ? 'bg-amber-100 text-amber-800'
+                                            : user.role === 'provider'
+                                                ? 'bg-slate-200 text-slate-700'
+                                                : 'bg-emerald-100 text-emerald-800'
+                                    ]"
+                                >
+                                    {{ roleLabel(user.role) }}
+                                </span>
+                            </div>
+
+                            <div class="flex items-center justify-between gap-3 lg:justify-center">
+                                <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Access</span>
+                                <div class="flex items-center gap-1.5">
+                                    <span
+                                        :class="[
+                                            'inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase',
+                                            user.account_status === 'suspended'
+                                                ? 'bg-rose-100 text-rose-800'
+                                                : 'bg-emerald-100 text-emerald-800'
+                                        ]"
+                                    >
+                                        {{ statusLabel(user.account_status) }}
+                                    </span>
+                                    <span
+                                        v-if="user.must_reset_password"
+                                        title="Password reset required"
+                                        aria-label="Password reset required"
+                                        class="inline-grid h-6 w-6 place-items-center rounded-md bg-slate-900 text-[10px] text-white"
+                                    >
+                                        <i class="fa-solid fa-key" aria-hidden="true"></i>
+                                        <span class="sr-only">Password reset required</span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between gap-3 lg:justify-center">
+                                <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Verification</span>
+                                <div class="flex min-w-0 items-center gap-2">
+                                    <span
+                                        :class="[
+                                            'inline-flex items-center gap-1.5 text-xs font-semibold',
+                                            user.email_verified ? 'text-emerald-700' : 'text-amber-700'
+                                        ]"
+                                    >
+                                        <i :class="user.email_verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-exclamation'" aria-hidden="true"></i>
+                                        {{ user.email_verified ? 'Email verified' : 'Email unverified' }}
+                                    </span>
+                                    <span
+                                        v-if="user.role === 'applicant'"
+                                        :title="applicantVerificationState(user.applicant_verification_status).label"
+                                        :aria-label="applicantVerificationState(user.applicant_verification_status).label"
+                                        :class="['inline-grid h-6 w-6 shrink-0 place-items-center rounded-md text-xs', applicantVerificationState(user.applicant_verification_status).className]"
+                                    >
+                                        <i :class="applicantVerificationState(user.applicant_verification_status).icon" aria-hidden="true"></i>
+                                        <span class="sr-only">{{ applicantVerificationState(user.applicant_verification_status).label }}</span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between gap-3 lg:justify-center">
+                                <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Action</span>
                                 <a
                                     :href="`/admin/accounts/${user.id}/edit`"
-                                    class="inline-flex rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                    class="inline-flex rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800"
                                 >
                                     Manage
                                 </a>

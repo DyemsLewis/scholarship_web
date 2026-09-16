@@ -145,4 +145,28 @@ class ApplicantProfilePhotoTest extends TestCase
         $this->actingAs($provider)->get($photoUrl)->assertOk();
         $this->actingAs($otherProvider)->get($photoUrl)->assertForbidden();
     }
+
+    public function test_admin_review_can_display_the_private_applicant_photo(): void
+    {
+        Storage::fake('local');
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/photo', [
+                'profile_photo' => UploadedFile::fake()->image('admin-review-photo.jpg', 600, 600),
+            ])
+            ->assertOk();
+
+        $photoUrl = route('admin.applicants.profile-photo.view', $applicant);
+
+        $this->actingAs($admin)
+            ->getJson(route('admin.applicants.review.data', $applicant))
+            ->assertOk()
+            ->assertJsonPath('applicant.profile_photo_url', $photoUrl);
+
+        $this->actingAs($admin)->get($photoUrl)->assertOk();
+        $this->actingAs($provider)->get($photoUrl)->assertForbidden();
+    }
 }

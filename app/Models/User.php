@@ -476,10 +476,15 @@ class User extends Authenticatable implements MustVerifyEmail
         $fields += [
             'income_bracket' => 'Household income bracket',
             'household_size' => 'Household size',
+            'current_scholarship_status' => 'Outside scholarship status',
             'city' => 'City / municipality',
             'province' => 'Province',
             'region' => 'Region',
         ];
+
+        if (in_array($payload['current_scholarship_status'] ?? null, ['receiving', 'pending'], true)) {
+            $fields['current_scholarship_details'] = 'Outside scholarship details';
+        }
 
         if ($requiresGuardian) {
             $fields += [

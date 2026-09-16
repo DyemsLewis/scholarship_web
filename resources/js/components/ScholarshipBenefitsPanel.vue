@@ -105,6 +105,9 @@ function benefitIcon(type) {
                         <span v-if="benefit.frequency_label" class="rounded-md bg-white px-2 py-1 ring-1 ring-slate-200">
                             {{ benefit.frequency_label }}
                         </span>
+                        <span v-if="benefit.duration" class="rounded-md bg-amber-50 px-2 py-1 text-amber-800 ring-1 ring-amber-200">
+                            {{ benefit.duration }}
+                        </span>
                     </div>
                     <p v-if="benefit.description" :class="compact ? 'mt-1 text-xs leading-5 text-slate-500' : (dense ? 'mt-2 text-xs leading-5 text-slate-600' : 'mt-3 text-sm leading-6 text-slate-600')">
                         {{ benefit.description }}

@@ -776,9 +776,9 @@ class AdminController extends Controller
         }
 
         $message = match ($validated['verification_status']) {
-            'approved' => 'Your academic record has been verified by the platform review team.',
-            'rejected' => 'Your academic record needs to be replaced before it can be verified.',
-            default => 'Your academic verification was reopened for platform review.',
+            'approved' => 'Your school and academic profile information has been verified against the supporting records by the platform review team.',
+            'rejected' => 'Your profile supporting evidence needs to be replaced before your information can be verified.',
+            default => 'Your profile verification was reopened for platform review.',
         };
 
         if ($notes) {
@@ -792,7 +792,7 @@ class AdminController extends Controller
         PortalNotification::create([
             'user_id' => $applicant->id,
             'type' => 'applicant_profile_verification',
-            'title' => 'Academic verification updated',
+            'title' => 'Profile verification updated',
             'message' => $message,
             'action_url' => '/dashboard/profile',
         ]);
@@ -805,7 +805,7 @@ class AdminController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Applicant academic verification updated.',
+            'message' => 'Applicant profile verification updated.',
             'user' => $freshApplicant->publicPayload(),
             'verification_documents' => $freshApplicant->applicantVerificationDocuments
                 ->whereIn('document_type', ['academic_record', 'school_record'])
@@ -826,6 +826,25 @@ class AdminController extends Controller
             'Cache-Control' => 'no-store, private',
             'X-Content-Type-Options' => 'nosniff',
         ]);
+    }
+
+    public function viewApplicantProfilePhoto(Request $request, User $applicant)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($applicant->isApplicant(), 404);
+
+        $profile = $applicant->studentProfile;
+        abort_unless($profile?->profile_photo_path, 404);
+        abort_unless(Storage::disk('local')->exists($profile->profile_photo_path), 404);
+
+        return Storage::disk('local')->response(
+            $profile->profile_photo_path,
+            $profile->profile_photo_original_name ?: 'applicant-photo',
+            [
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+        );
     }
 
     public function downloadProviderVerificationDocument(Request $request, ProviderVerificationDocument $document)
@@ -1534,6 +1553,8 @@ class AdminController extends Controller
             'category' => $scholarship->category,
             'program_cycle' => $scholarship->program_cycle,
             'description' => $scholarship->description,
+            'provider_objectives' => $scholarship->provider_objectives ?? [],
+            'provider_objective_notes' => $scholarship->provider_objective_notes,
             'eligibility' => $scholarship->eligibility,
             'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
             'provider' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
@@ -1556,6 +1577,8 @@ class AdminController extends Controller
             'deadline' => $scholarship->deadline?->format('M d, Y'),
             'application_opens_at' => $scholarship->application_opens_at?->format('M d, Y'),
             'expected_results_at' => $scholarship->expected_results_at?->format('M d, Y'),
+            'support_starts_at' => $scholarship->support_starts_at?->format('M d, Y'),
+            'support_ends_at' => $scholarship->support_ends_at?->format('M d, Y'),
             'official_program_url' => $scholarship->official_program_url,
             'requirements' => $scholarship->requirements,
             'optional_requirements' => $scholarship->optional_requirements,
@@ -1571,11 +1594,13 @@ class AdminController extends Controller
             'eligible_courses' => $scholarship->eligible_courses,
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,
+            'recipient_agreement' => $scholarship->recipient_agreement,
             'eligible_education_levels' => $scholarship->eligible_education_levels,
             'eligible_school_types' => $scholarship->eligible_school_types,
             'eligible_year_levels' => $scholarship->eligible_year_levels,
             'eligible_locations' => $scholarship->eligible_locations,
             'income_requirement' => $scholarship->income_requirement,
+            'exclude_current_scholarship_recipients' => (bool) $scholarship->exclude_current_scholarship_recipients,
             'location_name' => $scholarship->location_name,
             'location_address' => $scholarship->location_address,
             'latitude' => $scholarship->latitude,
@@ -1660,6 +1685,9 @@ class AdminController extends Controller
     {
         return [
             ...$applicant->publicPayload(),
+            'profile_photo_url' => filled($applicant->studentProfile?->profile_photo_path)
+                ? route('admin.applicants.profile-photo.view', $applicant)
+                : null,
             'academic_scan_required' => $this->academicRecordOcrService->configured(),
             'verification_documents' => $applicant->applicantVerificationDocuments
                 ->whereIn('document_type', ['academic_record', 'school_record'])

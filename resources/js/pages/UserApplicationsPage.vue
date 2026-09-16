@@ -7,6 +7,7 @@ import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
+import RecipientAgreementPanel from '../components/RecipientAgreementPanel.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { labelFromKey } from '../support/display';
@@ -75,19 +76,6 @@ const requiredApplicationQuestionsAnswered = computed(() => selectedApplicationQ
 const answeredApplicationQuestionCount = computed(() => selectedApplicationQuestions.value
     .filter((question) => String(applicationAnswers.value[question.id] ?? '').trim() !== '')
     .length);
-const selectedContractSections = computed(() => {
-    const scholarship = selectedScholarship.value;
-
-    if (!scholarship) {
-        return [];
-    }
-
-    return [
-        { label: 'Possible service commitment', value: scholarship.return_service_contract },
-        { label: 'Commitment preview', value: scholarship.other_contract_terms },
-        { label: 'Possible renewal requirement', value: scholarship.renewal_policy },
-    ].filter((section) => section.value && String(section.value).trim());
-});
 const appliedScholarshipIds = computed(() => new Set(applications.value.map((application) => application.scholarship?.id).filter(Boolean)));
 const selectedAlreadyApplied = computed(() => selectedScholarship.value && appliedScholarshipIds.value.has(selectedScholarship.value.id));
 const allDocumentsChecked = computed(() => selectedRequirements.value.every((requirement) => documentChecklist.value.includes(requirement)));
@@ -1282,10 +1270,7 @@ watch(selectedScholarship, (scholarship) => {
                                         </ol>
                                     </section>
 
-                                    <details v-if="selectedContractSections.length" class="rounded-lg border border-slate-200 bg-white">
-                                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-bold text-slate-700"><span>Possible commitments after acceptance</span><span class="flex items-center gap-2 text-xs text-slate-500">Review <i class="fa-solid fa-chevron-down" aria-hidden="true"></i></span></summary>
-                                        <div class="grid gap-4 border-t border-slate-200 p-5 sm:grid-cols-2"><div v-for="section in selectedContractSections" :key="section.label"><p class="text-sm font-bold text-slate-800">{{ section.label }}</p><p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-600">{{ section.value }}</p></div><p class="text-xs leading-5 text-slate-500 sm:col-span-2">This is not the final agreement. The provider explains any commitment only if you are accepted.</p></div>
-                                    </details>
+                                    <RecipientAgreementPanel :scholarship="selectedScholarship" />
 
                                     <section class="rounded-lg border border-amber-200 bg-amber-50/60 p-4 sm:p-5">
                                         <TermsAgreement v-model="applicationTermsAccepted" context="application" />

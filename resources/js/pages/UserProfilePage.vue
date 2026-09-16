@@ -71,6 +71,7 @@ const deletingVerificationDocumentId = ref(null);
 const rescanningAcademicDocumentId = ref(null);
 const previewDocument = ref(null);
 const preparedDocumentsCount = ref(0);
+const platformActiveScholarships = ref([]);
 const {
     confirmation,
     requestConfirmation,
@@ -119,11 +120,10 @@ const academicTermOptions = [
     { value: 'not_applicable', label: 'Not applicable' },
 ];
 const currentScholarshipOptions = [
-    { value: 'none', label: 'Not receiving another scholarship' },
-    { value: 'receiving', label: 'Currently receiving scholarship support' },
-    { value: 'pending', label: 'Another scholarship application is pending' },
-    { value: 'completed', label: 'Previous scholarship already completed' },
-    { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+    { value: 'none', label: 'No scholarship outside this portal' },
+    { value: 'receiving', label: 'Receiving scholarship support outside this portal' },
+    { value: 'pending', label: 'Outside scholarship application is pending' },
+    { value: 'completed', label: 'Outside scholarship already completed' },
 ];
 const schoolYearStart = new Date().getMonth() >= 5 ? new Date().getFullYear() : new Date().getFullYear() - 1;
 const academicYearOptions = [
@@ -197,8 +197,8 @@ const fieldLabels = {
     income_bracket: 'Household income bracket',
     household_size: 'Household size',
     support_needs: 'Support needs',
-    current_scholarship_status: 'Current scholarship support',
-    current_scholarship_details: 'Current scholarship details',
+    current_scholarship_status: 'Outside scholarship status',
+    current_scholarship_details: 'Outside scholarship details',
     scholarship_goal: 'Applicant goal',
     achievements: 'Achievements or strengths',
     activities_and_responsibilities: 'Activities and responsibilities',
@@ -223,7 +223,7 @@ const profileSections = [
         impact: 'Identity, contact, and household context.',
         required: true,
         fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'has_profile_photo', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'household_size', 'support_needs', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
-        requiredFields: ['first_name', 'last_name', 'has_profile_photo', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'household_size', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'],
+        requiredFields: ['first_name', 'last_name', 'has_profile_photo', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'household_size', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'],
     },
     {
         id: 'academic',
@@ -761,6 +761,11 @@ function isFieldRelevant(field) {
         return requiresGrades.value || hasValue(form.value[field]);
     }
 
+    if (field === 'current_scholarship_details') {
+        return ['receiving', 'pending'].includes(form.value.current_scholarship_status)
+            || hasValue(form.value.current_scholarship_details);
+    }
+
     if (['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'].includes(field)) {
         return needsGuardianContext.value
             || hasValue(form.value.guardian_name)
@@ -792,6 +797,10 @@ function isFieldRequired(field) {
 
     if (['academic_year', 'academic_term'].includes(field)) {
         return requiresGrades.value;
+    }
+
+    if (field === 'current_scholarship_details') {
+        return ['receiving', 'pending'].includes(form.value.current_scholarship_status);
     }
 
     if (['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'].includes(field)) {
@@ -1176,8 +1185,8 @@ const reviewGroups = computed(() => [
             ['Income bracket', form.value.income_bracket],
             ['Household size', form.value.household_size],
             ['Support needed', listFromText(form.value.support_needs).join(', ')],
-            ['Current scholarship', currentScholarshipLabel(form.value.current_scholarship_status)],
-            ...(form.value.current_scholarship_details ? [['Scholarship details', form.value.current_scholarship_details]] : []),
+            ['Outside scholarship', currentScholarshipLabel(form.value.current_scholarship_status)],
+            ...(form.value.current_scholarship_details ? [['Outside scholarship details', form.value.current_scholarship_details]] : []),
             ...((needsGuardianContext.value || hasGuardianDetails.value) ? [
                 ['Guardian name', form.value.guardian_name],
                 ['Guardian relationship', relationshipLabel(form.value.guardian_relationship)],
@@ -1804,6 +1813,7 @@ async function loadProfile() {
         fillForm(response.data.user);
         await loadApplicantLocationHierarchy();
         matchSummary.value = response.data.match_summary ?? matchSummary.value;
+        platformActiveScholarships.value = response.data.platform_active_scholarships ?? [];
         verificationDocuments.value = response.data.verification_documents ?? [];
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? 0;
         academicOcr.value = response.data.academic_ocr ?? academicOcr.value;
@@ -1843,6 +1853,7 @@ async function saveProfile(requireComplete = false, nextSectionId = null) {
         fillForm(response.data.user);
         await loadApplicantLocationHierarchy();
         matchSummary.value = response.data.match_summary ?? matchSummary.value;
+        platformActiveScholarships.value = response.data.platform_active_scholarships ?? platformActiveScholarships.value;
         markFormSaved();
         if (requireComplete) {
             profileView.value = 'overview';
@@ -2066,8 +2077,17 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <dd class="mt-1 font-bold text-slate-950">{{ form.household_size || 'Not provided' }}</dd>
                                     </div>
                                     <div class="sm:col-span-2">
-                                        <dt class="text-slate-500">Current scholarship support</dt>
+                                        <dt class="text-slate-500">Outside-platform scholarship declaration</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ currentScholarshipLabel(form.current_scholarship_status) || 'Not provided' }}</dd>
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <dt class="text-slate-500">Active awards detected in this portal</dt>
+                                        <dd v-if="platformActiveScholarships.length" class="mt-2 flex flex-wrap gap-2">
+                                            <span v-for="record in platformActiveScholarships" :key="record.application_id" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
+                                                {{ record.title }}
+                                            </span>
+                                        </dd>
+                                        <dd v-else class="mt-1 font-bold text-slate-950">No active portal award detected</dd>
                                     </div>
                                     <div class="sm:col-span-2">
                                         <dt class="text-slate-500">Location</dt>
@@ -2632,8 +2652,15 @@ watch(() => form.value.grading_scale, (scale) => {
 
                                 <div :class="formPanelClass">
                                     <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">Scholarship support context <span class="font-normal text-slate-400">(optional)</span></h4>
-                                        <p :class="formPanelDescriptionClass">Share the study costs that matter and whether the learner already receives scholarship support.</p>
+                                        <h4 :class="formPanelTitleClass">Scholarship support context</h4>
+                                        <p :class="formPanelDescriptionClass">Portal awards are detected automatically. Only declare scholarship support managed outside this platform.</p>
+                                    </div>
+                                    <div class="mb-5 rounded-md border border-slate-200 bg-white p-3">
+                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Detected by the portal</p>
+                                        <div v-if="platformActiveScholarships.length" class="mt-2 flex flex-wrap gap-2">
+                                            <span v-for="record in platformActiveScholarships" :key="record.application_id" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-200">{{ record.title }}</span>
+                                        </div>
+                                        <p v-else class="mt-1 text-sm font-semibold text-slate-700">No active scholarship award is recorded in this portal.</p>
                                     </div>
                                     <div class="grid gap-5 lg:grid-cols-2 lg:gap-0">
                                         <fieldset class="lg:pr-5">
@@ -2654,27 +2681,27 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </fieldset>
 
                                         <div class="border-t border-slate-200 pt-5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Other scholarship support</p>
+                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Scholarship outside this portal</p>
                                             <div class="mt-3 space-y-4">
                                                 <div>
-                                                    <label :class="labelClass" for="profile-current-scholarship">Current situation</label>
+                                                    <label :class="labelClass" for="profile-current-scholarship">Outside scholarship status <span class="font-normal text-slate-400">(required)</span></label>
                                                     <select id="profile-current-scholarship" v-model="form.current_scholarship_status" :class="inputClass">
                                                         <option value="">Select an option</option>
                                                         <option v-for="option in currentScholarshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                                                     </select>
                                                 </div>
                                                 <div v-if="['receiving', 'pending'].includes(form.current_scholarship_status)">
-                                                    <label :class="labelClass" for="profile-current-scholarship-details">Program and support received</label>
+                                                    <label :class="labelClass" for="profile-current-scholarship-details">Outside provider, program, and support <span class="font-normal text-slate-400">(required)</span></label>
                                                     <textarea
                                                         id="profile-current-scholarship-details"
                                                         v-model="form.current_scholarship_details"
                                                         rows="3"
                                                         maxlength="1000"
-                                                        placeholder="Program name and type of support"
+                                                        placeholder="Provider, program name, and type of support"
                                                         :class="inputClass"
                                                     ></textarea>
                                                 </div>
-                                                <p class="text-xs leading-5 text-slate-500">Used only when a program checks overlapping scholarship support.</p>
+                                                <p class="text-xs leading-5 text-slate-500">You do not need to list scholarships awarded through this portal because those are checked automatically.</p>
                                             </div>
                                         </div>
                                     </div>

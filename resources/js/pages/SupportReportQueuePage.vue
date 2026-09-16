@@ -39,12 +39,12 @@ const pageCopy = computed(() => ({
     title: isAdmin ? 'Applicant and provider reports' : 'Reports and support',
     description: isAdmin
         ? 'Review concerns submitted by applicants and coordinate program reports with providers.'
-        : 'Handle applicant concerns and track problems your organization sends to platform support.',
+        : 'Handle applicant concerns and track reports sent to platform support.',
     queueEyebrow: isAdmin ? 'Report Review Queue' : 'Issue Queue',
     queueTitle: isAdmin ? 'Review submitted concerns' : 'Applicant concerns and your reports',
     queueDescription: isAdmin
         ? 'Open a report to review its details and record the platform support response.'
-        : 'Respond to applicant concerns or check the progress of a report sent by your team.',
+        : 'Respond to applicants or check your team reports.',
 }));
 const statusFilters = computed(() => [
     { value: 'open', label: isAdmin ? 'Needs action' : 'Open', count: counts.value.open },
@@ -316,38 +316,41 @@ onMounted(() => loadReports());
                         <article
                             v-for="report in reports"
                             :key="report.id"
-                            class="flex items-center gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
+                            class="grid gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1fr)_16rem_8rem] lg:items-center"
                         >
-                            <div class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-950 text-white ring-1 ring-slate-200">
-                                <i :class="reportIcon(report.category)" aria-hidden="true"></i>
+                            <div class="flex min-w-0 items-center gap-3">
+                                <div class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-white ring-1 ring-slate-200">
+                                    <i :class="reportIcon(report.category)" aria-hidden="true"></i>
+                                </div>
+
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex min-w-0 items-start gap-2">
+                                        <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ report.subject }}</h4>
+                                        <span :class="['inline-flex shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase lg:hidden', statusClass(report.status)]">
+                                            {{ statusLabel(report.status) }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">{{ report.description }}</p>
+                                    <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
+                                        <span>{{ reporterName(report) }}</span>
+                                        <span>{{ reporterType(report) }}</span>
+                                        <span>{{ report.category_label }}</span>
+                                        <span v-if="report.privacy_request_type_label" class="text-amber-700">{{ report.privacy_request_type_label }}</span>
+                                        <span v-if="report.program">{{ report.program.title }}</span>
+                                        <span>{{ report.created_at }}</span>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div class="min-w-0 flex-1">
-                                <div class="flex min-w-0 items-center gap-2">
-                                    <h4 class="truncate text-sm font-bold text-slate-950 sm:text-base">{{ report.subject }}</h4>
-                                    <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', statusClass(report.status)]">
-                                        {{ statusLabel(report.status) }}
-                                    </span>
-                                </div>
-                                <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">{{ report.description }}</p>
-                                <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
-                                    <span>{{ reporterName(report) }}</span>
-                                    <span>{{ reporterType(report) }}</span>
-                                    <span>{{ report.category_label }}</span>
-                                    <span v-if="report.privacy_request_type_label" class="text-amber-700">{{ report.privacy_request_type_label }}</span>
-                                    <span v-if="report.program">{{ report.program.title }}</span>
-                                    <span>{{ report.created_at }}</span>
-                                </div>
-                            </div>
-
-                            <div class="hidden shrink-0 text-right lg:block">
-                                <p :class="['text-xs font-bold', report.overall_status === 'resolved' ? 'text-emerald-700' : 'text-slate-600']">
+                            <div class="hidden min-w-0 text-left lg:block">
+                                <span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', statusClass(report.status)]">{{ statusLabel(report.status) }}</span>
+                                <p :class="['mt-1.5 text-xs font-bold', report.overall_status === 'resolved' ? 'text-emerald-700' : 'text-slate-600']">
                                     {{ overallStatusLabel(report.overall_status) }}
                                 </p>
-                                <p class="mt-1 max-w-64 truncate text-[11px] text-slate-500">{{ handlingMessage(report) }}</p>
+                                <p class="mt-1 truncate text-[11px] text-slate-500">{{ handlingMessage(report) }}</p>
                             </div>
 
-                            <button type="button" class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800" @click="openReport(report)">
+                            <button type="button" class="inline-flex w-full shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800" @click="openReport(report)">
                                 View details
                             </button>
                         </article>

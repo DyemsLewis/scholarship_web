@@ -13,6 +13,15 @@ use App\Support\ScholarshipEligibilityCondition;
 
 class ScholarshipEligibilityService
 {
+    private const ACTIVE_PLATFORM_AWARD_STATUSES = [
+        'awarded',
+        'distribution_scheduled',
+        'disbursed',
+        'renewed',
+    ];
+
+    private array $activePlatformScholarshipsByUser = [];
+
     public function evaluate(Scholarship $scholarship, ?User $user): array
     {
         $profile = $user?->studentProfile;
@@ -146,6 +155,52 @@ class ScholarshipEligibilityService
             $addCriterion('income', 'Income bracket', 'info', $profile?->income_bracket, $scholarship->income_requirement, 'No income restriction listed.', false);
         }
 
+        if ($scholarship->exclude_current_scholarship_recipients) {
+            $scholarshipStatus = $profile?->current_scholarship_status;
+            $activePlatformScholarships = collect($this->activePlatformScholarships($user, $scholarship->id));
+            $isReceivingExternalSupport = $scholarshipStatus === 'receiving';
+            $hasActivePlatformSupport = $activePlatformScholarships->isNotEmpty();
+            $hasAcceptedDeclaration = in_array($scholarshipStatus, ['none', 'pending', 'completed'], true);
+            $statusLabels = [
+                'none' => 'No scholarship outside this portal',
+                'receiving' => 'Receiving scholarship support outside this portal',
+                'pending' => 'Outside scholarship application pending',
+                'completed' => 'Outside scholarship already completed',
+            ];
+            $studentValues = collect([
+                $hasActivePlatformSupport
+                    ? 'Portal record: '.$activePlatformScholarships->pluck('title')->implode(', ')
+                    : null,
+                $statusLabels[$scholarshipStatus] ?? $scholarshipStatus,
+            ])->filter()->implode('; ');
+            $addCriterion(
+                'current_scholarship_support',
+                'Current scholarship support',
+                blank($scholarshipStatus)
+                    ? 'missing'
+                    : (($hasActivePlatformSupport || $isReceivingExternalSupport || ! $hasAcceptedDeclaration) ? 'fail' : 'pass'),
+                $studentValues ?: null,
+                'Must not receive another active scholarship in this portal or elsewhere',
+                $hasActivePlatformSupport
+                    ? 'The portal found another active scholarship award on this account.'
+                    : ($isReceivingExternalSupport
+                        ? 'This provider does not accept applicants receiving scholarship support outside the portal.'
+                        : ($hasAcceptedDeclaration
+                            ? 'No conflicting active scholarship was found in the portal or external declaration.'
+                            : 'Choose an outside scholarship status before applying.')),
+            );
+        } else {
+            $addCriterion(
+                'current_scholarship_support',
+                'Current scholarship support',
+                'info',
+                $profile?->current_scholarship_status,
+                null,
+                'This program does not restrict applicants who receive other scholarship support.',
+                false,
+            );
+        }
+
         $documentReadiness = $this->preparedDocumentReadiness($scholarship, $user);
         if ($documentReadiness['required'] > 0) {
             $documentsReady = $documentReadiness['uploaded'] >= $documentReadiness['required'];
@@ -223,6 +278,39 @@ class ScholarshipEligibilityService
             'condition_results' => $conditionResults,
             'criteria' => $criteria,
         ];
+    }
+
+    public function activePlatformScholarships(?User $user, ?int $exceptScholarshipId = null): array
+    {
+        if (! $user) {
+            return [];
+        }
+
+        if (! array_key_exists($user->id, $this->activePlatformScholarshipsByUser)) {
+            $this->activePlatformScholarshipsByUser[$user->id] = ScholarshipApplication::query()
+                ->with('scholarship:id,title')
+                ->where('applicant_id', $user->id)
+                ->whereIn('status', self::ACTIVE_PLATFORM_AWARD_STATUSES)
+                ->get(['id', 'scholarship_id', 'status'])
+                ->map(fn (ScholarshipApplication $application): array => [
+                    'application_id' => $application->id,
+                    'scholarship_id' => $application->scholarship_id,
+                    'title' => $application->scholarship?->title ?? 'Scholarship program',
+                    'status' => $application->status,
+                ])
+                ->values()
+                ->all();
+        }
+
+        return collect($this->activePlatformScholarshipsByUser[$user->id])
+            ->when(
+                $exceptScholarshipId !== null,
+                fn ($records) => $records->reject(
+                    fn (array $record): bool => (int) $record['scholarship_id'] === $exceptScholarshipId,
+                ),
+            )
+            ->values()
+            ->all();
     }
 
     public function blockers(array $eligibilityMatch): array

@@ -354,6 +354,8 @@ class PlatformIntegritySafeguardsTest extends TestCase
             'application_mode' => 'online',
             'contact_email' => 'integrity@example.test',
             'deadline' => now()->addMonth()->toDateString(),
+            'support_starts_at' => now()->addMonths(2)->toDateString(),
+            'support_ends_at' => now()->addYear()->toDateString(),
             'status' => 'published',
             'provider_terms_accepted_at' => now(),
             'provider_terms_version' => Terms::VERSION,

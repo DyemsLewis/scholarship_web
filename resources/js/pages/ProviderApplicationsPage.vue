@@ -169,8 +169,8 @@ const pageTitle = computed(() => (hasProgramContext.value
     ? selectedScholarshipContext.value?.title || 'Scholarship program'
     : 'Applicant workflow'));
 const pageDescription = computed(() => (hasProgramContext.value
-    ? 'Review pre-screening submissions, then manage shared activities and formal outcomes when needed.'
-    : 'Find applicants needing attention and review their profile, eligibility, and supporting files.'));
+    ? 'Review applicants, publish activities, and record outcomes.'
+    : 'Find applicants who need review or a recorded result.'));
 const reviewFilterOptions = computed(() => [
     {
         value: 'needs_review',
@@ -1034,13 +1034,13 @@ onMounted(loadProviderData);
                         </button>
                     </section>
 
-                    <section v-if="hasProgramContext && activeWorkspaceSection === 'schedule'" class="provider-panel p-5">
+                    <section v-if="hasProgramContext && activeWorkspaceSection === 'schedule'" class="provider-panel p-4 sm:p-5">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program activities</p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">Publish exam or interview details</h3>
                                 <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Publish confirmed exam or interview details after applicants reach that stage. Pre-screening and final decisions stay in applicant review.
+                                    Add shared details when applicants reach an exam or interview.
                                 </p>
                             </div>
                             <a :href="`/provider/programs/${selectedScholarshipId}/edit`" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
@@ -1056,7 +1056,7 @@ onMounted(loadProviderData);
                                 :key="type.value"
                                 type="button"
                                 :class="[
-                                    'flex min-h-32 flex-col rounded-md border p-3 text-left transition',
+                                    'flex min-h-24 flex-col rounded-md border p-3 text-left transition',
                                     scheduleEditorType === type.value
                                         ? 'border-slate-900 bg-slate-900 text-white'
                                         : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white',
@@ -1193,7 +1193,7 @@ onMounted(loadProviderData);
                         <div class="border-b border-slate-200 px-5 py-4">
                             <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">After final decision</p>
                             <h3 class="mt-1 text-xl font-bold text-slate-950">Recipients and waitlist</h3>
-                            <p class="mt-1 text-sm leading-6 text-slate-500">Keep completed selections separate from applications that still need review.</p>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">Review completed selections separately.</p>
                         </div>
                         <div class="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
                             <button
@@ -1226,13 +1226,13 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="provider-panel p-5">
+                    <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="provider-panel p-4 sm:p-5">
                         <div>
                             <h3 class="text-xl font-bold text-slate-950">What needs attention</h3>
                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
                                 {{ hasProgramContext
-                                    ? 'Work through this program one task at a time. Applicants move automatically after each saved result.'
-                                    : 'Choose a queue to see only the applicants who need that action.' }}
+                                    ? 'Choose a task. Saved results move applicants forward automatically.'
+                                    : 'Choose a queue to view applicants needing that action.' }}
                             </p>
 
                             <div class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -1241,7 +1241,7 @@ onMounted(loadProviderData);
                                     :key="filter.value"
                                     type="button"
                                     :class="[
-                                        'flex min-h-24 items-start gap-3 rounded-md border p-3 text-left transition',
+                                        'flex min-h-20 items-start gap-3 rounded-md border p-3 text-left transition',
                                         selectedQueueFilter === filter.value
                                             ? 'border-slate-900 bg-slate-900 text-white'
                                             : 'border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-400 hover:bg-white',
@@ -1370,57 +1370,59 @@ onMounted(loadProviderData);
                             <article
                                 v-for="application in visibleApplications"
                                 :key="application.id"
-                                class="flex flex-wrap items-center gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
+                                class="grid gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-center"
                             >
-                                <label v-if="hasProgramContext" :title="canBulkAdvance(application) ? 'Select applicant' : 'This applicant is not ready for the selected bulk action.'" class="grid h-8 w-8 shrink-0 place-items-center">
-                                    <input v-model="selectedBulkApplicationIds" type="checkbox" :value="application.id" :disabled="!canBulkAdvance(application)" class="h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-30">
-                                    <span class="sr-only">Select {{ application.applicant?.name || 'applicant' }}</span>
-                                </label>
-                                <div class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
-                                    {{ applicantInitials(application) }}
+                                <div class="flex min-w-0 items-center gap-3">
+                                    <label v-if="hasProgramContext" :title="canBulkAdvance(application) ? 'Select applicant' : 'This applicant is not ready for the selected bulk action.'" class="grid h-8 w-8 shrink-0 place-items-center">
+                                        <input v-model="selectedBulkApplicationIds" type="checkbox" :value="application.id" :disabled="!canBulkAdvance(application)" class="h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-30">
+                                        <span class="sr-only">Select {{ application.applicant?.name || 'applicant' }}</span>
+                                    </label>
+                                    <div class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
+                                        {{ applicantInitials(application) }}
+                                    </div>
+
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex min-w-0 items-start gap-2">
+                                            <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">
+                                                {{ application.applicant?.name || 'Applicant' }}
+                                            </h4>
+                                            <i
+                                                v-if="application.applicant?.profile_verification_status === 'approved'"
+                                                class="fa-solid fa-circle-check mt-1 text-xs text-emerald-600"
+                                                title="Verified academic record"
+                                                aria-label="Verified academic record"
+                                            ></i>
+                                            <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', statusClass(application.status)]">
+                                                {{ applicationQueueLabel(application) }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
+                                            {{ application.scholarship?.title || 'Scholarship' }} - {{ application.applicant?.email || 'No email provided' }}
+                                        </p>
+                                        <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
+                                            <span>Submitted {{ application.submitted_at || 'recently' }}</span>
+                                            <span v-if="showWaitingTime(application)">Waiting {{ application.waiting_days }}d</span>
+                                            <span>Match {{ application.dss_score ?? 0 }}%</span>
+                                            <span>Files {{ application.document_readiness?.percent ?? 0 }}%</span>
+                                            <span v-if="documentIssueCount(application)" class="text-amber-700">
+                                                {{ documentIssueCount(application) }} file issue{{ documentIssueCount(application) === 1 ? '' : 's' }}
+                                            </span>
+                                            <span v-if="application.documents_changed_since_review" class="text-amber-700">Files updated</span>
+                                            <span v-if="application.correction_status === 'requested'" class="text-amber-700">Correction requested</span>
+                                            <span v-if="application.correction_status === 'submitted'" class="text-sky-700">Correction ready to review</span>
+                                            <span v-if="application.status === 'waitlisted' && application.waitlist_position" class="text-sky-700">Alternate #{{ application.waitlist_position }}</span>
+                                            <span class="text-slate-700">Next: {{ providerNextAction(application) }}</span>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div class="min-w-0 flex-1">
-                                    <div class="flex min-w-0 items-center gap-2">
-                                        <h4 class="truncate text-sm font-bold text-slate-950 sm:text-base">
-                                            {{ application.applicant?.name || 'Applicant' }}
-                                        </h4>
-                                        <i
-                                            v-if="application.applicant?.profile_verification_status === 'approved'"
-                                            class="fa-solid fa-circle-check text-xs text-emerald-600"
-                                            title="Verified academic record"
-                                            aria-label="Verified academic record"
-                                        ></i>
-                                        <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', statusClass(application.status)]">
-                                            {{ applicationQueueLabel(application) }}
-                                        </span>
-                                    </div>
-                                    <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
-                                        {{ application.scholarship?.title || 'Scholarship' }} - {{ application.applicant?.email || 'No email provided' }}
-                                    </p>
-                                    <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
-                                        <span>Submitted {{ application.submitted_at || 'recently' }}</span>
-                                        <span v-if="showWaitingTime(application)">Waiting {{ application.waiting_days }}d</span>
-                                        <span>Match {{ application.dss_score ?? 0 }}%</span>
-                                        <span>Files {{ application.document_readiness?.percent ?? 0 }}%</span>
-                                        <span v-if="documentIssueCount(application)" class="text-amber-700">
-                                            {{ documentIssueCount(application) }} file issue{{ documentIssueCount(application) === 1 ? '' : 's' }}
-                                        </span>
-                                        <span v-if="application.documents_changed_since_review" class="text-amber-700">Files updated</span>
-                                        <span v-if="application.correction_status === 'requested'" class="text-amber-700">Correction requested</span>
-                                        <span v-if="application.correction_status === 'submitted'" class="text-sky-700">Correction ready to review</span>
-                                        <span v-if="application.status === 'waitlisted' && application.waitlist_position" class="text-sky-700">Alternate #{{ application.waitlist_position }}</span>
-                                        <span class="text-slate-700">Next: {{ providerNextAction(application) }}</span>
-                                    </div>
-                                </div>
-
-                                <div :class="['flex w-full shrink-0 gap-2 sm:w-auto sm:pl-0', hasProgramContext ? 'pl-[6.25rem]' : 'pl-14']">
-                                    <label v-if="canAssignReviewers" class="min-w-0 flex-1 sm:w-44 sm:flex-none">
+                                <div :class="['flex w-full shrink-0 gap-2 lg:w-72 lg:justify-center', hasProgramContext ? 'pl-11 lg:pl-0' : 'pl-14 lg:pl-0']">
+                                    <label v-if="canAssignReviewers" class="min-w-0 flex-1 lg:w-44 lg:flex-none">
                                         <span class="sr-only">Assigned reviewer for {{ application.applicant?.name || 'applicant' }}</span>
                                         <select
                                             :value="application.assigned_reviewer?.id ?? ''"
                                             :disabled="assigningReviewerApplicationId === application.id"
-                                            class="w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-slate-500 disabled:cursor-wait disabled:opacity-60"
+                                            class="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-slate-500 disabled:cursor-wait disabled:opacity-60"
                                             @change="assignReviewer(application, $event)"
                                         >
                                             <option value="">Unassigned</option>
@@ -1431,7 +1433,7 @@ onMounted(loadProviderData);
                                     </label>
                                     <a
                                         :href="applicationDetailUrl(application)"
-                                        class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                        class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800"
                                     >
                                         {{ applicationActionLabel(application) }}
                                         <i class="fa-solid fa-arrow-right ml-2 text-[10px]" aria-hidden="true"></i>

@@ -75,7 +75,7 @@ function isActive(link) {
 <template>
     <nav
         v-if="links.length > 1"
-        :class="['mt-5 grid gap-1 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm', section === 'support' ? 'sm:grid-cols-3' : 'sm:grid-cols-2']"
+        :class="['mt-4 grid gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm', section === 'support' ? 'sm:grid-cols-3' : 'sm:grid-cols-2']"
         :aria-label="section === 'organization' ? 'Organization sections' : 'Support sections'"
     >
         <a
@@ -84,19 +84,16 @@ function isActive(link) {
             :href="link.href"
             :aria-current="isActive(link) ? 'page' : undefined"
             :class="[
-                'flex items-center gap-3 rounded-md px-3 py-2.5 transition',
+                'flex items-center justify-center gap-2.5 rounded-md px-3 py-2 transition',
                 isActive(link)
                     ? 'bg-slate-950 text-white'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
             ]"
         >
-            <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', isActive(link) ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-700']">
+            <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-md text-[11px]', isActive(link) ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-700']">
                 <i :class="link.icon" aria-hidden="true"></i>
             </span>
-            <span class="min-w-0">
-                <span class="block text-sm font-bold">{{ link.label }}</span>
-                <span :class="['mt-0.5 block truncate text-xs', isActive(link) ? 'text-slate-300' : 'text-slate-500']">{{ link.description }}</span>
-            </span>
+            <span class="text-sm font-bold">{{ link.label }}</span>
         </a>
     </nav>
 </template>

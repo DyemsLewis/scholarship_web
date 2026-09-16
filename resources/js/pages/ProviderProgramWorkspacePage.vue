@@ -370,17 +370,17 @@ onMounted(loadProgram);
 
                 <template v-else-if="scholarship">
                     <section class="provider-panel mt-5 overflow-hidden">
-                        <header class="relative overflow-hidden bg-[#081426] px-5 py-5 text-white sm:px-6">
+                        <header class="relative overflow-hidden bg-[#081426] px-4 py-4 text-white sm:px-5">
                             <div class="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border-[42px] border-amber-300/10"></div>
                             <div class="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div class="flex min-w-0 items-center gap-4">
-                                    <img :src="scholarship.image_url" :alt="scholarship.title" class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-2 shadow-sm ring-1 ring-white/20">
+                                    <img :src="scholarship.image_url" :alt="scholarship.title" class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 shadow-sm ring-1 ring-white/20">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
                                             <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Program control center</p>
                                             <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', statusClass(scholarship.status)]">{{ statusLabel(scholarship.status) }}</span>
                                         </div>
-                                        <h1 class="mt-1.5 font-display text-2xl font-bold leading-tight sm:text-3xl">{{ scholarship.title }}</h1>
+                                        <h1 class="mt-1.5 font-display text-2xl font-bold leading-tight">{{ scholarship.title }}</h1>
                                         <p class="mt-1 text-sm font-semibold text-slate-300">{{ scholarship.category || 'Scholarship program' }} · {{ targetLabel(scholarship) }}</p>
                                     </div>
                                 </div>
@@ -392,19 +392,19 @@ onMounted(loadProgram);
                         </header>
 
                         <dl class="grid grid-cols-2 gap-px bg-slate-200 lg:grid-cols-4">
-                            <div class="bg-white px-5 py-4">
+                            <div class="bg-white px-4 py-3">
                                 <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i class="fa-regular fa-calendar text-amber-700" aria-hidden="true"></i>Deadline</dt>
                                 <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ dateLabel(scholarship.deadline) }}</dd>
                             </div>
-                            <div class="bg-white px-5 py-4">
+                            <div class="bg-white px-4 py-3">
                                 <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i :class="[canAccessApplicantWorkspace ? 'fa-solid fa-users' : 'fa-solid fa-eye', 'text-amber-700']" aria-hidden="true"></i>{{ canAccessApplicantWorkspace ? 'Applicants' : 'Visibility' }}</dt>
                                 <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ canAccessApplicantWorkspace ? `${scholarship.applications_count ?? 0} total` : statusLabel(scholarship.status) }}</dd>
                             </div>
-                            <div class="bg-white px-5 py-4">
+                            <div class="bg-white px-4 py-3">
                                 <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i :class="[canAccessApplicantWorkspace ? 'fa-solid fa-list-check' : 'fa-solid fa-user-lock', 'text-amber-700']" aria-hidden="true"></i>{{ canAccessApplicantWorkspace ? 'Open tasks' : 'Your access' }}</dt>
                                 <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ canAccessApplicantWorkspace ? `${openTaskCount} applicant actions` : (canManagePrograms ? 'Program setup' : 'View program') }}</dd>
                             </div>
-                            <div class="bg-white px-5 py-4">
+                            <div class="bg-white px-4 py-3">
                                 <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i :class="[canAccessApplicantWorkspace ? 'fa-solid fa-user-check' : 'fa-regular fa-clock', 'text-amber-700']" aria-hidden="true"></i>{{ canAccessApplicantWorkspace ? 'Selected' : 'Updated' }}</dt>
                                 <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ canAccessApplicantWorkspace ? `${selectedCount}${slotCapacity > 0 ? ` of ${slotCapacity}` : ''}` : (scholarship.updated_at || 'Recently') }}</dd>
                                 <div v-if="canAccessApplicantWorkspace && slotCapacity > 0" class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-amber-400" :style="{ width: `${slotUsagePercent}%` }"></div></div>
@@ -414,7 +414,7 @@ onMounted(loadProgram);
 
                     <div class="mt-4 grid gap-4">
                         <section v-if="recommendedAction" class="self-start overflow-hidden rounded-lg border border-amber-200 bg-amber-50 shadow-sm">
-                            <div class="flex flex-col justify-between gap-5 p-5 sm:flex-row sm:items-center">
+                            <div class="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
                                 <div class="flex min-w-0 items-start gap-3">
                                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
                                     <div>
@@ -451,13 +451,13 @@ onMounted(loadProgram);
                             <div>
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant workflow</p>
                                 <h2 class="mt-1 text-xl font-bold text-slate-950">Work by next action</h2>
-                                <p class="mt-1 text-sm text-slate-600">Open only the applicants who need the same task.</p>
+                                <p class="mt-1 text-sm text-slate-600">Open applicants grouped by their next task.</p>
                             </div>
                             <a v-if="canAccessApplicantWorkspace" :href="`${applicantWorkspaceUrl}?filter=all`" class="text-xs font-bold text-slate-600 transition hover:text-slate-950">View all records <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i></a>
                         </header>
 
                         <div v-if="canAccessApplicantWorkspace" class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
-                            <a v-for="queue in workflowQueues" :key="queue.key" :href="queue.href" class="group flex min-h-32 flex-col bg-white p-4 transition hover:bg-slate-50">
+                            <a v-for="queue in workflowQueues" :key="queue.key" :href="queue.href" class="group flex min-h-28 flex-col bg-white p-3.5 transition hover:bg-slate-50">
                                 <span class="flex items-start justify-between gap-3">
                                     <span class="grid h-9 w-9 place-items-center rounded-md bg-slate-100 text-slate-700"><i :class="queue.icon" aria-hidden="true"></i></span>
                                     <span :class="['rounded-md px-2.5 py-1 text-sm font-bold', queue.count > 0 ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-500']">{{ queue.count }}</span>
@@ -476,7 +476,7 @@ onMounted(loadProgram);
                         <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
                             <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program activities</p>
                             <h2 class="mt-1 text-xl font-bold text-slate-950">Exam and interview status</h2>
-                            <p class="mt-1 text-sm text-slate-600">Publish one shared schedule, complete the activity, then record individual results.</p>
+                            <p class="mt-1 text-sm text-slate-600">Publish a shared schedule, then record results after completion.</p>
                         </header>
                         <div class="divide-y divide-slate-200">
                             <article v-for="activity in activityStatuses" :key="activity.type" class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">

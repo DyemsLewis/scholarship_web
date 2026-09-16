@@ -149,37 +149,45 @@ onMounted(() => {
                     </div>
 
                     <div v-else class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                        <table class="min-w-[900px] table-fixed divide-y divide-slate-200 text-left text-sm">
+                            <colgroup>
+                                <col>
+                                <col class="w-56">
+                                <col class="w-40">
+                                <col class="w-36">
+                                <col class="w-28">
+                                <col class="w-40">
+                            </colgroup>
                             <thead class="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
                                 <tr>
-                                    <th class="px-5 py-3 font-bold">Provider</th>
-                                    <th class="px-5 py-3 font-bold">Service</th>
-                                    <th class="px-5 py-3 font-bold">Payment</th>
-                                    <th class="px-5 py-3 font-bold">Fulfillment</th>
-                                    <th class="px-5 py-3 font-bold">Amount</th>
-                                    <th class="px-5 py-3 text-right font-bold">Action</th>
+                                    <th class="px-4 py-2.5 font-bold">Provider</th>
+                                    <th class="px-4 py-2.5 font-bold">Service</th>
+                                    <th class="px-4 py-2.5 text-center font-bold">Payment</th>
+                                    <th class="px-4 py-2.5 text-center font-bold">Fulfillment</th>
+                                    <th class="px-4 py-2.5 text-center font-bold">Amount</th>
+                                    <th class="px-4 py-2.5 text-center font-bold">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="purchase in purchases" :key="purchase.id" class="align-middle hover:bg-slate-50/70">
-                                    <td class="px-5 py-4">
-                                        <p class="font-bold text-slate-950">{{ purchase.provider?.name }}</p>
-                                        <p class="mt-1 text-xs text-slate-500">{{ purchase.provider?.email }}</p>
+                                    <td class="px-4 py-3">
+                                        <p class="line-clamp-2 font-bold leading-5 text-slate-950">{{ purchase.provider?.name }}</p>
+                                        <p class="mt-0.5 truncate text-xs text-slate-500">{{ purchase.provider?.email }}</p>
                                     </td>
-                                    <td class="px-5 py-4">
-                                        <p class="font-bold text-slate-900">{{ purchase.plan_name }}</p>
-                                        <p class="mt-1 font-mono text-xs text-slate-500">{{ purchase.reference_number }}</p>
+                                    <td class="px-4 py-3">
+                                        <p class="line-clamp-2 text-xs font-bold leading-5 text-slate-900">{{ purchase.plan_name }}</p>
+                                        <p class="mt-0.5 truncate font-mono text-xs text-slate-500">{{ purchase.reference_number }}</p>
                                     </td>
-                                    <td class="px-5 py-4">
+                                    <td class="px-4 py-3 text-center">
                                         <span :class="['rounded px-2 py-1 text-xs font-bold', statusClass(purchase.status)]">{{ statusLabel(purchase.status) }}</span>
-                                        <p class="mt-2 whitespace-nowrap text-xs text-slate-500">{{ dateTime(purchase.paid_at ?? purchase.created_at) }}</p>
+                                        <p class="mt-1.5 whitespace-nowrap text-xs text-slate-500">{{ dateTime(purchase.paid_at ?? purchase.created_at) }}</p>
                                     </td>
-                                    <td class="px-5 py-4">
+                                    <td class="px-4 py-3 text-center">
                                         <span :class="['rounded px-2 py-1 text-xs font-bold', statusClass(purchase.fulfillment_status)]">{{ statusLabel(purchase.fulfillment_status) }}</span>
                                     </td>
-                                    <td class="whitespace-nowrap px-5 py-4 font-bold text-slate-900">{{ money(purchase.amount, purchase.currency) }}</td>
-                                    <td class="px-5 py-4 text-right">
-                                        <a v-if="purchase.status === 'paid'" :href="purchase.workspace_url" class="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Open workspace <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
+                                    <td class="whitespace-nowrap px-4 py-3 text-center font-bold text-slate-900">{{ money(purchase.amount, purchase.currency) }}</td>
+                                    <td class="px-4 py-3 text-center">
+                                        <a v-if="purchase.status === 'paid'" :href="purchase.workspace_url" class="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100">Open workspace <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
                                         <span v-else class="text-xs font-semibold text-slate-400">No action</span>
                                     </td>
                                 </tr>

@@ -47,6 +47,17 @@ class ScholarshipPublicationGuard
             $errors['deadline'] = 'The application deadline cannot be in the past.';
         }
 
+        if (! $scholarship->support_starts_at) {
+            $errors['support_starts_at'] = 'Add the recipient support start date before publication.';
+        }
+
+        if (! $scholarship->support_ends_at) {
+            $errors['support_ends_at'] = 'Add the recipient support end date before publication.';
+        } elseif ($scholarship->support_starts_at
+            && $scholarship->support_ends_at->isBefore($scholarship->support_starts_at)) {
+            $errors['support_ends_at'] = 'The support end date must be on or after the support start date.';
+        }
+
         if (blank($scholarship->category)) {
             $errors['category'] = 'Choose a scholarship category before publication.';
         }

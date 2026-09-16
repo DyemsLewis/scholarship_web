@@ -292,34 +292,44 @@ onMounted(loadProvider);
 
         <section class="admin-page">
             <div class="admin-container">
+                <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
+                    <a href="/admin/reviews?type=providers" class="font-bold text-slate-600 transition hover:text-slate-950">Provider reviews</a>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
+                    <span class="truncate font-semibold text-slate-950">{{ provider?.provider_name || provider?.name || 'Provider record' }}</span>
+                </nav>
+
                 <header class="admin-hero">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                        <div class="max-w-3xl">
                             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Provider review</p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">Verify provider organization</h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Confirm the organization record and supporting proof before granting publishing access.</p>
+                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ provider?.provider_name || provider?.name || 'Verify provider organization' }}</h2>
+                            <p class="mt-3 text-sm leading-6 text-slate-600">Confirm the organization record and supporting proof before granting publishing access.</p>
+                            <div v-if="provider" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
+                                <span>{{ statusLabel(provider.provider_type || 'Provider organization') }}</span>
+                                <span>{{ provider.provider_contact_email || provider.email || 'Email not provided' }}</span>
+                                <span>{{ provider.provider_contact_number || provider.contact_number || 'Contact not provided' }}</span>
+                            </div>
                         </div>
-                        <div class="flex flex-wrap gap-2">
-                            <a
-                                href="/admin/reviews?type=providers"
-                                class="inline-flex items-center rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                            >
-                                Back to reviews
-                            </a>
+                        <div v-if="provider" class="flex flex-wrap items-center gap-2 lg:justify-end">
+                            <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(provider.verification_status)]">
+                                {{ statusLabel(provider.verification_status) }}
+                            </span>
                             <button
                                 type="button"
-                                class="w-fit rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                                class="grid h-10 w-10 place-items-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
+                                aria-label="Refresh provider record"
                                 @click="loadProvider"
                             >
-                                Refresh
+                                <i class="fa-solid fa-rotate text-xs" aria-hidden="true"></i>
                             </button>
                             <button
                                 v-if="activeReviewSection !== 'decision'"
                                 type="button"
-                                class="w-fit rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                class="inline-flex w-fit items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                                 @click="selectReviewSection('decision')"
                             >
                                 Record decision
+                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                             </button>
                         </div>
                     </div>
@@ -334,7 +344,39 @@ onMounted(loadProvider);
                     <p class="mt-1 text-sm leading-6 text-rose-700">{{ loadError }}</p>
                 </div>
 
-                <div v-else class="mt-6 space-y-4">
+                <div v-else class="mt-4 space-y-4">
+                    <section class="admin-panel overflow-hidden">
+                        <div class="border-b border-slate-200 px-4 py-3">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Review steps</p>
+                        </div>
+                        <nav class="grid gap-1 p-1 sm:grid-cols-2 xl:grid-cols-4" aria-label="Provider verification sections">
+                            <button
+                                v-for="(section, index) in reviewSections"
+                                :key="section.key"
+                                type="button"
+                                :aria-current="activeReviewSection === section.key ? 'step' : undefined"
+                                :class="[
+                                    'flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
+                                    activeReviewSection === section.key
+                                        ? 'bg-slate-950 text-white'
+                                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                                ]"
+                                @click="selectReviewSection(section.key)"
+                            >
+                                <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', activeReviewSection === section.key ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-600']"><i :class="section.icon" aria-hidden="true"></i></span>
+                                <span class="min-w-0">
+                                    <span class="block text-sm font-bold">{{ index + 1 }}. {{ section.label }}</span>
+                                    <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
+                                        <template v-if="section.key === 'organization'">Identity and contact</template>
+                                        <template v-else-if="section.key === 'representative'">Account and access</template>
+                                        <template v-else-if="section.key === 'proof'">{{ providerProofCount ? `${providerProofCount} submitted` : 'No evidence' }}</template>
+                                        <template v-else>{{ statusLabel(provider.verification_status) }}</template>
+                                    </span>
+                                </span>
+                            </button>
+                        </nav>
+                    </section>
+
                     <section class="admin-panel overflow-hidden">
                         <div class="flex flex-col gap-4 border-l-4 border-l-amber-400 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                             <div class="flex min-w-0 items-center gap-3">
@@ -407,35 +449,6 @@ onMounted(loadProvider);
                                 {{ reviewFocus.action }}
                             </button>
                         </div>
-                    </section>
-
-                    <section class="admin-panel overflow-hidden">
-                        <nav class="grid gap-1 p-1 sm:grid-cols-2 xl:grid-cols-4" aria-label="Provider verification sections">
-                            <button
-                                v-for="section in reviewSections"
-                                :key="section.key"
-                                type="button"
-                                :aria-current="activeReviewSection === section.key ? 'step' : undefined"
-                                :class="[
-                                    'flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
-                                    activeReviewSection === section.key
-                                        ? 'bg-slate-950 text-white'
-                                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
-                                ]"
-                                @click="selectReviewSection(section.key)"
-                            >
-                                <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', activeReviewSection === section.key ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-600']"><i :class="section.icon" aria-hidden="true"></i></span>
-                                <span class="min-w-0">
-                                    <span class="block text-sm font-bold">{{ section.label }}</span>
-                                    <span :class="['mt-0.5 block truncate text-xs', activeReviewSection === section.key ? 'text-slate-300' : 'text-slate-500']">
-                                        <template v-if="section.key === 'organization'">Identity and contact</template>
-                                        <template v-else-if="section.key === 'representative'">Account and access</template>
-                                        <template v-else-if="section.key === 'proof'">{{ providerProofCount ? `${providerProofCount} submitted` : 'No evidence' }}</template>
-                                        <template v-else>{{ statusLabel(provider.verification_status) }}</template>
-                                    </span>
-                                </span>
-                            </button>
-                        </nav>
                     </section>
 
                     <div v-if="activeReviewSection !== 'decision'" class="space-y-4">
@@ -681,7 +694,7 @@ onMounted(loadProvider);
                             {{ decisionError }}
                         </p>
 
-                        <div class="mt-4 grid gap-2">
+                        <div class="mt-4 grid gap-2 sm:auto-cols-fr sm:grid-flow-col">
                             <button
                                 v-for="action in providerActionOptions(provider)"
                                 :key="action.status"

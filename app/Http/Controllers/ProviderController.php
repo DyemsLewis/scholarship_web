@@ -53,6 +53,7 @@ class ProviderController extends Controller
     public function __construct(
         private readonly ApplicationWorkflowService $workflowService,
         private readonly AcademicRecordOcrService $academicRecordOcrService,
+        private readonly ScholarshipEligibilityService $eligibilityService,
     ) {}
 
     private const PROVIDER_TEAM_ROLES = [
@@ -77,6 +78,27 @@ class ProviderController extends Controller
         'distribution_scheduled',
         'disbursed',
         'renewed',
+    ];
+
+    private const PROVIDER_OBJECTIVES = [
+        'education_access',
+        'priority_skills',
+        'future_talent',
+        'community_development',
+        'equity_inclusion',
+        'academic_excellence',
+        'education_partnerships',
+        'other',
+    ];
+
+    private const RECIPIENT_COMMITMENT_TYPES = [
+        'provider_briefing',
+        'none',
+        'renewal',
+        'service',
+        'activities',
+        'reporting',
+        'custom',
     ];
 
     private const REVIEW_DECISION_STATUSES = [
@@ -3487,6 +3509,8 @@ class ProviderController extends Controller
         $this->ensureProviderCanPost($request);
 
         $validated = $this->validateScholarship($request);
+        $validated = $this->normalizeScholarshipProviderObjectives($validated, $request);
+        $validated = $this->normalizeScholarshipRecipientAgreement($validated, $request);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipProgramPaths($validated);
         $validated = $this->normalizeScholarshipRequirements($validated);
@@ -3565,6 +3589,8 @@ class ProviderController extends Controller
         $this->ensureProviderCanPost($request);
 
         $validated = $this->validateScholarship($request);
+        $validated = $this->normalizeScholarshipProviderObjectives($validated, $request, $scholarship);
+        $validated = $this->normalizeScholarshipRecipientAgreement($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipProgramPaths($validated);
         $validated = $this->normalizeScholarshipRequirements($validated);
@@ -3698,6 +3724,8 @@ class ProviderController extends Controller
         $deadline = $value('deadline');
         $applicationOpensAt = $value('application_opens_at');
         $expectedResultsAt = $value('expected_results_at');
+        $supportStartsAt = $value('support_starts_at');
+        $supportEndsAt = $value('support_ends_at');
 
         if (filled($applicationOpensAt) && filled($deadline)
             && CarbonImmutable::parse($applicationOpensAt)->startOfDay()->isAfter(CarbonImmutable::parse($deadline)->startOfDay())) {
@@ -3707,6 +3735,11 @@ class ProviderController extends Controller
         if (filled($expectedResultsAt) && filled($deadline)
             && CarbonImmutable::parse($expectedResultsAt)->startOfDay()->isBefore(CarbonImmutable::parse($deadline)->startOfDay())) {
             $errors['expected_results_at'] = 'The expected results date must be on or after the application deadline.';
+        }
+
+        if (filled($supportStartsAt) && filled($supportEndsAt)
+            && CarbonImmutable::parse($supportEndsAt)->startOfDay()->isBefore(CarbonImmutable::parse($supportStartsAt)->startOfDay())) {
+            $errors['support_ends_at'] = 'The support end date must be on or after the support start date.';
         }
 
         $this->addScholarshipEligibilityConsistencyErrors($errors, $value);
@@ -3746,6 +3779,14 @@ class ProviderController extends Controller
             $errors['deadline'] = 'The application deadline cannot be in the past.';
         }
 
+        if (blank($supportStartsAt)) {
+            $errors['support_starts_at'] = 'Add the date when recipient support is expected to begin.';
+        }
+
+        if (blank($supportEndsAt)) {
+            $errors['support_ends_at'] = 'Add the date when recipient support is expected to end.';
+        }
+
         if (blank($value('category'))) {
             $errors['category'] = 'Choose a scholarship category before submitting for review.';
         }
@@ -3775,6 +3816,7 @@ class ProviderController extends Controller
             $value('minimum_gwa'),
         ])->contains(fn ($field): bool => filled($field))
             || ($value('income_requirement') !== null && $value('income_requirement') !== 'Any')
+            || (bool) $value('exclude_current_scholarship_recipients')
             || in_array($value('minimum_grade_scale'), ['pass_fail', 'other'], true);
 
         if (! $hasFinderRule) {
@@ -3872,6 +3914,7 @@ class ProviderController extends Controller
                 || ! $this->isOpenScholarshipRule($value('eligible_year_levels'))
                 || ! $this->isOpenScholarshipRule($value('eligible_locations'))
                 || ! $this->isOpenScholarshipRule($value('income_requirement'))
+                || (bool) $value('exclude_current_scholarship_recipients')
                 || filled($value('minimum_grade_scale'))
                 || filled($value('minimum_gwa'));
 
@@ -3939,6 +3982,8 @@ class ProviderController extends Controller
                 'string',
                 'max:5000',
             ],
+            'provider_objectives' => ['nullable', 'string', 'max:2000', 'json'],
+            'provider_objective_notes' => ['nullable', 'string', 'max:1500'],
             'eligibility' => ['nullable', 'string', 'max:5000'],
             'eligibility_conditions' => ['nullable', 'string', 'max:15000', 'json'],
             'eligible_education_levels' => ['nullable', 'string', 'max:2000'],
@@ -3947,6 +3992,7 @@ class ProviderController extends Controller
             'eligible_year_levels' => ['nullable', 'string', 'max:2000'],
             'eligible_locations' => ['nullable', 'string', 'max:3000'],
             'income_requirement' => ['nullable', 'string', 'max:100'],
+            'exclude_current_scholarship_recipients' => ['nullable', 'boolean'],
             'location_name' => ['nullable', 'string', 'max:255'],
             'location_address' => ['nullable', 'string', 'max:500'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
@@ -3971,10 +4017,13 @@ class ProviderController extends Controller
             'renewal_policy' => ['nullable', 'string', 'max:2000'],
             'return_service_contract' => ['nullable', 'string', 'max:3000'],
             'other_contract_terms' => ['nullable', 'string', 'max:3000'],
+            'recipient_agreement' => ['nullable', 'string', 'max:6000', 'json'],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'contact_number' => ['nullable', 'string', 'max:30', new PhoneNumber],
             'application_opens_at' => ['nullable', 'date'],
             'expected_results_at' => ['nullable', 'date'],
+            'support_starts_at' => ['nullable', 'date'],
+            'support_ends_at' => ['nullable', 'date', 'after_or_equal:support_starts_at'],
             'official_program_url' => ['nullable', 'url:http,https', 'max:2048'],
             'contact_person' => ['nullable', 'string', 'max:150'],
             'contact_department' => ['nullable', 'string', 'max:150'],
@@ -3986,6 +4035,57 @@ class ProviderController extends Controller
             'review_rubric' => ['nullable', 'string', 'max:8000', 'json'],
             'application_questions' => ['nullable', 'string', 'max:10000', 'json'],
         ]);
+
+        return $validated;
+    }
+
+    private function normalizeScholarshipProviderObjectives(
+        array $validated,
+        Request $request,
+        ?Scholarship $scholarship = null,
+    ): array {
+        if (! $request->has('provider_objectives')) {
+            $validated['provider_objectives'] = $scholarship?->provider_objectives ?? [];
+
+            return $validated;
+        }
+
+        $decoded = json_decode((string) ($validated['provider_objectives'] ?? '[]'), true);
+        $validated['provider_objectives'] = collect(is_array($decoded) ? $decoded : [])
+            ->filter(fn (mixed $objective): bool => is_string($objective)
+                && in_array($objective, self::PROVIDER_OBJECTIVES, true))
+            ->unique()
+            ->values()
+            ->all();
+
+        return $validated;
+    }
+
+    private function normalizeScholarshipRecipientAgreement(
+        array $validated,
+        Request $request,
+        ?Scholarship $scholarship = null,
+    ): array {
+        if (! $request->has('recipient_agreement')) {
+            $validated['recipient_agreement'] = $scholarship?->recipient_agreement;
+
+            return $validated;
+        }
+
+        $decoded = json_decode((string) ($validated['recipient_agreement'] ?? '{}'), true);
+        $agreement = validator(['agreement' => is_array($decoded) ? $decoded : []], [
+            'agreement.commitment_type' => ['required', Rule::in(self::RECIPIENT_COMMITMENT_TYPES)],
+            'agreement.duration' => ['nullable', 'string', 'max:500'],
+            'agreement.noncompliance_consequence' => ['nullable', 'string', 'max:1000'],
+            'agreement.exit_or_exception_process' => ['nullable', 'string', 'max:1000'],
+        ])->validate()['agreement'];
+
+        $validated['recipient_agreement'] = [
+            'commitment_type' => $agreement['commitment_type'],
+            'duration' => Str::squish((string) ($agreement['duration'] ?? '')) ?: null,
+            'noncompliance_consequence' => Str::squish((string) ($agreement['noncompliance_consequence'] ?? '')) ?: null,
+            'exit_or_exception_process' => Str::squish((string) ($agreement['exit_or_exception_process'] ?? '')) ?: null,
+        ];
 
         return $validated;
     }
@@ -4394,6 +4494,8 @@ class ProviderController extends Controller
             'category',
             'program_cycle',
             'description',
+            'provider_objectives',
+            'provider_objective_notes',
             'eligibility',
             'eligible_education_levels',
             'eligible_courses',
@@ -4401,6 +4503,7 @@ class ProviderController extends Controller
             'eligible_year_levels',
             'eligible_locations',
             'income_requirement',
+            'exclude_current_scholarship_recipients',
             'location_name',
             'location_address',
             'latitude',
@@ -4425,10 +4528,13 @@ class ProviderController extends Controller
             'renewal_policy',
             'return_service_contract',
             'other_contract_terms',
+            'recipient_agreement',
             'contact_email',
             'contact_number',
             'application_opens_at',
             'expected_results_at',
+            'support_starts_at',
+            'support_ends_at',
             'official_program_url',
             'contact_person',
             'contact_department',
@@ -4767,6 +4873,10 @@ class ProviderController extends Controller
             'support_needs' => $profile?->support_needs,
             'current_scholarship_status' => $profile?->current_scholarship_status,
             'current_scholarship_details' => $profile?->current_scholarship_details,
+            'platform_active_scholarships' => $this->eligibilityService->activePlatformScholarships(
+                $applicant,
+                $application->scholarship_id,
+            ),
             'scholarship_goal' => $profile?->scholarship_goal,
             'achievements' => $profile?->achievements,
             'activities_and_responsibilities' => $profile?->activities_and_responsibilities,
@@ -4866,6 +4976,8 @@ class ProviderController extends Controller
             'category' => $scholarship->category,
             'program_cycle' => $scholarship->program_cycle,
             'description' => $scholarship->description,
+            'provider_objectives' => $scholarship->provider_objectives ?? [],
+            'provider_objective_notes' => $scholarship->provider_objective_notes,
             'eligibility' => $scholarship->eligibility,
             'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
             'eligible_education_levels' => $scholarship->eligible_education_levels,
@@ -4874,6 +4986,7 @@ class ProviderController extends Controller
             'eligible_year_levels' => $scholarship->eligible_year_levels,
             'eligible_locations' => $scholarship->eligible_locations,
             'income_requirement' => $scholarship->income_requirement,
+            'exclude_current_scholarship_recipients' => (bool) $scholarship->exclude_current_scholarship_recipients,
             'location_name' => $scholarship->location_name,
             'location_address' => $scholarship->location_address,
             'latitude' => $scholarship->latitude,
@@ -4914,10 +5027,13 @@ class ProviderController extends Controller
             'renewal_policy' => $scholarship->renewal_policy,
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,
+            'recipient_agreement' => $scholarship->recipient_agreement,
             'contact_email' => $scholarship->contact_email,
             'contact_number' => $scholarship->contact_number,
             'application_opens_at' => $scholarship->application_opens_at?->format('Y-m-d'),
             'expected_results_at' => $scholarship->expected_results_at?->format('Y-m-d'),
+            'support_starts_at' => $scholarship->support_starts_at?->format('Y-m-d'),
+            'support_ends_at' => $scholarship->support_ends_at?->format('Y-m-d'),
             'official_program_url' => $scholarship->official_program_url,
             'contact_person' => $scholarship->contact_person,
             'contact_department' => $scholarship->contact_department,

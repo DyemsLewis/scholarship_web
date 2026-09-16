@@ -976,7 +976,7 @@ onMounted(loadAccount);
                                 </button>
                             </div>
 
-                            <div v-if="account.account_status !== 'suspended' && !isCurrentAdminAccount" class="mt-4 grid gap-3 border-t border-rose-200 pt-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                            <div v-if="account.account_status !== 'suspended' && !isCurrentAdminAccount" class="mt-4 border-t border-rose-200 pt-4">
                                 <div>
                                     <label :class="labelClass" for="admin-suspension-reason">Reason for suspension</label>
                                     <textarea
@@ -987,14 +987,16 @@ onMounted(loadAccount);
                                         class="w-full rounded-md border border-rose-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-rose-400 focus:ring-3 focus:ring-rose-100"
                                     />
                                 </div>
-                                <button
-                                    type="button"
-                                    class="rounded-md bg-rose-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-80"
-                                    :disabled="Boolean(accountAction)"
-                                    @click="updateAccountStatus('suspended')"
-                                >
-                                    {{ accountAction === 'suspend' ? 'Suspending...' : 'Suspend account' }}
-                                </button>
+                                <div class="mt-3 flex justify-start">
+                                    <button
+                                        type="button"
+                                        class="rounded-md bg-rose-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-80"
+                                        :disabled="Boolean(accountAction)"
+                                        @click="updateAccountStatus('suspended')"
+                                    >
+                                        {{ accountAction === 'suspend' ? 'Suspending...' : 'Suspend account' }}
+                                    </button>
+                                </div>
                             </div>
                             <div v-else-if="isCurrentAdminAccount" class="mt-4 flex items-center gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600">
                                 <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
@@ -1055,7 +1057,7 @@ onMounted(loadAccount);
                             This applicant has not submitted an academic record yet.
                         </div>
 
-                        <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                        <div class="mt-5">
                             <div>
                                 <label :class="labelClass" for="admin-applicant-verification-notes">Review note</label>
                                 <textarea
@@ -1067,7 +1069,7 @@ onMounted(loadAccount);
                                 />
                             </div>
 
-                            <div class="flex flex-col gap-2 sm:flex-row lg:justify-end">
+                            <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-start">
                                 <button
                                     type="button"
                                     :disabled="Boolean(accountAction) || !hasAcademicVerificationDocument"
