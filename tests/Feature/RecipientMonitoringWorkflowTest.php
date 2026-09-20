@@ -3,8 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\PortalNotification;
+use App\Models\RecipientBenefitRelease;
 use App\Models\RecipientBenefitReleaseRecord;
+use App\Models\RecipientMonitoringCycle;
 use App\Models\RecipientMonitoringSubmission;
+use App\Models\RecipientSupportDecision;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
@@ -333,6 +336,218 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->where('user_id', $applicant->id)
             ->where('type', 'recipient_benefit_release_result')
             ->exists());
+    }
+
+    public function test_provider_can_renew_then_complete_a_recipient_support_record(): void
+    {
+        [$provider, $applicant, $scholarship, $application] = $this->selectedApplication();
+        $application->update([
+            'student_response_status' => 'accepted',
+            'student_responded_at' => now(),
+            'student_response_terms_accepted_at' => now(),
+            'provider_contract_terms_accepted_at' => now(),
+        ]);
+        $cycleId = $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-cycles", [
+                'title' => 'Renewal grade check',
+                'period_type' => 'semester',
+                'due_at' => now()->toDateString(),
+                'minimum_grade' => 85,
+                'grading_scale' => 'percentage',
+            ])
+            ->assertCreated()
+            ->json('cycle.id');
+        $renewalPayload = [
+            'decision' => 'renewed',
+            'effective_on' => now()->toDateString(),
+            'support_ends_on' => now()->addMonths(6)->toDateString(),
+            'next_review_on' => now()->addMonths(3)->toDateString(),
+            'next_period_terms' => 'Continue the published grade requirement and submit the next academic update.',
+            'confirmed' => true,
+        ];
+
+        $this->actingAs($provider)
+            ->postJson("/provider/applications/{$application->id}/support-decision", $renewalPayload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('decision');
+
+        RecipientMonitoringSubmission::create([
+            'recipient_monitoring_cycle_id' => $cycleId,
+            'scholarship_application_id' => $application->id,
+            'applicant_id' => $applicant->id,
+            'original_name' => 'renewal-grade-card.pdf',
+            'path' => 'monitoring/renewal-grade-card.pdf',
+            'mime_type' => 'application/pdf',
+            'size' => 100,
+            'ocr_status' => 'succeeded',
+            'ocr_grade' => 90,
+            'ocr_grading_scale' => 'percentage',
+            'grade_source' => 'ocr',
+            'submitted_at' => now(),
+            'review_status' => 'met',
+            'reviewed_by' => $provider->id,
+            'reviewed_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->postJson("/provider/applications/{$application->id}/support-decision", $renewalPayload)
+            ->assertOk()
+            ->assertJsonPath('recipient.support_status', 'renewed')
+            ->assertJsonPath('recipient.is_closed', false)
+            ->assertJsonPath('recipient.latest_decision.next_period_terms', $renewalPayload['next_period_terms']);
+        $this->assertSame('renewed', $application->fresh()->status);
+
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.recipient_monitoring.support_status', 'renewed')
+            ->assertJsonPath('application.recipient_monitoring.support_decisions.0.decision', 'renewed');
+
+        $this->actingAs($provider)
+            ->postJson("/provider/applications/{$application->id}/support-decision", [
+                'decision' => 'completed',
+                'effective_on' => now()->toDateString(),
+                'reason' => 'The recipient completed the support period and all currently due requirements.',
+                'confirmed' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('recipient.support_status', 'completed')
+            ->assertJsonPath('recipient.is_closed', true);
+
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.recipient_monitoring.support_status', 'completed')
+            ->assertJsonPath('application.recipient_monitoring.cycles.0.can_submit', false);
+
+        $this->actingAs($provider)
+            ->postJson("/provider/applications/{$application->id}/support-decision", $renewalPayload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('decision');
+        $this->assertDatabaseCount('recipient_support_decisions', 2);
+        $this->assertTrue(PortalNotification::query()
+            ->where('user_id', $applicant->id)
+            ->where('type', 'recipient_support_decision')
+            ->exists());
+    }
+
+    public function test_provider_can_view_a_consolidated_recipient_support_record(): void
+    {
+        [$provider, $applicant, $scholarship, $application] = $this->selectedApplication();
+        $application->update([
+            'student_response_status' => 'accepted',
+            'student_responded_at' => now()->subMonths(4),
+            'student_response_terms_accepted_at' => now()->subMonths(4),
+            'provider_contract_terms_accepted_at' => now()->subMonths(4),
+        ]);
+        $cycle = RecipientMonitoringCycle::create([
+            'scholarship_id' => $scholarship->id,
+            'created_by' => $provider->id,
+            'title' => 'First semester academic review',
+            'period_type' => 'semester',
+            'academic_period' => 'First semester',
+            'school_year' => '2026-2027',
+            'due_at' => now()->subMonth()->toDateString(),
+            'minimum_grade' => 85,
+            'grading_scale' => 'percentage',
+            'status' => 'closed',
+            'published_at' => now()->subMonths(2),
+        ]);
+        $submission = RecipientMonitoringSubmission::create([
+            'recipient_monitoring_cycle_id' => $cycle->id,
+            'scholarship_application_id' => $application->id,
+            'applicant_id' => $applicant->id,
+            'original_name' => 'first-semester-card.pdf',
+            'path' => 'monitoring/first-semester-card.pdf',
+            'mime_type' => 'application/pdf',
+            'size' => 256,
+            'ocr_status' => 'succeeded',
+            'ocr_grade' => 91,
+            'ocr_grading_scale' => 'percentage',
+            'grade_source' => 'ocr',
+            'submitted_at' => now()->subMonth(),
+            'review_status' => 'met',
+            'review_notes' => 'The submitted grade card meets the continuing requirement.',
+            'reviewed_by' => $provider->id,
+            'reviewed_at' => now()->subMonth()->addDay(),
+        ]);
+        $release = RecipientBenefitRelease::create([
+            'scholarship_id' => $scholarship->id,
+            'created_by' => $provider->id,
+            'title' => 'First semester allowance',
+            'release_at' => now()->subWeeks(2),
+            'benefit_description' => 'PHP 5,000 learning allowance',
+            'amount' => 5000,
+            'release_method' => 'in_person',
+            'location' => 'Tulay Aral Community Desk',
+            'requires_original_verification' => true,
+            'status' => 'completed',
+            'published_at' => now()->subMonth(),
+        ]);
+        $releaseRecord = RecipientBenefitReleaseRecord::create([
+            'recipient_benefit_release_id' => $release->id,
+            'scholarship_application_id' => $application->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'released',
+            'originals_verified' => true,
+            'notes' => 'Recipient received the allowance and signed the acknowledgement.',
+            'receipt_original_name' => 'signed-release-receipt.pdf',
+            'receipt_path' => 'monitoring/signed-release-receipt.pdf',
+            'receipt_mime_type' => 'application/pdf',
+            'receipt_size' => 128,
+            'recorded_by' => $provider->id,
+            'recorded_at' => now()->subWeeks(2),
+            'released_at' => now()->subWeeks(2),
+        ]);
+        RecipientSupportDecision::create([
+            'scholarship_application_id' => $application->id,
+            'applicant_id' => $applicant->id,
+            'decision' => 'renewed',
+            'effective_on' => now()->subWeek()->toDateString(),
+            'support_ends_on' => now()->addMonths(5)->toDateString(),
+            'next_review_on' => now()->addMonths(2)->toDateString(),
+            'next_period_terms' => 'Continue the grade requirement for the next semester.',
+            'decided_by' => $provider->id,
+            'decided_at' => now()->subWeek(),
+        ]);
+
+        $response = $this->actingAs($provider)
+            ->getJson("/provider/applications/{$application->id}/recipient-record")
+            ->assertOk()
+            ->assertJsonPath('record.recipient.name', $applicant->name)
+            ->assertJsonPath('record.program.title', $scholarship->title)
+            ->assertJsonPath('record.agreement.status', 'accepted')
+            ->assertJsonPath('record.summary.monitoring_total', 1)
+            ->assertJsonPath('record.summary.monitoring_confirmed', 1)
+            ->assertJsonPath('record.summary.release_total', 1)
+            ->assertJsonPath('record.summary.released_total', 1)
+            ->assertJsonPath('record.support.support_status', 'renewed');
+
+        $types = collect($response->json('record.timeline'))->pluck('type');
+        $this->assertContains('agreement', $types);
+        $this->assertContains('monitoring', $types);
+        $this->assertContains('release', $types);
+        $this->assertContains('decision', $types);
+        $this->assertSame($submission->id, $response->json('record.monitoring_records.0.submission.id'));
+        $this->assertSame($releaseRecord->id, $response->json('record.benefit_releases.0.id'));
+
+        $this->actingAs($provider)
+            ->getJson("/provider/scholarships/{$scholarship->id}/monitoring-cycles")
+            ->assertOk()
+            ->assertJsonPath('program_summary.recipients.total', 1)
+            ->assertJsonPath('program_summary.recipients.active', 1)
+            ->assertJsonPath('program_summary.recipients.renewal_ready', 1)
+            ->assertJsonPath('program_summary.outcomes.renewed', 1)
+            ->assertJsonPath('program_summary.monitoring.periods', 1)
+            ->assertJsonPath('program_summary.monitoring.records_reviewed', 1)
+            ->assertJsonPath('program_summary.releases.schedules', 1)
+            ->assertJsonPath('program_summary.releases.released', 1)
+            ->assertJsonPath('program_summary.attention_count', 0);
+
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $this->actingAs($otherProvider)
+            ->getJson("/provider/applications/{$application->id}/recipient-record")
+            ->assertForbidden();
     }
 
     private function selectedApplication(): array

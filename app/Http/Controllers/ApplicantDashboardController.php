@@ -2663,6 +2663,8 @@ class ApplicantDashboardController extends Controller
                 'eligible' => false,
                 'cycles' => [],
                 'benefit_releases' => [],
+                'support_decisions' => [],
+                'support_status' => null,
                 'pending_count' => 0,
             ];
         }
@@ -2672,10 +2674,15 @@ class ApplicantDashboardController extends Controller
             'monitoringSubmissions.reviews.reviewer',
             'benefitReleaseRecords.release.creator',
             'benefitReleaseRecords.recorder',
+            'supportDecisions.decider',
             'scholarship.monitoringCycles',
         ]);
         $agreementAccepted = $application->student_response_status === 'accepted';
-        $benefitsActive = $application->status !== 'benefits_terminated';
+        $latestSupportDecision = $application->supportDecisions->first();
+        $benefitsActive = $application->status !== 'benefits_terminated'
+            && ! in_array($latestSupportDecision?->decision, ['completed', 'terminated'], true);
+        $supportStatus = $latestSupportDecision?->decision
+            ?? ($application->status === 'benefits_terminated' ? 'terminated' : 'active');
         $cycles = $application->scholarship->monitoringCycles
             ->whereIn('status', ['open', 'closed'])
             ->map(function (RecipientMonitoringCycle $cycle) use ($application, $agreementAccepted, $benefitsActive): array {
@@ -2732,6 +2739,32 @@ class ApplicantDashboardController extends Controller
             'academic_ocr' => $this->academicRecordOcrService->publicConfiguration(),
             'cycles' => $cycles,
             'benefit_releases' => $benefitReleases,
+            'support_status' => $supportStatus,
+            'support_status_label' => match ($supportStatus) {
+                'renewed' => 'Scholarship support renewed',
+                'completed' => 'Scholarship program completed',
+                'terminated' => 'Scholarship support ended early',
+                default => 'Scholarship support active',
+            },
+            'support_decisions' => $application->supportDecisions
+                ->map(fn ($decision): array => [
+                    'id' => $decision->id,
+                    'decision' => $decision->decision,
+                    'decision_label' => match ($decision->decision) {
+                        'renewed' => 'Support renewed',
+                        'completed' => 'Program completed',
+                        'terminated' => 'Support ended early',
+                        default => Str::headline($decision->decision),
+                    },
+                    'effective_label' => $decision->effective_on?->format('M d, Y'),
+                    'support_ends_label' => $decision->support_ends_on?->format('M d, Y'),
+                    'next_review_label' => $decision->next_review_on?->format('M d, Y'),
+                    'reason' => $decision->reason,
+                    'next_period_terms' => $decision->next_period_terms,
+                    'decided_by' => $decision->decider?->name,
+                    'decided_at' => $decision->decided_at?->format('M d, Y h:i A'),
+                ])
+                ->values(),
             'pending_count' => $cycles
                 ->filter(fn (array $cycle): bool => $cycle['can_submit']
                     && ($cycle['submission'] === null || $cycle['correction_requested']))

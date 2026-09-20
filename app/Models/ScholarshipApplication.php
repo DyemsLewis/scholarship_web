@@ -169,4 +169,11 @@ class ScholarshipApplication extends Model
     {
         return $this->hasMany(RecipientBenefitReleaseRecord::class);
     }
+
+    public function supportDecisions(): HasMany
+    {
+        return $this->hasMany(RecipientSupportDecision::class)
+            ->orderByDesc('decided_at')
+            ->orderByDesc('id');
+    }
 }

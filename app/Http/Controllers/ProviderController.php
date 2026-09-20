@@ -13,6 +13,7 @@ use App\Models\RecipientBenefitRelease;
 use App\Models\RecipientBenefitReleaseRecord;
 use App\Models\RecipientMonitoringCycle;
 use App\Models\RecipientMonitoringSubmission;
+use App\Models\RecipientSupportDecision;
 use App\Models\Scholarship;
 use App\Models\ScholarshipAnnouncement;
 use App\Models\ScholarshipApplication;
@@ -3506,20 +3507,32 @@ class ProviderController extends Controller
         $releases = $scholarship->benefitReleases()
             ->with(['creator', 'records.applicant', 'records.recorder'])
             ->get();
+        $supportRecipients = $this->supportRecipientApplications($scholarship);
+        $cyclePayloads = $cycles
+            ->map(fn (RecipientMonitoringCycle $cycle): array => $this->recipientMonitoringCyclePayload($cycle, $applications))
+            ->values();
+        $releasePayloads = $releases
+            ->map(fn (RecipientBenefitRelease $release): array => $this->recipientBenefitReleasePayload($release))
+            ->values();
+        $supportPayloads = $supportRecipients
+            ->map(fn (ScholarshipApplication $application): array => $this->recipientSupportPayload($application, $cycles))
+            ->values();
 
         return response()->json([
             'scholarship' => [
                 ...$this->scholarshipPayload($scholarship),
-                'selected_recipients_count' => $applications->count(),
+                'selected_recipients_count' => $supportRecipients->count(),
             ],
             'academic_ocr' => $this->academicRecordOcrService->publicConfiguration(),
-            'cycles' => $cycles
-                ->map(fn (RecipientMonitoringCycle $cycle): array => $this->recipientMonitoringCyclePayload($cycle, $applications))
-                ->values(),
+            'cycles' => $cyclePayloads,
             'release_candidates' => $this->recipientReleaseCandidatesPayload($applications, $cycles, now()),
-            'benefit_releases' => $releases
-                ->map(fn (RecipientBenefitRelease $release): array => $this->recipientBenefitReleasePayload($release))
-                ->values(),
+            'benefit_releases' => $releasePayloads,
+            'support_recipients' => $supportPayloads,
+            'program_summary' => $this->recipientProgramSummaryPayload(
+                $cyclePayloads,
+                $releasePayloads,
+                $supportPayloads,
+            ),
         ]);
     }
 
@@ -3951,6 +3964,239 @@ class ProviderController extends Controller
         return Storage::disk('local')->response($record->receipt_path, $record->receipt_original_name, [
             'Cache-Control' => 'private, no-store',
             'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function recipientSupportRecord(
+        Request $request,
+        ScholarshipApplication $application,
+    ): JsonResponse {
+        abort_unless($request->user()?->isProvider(), 403);
+        $application->load([
+            'scholarship.provider.providerProfile',
+            'scholarship.monitoringCycles.creator',
+            'applicant.studentProfile',
+            'monitoringSubmissions.cycle',
+            'monitoringSubmissions.reviewer',
+            'monitoringSubmissions.reviews.reviewer',
+            'benefitReleaseRecords.release',
+            'benefitReleaseRecords.recorder',
+            'supportDecisions.decider',
+        ]);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
+        abort_unless(
+            $application->final_outcome === 'selected'
+                || in_array($application->status, [...self::AWARD_SLOT_STATUSES, 'benefits_terminated'], true),
+            404,
+        );
+
+        return response()->json([
+            'record' => $this->recipientSupportRecordPayload($application),
+        ]);
+    }
+
+    public function recordRecipientSupportDecision(
+        Request $request,
+        ScholarshipApplication $application,
+    ): JsonResponse {
+        abort_unless($request->user()?->isProvider(), 403);
+        $application->loadMissing([
+            'scholarship.monitoringCycles',
+            'applicant',
+            'monitoringSubmissions',
+            'benefitReleaseRecords.release',
+            'supportDecisions.decider',
+        ]);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
+        abort_unless(
+            $application->final_outcome === 'selected'
+                || in_array($application->status, [...self::AWARD_SLOT_STATUSES, 'benefits_terminated'], true),
+            422,
+        );
+
+        $validated = $request->validate([
+            'decision' => ['required', Rule::in(['renewed', 'completed', 'terminated'])],
+            'effective_on' => ['required', 'date', 'before_or_equal:today'],
+            'support_ends_on' => [Rule::requiredIf($request->input('decision') === 'renewed'), 'nullable', 'date'],
+            'next_review_on' => ['nullable', 'date'],
+            'reason' => [
+                Rule::requiredIf(in_array($request->input('decision'), ['completed', 'terminated'], true)),
+                'nullable',
+                'string',
+                'min:10',
+                'max:2000',
+            ],
+            'next_period_terms' => [
+                Rule::requiredIf($request->input('decision') === 'renewed'),
+                'nullable',
+                'string',
+                'min:10',
+                'max:2000',
+            ],
+            'confirmed' => ['accepted'],
+        ]);
+
+        if ($application->student_response_status !== 'accepted') {
+            throw ValidationException::withMessages([
+                'decision' => 'The applicant must accept the recipient agreement before support can be renewed or closed.',
+            ]);
+        }
+
+        $effectiveOn = CarbonImmutable::parse($validated['effective_on'])->startOfDay();
+        $supportEndsOn = filled($validated['support_ends_on'] ?? null)
+            ? CarbonImmutable::parse($validated['support_ends_on'])->startOfDay()
+            : null;
+        $nextReviewOn = filled($validated['next_review_on'] ?? null)
+            ? CarbonImmutable::parse($validated['next_review_on'])->startOfDay()
+            : null;
+
+        if ($supportEndsOn && $supportEndsOn->isBefore($effectiveOn)) {
+            throw ValidationException::withMessages([
+                'support_ends_on' => 'The renewed support end date must be on or after the effective date.',
+            ]);
+        }
+
+        if ($nextReviewOn && ($nextReviewOn->isBefore($effectiveOn) || ($supportEndsOn && $nextReviewOn->isAfter($supportEndsOn)))) {
+            throw ValidationException::withMessages([
+                'next_review_on' => 'The next review date must fall within the renewed support period.',
+            ]);
+        }
+
+        $latestDecision = $application->supportDecisions->first();
+        if ($latestDecision && in_array($latestDecision->decision, ['completed', 'terminated'], true)) {
+            throw ValidationException::withMessages([
+                'decision' => 'This recipient support record is already closed and cannot receive another outcome.',
+            ]);
+        }
+
+        if ($validated['decision'] === 'renewed') {
+            $eligibility = $this->recipientSupportEligibility(
+                $application,
+                $application->scholarship->monitoringCycles,
+                $effectiveOn,
+            );
+
+            if (! $eligibility['eligible']) {
+                throw ValidationException::withMessages([
+                    'decision' => $eligibility['reason'],
+                ]);
+            }
+        }
+
+        if ($validated['decision'] === 'completed') {
+            $pendingReleases = $application->benefitReleaseRecords
+                ->filter(function (RecipientBenefitReleaseRecord $record) use ($effectiveOn): bool {
+                    $releaseAt = $record->release?->release_at;
+
+                    return $releaseAt !== null
+                        && $releaseAt->startOfDay()->lte($effectiveOn)
+                        && in_array($record->status, ['scheduled', 'prepared'], true);
+                });
+
+            if ($pendingReleases->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'decision' => 'Record all benefit releases due by the completion date before closing recipient support.',
+                ]);
+            }
+        }
+
+        $previousStatus = $application->status;
+        $nextStatus = match ($validated['decision']) {
+            'renewed' => 'renewed',
+            'terminated' => 'benefits_terminated',
+            default => $previousStatus,
+        };
+
+        $decision = DB::transaction(function () use (
+            $request,
+            $application,
+            $validated,
+            $previousStatus,
+            $nextStatus,
+        ): RecipientSupportDecision {
+            $currentStatus = ScholarshipApplication::query()
+                ->whereKey($application->id)
+                ->lockForUpdate()
+                ->value('status');
+
+            if ($currentStatus !== $previousStatus) {
+                throw ValidationException::withMessages([
+                    'decision' => 'This recipient record changed. Refresh the page before recording an outcome.',
+                ]);
+            }
+
+            $decision = $application->supportDecisions()->create([
+                'applicant_id' => $application->applicant_id,
+                'decision' => $validated['decision'],
+                'effective_on' => $validated['effective_on'],
+                'support_ends_on' => $validated['support_ends_on'] ?? null,
+                'next_review_on' => $validated['next_review_on'] ?? null,
+                'reason' => $validated['reason'] ?? null,
+                'next_period_terms' => $validated['next_period_terms'] ?? null,
+                'decided_by' => $request->user()->id,
+                'decided_at' => now(),
+            ]);
+
+            if ($nextStatus !== $previousStatus) {
+                $application->update([
+                    'status' => $nextStatus,
+                    'outcome_notes' => $validated['reason'] ?? $application->outcome_notes,
+                    'outcome_at' => now(),
+                    'reviewed_by' => $request->user()->id,
+                    'reviewed_at' => now(),
+                ]);
+                ApplicationStatusHistory::create([
+                    'scholarship_application_id' => $application->id,
+                    'changed_by' => $request->user()->id,
+                    'from_status' => $previousStatus,
+                    'to_status' => $nextStatus,
+                    'review_notes' => $validated['reason'] ?? $validated['next_period_terms'] ?? null,
+                    'changed_at' => now(),
+                ]);
+            }
+
+            return $decision;
+        });
+
+        $decisionLabels = [
+            'renewed' => 'Support renewed',
+            'completed' => 'Support completed',
+            'terminated' => 'Support ended early',
+        ];
+        PortalNotification::create([
+            'user_id' => $application->applicant_id,
+            'type' => 'recipient_support_decision',
+            'title' => $decisionLabels[$validated['decision']],
+            'message' => "{$application->scholarship->title}: {$decisionLabels[$validated['decision']]} effective {$decision->effective_on->format('M d, Y')}.",
+            'action_url' => route('dashboard.applications.show', $application, false).'?section=monitoring',
+            'deduplication_key' => "recipient-support-decision:{$decision->id}",
+        ]);
+        ActivityLog::record(
+            $request->user(),
+            'recipient_support_decision_recorded',
+            "{$request->user()->name} recorded {$validated['decision']} support for {$application->applicant?->name}.",
+            $request,
+            [
+                'scholarship_id' => $application->scholarship_id,
+                'application_id' => $application->id,
+                'recipient_support_decision_id' => $decision->id,
+                'decision' => $validated['decision'],
+            ],
+        );
+
+        $cycles = $application->scholarship->monitoringCycles()
+            ->with('submissions')
+            ->get();
+        $freshApplication = $application->fresh()->load([
+            'applicant.studentProfile',
+            'monitoringSubmissions',
+            'benefitReleaseRecords.release',
+            'supportDecisions.decider',
+        ]);
+
+        return response()->json([
+            'message' => $decisionLabels[$validated['decision']].'.',
+            'recipient' => $this->recipientSupportPayload($freshApplication, $cycles),
         ]);
     }
 
@@ -5489,6 +5735,7 @@ class ProviderController extends Controller
                 'applicant.studentProfile',
                 'monitoringSubmissions.reviewer',
                 'monitoringSubmissions.reviews.reviewer',
+                'supportDecisions.decider',
             ])
             ->where('scholarship_id', $scholarship->id)
             ->where(function (Builder $query): void {
@@ -5501,7 +5748,545 @@ class ProviderController extends Controller
                     ->orWhere('student_response_status', '!=', 'declined');
             })
             ->orderBy('id')
+            ->get()
+            ->filter(fn (ScholarshipApplication $application): bool => ! in_array(
+                $application->supportDecisions->first()?->decision,
+                ['completed', 'terminated'],
+                true,
+            ));
+    }
+
+    private function supportRecipientApplications(Scholarship $scholarship): EloquentCollection
+    {
+        return ScholarshipApplication::query()
+            ->with([
+                'applicant.studentProfile',
+                'monitoringSubmissions',
+                'benefitReleaseRecords.release',
+                'supportDecisions.decider',
+            ])
+            ->where('scholarship_id', $scholarship->id)
+            ->where(function (Builder $query): void {
+                $query->where('final_outcome', 'selected')
+                    ->orWhereIn('status', [...self::AWARD_SLOT_STATUSES, 'benefits_terminated']);
+            })
+            ->where(function (Builder $query): void {
+                $query->whereNull('student_response_status')
+                    ->orWhere('student_response_status', '!=', 'declined');
+            })
+            ->orderBy('id')
             ->get();
+    }
+
+    private function recipientSupportPayload(
+        ScholarshipApplication $application,
+        EloquentCollection $cycles,
+    ): array {
+        $application->loadMissing([
+            'applicant.studentProfile',
+            'monitoringSubmissions',
+            'benefitReleaseRecords.release',
+            'supportDecisions.decider',
+        ]);
+        $latestDecision = $application->supportDecisions->first();
+        $eligibility = $this->recipientSupportEligibility($application, $cycles, now());
+        $releasedCount = $application->benefitReleaseRecords->where('status', 'released')->count();
+        $agreement = RecipientAgreement::payload($application);
+        $supportStatus = $latestDecision?->decision
+            ?? ($application->status === 'benefits_terminated' ? 'terminated' : 'active');
+
+        return [
+            'application_id' => $application->id,
+            'applicant_id' => $application->applicant_id,
+            'name' => $application->applicant?->name ?? 'Applicant',
+            'email' => $application->applicant?->email,
+            'application_url' => route('provider.applications.show', $application, false),
+            'agreement_status' => $agreement['status'] ?? 'pending',
+            'agreement_status_label' => $agreement['status_label'] ?? 'Awaiting response',
+            'support_status' => $supportStatus,
+            'support_status_label' => match ($supportStatus) {
+                'renewed' => 'Renewed support',
+                'completed' => 'Program completed',
+                'terminated' => 'Support ended early',
+                default => 'Active recipient',
+            },
+            'is_closed' => in_array($supportStatus, ['completed', 'terminated'], true),
+            'renewal_eligible' => $eligibility['eligible'],
+            'renewal_eligibility_label' => $eligibility['label'],
+            'renewal_eligibility_reason' => $eligibility['reason'],
+            'requirements_met' => $eligibility['requirements_met'],
+            'requirements_total' => $eligibility['requirements_total'],
+            'release_count' => $application->benefitReleaseRecords->count(),
+            'released_count' => $releasedCount,
+            'latest_decision' => $latestDecision ? $this->recipientSupportDecisionPayload($latestDecision) : null,
+            'decisions' => $application->supportDecisions
+                ->map(fn (RecipientSupportDecision $decision): array => $this->recipientSupportDecisionPayload($decision))
+                ->values(),
+        ];
+    }
+
+    private function recipientProgramSummaryPayload(
+        Collection $cycles,
+        Collection $releases,
+        Collection $recipients,
+    ): array {
+        $today = now()->startOfDay();
+        $attention = collect();
+
+        foreach ($recipients as $recipient) {
+            if (! $recipient['is_closed'] && $recipient['agreement_status'] !== 'accepted') {
+                $attention->push([
+                    'type' => 'agreement',
+                    'type_label' => 'Agreement',
+                    'title' => $recipient['name'],
+                    'detail' => 'Recipient agreement is awaiting acceptance.',
+                    'status_label' => $recipient['agreement_status_label'],
+                    'application_url' => $recipient['application_url'],
+                    'priority' => 2,
+                ]);
+            }
+        }
+
+        foreach ($cycles as $cycle) {
+            foreach ($cycle['recipients'] as $recipient) {
+                $submission = $recipient['submission'];
+                $reviewStatus = data_get($submission, 'review_status');
+
+                if ($submission && $reviewStatus === 'pending') {
+                    $attention->push([
+                        'type' => 'monitoring',
+                        'type_label' => 'Academic review',
+                        'title' => $recipient['name'],
+                        'detail' => $cycle['title'].' has a submitted grade record waiting for review.',
+                        'status_label' => 'Review needed',
+                        'application_url' => $recipient['application_url'],
+                        'priority' => 1,
+                    ]);
+                } elseif ($submission && in_array($reviewStatus, ['not_met', 'needs_correction'], true)) {
+                    $attention->push([
+                        'type' => 'monitoring',
+                        'type_label' => 'Academic requirement',
+                        'title' => $recipient['name'],
+                        'detail' => $cycle['title'].': '.data_get($submission, 'review_status_label').'.',
+                        'status_label' => data_get($submission, 'review_status_label'),
+                        'application_url' => $recipient['application_url'],
+                        'priority' => 1,
+                    ]);
+                } elseif (! $submission && $cycle['is_past_due']) {
+                    $attention->push([
+                        'type' => 'monitoring',
+                        'type_label' => 'Overdue record',
+                        'title' => $recipient['name'],
+                        'detail' => $cycle['title'].' was due '.$cycle['due_label'].' and has no submission.',
+                        'status_label' => 'Overdue',
+                        'application_url' => $recipient['application_url'],
+                        'priority' => 1,
+                    ]);
+                }
+            }
+        }
+
+        foreach ($releases as $release) {
+            $releaseIsDue = filled($release['release_date'])
+                && CarbonImmutable::parse($release['release_date'])->startOfDay()->lte($today);
+
+            foreach ($release['records'] as $record) {
+                if (in_array($record['status'], ['missed', 'withheld'], true)) {
+                    $attention->push([
+                        'type' => 'release',
+                        'type_label' => 'Benefit release',
+                        'title' => $record['name'],
+                        'detail' => $release['title'].': '.$record['status_label'].'.',
+                        'status_label' => $record['status_label'],
+                        'application_url' => $record['application_url'],
+                        'priority' => 1,
+                    ]);
+                } elseif ($releaseIsDue && in_array($record['status'], ['scheduled', 'prepared'], true)) {
+                    $attention->push([
+                        'type' => 'release',
+                        'type_label' => 'Release result',
+                        'title' => $record['name'],
+                        'detail' => $release['title'].' is due and still needs a final release result.',
+                        'status_label' => 'Result needed',
+                        'application_url' => $record['application_url'],
+                        'priority' => 2,
+                    ]);
+                }
+            }
+        }
+
+        $upcoming = collect();
+        foreach ($cycles as $cycle) {
+            if ($cycle['status'] !== 'open' || blank($cycle['due_at'])) {
+                continue;
+            }
+
+            $dueAt = CarbonImmutable::parse($cycle['due_at'])->startOfDay();
+            if ($dueAt->lt($today)) {
+                continue;
+            }
+
+            $upcoming->push([
+                'type' => 'monitoring',
+                'type_label' => 'Monitoring deadline',
+                'title' => $cycle['title'],
+                'detail' => $cycle['pending_count'].' awaiting upload; '.$cycle['submitted_count'].' received.',
+                'date' => $cycle['due_at'],
+                'date_label' => $cycle['due_label'],
+            ]);
+        }
+        foreach ($releases as $release) {
+            if (blank($release['release_date']) || $release['status'] === 'completed') {
+                continue;
+            }
+
+            $releaseAt = CarbonImmutable::parse($release['release_date'])->startOfDay();
+            if ($releaseAt->lt($today)) {
+                continue;
+            }
+
+            $upcoming->push([
+                'type' => 'release',
+                'type_label' => 'Benefit release',
+                'title' => $release['title'],
+                'detail' => $release['pending_count'].' recipient records still pending.',
+                'date' => $release['release_date'],
+                'date_label' => $release['release_label'],
+            ]);
+        }
+
+        $attention = $attention
+            ->sortBy(fn (array $item): string => $item['priority'].'-'.$item['title'])
+            ->values()
+            ->map(function (array $item): array {
+                unset($item['priority']);
+
+                return $item;
+            });
+        $upcoming = $upcoming->sortBy('date')->values();
+
+        return [
+            'recipients' => [
+                'total' => $recipients->count(),
+                'active' => $recipients->where('is_closed', false)->count(),
+                'agreement_pending' => $recipients
+                    ->where('is_closed', false)
+                    ->where('agreement_status', '!=', 'accepted')
+                    ->count(),
+                'renewal_ready' => $recipients
+                    ->where('is_closed', false)
+                    ->where('renewal_eligible', true)
+                    ->count(),
+            ],
+            'outcomes' => [
+                'active' => $recipients->where('support_status', 'active')->count(),
+                'renewed' => $recipients->where('support_status', 'renewed')->count(),
+                'completed' => $recipients->where('support_status', 'completed')->count(),
+                'terminated' => $recipients->where('support_status', 'terminated')->count(),
+            ],
+            'monitoring' => [
+                'periods' => $cycles->count(),
+                'open_periods' => $cycles->where('status', 'open')->count(),
+                'records_received' => $cycles->sum('submitted_count'),
+                'records_reviewed' => $cycles->sum('reviewed_count'),
+            ],
+            'releases' => [
+                'schedules' => $releases->count(),
+                'released' => $releases->sum('released_count'),
+                'pending' => $releases->sum('pending_count'),
+                'exceptions' => $releases->sum('exception_count'),
+            ],
+            'attention_count' => $attention->count(),
+            'upcoming_count' => $upcoming->count(),
+            'attention' => $attention,
+            'upcoming' => $upcoming,
+        ];
+    }
+
+    private function recipientSupportRecordPayload(ScholarshipApplication $application): array
+    {
+        $application->loadMissing([
+            'scholarship.provider.providerProfile',
+            'scholarship.monitoringCycles.creator',
+            'applicant.studentProfile',
+            'monitoringSubmissions.cycle',
+            'monitoringSubmissions.reviewer',
+            'monitoringSubmissions.reviews.reviewer',
+            'benefitReleaseRecords.release',
+            'benefitReleaseRecords.recorder',
+            'supportDecisions.decider',
+        ]);
+
+        $cycles = $application->scholarship->monitoringCycles;
+        $support = $this->recipientSupportPayload($application, $cycles);
+        $agreement = RecipientAgreement::payload($application);
+        $monitoringRecords = $cycles->map(function (RecipientMonitoringCycle $cycle) use ($application): array {
+            $submission = $application->monitoringSubmissions
+                ->firstWhere('recipient_monitoring_cycle_id', $cycle->id);
+
+            return [
+                'id' => $cycle->id,
+                'title' => $cycle->title,
+                'period_label' => collect([$cycle->academic_period, $cycle->school_year])->filter()->implode(' - ')
+                    ?: Str::headline($cycle->period_type),
+                'requirement_label' => AcademicRequirement::requirementLabel($cycle->minimum_grade, $cycle->grading_scale),
+                'due_label' => $cycle->due_at?->format('M d, Y'),
+                'submission' => $submission
+                    ? $this->recipientMonitoringSubmissionPayload($submission, $cycle)
+                    : null,
+            ];
+        })->values();
+        $releaseRecords = $application->benefitReleaseRecords
+            ->sortByDesc(fn (RecipientBenefitReleaseRecord $record): int => $record->release?->release_at?->timestamp ?? 0)
+            ->map(function (RecipientBenefitReleaseRecord $record): array {
+                $release = $record->release;
+
+                return [
+                    'id' => $record->id,
+                    'title' => $release?->title ?? 'Benefit release',
+                    'benefit_description' => $release?->benefit_description,
+                    'amount_label' => $release?->amount !== null
+                        ? 'PHP '.number_format((float) $release->amount, 2)
+                        : null,
+                    'release_label' => $release?->release_at?->format('M d, Y h:i A'),
+                    'method_label' => match ($release?->release_method) {
+                        'bank_transfer' => 'Bank transfer',
+                        'e_wallet' => 'E-wallet',
+                        'other' => 'Other arrangement',
+                        default => 'In person',
+                    },
+                    'location' => $release?->location,
+                    'status' => $record->status,
+                    'status_label' => match ($record->status) {
+                        'released' => 'Released',
+                        'prepared' => 'Prepared',
+                        'missed' => 'Missed',
+                        'withheld' => 'Withheld',
+                        default => 'Scheduled',
+                    },
+                    'originals_verified' => $record->originals_verified,
+                    'notes' => $record->notes,
+                    'recorded_by' => $record->recorder?->name,
+                    'recorded_at' => $record->recorded_at?->format('M d, Y h:i A'),
+                    'receipt' => $record->receipt_path ? [
+                        'id' => $record->id,
+                        'original_name' => $record->receipt_original_name,
+                        'size' => $record->receipt_size,
+                        'view_url' => route('provider.benefit-release-records.receipt', $record, false),
+                    ] : null,
+                ];
+            })
+            ->values();
+
+        $timeline = collect();
+        if ($agreement) {
+            $agreementDate = $application->student_responded_at
+                ?? $application->outcome_at
+                ?? $application->submitted_at;
+            $timeline->push([
+                'type' => 'agreement',
+                'title' => $agreement['status'] === 'accepted' ? 'Recipient agreement accepted' : 'Recipient agreement issued',
+                'description' => $agreement['response_note']
+                    ?: ($agreement['status'] === 'accepted'
+                        ? 'The recipient accepted the recorded support terms.'
+                        : 'The recipient has not accepted the support terms yet.'),
+                'status' => $agreement['status'],
+                'status_label' => $agreement['status_label'],
+                'occurred_label' => $agreement['responded_at'] ?? $application->outcome_at?->format('M d, Y h:i A'),
+                'sort_at' => $agreementDate?->timestamp ?? 0,
+                'file' => null,
+            ]);
+        }
+
+        foreach ($monitoringRecords as $record) {
+            $submission = $record['submission'];
+            $submitted = $application->monitoringSubmissions
+                ->firstWhere('recipient_monitoring_cycle_id', $record['id']);
+            $eventDate = $submitted?->reviewed_at ?? $submitted?->submitted_at;
+            $timeline->push([
+                'type' => 'monitoring',
+                'title' => $record['title'],
+                'description' => $submission
+                    ? collect([
+                        $submission['grade_label'] ? 'Recorded result: '.$submission['grade_label'].'.' : null,
+                        'Requirement: '.$record['requirement_label'].'.',
+                        $submission['review_notes'],
+                    ])->filter()->implode(' ')
+                    : 'Academic record requested; due '.$record['due_label'].'.',
+                'status' => $submission['review_status'] ?? 'pending',
+                'status_label' => $submission['review_status_label'] ?? 'Awaiting submission',
+                'occurred_label' => $submission['reviewed_at'] ?? $submission['submitted_at'] ?? $record['due_label'],
+                'sort_at' => $eventDate?->timestamp ?? 0,
+                'file' => $submission ? [
+                    'id' => $submission['id'],
+                    'original_name' => $submission['original_name'],
+                    'size' => $submission['size'],
+                    'view_url' => $submission['view_url'],
+                ] : null,
+            ]);
+        }
+
+        foreach ($application->benefitReleaseRecords as $record) {
+            $release = $record->release;
+            $eventDate = $record->recorded_at ?? $release?->release_at;
+            $timeline->push([
+                'type' => 'release',
+                'title' => $release?->title ?? 'Benefit release',
+                'description' => collect([
+                    $release?->benefit_description,
+                    $release?->amount !== null ? 'Value: PHP '.number_format((float) $release->amount, 2).'.' : null,
+                    $record->notes,
+                ])->filter()->implode(' '),
+                'status' => $record->status,
+                'status_label' => match ($record->status) {
+                    'released' => 'Released',
+                    'prepared' => 'Prepared',
+                    'missed' => 'Missed',
+                    'withheld' => 'Withheld',
+                    default => 'Scheduled',
+                },
+                'occurred_label' => $eventDate?->format('M d, Y h:i A'),
+                'sort_at' => $eventDate?->timestamp ?? 0,
+                'file' => $record->receipt_path ? [
+                    'id' => $record->id,
+                    'original_name' => $record->receipt_original_name,
+                    'size' => $record->receipt_size,
+                    'view_url' => route('provider.benefit-release-records.receipt', $record, false),
+                ] : null,
+            ]);
+        }
+
+        foreach ($application->supportDecisions as $decision) {
+            $payload = $this->recipientSupportDecisionPayload($decision);
+            $timeline->push([
+                'type' => 'decision',
+                'title' => $payload['decision_label'],
+                'description' => $payload['reason'] ?: $payload['next_period_terms'],
+                'status' => $decision->decision,
+                'status_label' => $payload['decision_label'],
+                'occurred_label' => $payload['decided_at'],
+                'sort_at' => $decision->decided_at?->timestamp ?? 0,
+                'file' => null,
+            ]);
+        }
+
+        $timeline = $timeline
+            ->sortByDesc('sort_at')
+            ->values()
+            ->map(function (array $event): array {
+                unset($event['sort_at']);
+
+                return $event;
+            });
+
+        return [
+            'recipient' => [
+                'id' => $application->applicant_id,
+                'name' => $application->applicant?->name ?? 'Applicant',
+                'email' => $application->applicant?->email,
+                'profile_photo_url' => $application->applicant?->studentProfile?->profile_photo_path
+                    ? route('provider.applications.profile-photo.view', $application, false)
+                    : null,
+                'application_url' => route('provider.applications.show', $application, false),
+            ],
+            'program' => [
+                'id' => $application->scholarship_id,
+                'title' => $application->scholarship?->title,
+                'provider_name' => $application->scholarship?->provider?->provider_name
+                    ?? $application->scholarship?->provider?->name,
+            ],
+            'support' => $support,
+            'agreement' => $agreement,
+            'monitoring_records' => $monitoringRecords,
+            'benefit_releases' => $releaseRecords,
+            'decisions' => $application->supportDecisions
+                ->map(fn (RecipientSupportDecision $decision): array => $this->recipientSupportDecisionPayload($decision))
+                ->values(),
+            'summary' => [
+                'monitoring_total' => $monitoringRecords->count(),
+                'monitoring_confirmed' => $application->monitoringSubmissions
+                    ->whereIn('review_status', ['met', 'excused'])
+                    ->count(),
+                'release_total' => $releaseRecords->count(),
+                'released_total' => $application->benefitReleaseRecords->where('status', 'released')->count(),
+                'decision_total' => $application->supportDecisions->count(),
+            ],
+            'timeline' => $timeline,
+        ];
+    }
+
+    private function recipientSupportEligibility(
+        ScholarshipApplication $application,
+        EloquentCollection $cycles,
+        mixed $effectiveOn,
+    ): array {
+        $latestDecision = $application->supportDecisions->first();
+        if ($latestDecision && in_array($latestDecision->decision, ['completed', 'terminated'], true)) {
+            return [
+                'eligible' => false,
+                'label' => 'Support closed',
+                'reason' => 'This recipient support record is already closed.',
+                'requirements_met' => 0,
+                'requirements_total' => 0,
+            ];
+        }
+
+        $monitoring = $this->recipientBenefitReleaseEligibility($application, $cycles, $effectiveOn);
+        if (! $monitoring['eligible']) {
+            return $monitoring;
+        }
+
+        $effectiveDate = CarbonImmutable::parse($effectiveOn)->endOfDay();
+        $pendingReleases = $application->benefitReleaseRecords
+            ->filter(function (RecipientBenefitReleaseRecord $record) use ($effectiveDate): bool {
+                $releaseAt = $record->release?->release_at;
+
+                return $releaseAt !== null
+                    && $releaseAt->lte($effectiveDate)
+                    && in_array($record->status, ['scheduled', 'prepared'], true);
+            });
+
+        if ($pendingReleases->isNotEmpty()) {
+            return [
+                'eligible' => false,
+                'label' => 'Release record pending',
+                'reason' => 'Record the result of all benefit releases due before renewing support.',
+                'requirements_met' => $monitoring['requirements_met'],
+                'requirements_total' => $monitoring['requirements_total'],
+            ];
+        }
+
+        return [
+            ...$monitoring,
+            'label' => 'Ready for renewal',
+            'reason' => $monitoring['requirements_total'] > 0
+                ? 'Due monitoring requirements are confirmed and release records are up to date.'
+                : 'No monitoring requirement is due and release records are up to date.',
+        ];
+    }
+
+    private function recipientSupportDecisionPayload(RecipientSupportDecision $decision): array
+    {
+        return [
+            'id' => $decision->id,
+            'decision' => $decision->decision,
+            'decision_label' => match ($decision->decision) {
+                'renewed' => 'Support renewed',
+                'completed' => 'Program completed',
+                'terminated' => 'Support ended early',
+                default => Str::headline($decision->decision),
+            },
+            'effective_on' => $decision->effective_on?->format('Y-m-d'),
+            'effective_label' => $decision->effective_on?->format('M d, Y'),
+            'support_ends_on' => $decision->support_ends_on?->format('Y-m-d'),
+            'support_ends_label' => $decision->support_ends_on?->format('M d, Y'),
+            'next_review_on' => $decision->next_review_on?->format('Y-m-d'),
+            'next_review_label' => $decision->next_review_on?->format('M d, Y'),
+            'reason' => $decision->reason,
+            'next_period_terms' => $decision->next_period_terms,
+            'decided_by' => $decision->decider?->name,
+            'decided_at' => $decision->decided_at?->format('M d, Y h:i A'),
+        ];
     }
 
     private function recipientMonitoringCyclePayload(

@@ -12,8 +12,10 @@ const scholarship = ref(null);
 const cycles = ref([]);
 const benefitReleases = ref([]);
 const releaseCandidates = ref([]);
+const supportRecipients = ref([]);
+const programSummary = ref(null);
 const academicOcr = ref(null);
-const activeTab = ref('monitoring');
+const activeTab = ref('summary');
 const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
@@ -33,6 +35,14 @@ const openReleases = ref(new Set());
 const releaseTarget = ref(null);
 const isRecordingRelease = ref(false);
 const releaseResultForm = ref(defaultReleaseResultForm());
+const supportTarget = ref(null);
+const supportForm = ref(defaultSupportForm());
+const isSavingSupport = ref(false);
+const supportError = ref('');
+const recipientRecordTarget = ref(null);
+const recipientRecord = ref(null);
+const recipientRecordError = ref('');
+const isLoadingRecipientRecord = ref(false);
 
 const totalSubmitted = computed(() => cycles.value.reduce(
     (total, cycle) => total + Number(cycle.submitted_count || 0),
@@ -48,6 +58,38 @@ const totalReleased = computed(() => benefitReleases.value.reduce(
     0,
 ));
 const eligibleCandidates = computed(() => releaseCandidates.value.filter((candidate) => candidate.eligible));
+const activeSupportCount = computed(() => supportRecipients.value.filter((recipient) => !recipient.is_closed).length);
+const renewedSupportCount = computed(() => supportRecipients.value.filter((recipient) => recipient.support_status === 'renewed').length);
+const closedSupportCount = computed(() => supportRecipients.value.filter((recipient) => recipient.is_closed).length);
+const renewalReadyCount = computed(() => supportRecipients.value.filter((recipient) => recipient.renewal_eligible && !recipient.is_closed).length);
+const headerStats = computed(() => {
+    if (activeTab.value === 'summary') {
+        return [
+            { label: 'Active support', value: programSummary.value?.recipients?.active ?? 0 },
+            { label: 'Need attention', value: programSummary.value?.attention_count ?? 0 },
+            { label: 'Upcoming work', value: programSummary.value?.upcoming_count ?? 0 },
+        ];
+    }
+    if (activeTab.value === 'monitoring') {
+        return [
+            { label: 'Open periods', value: openPeriodCount.value },
+            { label: 'Records received', value: totalSubmitted.value },
+            { label: 'Reviews completed', value: totalReviewed.value },
+        ];
+    }
+    if (activeTab.value === 'releases') {
+        return [
+            { label: 'Release schedules', value: benefitReleases.value.length },
+            { label: 'Recipients released', value: totalReleased.value },
+            { label: 'Ready today', value: eligibleCandidates.value.length },
+        ];
+    }
+    return [
+        { label: 'Active support', value: activeSupportCount.value },
+        { label: 'Renewed', value: renewedSupportCount.value },
+        { label: 'Closed records', value: closedSupportCount.value },
+    ];
+});
 
 function defaultForm() {
     return {
@@ -79,6 +121,82 @@ function defaultReleaseForm() {
 
 function defaultReleaseResultForm() {
     return { status: 'prepared', originals_verified: false, notes: '', receipt_proof: null };
+}
+
+function defaultSupportForm() {
+    return {
+        decision: 'renewed',
+        effective_on: today,
+        support_ends_on: '',
+        next_review_on: '',
+        reason: '',
+        next_period_terms: '',
+        confirmed: false,
+    };
+}
+
+function supportStatusClass(status) {
+    if (status === 'renewed') return 'bg-sky-100 text-sky-800';
+    if (status === 'completed') return 'bg-emerald-100 text-emerald-800';
+    if (status === 'terminated') return 'bg-rose-100 text-rose-700';
+    return 'bg-amber-100 text-amber-800';
+}
+
+function recordStatusClass(status) {
+    if (['accepted', 'met', 'excused', 'released', 'renewed', 'completed'].includes(status)) return 'bg-emerald-100 text-emerald-800';
+    if (['not_met', 'missed', 'withheld', 'terminated', 'declined'].includes(status)) return 'bg-rose-100 text-rose-700';
+    if (['needs_correction', 'prepared'].includes(status)) return 'bg-amber-100 text-amber-800';
+    return 'bg-slate-100 text-slate-600';
+}
+
+function recordEventIcon(type) {
+    if (type === 'agreement') return 'fa-file-signature';
+    if (type === 'monitoring') return 'fa-graduation-cap';
+    if (type === 'release') return 'fa-hand-holding-heart';
+    return 'fa-flag-checkered';
+}
+
+function openSummaryItem(item) {
+    if (item.application_url) {
+        window.location.href = item.application_url;
+        return;
+    }
+
+    activeTab.value = item.type === 'release' ? 'releases' : 'monitoring';
+}
+
+async function openRecipientRecord(recipient) {
+    recipientRecordTarget.value = recipient;
+    recipientRecord.value = null;
+    recipientRecordError.value = '';
+    isLoadingRecipientRecord.value = true;
+
+    try {
+        const response = await window.axios.get(`/provider/applications/${recipient.application_id}/recipient-record`);
+        recipientRecord.value = response.data.record;
+    } catch (error) {
+        recipientRecordError.value = error.response?.data?.message ?? 'Unable to load this recipient record.';
+    } finally {
+        isLoadingRecipientRecord.value = false;
+    }
+}
+
+function closeRecipientRecord() {
+    recipientRecordTarget.value = null;
+    recipientRecord.value = null;
+    recipientRecordError.value = '';
+}
+
+function openSupportDecision(recipient = null) {
+    supportTarget.value = recipient ?? supportRecipients.value.find((item) => !item.is_closed) ?? null;
+    supportForm.value = defaultSupportForm();
+    supportError.value = '';
+}
+
+function closeSupportDecision() {
+    if (isSavingSupport.value) return;
+    supportTarget.value = null;
+    supportError.value = '';
 }
 
 function openComposer() {
@@ -229,6 +347,8 @@ async function loadMonitoring() {
         cycles.value = response.data.cycles ?? [];
         benefitReleases.value = response.data.benefit_releases ?? [];
         releaseCandidates.value = response.data.release_candidates ?? [];
+        supportRecipients.value = response.data.support_recipients ?? [];
+        programSummary.value = response.data.program_summary ?? null;
         academicOcr.value = response.data.academic_ocr;
         if (cycles.value.length) openCycles.value = new Set([cycles.value[0].id]);
         if (benefitReleases.value.length) openReleases.value = new Set([benefitReleases.value[0].id]);
@@ -236,6 +356,29 @@ async function loadMonitoring() {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load recipient monitoring.';
     } finally {
         isLoading.value = false;
+    }
+}
+
+async function submitSupportDecision() {
+    if (!supportTarget.value || isSavingSupport.value) return;
+
+    isSavingSupport.value = true;
+    supportError.value = '';
+    try {
+        const response = await window.axios.post(
+            `/provider/applications/${supportTarget.value.application_id}/support-decision`,
+            supportForm.value,
+        );
+        const index = supportRecipients.value.findIndex((recipient) => recipient.application_id === response.data.recipient.application_id);
+        if (index >= 0) supportRecipients.value.splice(index, 1, response.data.recipient);
+        supportTarget.value = null;
+        await loadMonitoring();
+        showPortalToast({ type: 'success', title: 'Support outcome recorded', message: response.data.message });
+    } catch (error) {
+        const errors = error.response?.data?.errors;
+        supportError.value = errors ? Object.values(errors).flat()[0] : (error.response?.data?.message ?? 'Unable to record this support outcome.');
+    } finally {
+        isSavingSupport.value = false;
     }
 }
 
@@ -354,9 +497,13 @@ onMounted(loadMonitoring);
                                     <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
                                     New monitoring period
                                 </button>
-                                <button v-else type="button" class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300" @click="openReleaseComposer">
+                                <button v-else-if="activeTab === 'releases'" type="button" class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300" @click="openReleaseComposer">
                                     <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
                                     Schedule release
+                                </button>
+                                <button v-else-if="activeTab === 'outcomes'" type="button" :disabled="!activeSupportCount" class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300 disabled:opacity-50" @click="openSupportDecision()">
+                                    <i class="fa-solid fa-flag-checkered text-xs" aria-hidden="true"></i>
+                                    Record outcome
                                 </button>
                             </div>
                         </header>
@@ -365,17 +512,9 @@ onMounted(loadMonitoring);
                                 <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Selected recipients</dt>
                                 <dd class="mt-1 text-lg font-bold text-slate-950">{{ scholarship.selected_recipients_count }}</dd>
                             </div>
-                            <div class="px-5 py-3.5">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ activeTab === 'monitoring' ? 'Open periods' : 'Release schedules' }}</dt>
-                                <dd class="mt-1 text-lg font-bold text-slate-950">{{ activeTab === 'monitoring' ? openPeriodCount : benefitReleases.length }}</dd>
-                            </div>
-                            <div class="px-5 py-3.5">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ activeTab === 'monitoring' ? 'Records received' : 'Recipients released' }}</dt>
-                                <dd class="mt-1 text-lg font-bold text-slate-950">{{ activeTab === 'monitoring' ? totalSubmitted : totalReleased }}</dd>
-                            </div>
-                            <div class="px-5 py-3.5">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ activeTab === 'monitoring' ? 'Reviews completed' : 'Ready today' }}</dt>
-                                <dd class="mt-1 text-lg font-bold text-slate-950">{{ activeTab === 'monitoring' ? totalReviewed : eligibleCandidates.length }}</dd>
+                            <div v-for="stat in headerStats" :key="stat.label" class="px-5 py-3.5">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ stat.label }}</dt>
+                                <dd class="mt-1 text-lg font-bold text-slate-950">{{ stat.value }}</dd>
                             </div>
                         </dl>
                     </section>
@@ -384,16 +523,73 @@ onMounted(loadMonitoring);
 
                     <p v-if="errorMessage" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
 
-                    <div class="provider-panel mt-4 flex gap-1 p-1.5">
+                    <div class="provider-panel mt-4 grid gap-1 p-1.5 sm:grid-cols-2 lg:grid-cols-4">
+                        <button type="button" :class="['rounded-md px-4 py-2.5 text-sm font-bold transition', activeTab === 'summary' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']" @click="activeTab = 'summary'">
+                            <i class="fa-solid fa-table-columns mr-2 text-xs" aria-hidden="true"></i>Program summary
+                        </button>
                         <button type="button" :class="['flex-1 rounded-md px-4 py-2.5 text-sm font-bold transition', activeTab === 'monitoring' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']" @click="activeTab = 'monitoring'">
                             <i class="fa-solid fa-chart-line mr-2 text-xs" aria-hidden="true"></i>Academic monitoring
                         </button>
                         <button type="button" :class="['flex-1 rounded-md px-4 py-2.5 text-sm font-bold transition', activeTab === 'releases' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']" @click="activeTab = 'releases'">
                             <i class="fa-solid fa-hand-holding-heart mr-2 text-xs" aria-hidden="true"></i>Benefit releases
                         </button>
+                        <button type="button" :class="['flex-1 rounded-md px-4 py-2.5 text-sm font-bold transition', activeTab === 'outcomes' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']" @click="activeTab = 'outcomes'">
+                            <i class="fa-solid fa-flag-checkered mr-2 text-xs" aria-hidden="true"></i>Support outcomes
+                        </button>
                     </div>
 
-                    <template v-if="activeTab === 'monitoring'">
+                    <template v-if="activeTab === 'summary'">
+                        <section class="provider-panel mt-4 overflow-hidden">
+                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Program health</p>
+                                <h2 class="mt-1 text-lg font-bold text-slate-950">Recipient support at a glance</h2>
+                                <p class="mt-1 text-sm leading-6 text-slate-500">Use this summary to identify records that need action before opening the detailed workspace.</p>
+                            </header>
+                            <dl class="grid gap-px bg-slate-200 sm:grid-cols-2 lg:grid-cols-4">
+                                <div class="bg-white px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Active recipients</dt><dd class="mt-1 text-2xl font-bold text-slate-950">{{ programSummary?.recipients?.active || 0 }}</dd><p class="mt-1 text-xs text-slate-500">Open recipient support records</p></div>
+                                <div class="bg-white px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Agreement pending</dt><dd class="mt-1 text-2xl font-bold text-slate-950">{{ programSummary?.recipients?.agreement_pending || 0 }}</dd><p class="mt-1 text-xs text-slate-500">Recipients who have not accepted terms</p></div>
+                                <div class="bg-white px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Ready for renewal</dt><dd class="mt-1 text-2xl font-bold text-slate-950">{{ programSummary?.recipients?.renewal_ready || 0 }}</dd><p class="mt-1 text-xs text-slate-500">Requirements and releases are up to date</p></div>
+                                <div class="bg-white px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Released benefits</dt><dd class="mt-1 text-2xl font-bold text-slate-950">{{ programSummary?.releases?.released || 0 }}</dd><p class="mt-1 text-xs text-slate-500">Individual releases confirmed received</p></div>
+                            </dl>
+                        </section>
+
+                        <section class="provider-panel mt-4 overflow-hidden">
+                            <header class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Action queue</p><h2 class="mt-1 text-lg font-bold text-slate-950">Needs attention</h2><p class="mt-1 text-sm text-slate-500">Only overdue, unreviewed, missed, withheld, or agreement-related records appear here.</p></div>
+                                <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold', programSummary?.attention_count ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800']">{{ programSummary?.attention_count || 0 }} open</span>
+                            </header>
+                            <div v-if="!programSummary?.attention?.length" class="px-5 py-8 text-center sm:px-6"><span class="mx-auto grid h-10 w-10 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span><p class="mt-3 font-bold text-slate-950">No urgent recipient records</p><p class="mt-1 text-sm text-slate-500">Current agreements, reviews, and release results are up to date.</p></div>
+                            <div v-else class="divide-y divide-slate-200">
+                                <article v-for="(item, index) in programSummary.attention" :key="`${item.type}-${item.title}-${index}`" class="flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                    <div class="flex min-w-0 items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i :class="['fa-solid text-xs', recordEventIcon(item.type)]" aria-hidden="true"></i></span><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><h3 class="font-bold text-slate-950">{{ item.title }}</h3><span class="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{{ item.type_label }}</span></div><p class="mt-1 text-sm leading-5 text-slate-600">{{ item.detail }}</p></div></div>
+                                    <button type="button" class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openSummaryItem(item)">Open record <i class="fa-solid fa-arrow-right ml-1.5" aria-hidden="true"></i></button>
+                                </article>
+                            </div>
+                        </section>
+
+                        <section class="provider-panel mt-4 overflow-hidden">
+                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Calendar</p><h2 class="mt-1 text-lg font-bold text-slate-950">Upcoming work</h2><p class="mt-1 text-sm text-slate-500">Published monitoring deadlines and benefit release schedules, ordered by date.</p></header>
+                            <div v-if="!programSummary?.upcoming?.length" class="px-5 py-8 text-center text-sm text-slate-500">No upcoming monitoring deadline or benefit release is currently scheduled.</div>
+                            <div v-else class="divide-y divide-slate-200">
+                                <article v-for="item in programSummary.upcoming" :key="`${item.type}-${item.title}-${item.date}`" class="flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                    <div class="flex min-w-0 items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i :class="['fa-solid text-xs', recordEventIcon(item.type)]" aria-hidden="true"></i></span><div><div class="flex flex-wrap items-center gap-2"><h3 class="font-bold text-slate-950">{{ item.title }}</h3><span class="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{{ item.type_label }}</span></div><p class="mt-1 text-sm text-slate-600">{{ item.detail }}</p></div></div>
+                                    <div class="flex shrink-0 items-center gap-3"><span class="text-xs font-bold text-slate-600">{{ item.date_label }}</span><button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openSummaryItem(item)">Open</button></div>
+                                </article>
+                            </div>
+                        </section>
+
+                        <section class="provider-panel mt-4 overflow-hidden">
+                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Lifecycle</p><h2 class="mt-1 text-lg font-bold text-slate-950">Recipient outcomes</h2></header>
+                            <dl class="grid gap-px bg-slate-200 sm:grid-cols-2 lg:grid-cols-4">
+                                <div class="bg-white px-5 py-4"><dt class="text-xs font-bold text-slate-500">Active</dt><dd class="mt-1 text-xl font-bold text-slate-950">{{ programSummary?.outcomes?.active || 0 }}</dd></div>
+                                <div class="bg-white px-5 py-4"><dt class="text-xs font-bold text-slate-500">Renewed</dt><dd class="mt-1 text-xl font-bold text-sky-800">{{ programSummary?.outcomes?.renewed || 0 }}</dd></div>
+                                <div class="bg-white px-5 py-4"><dt class="text-xs font-bold text-slate-500">Completed</dt><dd class="mt-1 text-xl font-bold text-emerald-800">{{ programSummary?.outcomes?.completed || 0 }}</dd></div>
+                                <div class="bg-white px-5 py-4"><dt class="text-xs font-bold text-slate-500">Ended early</dt><dd class="mt-1 text-xl font-bold text-rose-700">{{ programSummary?.outcomes?.terminated || 0 }}</dd></div>
+                            </dl>
+                        </section>
+                    </template>
+
+                    <template v-else-if="activeTab === 'monitoring'">
                     <section v-if="!cycles.length" class="provider-panel mt-4 px-5 py-10 text-center sm:px-6">
                         <span class="mx-auto grid h-12 w-12 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
                         <h2 class="mt-4 text-lg font-bold text-slate-950">No monitoring periods yet</h2>
@@ -462,7 +658,7 @@ onMounted(loadMonitoring);
                     </section>
                     </template>
 
-                    <template v-else>
+                    <template v-else-if="activeTab === 'releases'">
                         <section v-if="!benefitReleases.length" class="provider-panel mt-4 px-5 py-10 text-center sm:px-6">
                             <span class="mx-auto grid h-12 w-12 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span>
                             <h2 class="mt-4 text-lg font-bold text-slate-950">No benefit releases scheduled</h2>
@@ -511,11 +707,114 @@ onMounted(loadMonitoring);
                             </article>
                         </section>
                     </template>
+
+                    <template v-else>
+                        <section class="provider-panel mt-4 overflow-hidden">
+                            <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">End-of-cycle decision</p><h2 class="mt-1 text-lg font-bold text-slate-950">Renew or close recipient support</h2><p class="mt-1 text-sm leading-6 text-slate-500">Use verified monitoring and release records before recording the recipient's next status.</p></div>
+                                <span class="w-fit rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{{ renewalReadyCount }} ready for renewal</span>
+                            </header>
+
+                            <div v-if="!supportRecipients.length" class="px-5 py-10 text-center"><p class="font-bold text-slate-950">No selected recipients yet</p><p class="mt-1 text-sm text-slate-500">Recipients appear here after accepting their scholarship offer.</p></div>
+                            <div v-else class="divide-y divide-slate-200">
+                                <article v-for="recipient in supportRecipients" :key="recipient.application_id" class="px-5 py-4 sm:px-6">
+                                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex flex-wrap items-center gap-2"><h3 class="font-bold text-slate-950">{{ recipient.name }}</h3><span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', supportStatusClass(recipient.support_status)]">{{ recipient.support_status_label }}</span></div>
+                                            <p class="mt-1 text-xs text-slate-500">{{ recipient.email }}</p>
+                                            <p class="mt-2 text-sm leading-6" :class="recipient.renewal_eligible ? 'text-emerald-700' : 'text-slate-600'"><strong>{{ recipient.renewal_eligibility_label }}:</strong> {{ recipient.renewal_eligibility_reason }}</p>
+                                        </div>
+                                        <dl class="grid shrink-0 grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 text-center sm:min-w-[270px]">
+                                            <div class="bg-slate-50 px-3 py-2.5"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Monitoring</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ recipient.requirements_met }}/{{ recipient.requirements_total }} confirmed</dd></div>
+                                            <div class="bg-slate-50 px-3 py-2.5"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Releases</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ recipient.released_count }}/{{ recipient.release_count }} received</dd></div>
+                                        </dl>
+                                        <div class="flex shrink-0 flex-wrap gap-2"><button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openRecipientRecord(recipient)"><i class="fa-solid fa-clock-rotate-left mr-1.5" aria-hidden="true"></i>Recipient record</button><button v-if="!recipient.is_closed" type="button" class="rounded-md bg-slate-950 px-3 py-2.5 text-xs font-bold text-white hover:bg-slate-800" @click="openSupportDecision(recipient)">Record outcome</button><a :href="recipient.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant</a></div>
+                                    </div>
+                                    <div v-if="recipient.latest_decision" class="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm"><div class="flex flex-wrap items-center justify-between gap-2"><strong class="text-slate-950">{{ recipient.latest_decision.decision_label }}</strong><span class="text-xs text-slate-500">Effective {{ recipient.latest_decision.effective_label }} · {{ recipient.latest_decision.decided_by }}</span></div><p v-if="recipient.latest_decision.next_period_terms" class="mt-1 leading-5 text-slate-600">{{ recipient.latest_decision.next_period_terms }}</p><p v-if="recipient.latest_decision.reason" class="mt-1 leading-5 text-slate-600">{{ recipient.latest_decision.reason }}</p></div>
+                                </article>
+                            </div>
+                        </section>
+                    </template>
                 </template>
 
                 <ProviderFooter />
             </div>
         </section>
+
+        <Teleport to="body">
+            <div v-if="recipientRecordTarget" class="fixed inset-0 z-[2050] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeRecipientRecord" @keydown.esc="closeRecipientRecord">
+                <section class="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="recipient-record-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-6">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Consolidated history</p>
+                                <h2 id="recipient-record-title" class="mt-1 truncate text-xl font-bold text-slate-950">{{ recipientRecord?.recipient?.name || recipientRecordTarget.name }}</h2>
+                                <p class="mt-1 truncate text-sm text-slate-500">{{ recipientRecord?.program?.title || scholarship?.title }}</p>
+                            </div>
+                        </div>
+                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100" aria-label="Close recipient record" @click="closeRecipientRecord"><i class="fa-solid fa-xmark"></i></button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6">
+                        <div v-if="isLoadingRecipientRecord" class="rounded-md border border-slate-200 bg-white px-5 py-12 text-center text-sm font-semibold text-slate-500">Loading recipient history...</div>
+                        <div v-else-if="recipientRecordError" class="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ recipientRecordError }}</div>
+                        <template v-else-if="recipientRecord">
+                            <section class="overflow-hidden rounded-md border border-slate-200 bg-white">
+                                <div class="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                                    <div class="flex min-w-0 items-center gap-3">
+                                        <img v-if="recipientRecord.recipient.profile_photo_url" :src="recipientRecord.recipient.profile_photo_url" :alt="recipientRecord.recipient.name" class="h-12 w-12 shrink-0 rounded-md border border-slate-200 object-cover">
+                                        <span v-else class="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">{{ recipientRecord.recipient.name.split(' ').map((part) => part[0]).slice(0, 2).join('') }}</span>
+                                        <div class="min-w-0"><h3 class="truncate font-bold text-slate-950">{{ recipientRecord.recipient.name }}</h3><p class="mt-0.5 truncate text-xs text-slate-500">{{ recipientRecord.recipient.email }}</p><p class="mt-1 text-xs text-slate-500">{{ recipientRecord.program.provider_name }}</p></div>
+                                    </div>
+                                    <span :class="['w-fit rounded-md px-2.5 py-1.5 text-[10px] font-bold uppercase', supportStatusClass(recipientRecord.support.support_status)]">{{ recipientRecord.support.support_status_label }}</span>
+                                </div>
+                                <dl class="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-3">
+                                    <div class="bg-white px-4 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Academic checks</dt><dd class="mt-1 text-base font-bold text-slate-950">{{ recipientRecord.summary.monitoring_confirmed }} of {{ recipientRecord.summary.monitoring_total }}</dd><p class="mt-0.5 text-xs text-slate-500">confirmed by the provider</p></div>
+                                    <div class="bg-white px-4 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Benefit releases</dt><dd class="mt-1 text-base font-bold text-slate-950">{{ recipientRecord.summary.released_total }} of {{ recipientRecord.summary.release_total }}</dd><p class="mt-0.5 text-xs text-slate-500">recorded as received</p></div>
+                                    <div class="bg-white px-4 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Lifecycle decisions</dt><dd class="mt-1 text-base font-bold text-slate-950">{{ recipientRecord.summary.decision_total }}</dd><p class="mt-0.5 text-xs text-slate-500">renewal or closing records</p></div>
+                                </dl>
+                            </section>
+
+                            <section v-if="recipientRecord.agreement" class="mt-4 rounded-md border border-slate-200 bg-white px-4 py-4 sm:px-5">
+                                <div class="flex flex-wrap items-center justify-between gap-2"><div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Recipient agreement</p><h3 class="mt-1 font-bold text-slate-950">Terms recorded at selection</h3></div><span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', recordStatusClass(recipientRecord.agreement.status)]">{{ recipientRecord.agreement.status_label }}</span></div>
+                                <div class="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                                    <div><p class="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">Commitment</p><p class="mt-1 font-semibold leading-5 text-slate-800">{{ labelFromKey(recipientRecord.agreement.snapshot?.recipient_expectation?.commitment_type || 'provider briefing') }}</p></div>
+                                    <div><p class="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">Duration or frequency</p><p class="mt-1 leading-5 text-slate-600">{{ recipientRecord.agreement.snapshot?.recipient_expectation?.duration || 'Explained by the provider' }}</p></div>
+                                    <div><p class="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">Response recorded</p><p class="mt-1 leading-5 text-slate-600">{{ recipientRecord.agreement.responded_at || 'Awaiting recipient response' }}</p></div>
+                                </div>
+                            </section>
+
+                            <section v-if="recipientRecord.support.latest_decision" class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-4 sm:px-5">
+                                <div class="flex flex-wrap items-start justify-between gap-3"><div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Latest outcome</p><h3 class="mt-1 font-bold text-slate-950">{{ recipientRecord.support.latest_decision.decision_label }}</h3></div><p class="text-xs font-semibold text-slate-600">Effective {{ recipientRecord.support.latest_decision.effective_label }}</p></div>
+                                <p v-if="recipientRecord.support.latest_decision.next_period_terms" class="mt-2 text-sm leading-6 text-slate-700">{{ recipientRecord.support.latest_decision.next_period_terms }}</p>
+                                <p v-if="recipientRecord.support.latest_decision.reason" class="mt-2 text-sm leading-6 text-slate-700">{{ recipientRecord.support.latest_decision.reason }}</p>
+                            </section>
+
+                            <section class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
+                                <header class="border-b border-slate-200 px-4 py-3.5 sm:px-5"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Full record</p><h3 class="mt-1 font-bold text-slate-950">Recipient history</h3><p class="mt-1 text-xs leading-5 text-slate-500">Newest activity appears first. Uploaded evidence remains available from its related entry.</p></header>
+                                <div v-if="!recipientRecord.timeline.length" class="px-5 py-8 text-center text-sm text-slate-500">No recipient history has been recorded yet.</div>
+                                <div v-else class="divide-y divide-slate-200">
+                                    <article v-for="(event, index) in recipientRecord.timeline" :key="`${event.type}-${index}-${event.occurred_label}`" class="flex gap-3 px-4 py-4 sm:px-5">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i :class="['fa-solid text-xs', recordEventIcon(event.type)]" aria-hidden="true"></i></span>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex flex-wrap items-start justify-between gap-2"><div><h4 class="text-sm font-bold text-slate-950">{{ event.title }}</h4><p v-if="event.occurred_label" class="mt-0.5 text-xs text-slate-500">{{ event.occurred_label }}</p></div><span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', recordStatusClass(event.status)]">{{ event.status_label }}</span></div>
+                                            <p v-if="event.description" class="mt-2 text-sm leading-6 text-slate-600">{{ event.description }}</p>
+                                            <button v-if="event.file" type="button" class="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-slate-800 underline decoration-slate-300 underline-offset-4" @click="previewFile = event.file"><i class="fa-regular fa-file-lines" aria-hidden="true"></i>View {{ event.type === 'release' ? 'receipt' : 'grade record' }}</button>
+                                        </div>
+                                    </article>
+                                </div>
+                            </section>
+                        </template>
+                    </div>
+
+                    <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:justify-end sm:px-6">
+                        <button type="button" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="closeRecipientRecord">Close</button>
+                        <a v-if="recipientRecord?.recipient?.application_url" :href="recipientRecord.recipient.application_url" class="rounded-md bg-slate-950 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-slate-800">Open applicant review</a>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
 
         <Teleport to="body">
             <div v-if="showCycleForm" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/60 p-4" @click.self="closeComposer" @keydown.esc="closeComposer">
@@ -600,6 +899,44 @@ onMounted(loadMonitoring);
                             <button v-if="releaseTarget.record.receipt" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="previewFile = releaseTarget.record.receipt">View existing receipt</button>
                         </div>
                         <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end"><button type="button" :disabled="isRecordingRelease" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeReleaseResult">Cancel</button><button type="submit" :disabled="isRecordingRelease" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">{{ isRecordingRelease ? 'Saving...' : 'Save release result' }}</button></footer>
+                    </form>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div v-if="supportTarget" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/65 p-4" @click.self="closeSupportDecision" @keydown.esc="closeSupportDecision">
+                <section class="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="support-decision-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
+                        <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Recipient lifecycle</p><h2 id="support-decision-title" class="mt-1 text-xl font-bold text-slate-950">Record support outcome</h2><p class="mt-1 text-sm text-slate-500">Renew support or close the recipient record with an auditable reason.</p></div>
+                        <button type="button" :disabled="isSavingSupport" class="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100" aria-label="Close" @click="closeSupportDecision"><i class="fa-solid fa-xmark"></i></button>
+                    </header>
+                    <form class="min-h-0 overflow-y-auto" @submit.prevent="submitSupportDecision">
+                        <div class="space-y-4 px-5 py-5 sm:px-6">
+                            <p v-if="supportError" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm font-semibold text-rose-700">{{ supportError }}</p>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Recipient</span><select v-model="supportTarget" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"><option v-for="recipient in supportRecipients.filter((item) => !item.is_closed)" :key="recipient.application_id" :value="recipient">{{ recipient.name }} · {{ recipient.support_status_label }}</option></select></label>
+
+                            <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                <div class="flex flex-wrap items-center justify-between gap-2"><p class="text-sm font-bold text-slate-950">{{ supportTarget.renewal_eligibility_label }}</p><span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', supportTarget.renewal_eligible ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800']">{{ supportTarget.renewal_eligible ? 'Renewal ready' : 'Review needed' }}</span></div>
+                                <p class="mt-1 text-xs leading-5 text-slate-600">{{ supportTarget.renewal_eligibility_reason }}</p>
+                            </div>
+
+                            <fieldset><legend class="text-xs font-bold text-slate-700">Outcome</legend><div class="mt-2 grid gap-2 sm:grid-cols-3">
+                                <label :class="['cursor-pointer rounded-md border p-3', supportForm.decision === 'renewed' ? 'border-slate-950 bg-slate-50' : 'border-slate-200']"><input v-model="supportForm.decision" type="radio" value="renewed" class="sr-only"><span class="block text-sm font-bold text-slate-950">Renew support</span><span class="mt-1 block text-xs leading-5 text-slate-500">Continue for another period.</span></label>
+                                <label :class="['cursor-pointer rounded-md border p-3', supportForm.decision === 'completed' ? 'border-slate-950 bg-slate-50' : 'border-slate-200']"><input v-model="supportForm.decision" type="radio" value="completed" class="sr-only"><span class="block text-sm font-bold text-slate-950">Complete program</span><span class="mt-1 block text-xs leading-5 text-slate-500">Close after normal completion.</span></label>
+                                <label :class="['cursor-pointer rounded-md border p-3', supportForm.decision === 'terminated' ? 'border-rose-500 bg-rose-50' : 'border-slate-200']"><input v-model="supportForm.decision" type="radio" value="terminated" class="sr-only"><span class="block text-sm font-bold text-slate-950">End early</span><span class="mt-1 block text-xs leading-5 text-slate-500">Stop future support with reason.</span></label>
+                            </div></fieldset>
+
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Effective date</span><input v-model="supportForm.effective_on" type="date" :max="today" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
+                            <template v-if="supportForm.decision === 'renewed'">
+                                <div class="grid gap-4 sm:grid-cols-2"><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">New support end date</span><input v-model="supportForm.support_ends_on" type="date" :min="supportForm.effective_on" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Next review date</span><input v-model="supportForm.next_review_on" type="date" :min="supportForm.effective_on" :max="supportForm.support_ends_on || undefined" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label></div>
+                                <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Next-period terms</span><textarea v-model="supportForm.next_period_terms" required minlength="10" maxlength="2000" rows="4" placeholder="State the continuing requirement, review period, and support covered by this renewal." class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
+                            </template>
+                            <label v-else class="block"><span class="mb-2 block text-xs font-bold text-slate-700">{{ supportForm.decision === 'completed' ? 'Completion summary' : 'Reason for ending support' }}</span><textarea v-model="supportForm.reason" required minlength="10" maxlength="2000" rows="4" :placeholder="supportForm.decision === 'completed' ? 'Summarize how the recipient completed the support period.' : 'Explain the policy or requirement involved and any discussion with the recipient.'" class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
+
+                            <label class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"><input v-model="supportForm.confirmed" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950"><span>I reviewed the recipient's monitoring, release records, and applicable program terms before recording this outcome.</span></label>
+                        </div>
+                        <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6"><button type="button" :disabled="isSavingSupport" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeSupportDecision">Cancel</button><button type="submit" :disabled="isSavingSupport || !supportForm.confirmed || (supportForm.decision === 'renewed' && !supportTarget.renewal_eligible)" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{{ isSavingSupport ? 'Saving...' : 'Confirm outcome' }}</button></footer>
                     </form>
                 </section>
             </div>

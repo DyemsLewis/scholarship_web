@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
-import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import LocationMapModal from '../components/LocationMapModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
@@ -63,6 +63,7 @@ const scheduleForm = ref(emptyScheduleForm());
 const scheduleProvinceOptions = ref([]);
 const scheduleCityOptions = ref([]);
 const scheduleLocationError = ref('');
+const showScheduleMapModal = ref(false);
 const isLoadingScheduleProvinces = ref(false);
 const isLoadingScheduleCities = ref(false);
 const selectedBulkApplicationIds = ref([]);
@@ -688,11 +689,17 @@ function openScheduleEditor(type) {
 }
 
 function closeScheduleEditor() {
+    showScheduleMapModal.value = false;
     scheduleEditorType.value = '';
     scheduleForm.value = emptyScheduleForm();
     scheduleProvinceOptions.value = [];
     scheduleCityOptions.value = [];
     scheduleLocationError.value = '';
+}
+
+function handleSchedulePinResolved(location) {
+    scheduleForm.value.latitude = Number(location.latitude).toFixed(7);
+    scheduleForm.value.longitude = Number(location.longitude).toFixed(7);
 }
 
 function handleSchedulePinPicked(location) {
@@ -1152,18 +1159,9 @@ onMounted(loadProviderData);
                                     <p class="mt-2 text-xs leading-5 text-slate-500">Use the exact activity location. It can differ from the provider office or program address.</p>
                                 </div>
                                 <p v-if="scheduleLocationError" class="text-xs font-semibold text-rose-600 md:col-span-2 xl:col-span-4">{{ scheduleLocationError }}</p>
-                                <div class="overflow-hidden rounded-md md:col-span-2 xl:col-span-4">
-                                    <LeafletMapPreview
-                                        :address="scheduleMapAddress"
-                                        :latitude="scheduleForm.latitude"
-                                        :longitude="scheduleForm.longitude"
-                                        :title="scheduleForm.venue || 'Program activity location'"
-                                        :marker-text="scheduleForm.venue || scheduleForm.title"
-                                        height="14rem"
-                                        picker
-                                        auto-geocode
-                                        @picked="handleSchedulePinPicked"
-                                    />
+                                <div class="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 md:col-span-2 xl:col-span-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div><p class="text-sm font-bold text-slate-950">Activity map pin</p><p class="mt-1 text-xs leading-5 text-slate-500">{{ scheduleForm.latitude ? 'A location pin is set for this activity.' : 'Open the map to confirm the activity address and place its pin.' }}</p></div>
+                                    <button type="button" class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="showScheduleMapModal = true"><i class="fa-solid fa-map-location-dot mr-1.5 text-amber-700" aria-hidden="true"></i>{{ scheduleForm.latitude ? 'Review map pin' : 'Set map pin' }}</button>
                                 </div>
                             </div>
 
@@ -1481,5 +1479,20 @@ onMounted(loadProviderData);
 
     </main>
 
+    <LocationMapModal
+        :open="showScheduleMapModal"
+        eyebrow="Activity location"
+        :title="scheduleForm.venue || scheduleForm.title || 'Set the activity map pin'"
+        :address="scheduleMapAddress"
+        :latitude="scheduleForm.latitude"
+        :longitude="scheduleForm.longitude"
+        :marker-text="scheduleForm.venue || scheduleForm.title"
+        :location-message="scheduleLocationError"
+        picker
+        @resolved="handleSchedulePinResolved"
+        @picked="handleSchedulePinPicked"
+        @error="scheduleLocationError = $event"
+        @close="showScheduleMapModal = false"
+    />
     <ConfirmationDialog v-bind="confirmation" @confirm="confirmConfirmation" @cancel="cancelConfirmation" />
 </template>

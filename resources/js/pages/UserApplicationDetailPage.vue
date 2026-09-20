@@ -7,7 +7,7 @@ import ApplicantRecipientMonitoring from '../components/ApplicantRecipientMonito
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
-import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import LocationMapModal from '../components/LocationMapModal.vue';
 import PreScreeningHandoffRecord from '../components/PreScreeningHandoffRecord.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import RecipientAgreementSummary from '../components/RecipientAgreementSummary.vue';
@@ -28,7 +28,7 @@ const uploadFile = ref(null);
 const fileInput = ref(null);
 const activeUploadRequirement = ref('');
 const previewDocument = ref(null);
-const showMapModal = ref(false);
+const activeMapPreview = ref(null);
 const documentTermsAccepted = ref(false);
 const showWithdrawalModal = ref(false);
 const withdrawalReason = ref('');
@@ -260,6 +260,58 @@ const hasMapPreview = computed(() => Boolean(
     || applicationScholarship.value?.location_name,
 ));
 const hasUserMapLocation = computed(() => hasCoordinates(user.value?.latitude, user.value?.longitude));
+
+function closeMapModal() {
+    activeMapPreview.value = null;
+}
+
+function openProgramMap() {
+    const program = applicationScholarship.value;
+    if (!program) return;
+
+    activeMapPreview.value = {
+        eyebrow: 'Program location',
+        title: program.location_name || program.title,
+        address: scholarshipMapAddress.value,
+        latitude: program.latitude,
+        longitude: program.longitude,
+        markerText: program.location_name || program.title,
+        secondaryLatitude: user.value?.latitude,
+        secondaryLongitude: user.value?.longitude,
+        secondaryMarkerText: user.value?.name || 'Your saved location',
+        distanceLabel: program.distance_label ? `About ${program.distance_label}` : '',
+        note: hasUserMapLocation.value && program.distance_label
+            ? `Your saved location is shown too: ${program.distance_label} from this program.`
+            : 'This is the program location currently listed by the provider.',
+    };
+}
+
+function openFormalHandoffMap() {
+    const handoff = formalApplicationHandoff.value;
+    if (!handoff) return;
+
+    activeMapPreview.value = {
+        eyebrow: 'Formal application location',
+        title: handoff.location_name || 'Where to continue',
+        address: handoff.location_address || handoff.location_name || '',
+        markerText: handoff.location_name || 'Formal application location',
+        note: 'Use this location when the provider asks you to continue the formal application in person.',
+    };
+}
+
+function openScheduleMap(schedule) {
+    if (!schedule) return;
+
+    activeMapPreview.value = {
+        eyebrow: 'Activity location',
+        title: schedule.venue || schedule.title,
+        address: schedule.location_address || schedule.venue || '',
+        latitude: schedule.latitude,
+        longitude: schedule.longitude,
+        markerText: schedule.venue || schedule.title,
+        note: 'Review this location together with the activity date and provider instructions.',
+    };
+}
 
 function statusLabel(status) {
     const labels = {
@@ -1036,53 +1088,59 @@ onMounted(loadApplication);
                                 v-if="activeSection === 'overview' && formalApplicationHandoff"
                                 id="formal-application-handoff"
                                 :open="formalHandoffOpen"
-                                class="scroll-mt-4 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm"
+                                class="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
                                 @toggle="formalHandoffOpen = $event.currentTarget.open"
                             >
-                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-4 hover:bg-amber-50/60 [&::-webkit-details-marker]:hidden">
+                                <summary class="student-section-head cursor-pointer list-none p-4 transition hover:bg-slate-50 sm:p-5 [&::-webkit-details-marker]:hidden">
                                     <div class="flex min-w-0 items-center gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-amber-300">
+                                        <span class="student-section-mark">
                                             <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i>
                                         </span>
                                         <div class="min-w-0">
                                             <p class="student-kicker">Pre-screening passed</p>
-                                            <h3 class="mt-0.5 text-base font-bold text-slate-950">Continue with the provider</h3>
-                                            <p class="mt-0.5 line-clamp-1 text-xs text-slate-500">{{ formalApplicationHandoff.notice }}</p>
+                                            <h3 class="mt-1 text-lg font-bold text-slate-950">Continue with the provider</h3>
+                                            <p class="mt-1 text-sm leading-5 text-slate-500">{{ formalApplicationHandoff.notice }}</p>
                                         </div>
                                     </div>
-                                    <span class="flex shrink-0 items-center gap-2 text-xs font-bold text-slate-600">
-                                        <span class="hidden sm:inline">{{ formalHandoffOpen ? 'Hide details' : 'View details' }}</span>
+                                    <span class="flex w-fit shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">
+                                        <span>{{ formalHandoffOpen ? 'Hide details' : 'View next steps' }}</span>
                                         <i :class="['fa-solid fa-chevron-down transition-transform', formalHandoffOpen ? 'rotate-180' : '']" aria-hidden="true"></i>
                                     </span>
                                 </summary>
 
-                                <div class="p-4">
+                                <div class="border-t border-slate-200 bg-slate-50/70 p-4 sm:p-5">
                                     <div
                                         v-if="formalApplicationHandoff.location_name || formalApplicationHandoff.location_address || formalApplicationHandoff.url"
-                                        class="flex flex-wrap items-stretch gap-2 border-b border-slate-200 pb-3"
+                                        class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))]"
                                     >
-                                        <div v-if="formalApplicationHandoff.location_name || formalApplicationHandoff.location_address" class="flex w-full items-start gap-2 rounded-md bg-slate-50 px-2.5 py-2 ring-1 ring-slate-200 sm:w-auto sm:max-w-sm">
-                                            <span class="grid h-6 w-6 shrink-0 place-items-center rounded bg-white text-[10px] text-slate-700 ring-1 ring-slate-200">
+                                        <div v-if="formalApplicationHandoff.location_name || formalApplicationHandoff.location_address" class="flex min-w-0 items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-sm text-slate-700">
                                                 <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
                                             </span>
                                             <div class="min-w-0 flex-1">
-                                                <p class="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Where to continue</p>
-                                                <p v-if="formalApplicationHandoff.location_name" class="text-xs font-bold text-slate-950">{{ formalApplicationHandoff.location_name }}</p>
-                                                <p v-if="formalApplicationHandoff.location_address" class="mt-0.5 line-clamp-1 text-[11px] leading-4 text-slate-600">{{ formalApplicationHandoff.location_address }}</p>
-                                                <a v-if="formalApplicationHandoff.map_url" :href="formalApplicationHandoff.map_url" target="_blank" rel="noopener" class="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-sky-700">
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Where to continue</p>
+                                                <p v-if="formalApplicationHandoff.location_name" class="mt-1 text-sm font-bold text-slate-950">{{ formalApplicationHandoff.location_name }}</p>
+                                                <p v-if="formalApplicationHandoff.location_address" class="mt-1 text-xs leading-5 text-slate-600">{{ formalApplicationHandoff.location_address }}</p>
+                                                <button v-if="formalApplicationHandoff.map_url || formalApplicationHandoff.location_address || formalApplicationHandoff.location_name" type="button" class="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-sky-700" @click="openFormalHandoffMap">
                                                     View map
-                                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]" aria-hidden="true"></i>
-                                                </a>
+                                                    <i class="fa-solid fa-map-location-dot text-[10px]" aria-hidden="true"></i>
+                                                </button>
                                             </div>
                                         </div>
 
-                                        <a v-if="formalApplicationHandoff.url" :href="formalApplicationHandoff.url" target="_blank" rel="noopener" class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white sm:w-auto">
-                                            Continue on provider site
-                                            <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
+                                        <a v-if="formalApplicationHandoff.url" :href="formalApplicationHandoff.url" target="_blank" rel="noopener" class="flex min-w-0 items-center gap-3 rounded-md border border-slate-900 bg-slate-950 p-3 text-white transition hover:bg-slate-800">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white/10 text-sm text-amber-300">
+                                                <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
+                                            </span>
+                                            <span class="min-w-0 flex-1">
+                                                <span class="block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-300">Official provider page</span>
+                                                <span class="mt-1 block text-sm font-bold">Continue online</span>
+                                            </span>
+                                            <i class="fa-solid fa-arrow-right text-xs text-slate-300" aria-hidden="true"></i>
                                         </a>
                                     </div>
 
-                                    <div :class="formalApplicationHandoff.location_name || formalApplicationHandoff.location_address || formalApplicationHandoff.url ? 'pt-4' : ''">
+                                    <div :class="['rounded-md border border-slate-200 bg-white p-4', formalApplicationHandoff.location_name || formalApplicationHandoff.location_address || formalApplicationHandoff.url ? 'mt-3' : '']">
                                         <div class="flex flex-wrap items-center justify-between gap-2">
                                             <div>
                                                 <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Provider documents</p>
@@ -1123,7 +1181,7 @@ onMounted(loadApplication);
 
                                     <div
                                         v-if="formalApplicationHandoff.instructions || formalApplicationHandoff.contact_person || formalApplicationHandoff.contact_department || formalApplicationHandoff.contact_email || formalApplicationHandoff.contact_number"
-                                        class="mt-4 border-t border-slate-200 pt-4"
+                                        class="mt-3 rounded-md border border-slate-200 bg-white p-4"
                                     >
                                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Provider instructions and contact</p>
                                         <p v-if="formalApplicationHandoff.instructions" class="mt-1.5 whitespace-pre-line text-sm leading-5 text-slate-700">{{ formalApplicationHandoff.instructions }}</p>
@@ -1264,26 +1322,15 @@ onMounted(loadApplication);
                                                     Open online access
                                                     <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                                 </a>
-                                                <details
+                                                <button
                                                     v-if="hasCoordinates(currentSchedule.latitude, currentSchedule.longitude) || currentSchedule.location_address || currentSchedule.venue"
-                                                    class="group/map w-full"
+                                                    type="button"
+                                                    class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                                                    @click="openScheduleMap(currentSchedule)"
                                                 >
-                                                    <summary class="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
                                                         <i class="fa-solid fa-map-location-dot text-amber-700" aria-hidden="true"></i>
                                                         View map
-                                                    </summary>
-                                                    <div class="mt-3 w-full overflow-hidden rounded-md border border-slate-200">
-                                                        <LeafletMapPreview
-                                                            :address="currentSchedule.location_address || currentSchedule.venue"
-                                                            :latitude="currentSchedule.latitude"
-                                                            :longitude="currentSchedule.longitude"
-                                                            :title="currentSchedule.venue || currentSchedule.title"
-                                                            :marker-text="currentSchedule.venue || currentSchedule.title"
-                                                            height="11rem"
-                                                            auto-geocode
-                                                        />
-                                                    </div>
-                                                </details>
+                                                </button>
                                             </div>
                                         </div>
                                     </article>
@@ -1430,7 +1477,7 @@ onMounted(loadApplication);
                                             <p class="mt-0.5 text-sm font-bold text-slate-950">{{ application.scholarship?.location_name || 'Location not named' }}</p>
                                             <p class="mt-0.5 text-xs leading-5 text-slate-600">{{ application.scholarship?.location_address || application.scholarship?.eligible_locations || 'No address listed.' }}</p>
                                             <p v-if="application.scholarship?.distance_label" class="mt-1 text-xs font-bold text-slate-600">About {{ application.scholarship.distance_label }} away</p>
-                                            <button v-if="hasMapPreview" type="button" class="mt-1.5 inline-flex items-center gap-2 text-xs font-bold text-amber-800" @click="showMapModal = true">
+                                            <button v-if="hasMapPreview" type="button" class="mt-1.5 inline-flex items-center gap-2 text-xs font-bold text-amber-800" @click="openProgramMap">
                                                 View on map
                                                 <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
                                             </button>
@@ -1968,68 +2015,22 @@ onMounted(loadApplication);
             </form>
         </div>
 
-        <div
-            v-if="showMapModal && applicationScholarship"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6"
-            @click.self="showMapModal = false"
-        >
-            <section class="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl">
-                <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
-                            Program Location
-                        </p>
-                        <h3 class="mt-1 text-xl font-bold text-slate-950">
-                            {{ applicationScholarship.location_name || applicationScholarship.title }}
-                        </h3>
-                        <p class="mt-1 text-sm leading-6 text-slate-600">
-                            {{ applicationScholarship.location_address || applicationScholarship.eligible_locations || 'No map address added yet.' }}
-                        </p>
-                        <p v-if="hasUserMapLocation && applicationScholarship.distance_label" class="mt-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
-                            Your saved location is shown too: {{ applicationScholarship.distance_label }} from this program.
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        class="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                        @click="showMapModal = false"
-                    >
-                        Close
-                    </button>
-                </div>
-
-                <div class="bg-slate-100 p-4">
-                    <LeafletMapPreview
-                        :address="scholarshipMapAddress"
-                        :latitude="applicationScholarship.latitude"
-                        :longitude="applicationScholarship.longitude"
-                        :secondary-latitude="user?.latitude"
-                        :secondary-longitude="user?.longitude"
-                        :secondary-marker-text="user?.name || 'Your location'"
-                        :distance-label="applicationScholarship.distance_label ? `About ${applicationScholarship.distance_label}` : ''"
-                        :title="applicationScholarship.location_name || applicationScholarship.title"
-                        :marker-text="applicationScholarship.location_name || applicationScholarship.title"
-                        height="55vh"
-                        auto-geocode
-                    />
-                </div>
-
-                <div class="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p class="text-xs leading-5 text-slate-500">
-                        This is the location currently listed by the scholarship provider.
-                    </p>
-                    <a
-                        v-if="applicationScholarship.map_url"
-                        :href="applicationScholarship.map_url"
-                        target="_blank"
-                        rel="noreferrer"
-                        class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                    >
-                        Open Full Map
-                    </a>
-                </div>
-            </section>
-        </div>
+        <LocationMapModal
+            v-if="activeMapPreview"
+            open
+            :eyebrow="activeMapPreview.eyebrow"
+            :title="activeMapPreview.title"
+            :address="activeMapPreview.address"
+            :latitude="activeMapPreview.latitude"
+            :longitude="activeMapPreview.longitude"
+            :marker-text="activeMapPreview.markerText"
+            :secondary-latitude="activeMapPreview.secondaryLatitude"
+            :secondary-longitude="activeMapPreview.secondaryLongitude"
+            :secondary-marker-text="activeMapPreview.secondaryMarkerText"
+            :distance-label="activeMapPreview.distanceLabel"
+            :note="activeMapPreview.note"
+            @close="closeMapModal"
+        />
 
     </main>
 </template>

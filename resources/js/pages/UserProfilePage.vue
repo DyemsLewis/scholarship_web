@@ -5,7 +5,7 @@ import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
-import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import LocationMapModal from '../components/LocationMapModal.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
@@ -31,6 +31,7 @@ const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
 const locationMessage = ref('');
+const showProfileMapModal = ref(false);
 const user = ref(null);
 const form = ref(emptyForm());
 const profileView = ref('overview');
@@ -3019,26 +3020,10 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                     </div>
 
-                                    <LeafletMapPreview
-                                        :address="profileMapAddress"
-                                        :latitude="form.latitude"
-                                        :longitude="form.longitude"
-                                        title="Student address map preview"
-                                        marker-text="Student address"
-                                        height="18rem"
-                                        auto-geocode
-                                        :auto-geocode-delay="900"
-                                        :geocode-zoom="11"
-                                        picker
-                                        @resolved="handleProfileLocationResolved"
-                                        @picked="handleProfileLocationPicked"
-                                        @error="handleProfileLocationError"
-                                    />
-
-                                    <p v-if="locationMessage" class="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-700">
-                                        <i class="fa-solid fa-circle-info text-amber-600" aria-hidden="true"></i>
-                                        <span>{{ locationMessage }}</span>
-                                    </p>
+                                    <div class="flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="min-w-0"><p class="text-sm font-bold text-slate-950">{{ form.latitude && form.longitude ? 'Map pin saved in this form' : 'Map pin not set yet' }}</p><p class="mt-1 text-xs leading-5 text-slate-500">{{ locationMessage || profileMapAddress || 'Complete your city and province, then set the pin in the map modal.' }}</p></div>
+                                        <button type="button" class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="showProfileMapModal = true"><i class="fa-solid fa-map-location-dot mr-2" aria-hidden="true"></i>{{ form.latitude ? 'Review map pin' : 'Set map pin' }}</button>
+                                    </div>
                                 </div>
                             </div>
                         </section>
@@ -3508,5 +3493,23 @@ watch(() => form.value.grading_scale, (scale) => {
                 <ApplicantFooter />
             </div>
         </section>
+
+        <LocationMapModal
+            :open="showProfileMapModal"
+            eyebrow="Applicant location"
+            title="Set your home location pin"
+            :address="profileMapAddress"
+            :latitude="form.latitude"
+            :longitude="form.longitude"
+            marker-text="Applicant home location"
+            :location-message="locationMessage"
+            :auto-geocode-delay="900"
+            :geocode-zoom="11"
+            picker
+            @resolved="handleProfileLocationResolved"
+            @picked="handleProfileLocationPicked"
+            @error="handleProfileLocationError"
+            @close="showProfileMapModal = false"
+        />
     </main>
 </template>

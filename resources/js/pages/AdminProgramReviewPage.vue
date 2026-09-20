@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
+import LocationMapModal from '../components/LocationMapModal.vue';
 import RecipientAgreementPanel from '../components/RecipientAgreementPanel.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import { labelFromKey } from '../support/display';
@@ -15,6 +16,7 @@ const isSaving = ref(false);
 const loadError = ref('');
 const decisionError = ref('');
 const scholarship = ref(null);
+const showMapModal = ref(false);
 const reviewStatus = ref('pending_review');
 const reviewNotes = ref('');
 const requestedSection = new URLSearchParams(window.location.search).get('section');
@@ -994,15 +996,10 @@ onMounted(loadScholarship);
                                             <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-600">
                                                 {{ scholarship.location_address || scholarship.eligible_locations || 'No address provided.' }}
                                             </p>
-                                            <a
-                                                v-if="scholarship.map_url"
-                                                :href="scholarship.map_url"
-                                                target="_blank"
-                                                rel="noopener"
-                                                class="mt-3 inline-flex text-sm font-bold text-sky-700 underline underline-offset-2"
-                                            >
-                                                Open map
-                                            </a>
+                                            <button v-if="hasLocationDetails" type="button" class="mt-3 inline-flex items-center gap-2 text-sm font-bold text-sky-700 underline underline-offset-2" @click="showMapModal = true">
+                                                <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i>
+                                                View map
+                                            </button>
                                         </div>
                                     </section>
                                 </div>
@@ -1197,5 +1194,18 @@ onMounted(loadScholarship);
                 <AdminFooter />
             </div>
         </section>
+
+        <LocationMapModal
+            v-if="scholarship"
+            :open="showMapModal"
+            eyebrow="Program review location"
+            :title="scholarship.location_name || scholarship.title"
+            :address="scholarship.location_address || scholarship.eligible_locations || ''"
+            :latitude="scholarship.latitude"
+            :longitude="scholarship.longitude"
+            :marker-text="scholarship.location_name || scholarship.title"
+            note="Review the location supplied by the provider without leaving the program review."
+            @close="showMapModal = false"
+        />
     </main>
 </template>

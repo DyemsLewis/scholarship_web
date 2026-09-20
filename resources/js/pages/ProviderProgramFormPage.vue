@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
-import LeafletMapPreview from '../components/LeafletMapPreview.vue';
+import LocationMapModal from '../components/LocationMapModal.vue';
 import ProgramBenefitsEditor from '../components/ProgramBenefitsEditor.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
@@ -19,6 +19,8 @@ import {
 } from '../support/learnerProgramPaths';
 import {
     citiesForLocation,
+    findLocationOption,
+    findPhilippineRegion,
     philippineRegionOptions,
     provincesForRegion,
 } from '../support/philippineLocations';
@@ -40,7 +42,6 @@ const imageFile = ref(null);
 const imagePreviewUrl = ref('');
 const useProviderLogoSelected = ref(false);
 const providerLocationMessage = ref('');
-const providerAddressLookupTrigger = ref(0);
 const activeFormSection = ref('details');
 const showLocationMap = ref(false);
 const customizeRubric = ref(false);
@@ -56,6 +57,12 @@ const isLoadingCoverageProvinces = ref(false);
 const isLoadingCoverageCities = ref(false);
 const coverageOptionsError = ref('');
 let coverageRequestId = 0;
+const programProvinceOptions = ref([]);
+const programCityOptions = ref([]);
+const isLoadingProgramProvinces = ref(false);
+const isLoadingProgramCities = ref(false);
+const programLocationOptionsError = ref('');
+let programLocationRequestId = 0;
 const autosaveReady = ref(false);
 const draftSavedAt = ref('');
 let autosaveTimer = null;
@@ -708,9 +715,22 @@ const officialProgramPreviewUrl = computed(() => {
 });
 const scholarshipFormMapAddress = computed(() => {
     const parts = [
-        scholarshipForm.value.locationName,
-        scholarshipForm.value.locationAddress,
+        scholarshipForm.value.locationCity,
+        scholarshipForm.value.locationProvince,
+        scholarshipForm.value.locationRegion,
     ].filter(Boolean);
+
+    return parts.length ? [...parts, 'Philippines'].join(', ') : '';
+});
+const scholarshipGoogleMapsAddress = computed(() => {
+    const parts = [
+        scholarshipForm.value.locationName,
+        scholarshipForm.value.locationAddressLine,
+        scholarshipForm.value.locationBarangay,
+        scholarshipForm.value.locationCity,
+        scholarshipForm.value.locationProvince,
+        scholarshipForm.value.locationRegion,
+    ].map((part) => String(part ?? '').trim()).filter(Boolean);
 
     return parts.length ? [...parts, 'Philippines'].join(', ') : '';
 });
@@ -896,10 +916,12 @@ const programReadinessItems = computed(() => [
         label: 'Program location',
         section: 'details',
         complete: hasText(scholarshipForm.value.locationName)
-            && hasText(scholarshipForm.value.locationAddress)
+            && hasText(scholarshipForm.value.locationRegion)
+            && hasText(scholarshipForm.value.locationProvince)
+            && hasText(scholarshipForm.value.locationCity)
             && hasText(scholarshipForm.value.latitude)
             && hasText(scholarshipForm.value.longitude),
-        help: 'Address and map pin for distance estimates.',
+        help: 'General location and map pin for distance estimates.',
     },
     {
         label: 'Public contact',
@@ -1083,7 +1105,9 @@ function readinessFocusTarget(item) {
 
     if (item.label === 'Program location') {
         if (!hasText(scholarshipForm.value.locationName)) return 'scholarship-location-name';
-        if (!hasText(scholarshipForm.value.locationAddress)) return 'scholarship-location-address';
+        if (!hasText(scholarshipForm.value.locationRegion)) return 'scholarship-location-region';
+        if (!hasText(scholarshipForm.value.locationProvince)) return 'scholarship-location-province';
+        if (!hasText(scholarshipForm.value.locationCity)) return 'scholarship-location-city';
 
         return 'scholarship-map-toggle';
     }
@@ -1250,6 +1274,11 @@ function emptyScholarshipForm() {
         excludeCurrentScholarshipRecipients: false,
         locationName: '',
         locationAddress: '',
+        locationAddressLine: '',
+        locationBarangay: '',
+        locationCity: '',
+        locationProvince: '',
+        locationRegion: '',
         latitude: '',
         longitude: '',
         requirements: [
@@ -1838,7 +1867,166 @@ function applyCustomCommitment() {
     scholarshipForm.value.otherContractTerms = customCommitmentText.value;
 }
 
+function composeProgramAddress(form = scholarshipForm.value) {
+    return [
+        form.locationAddressLine,
+        form.locationBarangay,
+        form.locationCity,
+        form.locationProvince,
+        form.locationRegion,
+    ].map((part) => String(part ?? '').trim()).filter(Boolean).join(', ');
+}
+
+function splitProgramAddress(value) {
+    const parts = String(value ?? '')
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
+    const fields = {
+        locationAddressLine: '',
+        locationBarangay: '',
+        locationCity: '',
+        locationProvince: '',
+        locationRegion: '',
+    };
+
+    if (/^philippines$/i.test(parts.at(-1) ?? '')) {
+        parts.pop();
+    }
+
+    const region = findPhilippineRegion(parts.at(-1));
+
+    if (region) {
+        fields.locationRegion = region.value;
+        parts.pop();
+    }
+
+    if (parts.length >= 2) {
+        fields.locationProvince = parts.pop() ?? '';
+        fields.locationCity = parts.pop() ?? '';
+    }
+
+    if (parts.length && /^(barangay|brgy\.?)(\s|$)/i.test(parts.at(-1))) {
+        fields.locationBarangay = parts.pop() ?? '';
+    }
+
+    fields.locationAddressLine = parts.join(', ');
+
+    return fields;
+}
+
+function syncProgramAddress({ clearCoordinates = true } = {}) {
+    scholarshipForm.value.locationAddress = composeProgramAddress();
+
+    if (clearCoordinates) {
+        clearScholarshipMapPoint();
+    }
+}
+
+async function loadProgramCities(requestId = programLocationRequestId) {
+    const region = findPhilippineRegion(scholarshipForm.value.locationRegion);
+    const province = findLocationOption(programProvinceOptions.value, scholarshipForm.value.locationProvince);
+
+    programCityOptions.value = [];
+
+    if (!region || !province) {
+        return;
+    }
+
+    isLoadingProgramCities.value = true;
+
+    try {
+        const cities = await citiesForLocation(region.code, province.code);
+
+        if (requestId === programLocationRequestId) {
+            programCityOptions.value = cities;
+        }
+    } catch (error) {
+        if (requestId === programLocationRequestId) {
+            programLocationOptionsError.value = 'City and municipality options could not be loaded. Check your connection and try again.';
+        }
+    } finally {
+        if (requestId === programLocationRequestId) {
+            isLoadingProgramCities.value = false;
+        }
+    }
+}
+
+async function loadProgramLocationHierarchy({ resetProvince = false, resetCity = false } = {}) {
+    const requestId = ++programLocationRequestId;
+    const region = findPhilippineRegion(scholarshipForm.value.locationRegion);
+
+    programLocationOptionsError.value = '';
+    programProvinceOptions.value = [];
+    programCityOptions.value = [];
+
+    if (resetProvince) {
+        scholarshipForm.value.locationProvince = '';
+    }
+
+    if (resetProvince || resetCity) {
+        scholarshipForm.value.locationCity = '';
+    }
+
+    if (!region) {
+        syncProgramAddress({ clearCoordinates: false });
+        return;
+    }
+
+    scholarshipForm.value.locationRegion = region.value;
+    isLoadingProgramProvinces.value = true;
+
+    try {
+        const provinces = await provincesForRegion(region.code);
+
+        if (requestId !== programLocationRequestId) {
+            return;
+        }
+
+        programProvinceOptions.value = provinces;
+
+        if (region.value === 'NCR') {
+            scholarshipForm.value.locationProvince = 'Metro Manila';
+        }
+
+        await loadProgramCities(requestId);
+    } catch (error) {
+        if (requestId === programLocationRequestId) {
+            programLocationOptionsError.value = 'Province options could not be loaded. Check your connection and select the region again.';
+        }
+    } finally {
+        if (requestId === programLocationRequestId) {
+            isLoadingProgramProvinces.value = false;
+            syncProgramAddress({ clearCoordinates: false });
+        }
+    }
+}
+
+function handleProgramRegionChange() {
+    clearScholarshipMapPoint();
+    loadProgramLocationHierarchy({ resetProvince: true });
+}
+
+function handleProgramProvinceChange() {
+    const requestId = ++programLocationRequestId;
+
+    scholarshipForm.value.locationCity = '';
+    programLocationOptionsError.value = '';
+    syncProgramAddress();
+    loadProgramCities(requestId);
+}
+
+function handleProgramAddressChange() {
+    syncProgramAddress();
+}
+
+function handleProgramDetailAddressChange() {
+    syncProgramAddress({ clearCoordinates: false });
+}
+
 function fillScholarshipForm(scholarship) {
+    const programAddress = splitProgramAddress(scholarship.location_address);
+
     existingApplicationCount.value = Number(scholarship.applications_count ?? 0);
     awardedSlotsCount.value = Number(scholarship.awarded_slots_count ?? 0);
     scholarshipForm.value = {
@@ -1861,6 +2049,7 @@ function fillScholarshipForm(scholarship) {
         excludeCurrentScholarshipRecipients: Boolean(scholarship.exclude_current_scholarship_recipients),
         locationName: scholarship.location_name ?? '',
         locationAddress: scholarship.location_address ?? '',
+        ...programAddress,
         latitude: scholarship.latitude ?? '',
         longitude: scholarship.longitude ?? '',
         requirements: parseRequirements(scholarship.requirements),
@@ -1920,6 +2109,7 @@ function fillScholarshipForm(scholarship) {
     selectedTargetPresetKey.value = inferTargetFormKey(scholarshipForm.value.eligibleEducationLevels);
     syncEligibilityOptions();
     syncCommitmentEditor();
+    loadProgramLocationHierarchy();
     if (commitmentOptions.some((option) => option.value === scholarshipForm.value.recipientAgreement.commitment_type)) {
         selectedCommitmentOption.value = scholarshipForm.value.recipientAgreement.commitment_type;
     }
@@ -2009,6 +2199,9 @@ function useProviderAddress(overwrite = true) {
     if (defaults.address && (overwrite || !hasText(scholarshipForm.value.locationAddress))) {
         addressChanged = scholarshipForm.value.locationAddress !== defaults.address;
         scholarshipForm.value.locationAddress = defaults.address;
+        Object.assign(scholarshipForm.value, splitProgramAddress(defaults.address));
+        syncProgramAddress({ clearCoordinates: false });
+        loadProgramLocationHierarchy();
     }
 
     if (addressChanged) {
@@ -2089,16 +2282,6 @@ function clearScholarshipMapPoint() {
     providerLocationMessage.value = '';
 }
 
-function lookupScholarshipAddress() {
-    if (!scholarshipFormMapAddress.value) {
-        providerLocationMessage.value = 'Enter the scholarship location address first.';
-        return;
-    }
-
-    providerLocationMessage.value = 'Searching scholarship address on the map...';
-    providerAddressLookupTrigger.value += 1;
-}
-
 function openLocationMap() {
     showLocationMap.value = true;
 }
@@ -2115,6 +2298,7 @@ function handleScholarshipLocationResolved(location) {
 
 function handleScholarshipLocationPicked(location) {
     const address = location.address ?? {};
+    const streetAddress = [address.house_number, address.road].filter(Boolean).join(' ');
     const locationName = address.office
         || address.amenity
         || address.building
@@ -2126,16 +2310,29 @@ function handleScholarshipLocationPicked(location) {
     scholarshipForm.value.latitude = Number(location.latitude).toFixed(7);
     scholarshipForm.value.longitude = Number(location.longitude).toFixed(7);
     scholarshipForm.value.locationName = locationName;
-    scholarshipForm.value.locationAddress = location.displayName
-        || [
-            [address.house_number, address.road].filter(Boolean).join(' '),
-            address.neighbourhood || address.suburb || address.quarter,
-            address.city || address.municipality || address.town,
-            address.province || address.state,
-        ].filter(Boolean).join(', ')
-        || scholarshipForm.value.locationAddress;
+    scholarshipForm.value.locationAddressLine = streetAddress || scholarshipForm.value.locationAddressLine;
+    scholarshipForm.value.locationBarangay = address.neighbourhood
+        || address.suburb
+        || address.quarter
+        || address.village
+        || scholarshipForm.value.locationBarangay;
+    scholarshipForm.value.locationCity = address.city
+        || address.municipality
+        || address.town
+        || address.city_district
+        || scholarshipForm.value.locationCity;
+    scholarshipForm.value.locationProvince = address.province
+        || address.state
+        || address.county
+        || scholarshipForm.value.locationProvince;
+    const resolvedRegion = findPhilippineRegion(address.region
+        || address.state
+        || scholarshipForm.value.locationRegion);
+    scholarshipForm.value.locationRegion = resolvedRegion?.value || scholarshipForm.value.locationRegion;
+    syncProgramAddress({ clearCoordinates: false });
+    loadProgramLocationHierarchy();
     providerLocationMessage.value = location.displayName
-        ? 'Pin set. The scholarship address was filled from the selected map point.'
+        ? 'Pin set. The structured address was filled from the selected map point.'
         : 'Pin set. Save the scholarship to keep this map point.';
 }
 
@@ -2160,6 +2357,9 @@ function resetScholarshipForm() {
     coverageProvinceOptions.value = [];
     coverageCityOptions.value = [];
     coverageOptionsError.value = '';
+    programProvinceOptions.value = [];
+    programCityOptions.value = [];
+    programLocationOptionsError.value = '';
     imageFile.value = null;
     imagePreviewUrl.value = '';
     useProviderLogoSelected.value = false;
@@ -2212,6 +2412,11 @@ function restoreLocalDraft() {
             termsAccepted: false,
             imageUrl: '/uploads/scholarship-default.jpg',
         };
+        if (!hasText(scholarshipForm.value.locationCity) && hasText(scholarshipForm.value.locationAddress)) {
+            Object.assign(scholarshipForm.value, splitProgramAddress(scholarshipForm.value.locationAddress));
+        }
+        syncProgramAddress({ clearCoordinates: false });
+        loadProgramLocationHierarchy();
         draftSavedAt.value = storedDraft.savedAt || '';
         selectedTargetPresetKey.value = inferTargetFormKey(scholarshipForm.value.eligibleEducationLevels);
         syncEligibilityOptions();
@@ -3827,7 +4032,7 @@ onBeforeUnmount(() => {
                                             <span :class="requiredHintClass">Address and pin required</span>
                                         </p>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            Add the public office, campus, or service address. The map locates it automatically when opened, and you can adjust the pin if needed.
+                                            Select the general area used by the portal map. Add the street details for applicants, then use Google Maps when exact street-level checking is needed.
                                         </p>
                                     </div>
 
@@ -3853,7 +4058,7 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid items-stretch gap-4 lg:grid-cols-2">
+                                <div class="mt-4 space-y-4">
                                     <div :class="fieldStackClass">
                                         <label :class="labelClass" for="scholarship-location-name">
                                             Location name
@@ -3865,23 +4070,106 @@ onBeforeUnmount(() => {
                                             type="text"
                                             placeholder="Example: City Scholarship Office"
                                             :class="inputClass"
-                                            @input="clearScholarshipMapPoint"
                                         >
                                     </div>
 
+                                    <div class="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
+                                        <div :class="fieldStackClass">
+                                            <label :class="labelClass" for="scholarship-location-region">
+                                                Region
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
+                                            <select
+                                                id="scholarship-location-region"
+                                                v-model="scholarshipForm.locationRegion"
+                                                :class="inputClass"
+                                                @change="handleProgramRegionChange"
+                                            >
+                                                <option value="">Select region</option>
+                                                <option v-if="scholarshipForm.locationRegion && !findPhilippineRegion(scholarshipForm.locationRegion)" :value="scholarshipForm.locationRegion">{{ scholarshipForm.locationRegion }}</option>
+                                                <option v-for="region in philippineRegionOptions" :key="region.code" :value="region.value">{{ region.label }}</option>
+                                            </select>
+                                        </div>
+
+                                        <div :class="fieldStackClass">
+                                            <label :class="labelClass" for="scholarship-location-province">
+                                                Province
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
+                                            <select
+                                                id="scholarship-location-province"
+                                                v-model="scholarshipForm.locationProvince"
+                                                :disabled="!scholarshipForm.locationRegion || isLoadingProgramProvinces"
+                                                :class="[inputClass, 'disabled:bg-slate-100 disabled:text-slate-500']"
+                                                @change="handleProgramProvinceChange"
+                                            >
+                                                <option value="">{{ isLoadingProgramProvinces ? 'Loading provinces...' : 'Select province' }}</option>
+                                                <option v-if="scholarshipForm.locationProvince && !findLocationOption(programProvinceOptions, scholarshipForm.locationProvince)" :value="scholarshipForm.locationProvince">{{ scholarshipForm.locationProvince }}</option>
+                                                <option v-for="province in programProvinceOptions" :key="province.code" :value="province.value">{{ province.label }}</option>
+                                            </select>
+                                        </div>
+
+                                        <div :class="fieldStackClass">
+                                            <label :class="labelClass" for="scholarship-location-city">
+                                                City / municipality
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
+                                            <select
+                                                id="scholarship-location-city"
+                                                v-model="scholarshipForm.locationCity"
+                                                :disabled="!scholarshipForm.locationProvince || isLoadingProgramCities"
+                                                :class="[inputClass, 'disabled:bg-slate-100 disabled:text-slate-500']"
+                                                @change="handleProgramAddressChange"
+                                            >
+                                                <option value="">{{ isLoadingProgramCities ? 'Loading cities...' : 'Select city or municipality' }}</option>
+                                                <option v-if="scholarshipForm.locationCity && !findLocationOption(programCityOptions, scholarshipForm.locationCity)" :value="scholarshipForm.locationCity">{{ scholarshipForm.locationCity }}</option>
+                                                <option v-for="city in programCityOptions" :key="city.code" :value="city.value">{{ city.label }}</option>
+                                            </select>
+                                        </div>
+
+                                        <div :class="fieldStackClass">
+                                            <label :class="labelClass" for="scholarship-location-barangay">
+                                                Barangay
+                                                <span :class="optionalHintClass">Optional</span>
+                                            </label>
+                                            <input
+                                                id="scholarship-location-barangay"
+                                                v-model="scholarshipForm.locationBarangay"
+                                                type="text"
+                                                maxlength="255"
+                                                placeholder="Barangay"
+                                                :class="inputClass"
+                                                @input="handleProgramDetailAddressChange"
+                                            >
+                                        </div>
+                                    </div>
+
                                     <div :class="fieldStackClass">
-                                        <label :class="labelClass" for="scholarship-location-address">
-                                            Full address
-                                            <span :class="requiredHintClass">Required</span>
+                                        <label :class="labelClass" for="scholarship-location-address-line">
+                                            Street / building address
+                                            <span :class="optionalHintClass">Optional</span>
                                         </label>
                                         <input
-                                            id="scholarship-location-address"
-                                            v-model="scholarshipForm.locationAddress"
+                                            id="scholarship-location-address-line"
+                                            v-model="scholarshipForm.locationAddressLine"
                                             type="text"
-                                            placeholder="Street, city, province"
+                                            maxlength="500"
+                                            placeholder="Building, house number, and street"
                                             :class="inputClass"
-                                            @input="clearScholarshipMapPoint"
+                                            @input="handleProgramDetailAddressChange"
                                         >
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">
+                                            Leaflet uses only the city, province, and region. Open Google Maps from the map modal to check the complete address more accurately.
+                                        </p>
+                                    </div>
+
+                                    <p v-if="programLocationOptionsError" class="text-xs font-semibold text-rose-600">
+                                        {{ programLocationOptionsError }}
+                                    </p>
+
+                                    <div class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-xs leading-5 text-slate-600">
+                                        <span class="font-bold text-slate-800">Saved public address:</span>
+                                        {{ scholarshipForm.locationAddress || 'Complete the location fields above.' }}
                                     </div>
                                 </div>
 
@@ -4732,84 +5020,23 @@ onBeforeUnmount(() => {
             </div>
         </section>
 
-        <Teleport to="body">
-            <div
-                v-if="showLocationMap"
-                class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="program-location-map-title"
-                tabindex="-1"
-                @click.self="closeLocationMap"
-                @keydown.esc="closeLocationMap"
-            >
-                <section class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
-                    <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
-                            <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i>
-                        </span>
-                        <div class="min-w-0 flex-1">
-                                <p class="text-[10px] font-bold uppercase text-amber-700">Program location</p>
-                            <h2 id="program-location-map-title" class="mt-1 text-lg font-bold text-slate-950 sm:text-xl">
-                                Set the map pin
-                            </h2>
-                            <p class="mt-1 truncate text-xs text-slate-500">
-                                {{ scholarshipFormMapAddress || 'Add a full address, then search or select the location on the map.' }}
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
-                            aria-label="Close program location map"
-                            @click="closeLocationMap"
-                        >
-                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                        </button>
-                    </header>
-
-                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-4">
-                        <LeafletMapPreview
-                            :address="scholarshipFormMapAddress"
-                            :latitude="scholarshipForm.latitude"
-                            :longitude="scholarshipForm.longitude"
-                            title="Scholarship address map preview"
-                            :marker-text="scholarshipForm.locationName || 'Scholarship location'"
-                            :geocode-trigger="providerAddressLookupTrigger"
-                            auto-geocode
-                            :auto-geocode-delay="900"
-                            height="min(58vh, 32rem)"
-                            picker
-                            @resolved="handleScholarshipLocationResolved"
-                            @picked="handleScholarshipLocationPicked"
-                            @error="handleScholarshipLocationError"
-                        />
-                    </div>
-
-                    <footer class="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                        <p :class="['text-xs font-semibold', scholarshipForm.latitude ? 'text-emerald-700' : 'text-slate-500']">
-                            {{ providerLocationMessage || (scholarshipForm.latitude ? 'Pin selected. Use this location to return to the form.' : 'Click the map to place a pin.') }}
-                        </p>
-                        <div class="flex shrink-0 gap-2">
-                            <button
-                                type="button"
-                                :disabled="!scholarshipFormMapAddress"
-                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                @click="lookupScholarshipAddress"
-                            >
-                                Retry address search
-                            </button>
-                            <button
-                                type="button"
-                                class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
-                                @click="closeLocationMap"
-                            >
-                                {{ scholarshipForm.latitude ? 'Use this location' : 'Close map' }}
-                            </button>
-                        </div>
-                    </footer>
-                </section>
-            </div>
-        </Teleport>
+        <LocationMapModal
+            :open="showLocationMap"
+            eyebrow="Program location"
+            title="Set the program map pin"
+            :address="scholarshipFormMapAddress"
+            :google-maps-query="scholarshipGoogleMapsAddress"
+            :latitude="scholarshipForm.latitude"
+            :longitude="scholarshipForm.longitude"
+            :marker-text="scholarshipForm.locationName || 'Program location'"
+            :location-message="providerLocationMessage"
+            :auto-geocode-delay="900"
+            picker
+            @resolved="handleScholarshipLocationResolved"
+            @picked="handleScholarshipLocationPicked"
+            @error="handleScholarshipLocationError"
+            @close="closeLocationMap"
+        />
 
     </main>
 </template>

@@ -61,6 +61,20 @@ function releaseStatusIcon(status) {
     return 'fa-regular fa-calendar-check';
 }
 
+function supportStatusClass(status) {
+    if (status === 'renewed') return 'border-sky-200 bg-sky-50 text-sky-900';
+    if (status === 'completed') return 'border-emerald-200 bg-emerald-50 text-emerald-900';
+    if (status === 'terminated') return 'border-rose-200 bg-rose-50 text-rose-800';
+    return 'border-amber-200 bg-amber-50 text-amber-900';
+}
+
+function supportStatusIcon(status) {
+    if (status === 'renewed') return 'fa-solid fa-rotate';
+    if (status === 'completed') return 'fa-solid fa-graduation-cap';
+    if (status === 'terminated') return 'fa-solid fa-circle-stop';
+    return 'fa-solid fa-heart-pulse';
+}
+
 function openFilePicker(cycle) {
     if (!cycle.submission && !acceptedTerms.value[cycle.id]) {
         showPortalToast({
@@ -154,6 +168,29 @@ async function saveManualGrade(cycle) {
         :context="programTitle"
         @close="previewFile = null"
     />
+
+    <section v-if="monitoring.support_decisions?.length" class="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <header class="student-section-head p-4 sm:p-5">
+            <div class="flex items-start gap-3">
+                <span class="student-section-mark"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i></span>
+                <div><p class="student-kicker">Recipient status</p><h3 class="mt-1 text-lg font-bold text-slate-950">{{ monitoring.support_status_label }}</h3><p class="mt-1 text-sm leading-6 text-slate-500">Official renewal and completion decisions recorded by your scholarship provider.</p></div>
+            </div>
+        </header>
+        <div class="divide-y divide-slate-200 border-t border-slate-200">
+            <article v-for="decision in monitoring.support_decisions" :key="decision.id" class="p-4 sm:p-5">
+                <div :class="['flex items-start gap-3 rounded-md border px-3 py-3', supportStatusClass(decision.decision)]">
+                    <i :class="[supportStatusIcon(decision.decision), 'mt-0.5 shrink-0']" aria-hidden="true"></i>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center justify-between gap-2"><p class="text-sm font-bold">{{ decision.decision_label }}</p><span class="text-xs">Effective {{ decision.effective_label }}</span></div>
+                        <p v-if="decision.next_period_terms" class="mt-2 text-sm leading-6">{{ decision.next_period_terms }}</p>
+                        <p v-if="decision.reason" class="mt-2 text-sm leading-6">{{ decision.reason }}</p>
+                        <div v-if="decision.support_ends_label || decision.next_review_label" class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold"><span v-if="decision.support_ends_label">Support through {{ decision.support_ends_label }}</span><span v-if="decision.next_review_label">Next review {{ decision.next_review_label }}</span></div>
+                        <p class="mt-2 text-[11px] opacity-70">Recorded {{ decision.decided_at }}<span v-if="decision.decided_by"> by {{ decision.decided_by }}</span></p>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </section>
 
     <section v-if="monitoring.benefit_releases?.length" class="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <header class="student-section-head p-4 sm:p-5">
