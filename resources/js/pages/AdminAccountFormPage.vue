@@ -217,6 +217,7 @@ const applicantVerificationClass = computed(() => {
 const applicantVerificationDocumentOptions = {
     academic_record: 'Academic record',
     school_record: 'School enrollment proof',
+    achievement_evidence: 'Achievement evidence',
 };
 const hasAcademicVerificationDocument = computed(() => verificationDocuments.value.some(
     (document) => document.document_type === 'academic_record',

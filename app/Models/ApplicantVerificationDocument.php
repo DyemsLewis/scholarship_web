@@ -7,6 +7,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ApplicantVerificationDocument extends Model
 {
+    public const PROFILE_EVIDENCE_TYPES = [
+        'academic_record',
+        'school_record',
+        'achievement_evidence',
+    ];
+
     protected $fillable = [
         'applicant_id',
         'uploaded_by',

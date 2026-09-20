@@ -6,6 +6,8 @@ use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ApplicantProfileWorkflowTest extends TestCase
@@ -28,6 +30,7 @@ class ApplicantProfileWorkflowTest extends TestCase
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',
             'household_size' => 5,
+            'current_scholarship_status' => 'none',
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',
@@ -259,6 +262,7 @@ class ApplicantProfileWorkflowTest extends TestCase
             'contact_number' => $applicant->contact_number,
             'grading_scale' => 'grade_point',
             'gwa' => 5.5,
+            'current_scholarship_status' => 'none',
         ];
 
         $this->actingAs($applicant)
@@ -274,7 +278,16 @@ class ApplicantProfileWorkflowTest extends TestCase
 
     public function test_applicant_can_save_optional_background_without_affecting_readiness(): void
     {
+        Storage::fake('local');
         $applicant = $this->completeAdultApplicant();
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'achievement_evidence',
+                'document_file' => UploadedFile::fake()->create('research-project.pdf', 100, 'application/pdf'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated();
 
         $response = $this->actingAs($applicant)
             ->patchJson('/dashboard/profile', [
@@ -315,6 +328,7 @@ class ApplicantProfileWorkflowTest extends TestCase
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',
             'household_size' => 4,
+            'current_scholarship_status' => 'none',
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',

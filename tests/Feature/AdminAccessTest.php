@@ -3,8 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\Scholarship;
+use App\Models\RecipientBenefitRelease;
+use App\Models\RecipientBenefitReleaseRecord;
+use App\Models\ScholarshipApplication;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class AdminAccessTest extends TestCase
@@ -129,5 +133,76 @@ class AdminAccessTest extends TestCase
             ->assertJsonPath('selected_program_status', 'rejected')
             ->assertJsonCount(1, 'scholarships')
             ->assertJsonPath('scholarships.0.status', 'rejected');
+    }
+
+    public function test_admin_can_review_benefit_release_evidence_and_open_private_receipt(): void
+    {
+        Storage::fake('local');
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['provider_name' => 'Tulay Aral Community Foundation']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Continuing Scholar Grant',
+            'description' => 'A scholarship with documented recipient releases.',
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'disbursed',
+            'document_checklist' => [],
+            'submitted_at' => now(),
+        ]);
+        $release = RecipientBenefitRelease::create([
+            'scholarship_id' => $scholarship->id,
+            'created_by' => $provider->id,
+            'title' => 'First semester allowance',
+            'release_at' => now()->subDay(),
+            'benefit_description' => 'PHP 5,000 learning allowance',
+            'amount' => 5000,
+            'release_method' => 'in_person',
+            'location' => 'Provider office',
+            'requires_original_verification' => true,
+            'status' => 'completed',
+            'published_at' => now()->subWeek(),
+        ]);
+        $receiptPath = 'benefit-release-receipts/test/signed-receipt.pdf';
+        Storage::disk('local')->put($receiptPath, 'signed receipt');
+        $record = RecipientBenefitReleaseRecord::create([
+            'recipient_benefit_release_id' => $release->id,
+            'scholarship_application_id' => $application->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'released',
+            'originals_verified' => true,
+            'notes' => 'Recipient signed after receiving the allowance.',
+            'receipt_original_name' => 'signed-receipt.pdf',
+            'receipt_path' => $receiptPath,
+            'receipt_mime_type' => 'application/pdf',
+            'receipt_size' => 14,
+            'recorded_by' => $provider->id,
+            'recorded_at' => now(),
+            'released_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->getJson('/admin/reviews/data')
+            ->assertOk()
+            ->assertJsonPath('stats.benefit_records', 1)
+            ->assertJsonPath('stats.benefits_released', 1)
+            ->assertJsonPath('stats.benefits_with_receipts', 1)
+            ->assertJsonPath('benefit_records.0.id', $record->id)
+            ->assertJsonPath('benefit_records.0.provider_name', 'Tulay Aral Community Foundation')
+            ->assertJsonPath('benefit_records.0.oversight_status', 'documented')
+            ->assertJsonPath('benefit_records.0.evidence_type', 'receipt');
+
+        $this->actingAs($admin)
+            ->get("/admin/benefit-release-records/{$record->id}/receipt")
+            ->assertOk();
+
+        $this->actingAs($provider)
+            ->get("/admin/benefit-release-records/{$record->id}/receipt")
+            ->assertForbidden();
     }
 }

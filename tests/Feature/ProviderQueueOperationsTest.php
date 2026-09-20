@@ -53,9 +53,16 @@ class ProviderQueueOperationsTest extends TestCase
             ->json();
         $reviewerIds = collect($payload['reviewers'])->pluck('id')->all();
 
-        $this->assertContains($provider->id, $reviewerIds);
+        $this->assertNotContains($provider->id, $reviewerIds);
         $this->assertContains($reviewer->id, $reviewerIds);
         $this->assertNotContains($nonReviewer->id, $reviewerIds);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/reviewer", [
+                'assigned_reviewer_id' => $provider->id,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('assigned_reviewer_id');
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/reviewer", [
@@ -120,7 +127,7 @@ class ProviderQueueOperationsTest extends TestCase
             ->all();
 
         $this->assertNotContains($provider->id, $reviewerIds);
-        $this->assertContains($teamMember->id, $reviewerIds);
+        $this->assertNotContains($teamMember->id, $reviewerIds);
         $this->assertContains($otherReviewer->id, $reviewerIds);
 
         $this->actingAs($teamMember)
@@ -141,6 +148,68 @@ class ProviderQueueOperationsTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('application.assigned_reviewer.id', $otherReviewer->id);
+    }
+
+    public function test_team_member_cannot_assign_a_reviewer_with_broader_access(): void
+    {
+        Mail::fake();
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $teamMember = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'account_title' => 'application_reviewer',
+            'permissions' => ['review_applications'],
+        ]);
+        $manager = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'account_title' => 'manager',
+            'permissions' => User::PROVIDER_PERMISSIONS,
+        ]);
+        $peerReviewer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'account_title' => 'application_reviewer',
+            'permissions' => ['review_applications'],
+        ]);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Reviewer Access Hierarchy Program',
+            'description' => 'Tests reviewer assignment access boundaries.',
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $reviewerIds = collect($this->actingAs($teamMember)
+            ->getJson('/provider/applications/data')
+            ->assertOk()
+            ->json('reviewers'))
+            ->pluck('id')
+            ->all();
+
+        $this->assertNotContains($teamMember->id, $reviewerIds);
+        $this->assertNotContains($manager->id, $reviewerIds);
+        $this->assertContains($peerReviewer->id, $reviewerIds);
+
+        $this->actingAs($teamMember)
+            ->patchJson("/provider/applications/{$application->id}/reviewer", [
+                'assigned_reviewer_id' => $manager->id,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('assigned_reviewer_id');
+
+        $this->actingAs($teamMember)
+            ->patchJson("/provider/applications/{$application->id}/reviewer", [
+                'assigned_reviewer_id' => $peerReviewer->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.assigned_reviewer.id', $peerReviewer->id);
     }
 
     public function test_provider_cannot_assign_a_reviewer_outside_their_program_scope(): void

@@ -730,6 +730,8 @@ onMounted(loadScholarship);
                                 </p>
                             </article>
 
+                            <RecipientAgreementPanel :scholarship="scholarship" />
+
                             <article id="eligibility" class="student-card scroll-mt-6 p-5 sm:p-6">
                                 <div class="student-section-head">
                                     <div class="flex items-start gap-3">
@@ -1011,9 +1013,6 @@ onMounted(loadScholarship);
                                 </ol>
 
                             </article>
-
-                            <RecipientAgreementPanel :scholarship="scholarship" />
-
                         </section>
 
                         <section class="student-card overflow-hidden">
@@ -1148,25 +1147,6 @@ onMounted(loadScholarship);
                             <i class="fa-solid fa-xmark" aria-hidden="true"></i>
                         </button>
                     </header>
-
-                    <div class="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-4">
-                        <div class="bg-white px-4 py-3">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Matched</p>
-                            <p class="mt-1 text-lg font-bold text-emerald-700">{{ eligibilityStatusCounts.matched }}</p>
-                        </div>
-                        <div class="bg-white px-4 py-3">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Different</p>
-                            <p class="mt-1 text-lg font-bold text-rose-700">{{ eligibilityStatusCounts.different }}</p>
-                        </div>
-                        <div class="bg-white px-4 py-3">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Missing</p>
-                            <p class="mt-1 text-lg font-bold text-amber-700">{{ eligibilityStatusCounts.missing }}</p>
-                        </div>
-                        <div class="bg-white px-4 py-3">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Open to all</p>
-                            <p class="mt-1 text-lg font-bold text-slate-700">{{ eligibilityStatusCounts.open }}</p>
-                        </div>
-                    </div>
 
                     <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6">
                         <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">

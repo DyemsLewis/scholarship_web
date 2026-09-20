@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStatusHistory;
@@ -252,6 +253,17 @@ class MobileAuthController extends Controller
             $validated['current_scholarship_details'] = null;
         }
 
+        $submittedAchievements = trim((string) ($validated['achievements'] ?? ''));
+        $savedAchievements = trim((string) ($user->studentProfile?->achievements ?? ''));
+
+        if ($submittedAchievements !== $savedAchievements
+            && $submittedAchievements !== ''
+            && ! $user->applicantVerificationDocuments()->where('document_type', 'achievement_evidence')->exists()) {
+            throw ValidationException::withMessages([
+                'achievements' => 'Upload achievement evidence from the applicant web profile before saving a new or changed achievement.',
+            ]);
+        }
+
         $profileValues = [
             ...$validated,
             'middle_initial' => filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null,
@@ -271,6 +283,7 @@ class MobileAuthController extends Controller
             'academic_term',
             'gwa',
             'grading_scale',
+            'achievements',
         ];
         $verificationReset = $studentProfile->verification_status === 'approved'
             && $studentProfile->isDirty($verifiedFields);
@@ -291,7 +304,7 @@ class MobileAuthController extends Controller
 
             if ($verificationReset) {
                 $user->applicantVerificationDocuments()
-                    ->where('document_type', 'academic_record')
+                    ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
                     ->update([
                         'status' => 'submitted',
                         'review_notes' => null,
@@ -310,8 +323,8 @@ class MobileAuthController extends Controller
                 ->each(fn (User $admin) => PortalNotification::create([
                     'user_id' => $admin->id,
                     'type' => 'applicant_profile_verification',
-                    'title' => 'Verified academic details changed',
-                    'message' => "{$user->name} changed verified academic information and needs another review.",
+                    'title' => 'Verified profile details changed',
+                    'message' => "{$user->name} changed verified profile information and needs another review.",
                     'action_url' => route('admin.applicants.review.show', $user, false),
                 ]));
         }
@@ -344,7 +357,7 @@ class MobileAuthController extends Controller
 
         return response()->json([
             'message' => $verificationReset
-                ? 'Academic details updated and returned for verification.'
+                ? 'Verified profile details updated and returned for review.'
                 : 'Applicant profile updated.',
             'user' => $this->userPayload($freshUser),
             'profile_readiness' => $freshUser->applicantProfileReadiness(),

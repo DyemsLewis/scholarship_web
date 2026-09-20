@@ -2590,14 +2590,14 @@ onMounted(loadApplication);
                             <section v-if="activeSection === 'applicant'" class="provider-panel overflow-hidden lg:col-span-2">
                                 <div class="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Academic record</p>
+                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Profile supporting evidence</p>
                                         <p class="mt-2 text-sm leading-6 text-slate-600">
-                                            Grade evidence saved in the applicant profile, shown separately from this program's requirements.
+                                            Academic, enrollment, and achievement evidence saved in the applicant profile, shown separately from this program's requirements.
                                         </p>
                                     </div>
                                     <div class="flex shrink-0 flex-wrap items-center gap-2">
                                         <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                            {{ applicantProfileProofs.length ? 'Record available' : 'No record' }}
+                                            {{ applicantProfileProofs.length ? `${applicantProfileProofs.length} record${applicantProfileProofs.length === 1 ? '' : 's'}` : 'No record' }}
                                         </span>
                                     </div>
                                 </div>
@@ -2682,7 +2682,7 @@ onMounted(loadApplication);
                                     </article>
                                 </div>
                                 <p v-else class="p-5 text-sm leading-6 text-slate-600">
-                                    No academic record is available from profile verification. Review only the documents required by this program.
+                                    No profile evidence is available. Review only the documents required by this program.
                                 </p>
                             </section>
 

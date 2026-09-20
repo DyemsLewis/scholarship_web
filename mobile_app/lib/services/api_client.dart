@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,10 +15,15 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  static const String baseUrl = String.fromEnvironment(
+  static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8000/api/mobile',
   );
+
+  static final String baseUrl = _configuredBaseUrl.isNotEmpty
+      ? _configuredBaseUrl
+      : kIsWeb
+      ? 'http://${Uri.base.host}:8000/api/mobile'
+      : 'http://10.0.2.2:8000/api/mobile';
 
   static final String assetBaseUrl = baseUrl.replaceFirst('/api/mobile', '');
 

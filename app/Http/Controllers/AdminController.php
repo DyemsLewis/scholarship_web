@@ -7,6 +7,7 @@ use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\PortalNotification;
 use App\Models\ProviderVerificationDocument;
+use App\Models\RecipientBenefitReleaseRecord;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
@@ -313,7 +314,7 @@ class AdminController extends Controller
             'user' => $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
             'verification_documents' => $user->isApplicant()
                 ? $user->applicantVerificationDocuments()
-                    ->whereIn('document_type', ['academic_record', 'school_record'])
+                    ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
                     ->latest('uploaded_at')
                     ->get()
                     ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
@@ -457,6 +458,19 @@ class AdminController extends Controller
             ->latest('updated_at')
             ->limit(12)
             ->get();
+        $benefitRecords = RecipientBenefitReleaseRecord::query()
+            ->with([
+                'release.scholarship.provider.providerProfile',
+                'application',
+                'applicant.studentProfile',
+                'recorder.providerProfile',
+                'recorder.parentAccount.providerProfile',
+            ])
+            ->latest('updated_at')
+            ->limit(200)
+            ->get()
+            ->map(fn (RecipientBenefitReleaseRecord $record): array => $this->benefitOversightPayload($record))
+            ->values();
 
         return response()->json([
             'stats' => [
@@ -473,15 +487,34 @@ class AdminController extends Controller
                     && $user->studentProfile?->verification_status === 'rejected')->count(),
                 'unsubmitted_applicants' => $applicants->filter(fn (User $user) => ! $user->applicantVerificationDocuments->contains('document_type', 'academic_record'))->count(),
                 'applicant_proofs' => $applicants->sum(fn (User $user) => $user->applicantVerificationDocuments
-                    ->whereIn('document_type', ['academic_record', 'school_record'])->count()),
+                    ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)->count()),
                 'pending_programs' => (int) ($programStatusCounts['pending_review'] ?? 0),
                 'published_programs' => (int) ($programStatusCounts['published'] ?? 0),
                 'rejected_programs' => (int) ($programStatusCounts['rejected'] ?? 0),
+                'benefit_records' => $benefitRecords->count(),
+                'benefits_released' => $benefitRecords->where('status', 'released')->count(),
+                'benefits_with_receipts' => $benefitRecords->where('evidence_type', 'receipt')->count(),
+                'benefits_note_only' => $benefitRecords->where('evidence_type', 'note')->count(),
+                'benefits_needing_attention' => $benefitRecords->where('oversight_status', 'attention')->count(),
             ],
             'providers' => $providers->map(fn (User $user) => $this->providerReviewPayload($user))->values(),
             'applicants' => $applicants->map(fn (User $user) => $this->applicantReviewPayload($user))->values(),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipReviewPayload($scholarship))->values(),
+            'benefit_records' => $benefitRecords,
             'selected_program_status' => $programStatus,
+        ]);
+    }
+
+    public function viewBenefitReleaseReceipt(
+        Request $request,
+        RecipientBenefitReleaseRecord $record,
+    ) {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless(filled($record->receipt_path) && Storage::disk('local')->exists($record->receipt_path), 404);
+
+        return Storage::disk('local')->response($record->receipt_path, $record->receipt_original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
@@ -690,6 +723,14 @@ class AdminController extends Controller
             ], 422);
         }
 
+        if ($validated['verification_status'] === 'approved'
+            && filled($applicant->studentProfile?->achievements)
+            && ! $applicant->applicantVerificationDocuments()->where('document_type', 'achievement_evidence')->exists()) {
+            return response()->json([
+                'message' => 'The applicant must upload evidence for the listed achievement before the profile can be verified.',
+            ], 422);
+        }
+
         if ($validated['verification_status'] === 'approved' && $this->academicRecordOcrService->configured()) {
             if ($academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED && $reviewedAcademicResult === null) {
                 return response()->json([
@@ -740,7 +781,7 @@ class AdminController extends Controller
             $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], $profileUpdates);
 
             $applicant->applicantVerificationDocuments()
-                ->whereIn('document_type', ['academic_record', 'school_record'])
+                ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
                 ->update([
                     'status' => $documentStatus,
                     'review_notes' => $notes,
@@ -808,7 +849,7 @@ class AdminController extends Controller
             'message' => 'Applicant profile verification updated.',
             'user' => $freshApplicant->publicPayload(),
             'verification_documents' => $freshApplicant->applicantVerificationDocuments
-                ->whereIn('document_type', ['academic_record', 'school_record'])
+                ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
                 ->sortByDesc('uploaded_at')
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
                 ->values(),
@@ -819,7 +860,7 @@ class AdminController extends Controller
     public function viewApplicantVerificationDocument(Request $request, ApplicantVerificationDocument $document)
     {
         abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless(in_array($document->document_type, ['academic_record', 'school_record'], true), 403);
+        abort_unless(in_array($document->document_type, ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES, true), 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
         return Storage::disk('local')->response($document->path, $document->original_name, [
@@ -1690,7 +1731,7 @@ class AdminController extends Controller
                 : null,
             'academic_scan_required' => $this->academicRecordOcrService->configured(),
             'verification_documents' => $applicant->applicantVerificationDocuments
-                ->whereIn('document_type', ['academic_record', 'school_record'])
+                ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
                 ->sortByDesc('uploaded_at')
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
                 ->values(),
@@ -1805,6 +1846,101 @@ class AdminController extends Controller
             ->values();
 
         return $oversight;
+    }
+
+    private function benefitOversightPayload(RecipientBenefitReleaseRecord $record): array
+    {
+        $release = $record->release;
+        $scholarship = $release?->scholarship;
+        $hasReceipt = filled($record->receipt_path) && Storage::disk('local')->exists($record->receipt_path);
+        $hasNote = filled($record->notes);
+        $isOverdue = in_array($record->status, ['scheduled', 'prepared'], true)
+            && $release?->release_at?->isPast();
+        $flags = collect();
+
+        if ($isOverdue) {
+            $flags->push('Release date passed without a completed recipient result.');
+        }
+
+        if (in_array($record->status, ['missed', 'withheld'], true)) {
+            $flags->push($record->status === 'withheld'
+                ? 'The provider withheld this recipient benefit; review the stated reason.'
+                : 'The recipient was marked as having missed the release schedule.');
+        }
+
+        if ($record->status === 'released' && ! $hasReceipt) {
+            $flags->push($hasNote
+                ? 'Receipt was confirmed by provider note only; no signed file was uploaded.'
+                : 'No receipt file or acknowledgement note is available.');
+        }
+
+        if ($record->status === 'released'
+            && $release?->requires_original_verification
+            && ! $record->originals_verified) {
+            $flags->push('The release required original-document verification, but it was not recorded.');
+        }
+
+        $oversightStatus = $flags->isNotEmpty()
+            ? 'attention'
+            : ($record->status === 'released' && $hasReceipt ? 'documented' : 'pending');
+        $evidenceType = $hasReceipt ? 'receipt' : ($hasNote ? 'note' : 'none');
+
+        return [
+            'id' => $record->id,
+            'status' => $record->status,
+            'status_label' => match ($record->status) {
+                'prepared' => 'Prepared for release',
+                'released' => 'Released to recipient',
+                'missed' => 'Recipient missed schedule',
+                'withheld' => 'Release withheld',
+                default => 'Scheduled',
+            },
+            'oversight_status' => $oversightStatus,
+            'oversight_label' => match ($oversightStatus) {
+                'documented' => 'Receipt documented',
+                'attention' => 'Review needed',
+                default => 'Pending release',
+            },
+            'oversight_flags' => $flags->values(),
+            'evidence_type' => $evidenceType,
+            'evidence_label' => match ($evidenceType) {
+                'receipt' => 'Receipt file',
+                'note' => 'Provider note only',
+                default => 'No evidence yet',
+            },
+            'provider_name' => $scholarship?->provider?->providerProfile?->provider_name
+                ?: $scholarship?->provider?->name,
+            'program_id' => $scholarship?->id,
+            'program_title' => $scholarship?->title,
+            'program_review_url' => $scholarship ? route('admin.scholarships.review.show', $scholarship) : null,
+            'applicant_id' => $record->applicant_id,
+            'applicant_name' => $record->applicant?->name,
+            'applicant_email' => $record->applicant?->email,
+            'applicant_review_url' => $record->applicant
+                ? route('admin.applicants.review.show', $record->applicant)
+                : null,
+            'release_title' => $release?->title,
+            'benefit_description' => $release?->benefit_description,
+            'amount_label' => $release?->amount !== null
+                ? 'PHP '.number_format((float) $release->amount, 2)
+                : null,
+            'release_method' => $release?->release_method,
+            'release_method_label' => $this->labelFromKey((string) ($release?->release_method ?: 'provider_arrangement')),
+            'location' => $release?->location,
+            'scheduled_at' => $release?->release_at?->format('M d, Y h:i A'),
+            'released_at' => $record->released_at?->format('M d, Y h:i A'),
+            'recorded_at' => $record->recorded_at?->format('M d, Y h:i A'),
+            'recorded_by' => $record->recorder?->name,
+            'requires_original_verification' => (bool) $release?->requires_original_verification,
+            'originals_verified' => (bool) $record->originals_verified,
+            'notes' => $record->notes,
+            'receipt' => $hasReceipt ? [
+                'name' => $record->receipt_original_name,
+                'mime_type' => $record->receipt_mime_type,
+                'size' => $record->receipt_size,
+                'view_url' => route('admin.benefit-release-records.receipt', $record),
+            ] : null,
+        ];
     }
 
     private function verificationDocumentPayload(ProviderVerificationDocument $document): array

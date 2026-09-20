@@ -486,17 +486,19 @@ class ApplicantDashboardController extends Controller
             : 5120;
         $allowedFileTypes = $usesAcademicOcr ? 'pdf,jpg,jpeg,png' : 'pdf,jpg,jpeg,png,doc,docx';
         $validated = $request->validate([
-            'document_type' => ['required', Rule::in([
-                'academic_record',
-                'school_record',
-            ])],
+            'document_type' => ['required', Rule::in(ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)],
             'document_file' => ['required', 'file', "max:{$maximumFileSize}", "mimes:{$allowedFileTypes}"],
             'terms_accepted' => ['accepted'],
         ]);
 
         $user = $request->user();
         $isAcademicRecord = $validated['document_type'] === 'academic_record';
-        $documentLabel = $isAcademicRecord ? 'academic record' : 'school enrollment proof';
+        $isAchievementEvidence = $validated['document_type'] === 'achievement_evidence';
+        $documentLabel = match ($validated['document_type']) {
+            'academic_record' => 'academic record',
+            'school_record' => 'school enrollment proof',
+            'achievement_evidence' => 'achievement evidence',
+        };
         $existing = $user->applicantVerificationDocuments()
             ->where('document_type', $validated['document_type'])
             ->first();
@@ -512,7 +514,7 @@ class ApplicantDashboardController extends Controller
         }
 
         try {
-            $document = DB::transaction(function () use ($user, $validated, $file, $path, $isAcademicRecord): ApplicantVerificationDocument {
+            $document = DB::transaction(function () use ($user, $validated, $file, $path, $isAcademicRecord, $isAchievementEvidence): ApplicantVerificationDocument {
                 $document = ApplicantVerificationDocument::query()->updateOrCreate([
                     'applicant_id' => $user->id,
                     'document_type' => $validated['document_type'],
@@ -558,6 +560,15 @@ class ApplicantDashboardController extends Controller
                             'status' => 'submitted',
                             'review_notes' => null,
                         ]);
+                }
+
+                if ($isAchievementEvidence && filled($user->studentProfile?->achievements)) {
+                    $user->studentProfile()->update([
+                        'verification_status' => 'pending',
+                        'verification_notes' => null,
+                        'verified_at' => null,
+                        'verified_by' => null,
+                    ]);
                 }
 
                 return $document;
@@ -684,6 +695,13 @@ class ApplicantDashboardController extends Controller
         $user = $request->user();
         $removedAcademicRecord = $document->document_type === 'academic_record';
         $removedSchoolRecord = $document->document_type === 'school_record';
+        $removedAchievementEvidence = $document->document_type === 'achievement_evidence';
+
+        if ($removedAchievementEvidence && filled($user->studentProfile?->achievements)) {
+            throw ValidationException::withMessages([
+                'document' => 'Clear and save the achievement entry before removing its supporting evidence.',
+            ]);
+        }
         DB::transaction(function () use ($document, $user, $removedAcademicRecord): void {
             $document->delete();
             $hasAcademicRecord = $user->applicantVerificationDocuments()
@@ -730,7 +748,9 @@ class ApplicantDashboardController extends Controller
                 ? "{$user->name} removed an academic verification record."
                 : ($removedSchoolRecord
                     ? "{$user->name} removed a school enrollment proof."
-                    : "{$user->name} removed a legacy profile verification file."),
+                    : ($removedAchievementEvidence
+                        ? "{$user->name} removed achievement evidence."
+                        : "{$user->name} removed a legacy profile verification file.")),
             $request,
         );
 
@@ -739,7 +759,9 @@ class ApplicantDashboardController extends Controller
                 ? 'Academic record removed. Upload a current record when you are ready for verification.'
                 : ($removedSchoolRecord
                     ? 'School enrollment proof removed. Your academic verification was not changed.'
-                    : 'Older proof file removed. Your academic verification was not changed.'),
+                    : ($removedAchievementEvidence
+                        ? 'Achievement evidence removed.'
+                        : 'Older proof file removed. Your academic verification was not changed.')),
             'user' => $user->fresh(['studentProfile'])->publicPayload(),
             'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
             'prepared_documents_count' => $user->studentDocuments()->count(),
@@ -946,6 +968,18 @@ class ApplicantDashboardController extends Controller
             $validated['current_scholarship_details'] = null;
         }
 
+        $submittedAchievements = trim((string) ($validated['achievements'] ?? ''));
+        $savedAchievements = trim((string) ($user->studentProfile?->achievements ?? ''));
+        $achievementChanged = $submittedAchievements !== $savedAchievements;
+
+        if ($achievementChanged
+            && $submittedAchievements !== ''
+            && ! $user->applicantVerificationDocuments()->where('document_type', 'achievement_evidence')->exists()) {
+            throw ValidationException::withMessages([
+                'achievements' => 'Upload achievement evidence before saving a new or changed achievement.',
+            ]);
+        }
+
         $profileValues = [
             ...$validated,
             'middle_initial' => filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null,
@@ -977,6 +1011,7 @@ class ApplicantDashboardController extends Controller
             'academic_term',
             'gwa',
             'grading_scale',
+            'achievements',
         ];
         $verificationReset = $studentProfile->verification_status === 'approved'
             && $studentProfile->isDirty($verifiedFields);
@@ -997,7 +1032,7 @@ class ApplicantDashboardController extends Controller
 
             if ($verificationReset) {
                 $user->applicantVerificationDocuments()
-                    ->where('document_type', 'academic_record')
+                    ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
                     ->update([
                         'status' => 'submitted',
                         'review_notes' => null,
@@ -1015,8 +1050,8 @@ class ApplicantDashboardController extends Controller
                 ->each(fn (User $admin) => PortalNotification::create([
                     'user_id' => $admin->id,
                     'type' => 'applicant_profile_verification',
-                    'title' => 'Verified academic details changed',
-                    'message' => "{$user->name} changed verified academic information and needs another review.",
+                    'title' => 'Verified profile details changed',
+                    'message' => "{$user->name} changed verified profile information and needs another review.",
                     'action_url' => route('admin.applicants.review.show', $user, false),
                 ]));
         }

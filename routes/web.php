@@ -118,6 +118,7 @@ Route::middleware(['auth', 'admin'])
         Route::post('/users/{user}/verification-email', [AdminController::class, 'resendUserVerificationEmail'])->middleware('permission:manage_accounts')->name('users.verification-email');
         Route::patch('/users/{applicant}/profile-verification', [AdminController::class, 'updateApplicantVerification'])->middleware('permission:manage_reviews')->name('users.profile-verification');
         Route::get('/applicant-verification-documents/{document}/view', [AdminController::class, 'viewApplicantVerificationDocument'])->middleware('permission:manage_reviews')->name('applicant-verification-documents.view');
+        Route::get('/benefit-release-records/{record}/receipt', [AdminController::class, 'viewBenefitReleaseReceipt'])->middleware('permission:manage_reviews')->whereNumber('record')->name('benefit-release-records.receipt');
         Route::get('/profile/data', [AdminController::class, 'profileData'])->name('profile.data');
         Route::patch('/profile', [AdminController::class, 'updateProfile'])->name('profile.update');
         Route::get('/reviews/data', [AdminController::class, 'reviewsData'])->middleware('permission:manage_reviews')->name('reviews.data');

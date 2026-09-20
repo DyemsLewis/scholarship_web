@@ -7,7 +7,7 @@ const isLoading = ref(true);
 const isProgramLoading = ref(false);
 const errorMessage = ref('');
 const requestedReviewType = new URLSearchParams(window.location.search).get('type');
-const reviewTypeValues = ['providers', 'programs', 'applicants'];
+const reviewTypeValues = ['providers', 'programs', 'applicants', 'benefits'];
 const activeReviewType = ref(reviewTypeValues.includes(requestedReviewType) ? requestedReviewType : 'providers');
 const reviewSearch = ref('');
 const reviewPage = ref(1);
@@ -15,6 +15,7 @@ const reviewsPerPage = 10;
 const selectedStatus = ref('pending');
 const selectedApplicantStatus = ref('pending');
 const selectedProgramStatus = ref('pending_review');
+const selectedBenefitStatus = ref('attention');
 const stats = ref({
     providers: 0,
     pending_providers: 0,
@@ -29,10 +30,16 @@ const stats = ref({
     pending_programs: 0,
     published_programs: 0,
     rejected_programs: 0,
+    benefit_records: 0,
+    benefits_released: 0,
+    benefits_with_receipts: 0,
+    benefits_note_only: 0,
+    benefits_needing_attention: 0,
 });
 const providers = ref([]);
 const applicants = ref([]);
 const scholarships = ref([]);
+const benefitRecords = ref([]);
 const reviewTabs = computed(() => [
     {
         value: 'providers',
@@ -54,6 +61,13 @@ const reviewTabs = computed(() => [
         count: stats.value.applicants,
         pending: stats.value.pending_applicants,
         description: 'Academic results and submitted grade records',
+    },
+    {
+        value: 'benefits',
+        label: 'Benefit oversight',
+        count: stats.value.benefit_records,
+        pending: stats.value.benefits_needing_attention,
+        description: 'Release evidence and recipient consistency',
     },
 ]);
 
@@ -121,10 +135,39 @@ const filteredPrograms = computed(() => {
         return !query || searchableText.includes(query);
     });
 });
+const benefitStatusFilters = computed(() => [
+    { value: 'attention', label: 'Needs review', count: stats.value.benefits_needing_attention },
+    { value: 'released', label: 'Released', count: stats.value.benefits_released },
+    { value: 'receipt', label: 'Receipt-backed', count: stats.value.benefits_with_receipts },
+    { value: 'note', label: 'Note only', count: stats.value.benefits_note_only },
+    { value: 'all', label: 'All records', count: stats.value.benefit_records },
+]);
+const filteredBenefitRecords = computed(() => {
+    const query = reviewSearch.value.trim().toLowerCase();
+
+    return benefitRecords.value.filter((record) => {
+        const matchesStatus = selectedBenefitStatus.value === 'all'
+            || (selectedBenefitStatus.value === 'attention' && record.oversight_status === 'attention')
+            || (selectedBenefitStatus.value === 'released' && record.status === 'released')
+            || record.evidence_type === selectedBenefitStatus.value;
+        const searchableText = [
+            record.provider_name,
+            record.program_title,
+            record.applicant_name,
+            record.applicant_email,
+            record.release_title,
+            record.benefit_description,
+            record.notes,
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        return matchesStatus && (!query || searchableText.includes(query));
+    });
+});
 const activeReviewItems = computed(() => ({
     providers: filteredProviders.value,
     programs: filteredPrograms.value,
     applicants: filteredApplicants.value,
+    benefits: filteredBenefitRecords.value,
 }[activeReviewType.value] ?? []));
 const totalReviewPages = computed(() => Math.max(1, Math.ceil(activeReviewItems.value.length / reviewsPerPage)));
 const visibleReviewItems = computed(() => {
@@ -194,6 +237,19 @@ function statusLabel(status) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function benefitStatusClass(status) {
+    if (status === 'released') return 'bg-emerald-100 text-emerald-800';
+    if (['missed', 'withheld'].includes(status)) return 'bg-rose-100 text-rose-800';
+    if (status === 'prepared') return 'bg-sky-100 text-sky-800';
+    return 'bg-slate-100 text-slate-700';
+}
+
+function oversightClass(status) {
+    if (status === 'documented') return 'bg-emerald-100 text-emerald-800';
+    if (status === 'attention') return 'bg-amber-100 text-amber-900';
+    return 'bg-slate-100 text-slate-700';
+}
+
 function reviewProgramUrl(scholarship) {
     return `/admin/scholarships/${scholarship.id}/review`;
 }
@@ -255,6 +311,7 @@ async function loadReviewData(options = {}) {
         providers.value = response.data.providers ?? [];
         applicants.value = response.data.applicants ?? [];
         scholarships.value = response.data.scholarships ?? [];
+        benefitRecords.value = response.data.benefit_records ?? [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load review details.';
     } finally {
@@ -263,7 +320,7 @@ async function loadReviewData(options = {}) {
     }
 }
 
-watch([reviewSearch, selectedStatus, selectedApplicantStatus], () => {
+watch([reviewSearch, selectedStatus, selectedApplicantStatus, selectedBenefitStatus], () => {
     reviewPage.value = 1;
 });
 
@@ -286,7 +343,7 @@ onMounted(loadReviewData);
                                 Review one queue at a time
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Choose providers, programs, or applicants, then open a guided review before recording a decision.
+                                Review provider identity, programs, applicants, and benefit-release evidence from one workspace.
                             </p>
                         </div>
 
@@ -309,7 +366,7 @@ onMounted(loadReviewData);
                         {{ errorMessage }}
                     </p>
                     <section class="admin-panel overflow-hidden">
-                        <nav class="grid gap-1 p-2 md:grid-cols-3" aria-label="Admin review queues">
+                        <nav class="grid gap-1 p-2 md:grid-cols-2 xl:grid-cols-4" aria-label="Admin review queues">
                             <button
                                 v-for="tab in reviewTabs"
                                 :key="tab.value"
@@ -499,7 +556,7 @@ onMounted(loadReviewData);
                         </div>
                     </section>
 
-                    <section v-else class="admin-panel p-5">
+                    <section v-else-if="activeReviewType === 'applicants'" class="admin-panel p-5">
                         <div>
                             <div>
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant Review</p>
@@ -577,6 +634,78 @@ onMounted(loadReviewData);
                                 >
                                     Open record
                                 </a>
+                            </article>
+                        </div>
+                    </section>
+
+                    <section v-else class="admin-panel overflow-hidden">
+                        <header class="border-b border-slate-200 px-5 py-5 sm:px-6">
+                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Benefit Oversight</p>
+                            <h3 class="mt-2 text-xl font-bold text-slate-950">Check whether recipient support is documented</h3>
+                            <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+                                Compare recipient results under the same provider release. Flags identify records that need human review; they do not automatically declare a provider unfair.
+                            </p>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <button
+                                    v-for="filter in benefitStatusFilters"
+                                    :key="filter.value"
+                                    type="button"
+                                    :class="[
+                                        'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
+                                        selectedBenefitStatus === filter.value
+                                            ? 'border-slate-900 bg-slate-900 text-white'
+                                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50',
+                                    ]"
+                                    @click="selectedBenefitStatus = filter.value"
+                                >
+                                    {{ filter.label }} ({{ filter.count }})
+                                </button>
+                            </div>
+                        </header>
+
+                        <div v-if="benefitRecords.length === 0" class="px-5 py-10 text-center sm:px-6">
+                            <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span>
+                            <p class="mt-3 font-bold text-slate-950">No benefit releases recorded yet</p>
+                            <p class="mt-1 text-sm text-slate-500">Records appear after a provider schedules support for selected recipients.</p>
+                        </div>
+
+                        <div v-else-if="filteredBenefitRecords.length === 0" class="px-5 py-10 text-center sm:px-6">
+                            <p class="font-bold text-slate-950">No records match this filter</p>
+                            <p class="mt-1 text-sm text-slate-500">Choose another evidence status or change the search.</p>
+                        </div>
+
+                        <div v-else class="divide-y divide-slate-200">
+                            <article v-for="record in visibleReviewItems" :key="record.id" class="px-5 py-4 sm:px-6">
+                                <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h4 class="font-bold text-slate-950">{{ record.applicant_name || 'Applicant' }}</h4>
+                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', benefitStatusClass(record.status)]">{{ record.status_label }}</span>
+                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', oversightClass(record.oversight_status)]">{{ record.oversight_label }}</span>
+                                        </div>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ record.provider_name || 'Provider' }} &middot; {{ record.program_title || 'Scholarship program' }}</p>
+                                        <p class="mt-2 text-sm font-bold leading-5 text-slate-800">{{ record.release_title || 'Benefit release' }}</p>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">{{ record.benefit_description }}<span v-if="record.amount_label"> &middot; {{ record.amount_label }}</span></p>
+                                    </div>
+
+                                    <dl class="grid shrink-0 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 text-xs sm:grid-cols-3 xl:w-[520px]">
+                                        <div class="bg-slate-50 px-3 py-2.5"><dt class="font-bold uppercase tracking-[0.08em] text-slate-500">Scheduled</dt><dd class="mt-1 font-semibold text-slate-800">{{ record.scheduled_at || 'Not recorded' }}</dd></div>
+                                        <div class="bg-slate-50 px-3 py-2.5"><dt class="font-bold uppercase tracking-[0.08em] text-slate-500">Evidence</dt><dd class="mt-1 font-semibold text-slate-800">{{ record.evidence_label }}</dd></div>
+                                        <div class="bg-slate-50 px-3 py-2.5"><dt class="font-bold uppercase tracking-[0.08em] text-slate-500">Original check</dt><dd class="mt-1 font-semibold text-slate-800">{{ record.requires_original_verification ? (record.originals_verified ? 'Verified' : 'Not recorded') : 'Not required' }}</dd></div>
+                                    </dl>
+                                </div>
+
+                                <div v-if="record.oversight_flags?.length" class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5">
+                                    <p v-for="flag in record.oversight_flags" :key="flag" class="text-xs font-semibold leading-5 text-amber-900"><i class="fa-solid fa-triangle-exclamation mr-1.5" aria-hidden="true"></i>{{ flag }}</p>
+                                </div>
+                                <p v-if="record.notes" class="mt-3 text-sm leading-6 text-slate-600"><strong class="text-slate-900">Provider note:</strong> {{ record.notes }}</p>
+
+                                <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                                    <a v-if="record.receipt" :href="record.receipt.view_url" target="_blank" rel="noopener noreferrer" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-file-shield mr-1.5" aria-hidden="true"></i>View receipt proof</a>
+                                    <a v-if="record.applicant_review_url" :href="record.applicant_review_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant record</a>
+                                    <a v-if="record.program_review_url" :href="record.program_review_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Program record</a>
+                                    <p class="ml-auto text-xs text-slate-500">Recorded {{ record.recorded_at || 'not yet' }}<span v-if="record.recorded_by"> by {{ record.recorded_by }}</span></p>
+                                </div>
                             </article>
                         </div>
                     </section>

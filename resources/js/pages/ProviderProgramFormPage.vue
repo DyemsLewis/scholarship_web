@@ -3134,12 +3134,6 @@ onBeforeUnmount(() => {
                                         ></textarea>
                                     </div>
 
-                                    <p class="mt-3 text-xs leading-5 text-slate-500">
-                                        Evidence basis:
-                                        <a href="https://mimaropa.ched.gov.ph/wp-content/uploads/2023/03/CMO-No.-08-Policies-and-Guidelines-for-CHED-Scholarship-Programs-CSPs.pdf" target="_blank" rel="noopener noreferrer" class="font-bold text-slate-800 underline decoration-amber-400 underline-offset-2">CHED scholarship policy</a>,
-                                        <a href="https://www.unesco.org/reports/gem-report/en/2026-access-equity" target="_blank" rel="noopener noreferrer" class="font-bold text-slate-800 underline decoration-amber-400 underline-offset-2">UNESCO access and equity</a>, and
-                                        <a href="https://www.ilo.org/publications/role-employers-skills-development-systems" target="_blank" rel="noopener noreferrer" class="font-bold text-slate-800 underline decoration-amber-400 underline-offset-2">ILO employer participation in skills development</a>.
-                                    </p>
                                 </section>
 
                                 <div v-show="activeFormSection === 'support'" class="md:col-span-2">
@@ -4639,12 +4633,6 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
 
-                                    <p class="border-t border-slate-200 bg-amber-50/60 px-4 py-3 text-xs leading-5 text-slate-600 sm:px-5">
-                                        Evidence basis:
-                                        <a href="https://lawphil.net/statutes/repacts/ra1949/ra_386_1949.html" target="_blank" rel="noopener noreferrer" class="font-bold text-slate-800 underline decoration-amber-400 underline-offset-2">Civil Code contract principles</a>,
-                                        <a href="https://lawphil.net/statutes/repacts/ra1994/ra_7687_1994.html" target="_blank" rel="noopener noreferrer" class="font-bold text-slate-800 underline decoration-amber-400 underline-offset-2">DOST service obligations</a>, and
-                                        <a href="https://ched.gov.ph/wp-content/uploads/2017/11/CMO-No.-3-Series-of-2016.pdf" target="_blank" rel="noopener noreferrer" class="font-bold text-slate-800 underline decoration-amber-400 underline-offset-2">CHED scholarship terms</a>.
-                                    </p>
                                 </section>
                             </fieldset>
 

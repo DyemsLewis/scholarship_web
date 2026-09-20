@@ -357,7 +357,24 @@ const schoolProofOption = computed(() => {
         context: [form.value.school, form.value.enrollment_status].filter(hasValue),
     };
 });
-const verificationDocumentOptions = computed(() => [academicProofOption.value, schoolProofOption.value]);
+const achievementEvidenceOption = computed(() => ({
+    value: 'achievement_evidence',
+    label: 'Achievement evidence',
+    description: 'Certificate, award notice, competition result, project proof, or another readable record supporting the achievement you listed.',
+    icon: 'fa-solid fa-award',
+    context: hasValue(form.value.achievements) ? ['Required for the achievement entered'] : [],
+}));
+const verificationDocumentOptions = computed(() => {
+    const options = [academicProofOption.value, schoolProofOption.value];
+    const hasAchievementEvidence = verificationDocuments.value
+        .some((document) => document.document_type === 'achievement_evidence');
+
+    if (hasValue(form.value.achievements) || hasAchievementEvidence) {
+        options.push(achievementEvidenceOption.value);
+    }
+
+    return options;
+});
 const applicantAge = computed(() => calculateAge(form.value.birthdate));
 const isMinor = computed(() => applicantAge.value !== null && applicantAge.value < 18);
 const needsGuardianContext = computed(() => isMinor.value
@@ -393,13 +410,13 @@ const manualAcademicResultComplete = computed(() => Boolean(form.value.grading_s
     && (!requiresNumericGrade.value || hasValue(form.value.gwa)));
 const schoolVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'school_record') ?? null);
+const achievementEvidenceDocument = computed(() => verificationDocuments.value
+    .find((document) => document.document_type === 'achievement_evidence') ?? null);
 const legacyVerificationDocuments = computed(() => verificationDocuments.value
-    .filter((document) => !['academic_record', 'school_record'].includes(document.document_type)));
+    .filter((document) => !['academic_record', 'school_record', 'achievement_evidence'].includes(document.document_type)));
 const verificationDocumentRows = computed(() => verificationDocumentOptions.value.map((option) => ({
     ...option,
-    document: option.value === 'academic_record'
-        ? academicVerificationDocument.value
-        : schoolVerificationDocument.value,
+    document: verificationDocuments.value.find((document) => document.document_type === option.value) ?? null,
 })));
 const missingVerificationDocumentRows = computed(() => verificationDocumentRows.value
     .filter((row) => !row.document));
@@ -1777,8 +1794,13 @@ async function retryAcademicRecordScan(document) {
 async function deleteVerificationDocument(document) {
     const isAcademicRecord = document.document_type === 'academic_record';
     const isSchoolRecord = document.document_type === 'school_record';
+    const isAchievementEvidence = document.document_type === 'achievement_evidence';
     const confirmed = await requestConfirmation({
-        title: isAcademicRecord ? 'Remove academic record?' : (isSchoolRecord ? 'Remove school proof?' : 'Remove older proof file?'),
+        title: isAcademicRecord
+            ? 'Remove academic record?'
+            : (isSchoolRecord
+                ? 'Remove school proof?'
+                : (isAchievementEvidence ? 'Remove achievement evidence?' : 'Remove older proof file?')),
         message: `${document.original_name || 'This file'} will be removed from supporting evidence. Its separate copy in Documents will stay available.${isAcademicRecord ? ' Your academic record review will return to not submitted.' : ''}`,
         confirmLabel: 'Remove file',
         tone: 'danger',
@@ -2915,6 +2937,38 @@ watch(() => form.value.grading_scale, (scale) => {
                                                 placeholder="Recognition, skills, projects, improvement, or something the learner is proud of"
                                                 :class="inputClass"
                                             ></textarea>
+                                            <p v-if="fieldErrors.achievements" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldErrors.achievements[0] }}</p>
+                                            <div
+                                                v-if="hasValue(form.achievements)"
+                                                :class="[
+                                                    'mt-3 flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between',
+                                                    achievementEvidenceDocument
+                                                        ? 'border-emerald-200 bg-emerald-50/70'
+                                                        : 'border-amber-200 bg-amber-50/70',
+                                                ]"
+                                            >
+                                                <div class="flex items-start gap-2.5">
+                                                    <i :class="achievementEvidenceDocument ? 'fa-solid fa-circle-check mt-0.5 text-emerald-700' : 'fa-solid fa-paperclip mt-0.5 text-amber-700'" aria-hidden="true"></i>
+                                                    <div>
+                                                        <p class="text-xs font-bold text-slate-900">
+                                                            {{ achievementEvidenceDocument ? 'Achievement evidence attached' : 'Achievement evidence required' }}
+                                                        </p>
+                                                        <p class="mt-1 text-xs leading-5 text-slate-600">
+                                                            {{ achievementEvidenceDocument
+                                                                ? achievementEvidenceDocument.original_name
+                                                                : 'Add a certificate, award notice, result, or project proof so an authorized reviewer can confirm this entry.' }}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                                    @click="openSection('verification')"
+                                                >
+                                                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                                                    {{ achievementEvidenceDocument ? 'View evidence' : 'Add evidence' }}
+                                                </button>
+                                            </div>
                                         </div>
                                         <div>
                                             <label :class="labelClass" for="profile-activities">Activities and responsibilities</label>
@@ -3034,7 +3088,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <p class="student-kicker">Profile records</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Supporting evidence</h3>
                                     <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Add records that support the academic result, school, and enrollment information saved in your profile.
+                                        Add records that support the academic, enrollment, and achievement information saved in your profile.
                                     </p>
                                 </div>
                                 <span :class="[sectionStatusPillClass, verificationStatusClass(profileVerificationStatus)]">
@@ -3237,6 +3291,10 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <li class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
                                             <i class="fa-solid fa-school mt-1 text-slate-700" aria-hidden="true"></i>
                                             <span>Enrollment certificate, recent school ID, admission letter, or learning-center record.</span>
+                                        </li>
+                                        <li v-if="hasValue(form.achievements) || achievementEvidenceDocument" class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
+                                            <i class="fa-solid fa-award mt-1 text-amber-700" aria-hidden="true"></i>
+                                            <span>Certificate, award notice, official result, or project record that supports the achievement entered in your profile.</span>
                                         </li>
                                         <li class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
                                             <i class="fa-solid fa-shield-halved mt-1 text-emerald-700" aria-hidden="true"></i>

@@ -37,7 +37,7 @@ const errorMessage = ref('');
 const applications = ref([]);
 const reviewers = ref([]);
 const assigningReviewerApplicationId = ref(null);
-const canAssignReviewers = computed(() => reviewers.value.length >= 2);
+const canAssignReviewers = computed(() => reviewers.value.length > 0);
 const selectedScholarshipContext = ref(initialScholarshipId ? {
     id: Number(initialScholarshipId),
     title: initialScholarshipTitle,

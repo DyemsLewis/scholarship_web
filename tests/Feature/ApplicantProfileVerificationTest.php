@@ -18,6 +18,93 @@ class ApplicantProfileVerificationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_achievement_entry_requires_private_evidence_visible_to_authorized_reviewers(): void
+    {
+        Storage::fake('local');
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->updateOrCreate(['user_id' => $provider->id], [
+            'provider_name' => 'Achievement Review Foundation',
+            'verification_status' => 'approved',
+        ]);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $profilePayload = [
+            'first_name' => $applicant->first_name,
+            'last_name' => $applicant->last_name,
+            'contact_number' => $applicant->contact_number,
+            'current_scholarship_status' => 'none',
+            'achievements' => 'Won first place in the regional science project exhibition.',
+        ];
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', $profilePayload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('achievements');
+
+        $uploadResponse = $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'achievement_evidence',
+                'document_file' => UploadedFile::fake()->create('science-award.pdf', 120, 'application/pdf'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('verification_documents.0.document_type', 'achievement_evidence');
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', $profilePayload)
+            ->assertOk()
+            ->assertJsonPath('user.achievements', $profilePayload['achievements']);
+
+        $proof = ApplicantVerificationDocument::query()
+            ->where('applicant_id', $applicant->id)
+            ->where('document_type', 'achievement_evidence')
+            ->firstOrFail();
+
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Achievement Evidence Scholarship',
+            'description' => 'Tests achievement evidence visibility for authorized reviewers.',
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+        $providerViewUrl = route('provider.applications.profile-proofs.view', [$application, $proof]);
+
+        $this->actingAs($provider)
+            ->getJson("/provider/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.applicant.achievements', $profilePayload['achievements'])
+            ->assertJsonPath('application.applicant.profile_proofs.0.document_type', 'achievement_evidence')
+            ->assertJsonPath('application.applicant.profile_proofs.0.view_url', $providerViewUrl);
+
+        $this->actingAs($provider)
+            ->get($providerViewUrl)
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private');
+
+        $this->actingAs($admin)
+            ->getJson("/admin/applicants/{$applicant->id}/review/data")
+            ->assertOk()
+            ->assertJsonPath('applicant.verification_documents.0.document_type', 'achievement_evidence');
+
+        $this->actingAs($applicant)
+            ->deleteJson("/dashboard/profile/verification-documents/{$proof->id}")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('document');
+
+        $this->assertDatabaseHas('student_documents', [
+            'user_id' => $applicant->id,
+            'document_name' => 'Achievement evidence',
+        ]);
+        $this->assertSame('achievement_evidence', $uploadResponse->json('verification_documents.0.document_type'));
+    }
+
     public function test_cloud_scan_sets_the_academic_result_and_applicant_cannot_overwrite_it(): void
     {
         Storage::fake('local');
@@ -53,6 +140,7 @@ class ApplicantProfileVerificationTest extends TestCase
                 'first_name' => $applicant->first_name,
                 'last_name' => $applicant->last_name,
                 'contact_number' => $applicant->contact_number,
+                'current_scholarship_status' => 'none',
                 'grading_scale' => 'percentage',
                 'gwa' => 55,
             ])
@@ -149,6 +237,7 @@ class ApplicantProfileVerificationTest extends TestCase
                 'first_name' => $applicant->first_name,
                 'last_name' => $applicant->last_name,
                 'contact_number' => $applicant->contact_number,
+                'current_scholarship_status' => 'none',
                 'grading_scale' => 'percentage',
                 'gwa' => 91.25,
             ])

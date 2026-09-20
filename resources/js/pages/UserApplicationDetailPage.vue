@@ -40,6 +40,7 @@ const agreementTermsAccepted = ref(false);
 const agreementResponseNote = ref('');
 const isSubmittingAgreement = ref(false);
 const showRecipientAgreementModal = ref(false);
+const showProfileMatchModal = ref(false);
 const formalHandoffOpen = ref(false);
 const activeSection = ref('overview');
 const requiresOriginalVerification = computed(() => ['onsite', 'hybrid'].includes(
@@ -498,6 +499,20 @@ function eligibilityCriterionLabel(criterion) {
     return criterion.key === 'academic' && criterion.requirement
         ? 'Provider review'
         : 'No restriction';
+}
+
+function eligibilityCriterionText(value, fallback = '') {
+    if (Array.isArray(value)) {
+        const items = value
+            .map((item) => eligibilityCriterionText(item))
+            .filter(Boolean);
+
+        return items.length ? items.join(', ') : fallback;
+    }
+
+    const text = String(value ?? '').trim();
+
+    return text ? labelFromKey(text) : fallback;
 }
 
 function labelFromKey(value) {
@@ -1513,70 +1528,27 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <div class="border-t border-slate-200 px-4 py-3 sm:px-5">
-                                    <p class="text-sm font-bold leading-5 text-slate-950">{{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'Your saved profile was compared with this program.' }}</p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-600">{{ application.dss_explanation?.next_action || 'Review the eligibility checks and keep your profile information current.' }}</p>
-                                    <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
-                                        <div class="h-full rounded-full bg-amber-500" :style="{ width: `${Math.min(Math.max(Number(application.dss_score) || 0, 0), 100)}%` }"></div>
-                                    </div>
-                                </div>
-
-                                <div class="border-t border-slate-200 px-4 py-3 sm:px-5">
-                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">Eligibility checks</p>
-                                            <p class="mt-1 text-xs text-slate-500">Your saved answers compared with the program rules.</p>
-                                        </div>
-                                        <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', matchClass(application.eligibility_score)]">{{ application.eligibility_score ?? 0 }}% profile match</span>
-                                    </div>
-                                    <div v-if="application.eligibility_breakdown?.criteria?.length" class="mt-2 divide-y divide-slate-200 border-y border-slate-200">
-                                        <div v-for="criterion in application.eligibility_breakdown.criteria" :key="criterion.key" class="flex items-center justify-between gap-4 py-2.5 text-sm">
-                                            <span class="font-semibold text-slate-700">{{ criterion.label }}</span>
-                                            <span :class="['shrink-0 rounded-md px-2 py-1 text-xs font-bold', criterionClass(criterion.status)]">{{ eligibilityCriterionLabel(criterion) }}</span>
+                                <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                                    <div class="flex min-w-0 items-start gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-amber-700 ring-1 ring-slate-200">
+                                            <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-bold text-slate-950">See what matched your profile</p>
+                                            <p class="mt-0.5 text-xs leading-5 text-slate-500">
+                                                {{ application.eligibility_breakdown?.criteria?.length || 0 }} checks compare your submitted information with this program's rules.
+                                            </p>
                                         </div>
                                     </div>
-                                    <p v-else class="mt-3 text-sm leading-5 text-slate-500">{{ application.eligibility_breakdown?.summary || 'No individual eligibility checks are available.' }}</p>
+                                    <button
+                                        type="button"
+                                        class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-100"
+                                        @click="showProfileMatchModal = true"
+                                    >
+                                        View match details
+                                        <i class="fa-solid fa-arrow-up-right-from-square text-xs text-amber-700" aria-hidden="true"></i>
+                                    </button>
                                 </div>
-
-                                <div v-if="eligibilityConditionResults.length" class="border-t border-slate-200 px-4 py-3 sm:px-5">
-                                    <p class="text-sm font-bold text-slate-950">Provider-required conditions</p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">These results were saved when you submitted the application.</p>
-                                    <EligibilityConditionList class="mt-3" :conditions="eligibilityConditionResults" />
-                                </div>
-
-                                <div v-if="application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length" class="border-t border-slate-200 px-4 sm:px-5">
-                                    <div v-if="application.dss_explanation?.strengths?.length" class="py-3">
-                                        <p class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-circle-check text-emerald-600" aria-hidden="true"></i> Where your profile aligns</p>
-                                        <ul class="mt-2 space-y-1.5">
-                                            <li v-for="item in application.dss_explanation.strengths" :key="item" class="flex items-start gap-2 text-xs leading-5 text-slate-600"><span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400"></span><span>{{ item }}</span></li>
-                                        </ul>
-                                    </div>
-                                    <div v-if="application.dss_explanation?.needs_attention?.length" :class="['py-3', application.dss_explanation?.strengths?.length ? 'border-t border-slate-200' : '']">
-                                        <p class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-circle-info text-amber-700" aria-hidden="true"></i> What to review</p>
-                                        <ul class="mt-2 space-y-1.5">
-                                            <li v-for="item in application.dss_explanation.needs_attention" :key="item" class="flex items-start gap-2 text-xs leading-5 text-slate-600"><span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400"></span><span>{{ item }}</span></li>
-                                        </ul>
-                                    </div>
-                                </div>
-
-                                <details v-if="dssCriteria.length" class="border-t border-slate-200 px-4 sm:px-5">
-                                    <summary class="flex cursor-pointer items-center justify-between gap-3 py-3 text-sm font-bold text-slate-800">
-                                        <span>View suitability score breakdown</span>
-                                        <i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i>
-                                    </summary>
-                                    <div class="divide-y divide-slate-200 border-t border-slate-200">
-                                        <div v-for="criterion in dssCriteria" :key="criterion.key" class="py-2.5 text-sm">
-                                            <div class="flex items-center justify-between gap-2">
-                                                <p class="font-bold text-slate-950">{{ criterion.label }}</p>
-                                                <span class="text-xs font-bold text-slate-600">{{ criterionImpact(criterion) }}</span>
-                                            </div>
-                                            <p class="mt-1 text-xs font-bold uppercase tracking-[0.1em] text-slate-400">{{ criterion.score }}% score x {{ criterion.weight }}% weight</p>
-                                            <p class="mt-1 leading-5 text-slate-600">{{ criterion.note }}</p>
-                                        </div>
-                                    </div>
-                                </details>
-
-                                <p class="border-t border-slate-200 px-4 py-3 text-xs font-semibold leading-5 text-slate-500 sm:px-5">{{ dssDecisionNotice }}</p>
                             </section>
 
                             <section v-if="activeSection === 'files'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -1877,6 +1849,159 @@ onMounted(loadApplication);
                 <ApplicantFooter />
             </div>
         </section>
+
+        <Teleport to="body">
+            <div
+                v-if="showProfileMatchModal && application"
+                class="fixed inset-0 z-[2500] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5"
+                @click.self="showProfileMatchModal = false"
+                @keydown.esc="showProfileMatchModal = false"
+            >
+                <section
+                    class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="application-profile-match-title"
+                >
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                <i class="fa-solid fa-chart-simple" aria-hidden="true"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Profile match</p>
+                                <h2 id="application-profile-match-title" class="mt-1 text-xl font-bold text-slate-950">Your profile and this program</h2>
+                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                                    See the information saved with your application and the program rule it was compared with.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                            aria-label="Close profile match details"
+                            @click="showProfileMatchModal = false"
+                        >
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6">
+                        <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold leading-6 text-slate-950">
+                                        {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'Your saved profile was compared with this program.' }}
+                                    </p>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">
+                                        {{ application.dss_explanation?.next_action || 'Review the comparison and keep your profile information current.' }}
+                                    </p>
+                                </div>
+                                <div class="flex w-fit shrink-0 items-baseline gap-2 rounded-md bg-slate-950 px-3 py-2 text-white">
+                                    <span class="text-xl font-bold">{{ application.dss_score ?? 0 }}%</span>
+                                    <span class="text-xs font-semibold text-slate-300">{{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}</span>
+                                </div>
+                            </div>
+                            <div class="h-1.5 bg-slate-200">
+                                <div class="h-full bg-amber-500" :style="{ width: `${Math.min(Math.max(Number(application.dss_score) || 0, 0), 100)}%` }"></div>
+                            </div>
+                        </section>
+
+                        <section class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
+                                <div>
+                                    <h3 class="text-sm font-bold text-slate-950">Eligibility comparison</h3>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">Your submitted value is shown beside the rule used for this application.</p>
+                                </div>
+                                <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', matchClass(application.eligibility_score)]">
+                                    {{ application.eligibility_score ?? 0 }}% profile match
+                                </span>
+                            </div>
+
+                            <div v-if="application.eligibility_breakdown?.criteria?.length" class="divide-y divide-slate-200">
+                                <article v-for="criterion in application.eligibility_breakdown.criteria" :key="criterion.key" class="p-4 sm:p-5">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <h4 class="text-sm font-bold text-slate-950">{{ eligibilityCriterionText(criterion.label, 'Eligibility requirement') }}</h4>
+                                        <span :class="['shrink-0 rounded-md border px-2.5 py-1 text-xs font-bold', criterionClass(criterion.status)]">
+                                            {{ eligibilityCriterionLabel(criterion) }}
+                                        </span>
+                                    </div>
+                                    <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                                        <div class="rounded-md bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Your profile</p>
+                                            <p class="mt-1 text-sm font-semibold leading-5 text-slate-800">
+                                                {{ eligibilityCriterionText(criterion.student_value || criterion.studentValue, 'Not provided') }}
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Program rule</p>
+                                            <p class="mt-1 text-sm font-semibold leading-5 text-slate-800">
+                                                {{ criterion.status === 'info' && !criterion.requirement ? 'Open to all' : eligibilityCriterionText(criterion.requirement, 'No restriction') }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <p v-if="criterion.comparison || criterion.note" class="mt-2 text-xs leading-5 text-slate-500">
+                                        {{ criterion.comparison || criterion.note }}
+                                    </p>
+                                </article>
+                            </div>
+                            <p v-else class="p-5 text-sm leading-6 text-slate-500">
+                                {{ application.eligibility_breakdown?.summary || 'No individual eligibility checks are available.' }}
+                            </p>
+                        </section>
+
+                        <section v-if="eligibilityConditionResults.length" class="mt-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+                            <h3 class="text-sm font-bold text-slate-950">Provider-required conditions</h3>
+                            <p class="mt-1 text-xs leading-5 text-slate-500">These written conditions were saved when you submitted the application.</p>
+                            <EligibilityConditionList class="mt-3" :conditions="eligibilityConditionResults" />
+                        </section>
+
+                        <div v-if="application.dss_explanation?.strengths?.length || application.dss_explanation?.needs_attention?.length" class="mt-4 grid gap-4 lg:grid-cols-2">
+                            <section v-if="application.dss_explanation?.strengths?.length" class="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+                                <h3 class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-circle-check text-emerald-600" aria-hidden="true"></i> Where your profile aligns</h3>
+                                <ul class="mt-3 space-y-2">
+                                    <li v-for="item in application.dss_explanation.strengths" :key="item" class="flex items-start gap-2 text-xs leading-5 text-slate-600"><span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400"></span><span>{{ item }}</span></li>
+                                </ul>
+                            </section>
+                            <section v-if="application.dss_explanation?.needs_attention?.length" class="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+                                <h3 class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-circle-info text-amber-700" aria-hidden="true"></i> What to review</h3>
+                                <ul class="mt-3 space-y-2">
+                                    <li v-for="item in application.dss_explanation.needs_attention" :key="item" class="flex items-start gap-2 text-xs leading-5 text-slate-600"><span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400"></span><span>{{ item }}</span></li>
+                                </ul>
+                            </section>
+                        </div>
+
+                        <details v-if="dssCriteria.length" class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <summary class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-800 sm:px-5">
+                                <span>How the suitability score was calculated</span>
+                                <i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i>
+                            </summary>
+                            <div class="divide-y divide-slate-200 border-t border-slate-200 px-4 sm:px-5">
+                                <div v-for="criterion in dssCriteria" :key="criterion.key" class="py-3 text-sm">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="font-bold text-slate-950">{{ criterion.label }}</p>
+                                        <span class="text-xs font-bold text-slate-600">{{ criterionImpact(criterion) }}</span>
+                                    </div>
+                                    <p class="mt-1 text-xs font-bold uppercase tracking-[0.1em] text-slate-400">{{ criterion.score }}% score x {{ criterion.weight }}% weight</p>
+                                    <p class="mt-1 leading-5 text-slate-600">{{ criterion.note }}</p>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+
+                    <footer class="flex items-center justify-between gap-4 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+                        <p class="hidden max-w-2xl text-xs leading-5 text-slate-500 sm:block">{{ dssDecisionNotice }}</p>
+                        <button
+                            type="button"
+                            class="ml-auto rounded-md bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                            @click="showProfileMatchModal = false"
+                        >
+                            Close
+                        </button>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
 
         <Teleport to="body">
             <div

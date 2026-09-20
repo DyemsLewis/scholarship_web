@@ -14,6 +14,7 @@ class ApplicantDocumentLibraryService
     private const VERIFICATION_DOCUMENT_NAMES = [
         'academic_record' => 'Latest report card or grades',
         'school_record' => 'Certificate of enrollment',
+        'achievement_evidence' => 'Achievement evidence',
     ];
 
     public function ensureVerificationCopy(User $user, ApplicantVerificationDocument $verificationDocument): ?StudentDocument

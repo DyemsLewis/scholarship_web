@@ -36,8 +36,12 @@ const academicRecord = computed(() => academicVerificationDocument(applicant.val
 const schoolRecord = computed(() => applicant.value?.verification_documents?.find(
     (document) => document.document_type === 'school_record',
 ) ?? null);
-const profileEvidenceDocuments = computed(() => [schoolRecord.value, academicRecord.value].filter(Boolean));
-const profileEvidenceReady = computed(() => Boolean(academicRecord.value));
+const achievementEvidence = computed(() => applicant.value?.verification_documents?.find(
+    (document) => document.document_type === 'achievement_evidence',
+) ?? null);
+const profileEvidenceDocuments = computed(() => [schoolRecord.value, academicRecord.value, achievementEvidence.value].filter(Boolean));
+const profileEvidenceReady = computed(() => Boolean(academicRecord.value)
+    && (!applicant.value?.achievements || achievementEvidence.value));
 const savedAcademicResult = computed(() => academicResultLabel(applicant.value));
 const academicScanRequired = computed(() => Boolean(applicant.value?.academic_scan_required));
 const academicScanReady = computed(() => !academicScanRequired.value || academicRecord.value?.ocr_status === 'succeeded');
@@ -231,6 +235,7 @@ function documentTypeLabel(type) {
     return {
         academic_record: 'Academic record',
         school_record: 'School enrollment proof',
+        achievement_evidence: 'Achievement evidence',
     }[type] ?? 'Older verification file';
 }
 
@@ -670,8 +675,8 @@ onMounted(loadApplicant);
                                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-file-lines" aria-hidden="true"></i></span>
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Submitted evidence</p>
-                                        <h3 class="mt-1 text-xl font-bold text-slate-950">Academic and school records</h3>
-                                        <p class="mt-1 text-sm text-slate-600">Open the academic record and compare it with the saved result shown above.</p>
+                                        <h3 class="mt-1 text-xl font-bold text-slate-950">Profile supporting records</h3>
+                                        <p class="mt-1 text-sm text-slate-600">Open each submitted record and compare it with the related information in the applicant profile.</p>
                                     </div>
                                 </div>
                                 <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
@@ -725,6 +730,9 @@ onMounted(loadApplicant);
                                 {{ applicant.verification_documents?.length
                                     ? 'School enrollment proof is available, but the applicant must still upload an academic record before the saved result can be verified.'
                                     : 'No academic record has been uploaded. The saved academic result cannot be verified yet.' }}
+                            </p>
+                            <p v-else-if="applicant.achievements && !achievementEvidence" class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                                The applicant listed an achievement but has not uploaded supporting evidence for it yet.
                             </p>
                         </article>
 

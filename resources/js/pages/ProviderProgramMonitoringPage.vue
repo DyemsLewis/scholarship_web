@@ -14,7 +14,6 @@ const benefitReleases = ref([]);
 const releaseCandidates = ref([]);
 const supportRecipients = ref([]);
 const programSummary = ref(null);
-const academicOcr = ref(null);
 const activeTab = ref('summary');
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -349,7 +348,6 @@ async function loadMonitoring() {
         releaseCandidates.value = response.data.release_candidates ?? [];
         supportRecipients.value = response.data.support_recipients ?? [];
         programSummary.value = response.data.program_summary ?? null;
-        academicOcr.value = response.data.academic_ocr;
         if (cycles.value.length) openCycles.value = new Set([cycles.value[0].id]);
         if (benefitReleases.value.length) openReleases.value = new Set([benefitReleases.value[0].id]);
     } catch (error) {
@@ -590,72 +588,96 @@ onMounted(loadMonitoring);
                     </template>
 
                     <template v-else-if="activeTab === 'monitoring'">
-                    <section v-if="!cycles.length" class="provider-panel mt-4 px-5 py-10 text-center sm:px-6">
-                        <span class="mx-auto grid h-12 w-12 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
-                        <h2 class="mt-4 text-lg font-bold text-slate-950">No monitoring periods yet</h2>
-                        <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-600">Create a semester, quarter, month, or custom period. Selected recipients will receive one request to upload their grade record.</p>
-                        <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openComposer">Create first period</button>
-                    </section>
+                        <section class="provider-panel mt-4 overflow-hidden">
+                            <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Grade records</p>
+                                    <h2 class="mt-1 text-lg font-bold text-slate-950">Academic monitoring periods</h2>
+                                    <p class="mt-1 text-sm text-slate-500">Collect one grade record, then confirm whether it meets the requirement.</p>
+                                </div>
+                                <span v-if="cycles.length" class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ cycles.length }} {{ cycles.length === 1 ? 'period' : 'periods' }}</span>
+                            </header>
 
-                    <section v-else class="mt-4 space-y-3">
-                        <article v-for="cycle in cycles" :key="cycle.id" class="provider-panel overflow-hidden">
-                            <button type="button" class="flex w-full flex-col gap-3 px-5 py-4 text-left sm:flex-row sm:items-center sm:justify-between sm:px-6" @click="toggleCycle(cycle.id)">
-                                <div class="flex min-w-0 items-start gap-3">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-file-waveform" aria-hidden="true"></i></span>
-                                    <div class="min-w-0">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <h2 class="font-bold text-slate-950">{{ cycle.title }}</h2>
-                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', cycle.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">{{ cycle.status }}</span>
-                                        </div>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ cycle.academic_period || labelFromKey(cycle.period_type) }}<span v-if="cycle.school_year"> · {{ cycle.school_year }}</span> · Due {{ cycle.due_label }}</p>
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-4 sm:text-right">
-                                    <div>
-                                        <p class="text-sm font-bold text-slate-950">{{ cycle.submitted_count }} received · {{ cycle.reviewed_count }} reviewed</p>
-                                        <p :class="['text-xs', cycle.action_needed_count ? 'font-bold text-amber-700' : 'text-slate-500']">{{ cycle.action_needed_count ? `${cycle.action_needed_count} need action` : `${cycle.pending_count} awaiting upload` }}</p>
-                                    </div>
-                                    <i :class="['fa-solid fa-chevron-down text-xs text-slate-400 transition', cycleIsOpen(cycle.id) ? 'rotate-180' : '']" aria-hidden="true"></i>
-                                </div>
-                            </button>
-
-                            <div v-if="cycleIsOpen(cycle.id)" class="border-t border-slate-200">
-                                <div class="grid gap-px bg-slate-200 sm:grid-cols-3">
-                                    <div class="bg-slate-50 px-5 py-3">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Academic requirement</p>
-                                        <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.requirement_label }}</p>
-                                    </div>
-                                    <div class="bg-slate-50 px-5 py-3">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Upload window</p>
-                                        <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.opens_label || 'Published now' }} to {{ cycle.due_label }}</p>
-                                    </div>
-                                    <div class="bg-slate-50 px-5 py-3">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Scanner</p>
-                                        <p class="mt-1 text-sm font-bold text-slate-950">{{ academicOcr?.configured ? 'OCR.space enabled' : 'Manual review fallback' }}</p>
-                                    </div>
-                                </div>
-                                <p v-if="cycle.instructions" class="border-t border-slate-200 px-5 py-3 text-sm leading-6 text-slate-600 sm:px-6"><strong class="text-slate-900">Instructions:</strong> {{ cycle.instructions }}</p>
-
-                                <div class="overflow-x-auto border-t border-slate-200">
-                                    <table class="w-full min-w-[940px] text-left text-sm">
-                                        <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
-                                            <tr><th class="px-5 py-3">Recipient</th><th class="px-4 py-3">Agreement</th><th class="px-4 py-3">Grade result</th><th class="px-4 py-3">System comparison</th><th class="px-4 py-3">Provider review</th><th class="px-5 py-3 text-right">Action</th></tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-slate-200 bg-white">
-                                            <tr v-for="recipient in cycle.recipients" :key="recipient.application_id">
-                                                <td class="px-5 py-3"><p class="font-bold text-slate-950">{{ recipient.name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ recipient.email }}</p></td>
-                                                <td class="px-4 py-3"><span class="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{{ recipient.agreement_status }}</span></td>
-                                                <td class="px-4 py-3"><p class="font-bold text-slate-950">{{ recipient.submission?.grade_label || (recipient.submission ? 'Needs manual result' : 'Not submitted') }}</p><p v-if="recipient.submission" class="mt-0.5 text-xs text-slate-500">{{ recipient.submission.grade_source === 'ocr' ? 'Extracted by OCR.space' : recipient.submission.grade_source === 'applicant_manual' ? 'Entered by applicant' : 'Scan needs review' }}</p></td>
-                                                <td class="px-4 py-3"><span v-if="recipient.submission" :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', comparisonClass(recipient.submission.comparison?.status)]">{{ comparisonLabel(recipient.submission) }}</span><span v-else class="text-xs font-semibold text-slate-400">Waiting for record</span></td>
-                                                <td class="px-4 py-3"><span v-if="recipient.submission" :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', reviewStatusClass(recipient.submission.review_status)]">{{ recipient.submission.review_status_label }}</span><span v-else class="text-xs font-semibold text-slate-400">Not available</span></td>
-                                                <td class="px-5 py-3"><div class="flex justify-end gap-2"><button v-if="recipient.submission" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReview(cycle, recipient)">{{ recipient.submission.review_status === 'pending' ? 'Review' : 'Open review' }}</button><a :href="recipient.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant</a></div></td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
+                            <div v-if="!cycles.length" class="px-5 py-10 text-center sm:px-6">
+                                <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
+                                <h3 class="mt-3 font-bold text-slate-950">No monitoring period yet</h3>
+                                <p class="mx-auto mt-1 max-w-lg text-sm leading-6 text-slate-500">Open a period when recipients need to submit a new grade record.</p>
+                                <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openComposer">Create first period</button>
                             </div>
-                        </article>
-                    </section>
+
+                            <div v-else class="divide-y divide-slate-200">
+                                <article v-for="cycle in cycles" :key="cycle.id">
+                                    <button type="button" class="flex w-full flex-col gap-3 px-5 py-4 text-left transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-6" @click="toggleCycle(cycle.id)">
+                                        <div class="min-w-0">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <h3 class="font-bold text-slate-950">{{ cycle.title }}</h3>
+                                                <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', cycle.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">{{ cycle.status }}</span>
+                                            </div>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">{{ cycle.academic_period || labelFromKey(cycle.period_type) }}<span v-if="cycle.school_year"> · {{ cycle.school_year }}</span> · Due {{ cycle.due_label }}</p>
+                                        </div>
+                                        <div class="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-end">
+                                            <div class="flex gap-4 text-xs">
+                                                <span><strong class="text-sm text-slate-950">{{ cycle.submitted_count }}</strong> received</span>
+                                                <span :class="cycle.action_needed_count ? 'text-amber-700' : 'text-slate-500'"><strong class="text-sm">{{ cycle.action_needed_count }}</strong> to review</span>
+                                            </div>
+                                            <i :class="['fa-solid fa-chevron-down text-xs text-slate-400 transition', cycleIsOpen(cycle.id) ? 'rotate-180' : '']" aria-hidden="true"></i>
+                                        </div>
+                                    </button>
+
+                                    <div v-if="cycleIsOpen(cycle.id)" class="border-t border-slate-200 bg-slate-50/70">
+                                        <div class="grid border-b border-slate-200 sm:grid-cols-3 sm:divide-x sm:divide-slate-200">
+                                            <div class="px-5 py-3 sm:px-6">
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Requirement</p>
+                                                <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.requirement_label }}</p>
+                                            </div>
+                                            <div class="border-t border-slate-200 px-5 py-3 sm:border-t-0 sm:px-6">
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Submission deadline</p>
+                                                <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.due_label }}</p>
+                                            </div>
+                                            <div class="border-t border-slate-200 px-5 py-3 sm:border-t-0 sm:px-6">
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Waiting for upload</p>
+                                                <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.pending_count }} recipients</p>
+                                            </div>
+                                        </div>
+                                        <p v-if="cycle.instructions" class="border-b border-slate-200 bg-white px-5 py-3 text-sm leading-6 text-slate-600 sm:px-6"><strong class="text-slate-900">Instructions:</strong> {{ cycle.instructions }}</p>
+
+                                        <div class="hidden grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b border-slate-200 bg-white px-6 py-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 lg:grid">
+                                            <span>Recipient</span>
+                                            <span>Grade record</span>
+                                            <span>Provider review</span>
+                                            <span class="text-right">Action</span>
+                                        </div>
+                                        <div class="divide-y divide-slate-200 bg-white">
+                                            <article v-for="recipient in cycle.recipients" :key="recipient.application_id" class="grid gap-3 px-5 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-center lg:gap-4">
+                                                <div class="min-w-0">
+                                                    <p class="font-bold text-slate-950">{{ recipient.name }}</p>
+                                                    <p class="mt-0.5 truncate text-xs text-slate-500">{{ recipient.email }}</p>
+                                                    <span v-if="recipient.agreement_status !== 'accepted'" class="mt-1.5 inline-flex rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">Agreement {{ recipient.agreement_status }}</span>
+                                                </div>
+                                                <div>
+                                                    <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Grade record</p>
+                                                    <p class="mt-1 font-bold text-slate-950 lg:mt-0">{{ recipient.submission?.grade_label || (recipient.submission ? 'Result needs review' : 'Not submitted') }}</p>
+                                                    <div v-if="recipient.submission" class="mt-1 flex flex-wrap items-center gap-1.5">
+                                                        <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', comparisonClass(recipient.submission.comparison?.status)]">{{ comparisonLabel(recipient.submission) }}</span>
+                                                        <span class="text-xs text-slate-500">{{ recipient.submission.grade_source === 'ocr' ? 'OCR extracted' : recipient.submission.grade_source === 'applicant_manual' ? 'Entered by applicant' : 'Manual check' }}</span>
+                                                    </div>
+                                                    <p v-else class="mt-1 text-xs text-slate-400">Waiting for upload</p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Provider review</p>
+                                                    <span v-if="recipient.submission" :class="['mt-1 inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase lg:mt-0', reviewStatusClass(recipient.submission.review_status)]">{{ recipient.submission.review_status_label }}</span>
+                                                    <span v-else class="mt-1 block text-xs font-semibold text-slate-400 lg:mt-0">Available after upload</span>
+                                                </div>
+                                                <div class="flex flex-wrap gap-2 lg:justify-end">
+                                                    <button v-if="recipient.submission" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReview(cycle, recipient)">{{ recipient.submission.review_status === 'pending' ? 'Review record' : 'View review' }}</button>
+                                                    <a :href="recipient.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View applicant</a>
+                                                </div>
+                                            </article>
+                                        </div>
+                                    </div>
+                                </article>
+                            </div>
+                        </section>
                     </template>
 
                     <template v-else-if="activeTab === 'releases'">
@@ -743,7 +765,7 @@ onMounted(loadMonitoring);
 
         <Teleport to="body">
             <div v-if="recipientRecordTarget" class="fixed inset-0 z-[2050] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeRecipientRecord" @keydown.esc="closeRecipientRecord">
-                <section class="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="recipient-record-title">
+                <section class="monitoring-modal flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="recipient-record-title">
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-6">
                         <div class="flex min-w-0 items-start gap-3">
                             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span>
@@ -818,7 +840,7 @@ onMounted(loadMonitoring);
 
         <Teleport to="body">
             <div v-if="showCycleForm" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/60 p-4" @click.self="closeComposer" @keydown.esc="closeComposer">
-                <section class="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="monitoring-cycle-title">
+                <section class="monitoring-modal flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="monitoring-cycle-title">
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
                         <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Academic progress</p><h2 id="monitoring-cycle-title" class="mt-1 text-xl font-bold text-slate-950">New monitoring period</h2><p class="mt-1 text-sm text-slate-600">One grade record request will be sent to every selected recipient.</p></div>
                         <button type="button" class="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100" aria-label="Close" @click="closeComposer"><i class="fa-solid fa-xmark"></i></button>
@@ -844,7 +866,7 @@ onMounted(loadMonitoring);
 
         <Teleport to="body">
             <div v-if="showReleaseForm" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/60 p-4" @click.self="closeReleaseComposer" @keydown.esc="closeReleaseComposer">
-                <section class="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="benefit-release-title">
+                <section class="monitoring-modal flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="benefit-release-title">
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
                         <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Benefit release</p><h2 id="benefit-release-title" class="mt-1 text-xl font-bold text-slate-950">Schedule recipient release</h2><p class="mt-1 text-sm text-slate-600">Only recipients with confirmed requirements can be included.</p></div>
                         <button type="button" class="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100" aria-label="Close" @click="closeReleaseComposer"><i class="fa-solid fa-xmark"></i></button>
@@ -884,7 +906,7 @@ onMounted(loadMonitoring);
 
         <Teleport to="body">
             <div v-if="releaseTarget" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/65 p-4" @click.self="closeReleaseResult" @keydown.esc="closeReleaseResult">
-                <section class="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="release-result-title">
+                <section class="monitoring-modal flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="release-result-title">
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
                         <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Recipient release record</p><h2 id="release-result-title" class="mt-1 text-xl font-bold text-slate-950">{{ releaseTarget.record.name }}</h2><p class="mt-1 text-sm text-slate-500">{{ releaseTarget.release.title }} · {{ releaseTarget.release.release_label }}</p></div>
                         <button type="button" :disabled="isRecordingRelease" class="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100" aria-label="Close" @click="closeReleaseResult"><i class="fa-solid fa-xmark"></i></button>
@@ -906,7 +928,7 @@ onMounted(loadMonitoring);
 
         <Teleport to="body">
             <div v-if="supportTarget" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/65 p-4" @click.self="closeSupportDecision" @keydown.esc="closeSupportDecision">
-                <section class="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="support-decision-title">
+                <section class="monitoring-modal flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="support-decision-title">
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
                         <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Recipient lifecycle</p><h2 id="support-decision-title" class="mt-1 text-xl font-bold text-slate-950">Record support outcome</h2><p class="mt-1 text-sm text-slate-500">Renew support or close the recipient record with an auditable reason.</p></div>
                         <button type="button" :disabled="isSavingSupport" class="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100" aria-label="Close" @click="closeSupportDecision"><i class="fa-solid fa-xmark"></i></button>
@@ -944,7 +966,7 @@ onMounted(loadMonitoring);
 
         <Teleport to="body">
             <div v-if="reviewTarget" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeReview" @keydown.esc="closeReview">
-                <section class="flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="monitoring-review-title">
+                <section class="monitoring-modal flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="monitoring-review-title">
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5">
                         <div class="flex min-w-0 items-start gap-3">
                             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i></span>
@@ -992,3 +1014,20 @@ onMounted(loadMonitoring);
         </Teleport>
     </main>
 </template>
+
+<style scoped>
+.monitoring-modal :is(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+    background-color: #fff;
+    color: #0f172a;
+}
+
+.monitoring-modal :is(input, textarea)::placeholder {
+    color: #94a3b8;
+    opacity: 1;
+}
+
+.monitoring-modal select option {
+    background-color: #fff;
+    color: #0f172a;
+}
+</style>

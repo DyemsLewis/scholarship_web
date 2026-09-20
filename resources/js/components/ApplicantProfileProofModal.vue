@@ -25,10 +25,13 @@ const isPdf = computed(() => {
 const proofLabel = computed(() => ({
     academic_record: 'Academic record',
     school_record: 'School enrollment proof',
+    achievement_evidence: 'Achievement evidence',
 }[props.proof?.document_type] ?? 'Profile proof'));
-const proofContext = computed(() => props.proof?.document_type === 'school_record'
-    ? 'This file supports the applicant\'s current school or learning-center information and is separate from the scholarship requirement checklist.'
-    : 'This file supports the academic result saved in the applicant profile and is separate from the scholarship requirement checklist.');
+const proofContext = computed(() => ({
+    school_record: 'This file supports the applicant\'s current school or learning-center information and is separate from the scholarship requirement checklist.',
+    achievement_evidence: 'This file supports the achievement entered in the applicant profile. Compare the record with the applicant\'s written achievement before making a decision.',
+    academic_record: 'This file supports the academic result saved in the applicant profile and is separate from the scholarship requirement checklist.',
+}[props.proof?.document_type] ?? 'This file supports information entered in the applicant profile.'));
 
 function statusClass(status) {
     if (status === 'approved') {

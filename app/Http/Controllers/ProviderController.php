@@ -2157,9 +2157,25 @@ class ProviderController extends Controller
         ]);
         $reviewerId = $validated['assigned_reviewer_id'] ?? null;
 
-        if ($request->user()->isManagedAccount() && (int) $reviewerId === $providerId) {
+        if ($reviewerId && (int) $reviewerId === (int) $request->user()->id) {
             throw ValidationException::withMessages([
-                'assigned_reviewer_id' => 'Team members cannot assign an application to the provider owner or representative.',
+                'assigned_reviewer_id' => 'You cannot assign an application review to yourself.',
+            ]);
+        }
+
+        $requestedReviewer = $reviewerId
+            ? User::query()
+                ->where('role', 'provider')
+                ->where(function ($query) use ($providerId): void {
+                    $query->whereKey($providerId)
+                        ->orWhere('parent_account_id', $providerId);
+                })
+                ->find($reviewerId)
+            : null;
+
+        if ($requestedReviewer && $this->providerReviewerHasBroaderAccess($request->user(), $requestedReviewer)) {
+            throw ValidationException::withMessages([
+                'assigned_reviewer_id' => 'You cannot assign a reviewer with broader permissions or program access than your own.',
             ]);
         }
 
@@ -2439,7 +2455,7 @@ class ProviderController extends Controller
         abort_unless($request->user()?->isProvider(), 403);
         abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
         abort_unless($document->applicant_id === $application->applicant_id, 403);
-        abort_unless(in_array($document->document_type, ['academic_record', 'school_record'], true), 403);
+        abort_unless(in_array($document->document_type, ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES, true), 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
         return Storage::disk('local')->response($document->path, $document->original_name, [
@@ -2523,6 +2539,13 @@ class ProviderController extends Controller
             ]);
         }
 
+        if (filled($applicant->studentProfile?->achievements)
+            && ! $applicant->applicantVerificationDocuments()->where('document_type', 'achievement_evidence')->exists()) {
+            throw ValidationException::withMessages([
+                'verification' => 'The applicant must upload evidence for the listed achievement before the profile can be verified.',
+            ]);
+        }
+
         if ($this->academicRecordOcrService->configured()) {
             $academicRecord = $applicant->applicantVerificationDocuments
                 ->firstWhere('document_type', 'academic_record');
@@ -2567,7 +2590,7 @@ class ProviderController extends Controller
             $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], $profileUpdates);
 
             $applicant->applicantVerificationDocuments()
-                ->whereIn('document_type', ['academic_record', 'school_record'])
+                ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
                 ->update([
                     'status' => 'approved',
                     'review_notes' => null,
@@ -5684,7 +5707,7 @@ class ProviderController extends Controller
             'guardian_email' => $profile?->guardian_email,
             'guardian_is_account_owner' => (bool) $profile?->guardian_is_account_owner,
             'profile_proofs' => ($applicant?->applicantVerificationDocuments ?? collect())
-                ->whereIn('document_type', ['academic_record', 'school_record'])
+                ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
                 ->sortByDesc('uploaded_at')
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantProfileProofPayload($application, $document))
                 ->values(),
@@ -6850,13 +6873,38 @@ class ProviderController extends Controller
             ->filter(fn (User $reviewer) => $reviewer->isActive()
                 && $reviewer->providerOrganizationOwner()->isActive()
                 && $reviewer->hasPortalPermission('review_applications')
-                && (! $assigner?->isManagedAccount() || $reviewer->id !== $providerId))
+                && (! $assigner || $reviewer->id !== $assigner->id)
+                && (! $assigner || ! $this->providerReviewerHasBroaderAccess($assigner, $reviewer)))
             ->sortBy(fn (User $reviewer) => sprintf(
                 '%d-%s',
                 $reviewer->id === $providerId ? 0 : 1,
                 strtolower($reviewer->email),
             ))
             ->values();
+    }
+
+    private function providerReviewerHasBroaderAccess(User $assigner, User $reviewer): bool
+    {
+        $assignerPermissions = $assigner->isManagedAccount()
+            ? array_values(array_intersect(User::PROVIDER_PERMISSIONS, $assigner->permissions ?? []))
+            : User::PROVIDER_PERMISSIONS;
+        $reviewerPermissions = $reviewer->isManagedAccount()
+            ? array_values(array_intersect(User::PROVIDER_PERMISSIONS, $reviewer->permissions ?? []))
+            : User::PROVIDER_PERMISSIONS;
+
+        if (array_diff($reviewerPermissions, $assignerPermissions) !== []) {
+            return true;
+        }
+
+        if (! $assigner->hasLimitedProviderProgramAccess()) {
+            return false;
+        }
+
+        return ! $reviewer->hasLimitedProviderProgramAccess()
+            || array_diff(
+                $reviewer->assignedProviderProgramIds(),
+                $assigner->assignedProviderProgramIds(),
+            ) !== [];
     }
 
     private function unassignInaccessibleApplications(User $account): void
