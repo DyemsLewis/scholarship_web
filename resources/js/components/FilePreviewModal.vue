@@ -38,7 +38,7 @@ onUnmounted(() => {
     <Teleport to="body">
         <div
             v-if="file"
-            class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
+            class="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
             role="dialog"
             aria-modal="true"
             tabindex="-1"

@@ -159,4 +159,14 @@ class ScholarshipApplication extends Model
     {
         return $this->hasMany(ApplicationStageProgress::class)->orderBy('position');
     }
+
+    public function monitoringSubmissions(): HasMany
+    {
+        return $this->hasMany(RecipientMonitoringSubmission::class);
+    }
+
+    public function benefitReleaseRecords(): HasMany
+    {
+        return $this->hasMany(RecipientBenefitReleaseRecord::class);
+    }
 }

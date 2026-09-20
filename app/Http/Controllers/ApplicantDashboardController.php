@@ -8,6 +8,9 @@ use App\Models\ApplicationDocument;
 use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
+use App\Models\RecipientBenefitReleaseRecord;
+use App\Models\RecipientMonitoringCycle;
+use App\Models\RecipientMonitoringSubmission;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
@@ -1606,6 +1609,230 @@ class ApplicantDashboardController extends Controller
         ]);
     }
 
+    public function uploadRecipientMonitoringGrade(
+        Request $request,
+        ScholarshipApplication $application,
+        RecipientMonitoringCycle $cycle,
+    ): JsonResponse {
+        $this->ensureRecipientMonitoringSubmissionAllowed($request, $application, $cycle);
+
+        $maximumFileSize = $this->academicRecordOcrService->configured()
+            ? max(1, (int) config('services.academic_ocr.max_file_size_kb', 1024))
+            : 5120;
+        $validated = $request->validate([
+            'grade_record' => ['required', 'file', "max:{$maximumFileSize}", 'mimes:pdf,jpg,jpeg,png'],
+            'terms_accepted' => ['accepted'],
+        ]);
+        $file = $validated['grade_record'];
+        $existing = RecipientMonitoringSubmission::query()
+            ->where('recipient_monitoring_cycle_id', $cycle->id)
+            ->where('scholarship_application_id', $application->id)
+            ->first();
+        $path = $file->store("recipient-monitoring/{$application->id}/{$cycle->id}", 'local');
+        $oldPath = $existing?->path;
+
+        if (! is_string($path)) {
+            throw ValidationException::withMessages([
+                'grade_record' => 'The grade record could not be stored. Please try again.',
+            ]);
+        }
+
+        try {
+            $submission = RecipientMonitoringSubmission::query()->updateOrCreate([
+                'recipient_monitoring_cycle_id' => $cycle->id,
+                'scholarship_application_id' => $application->id,
+            ], [
+                'applicant_id' => $request->user()->id,
+                'original_name' => $file->getClientOriginalName(),
+                'path' => $path,
+                'mime_type' => $file->getMimeType(),
+                'size' => $file->getSize() ?: 0,
+                'ocr_status' => AcademicRecordOcrService::STATUS_NOT_REQUESTED,
+                'ocr_provider' => null,
+                'ocr_grade' => null,
+                'ocr_grading_scale' => null,
+                'ocr_label' => null,
+                'ocr_message' => null,
+                'ocr_processed_at' => null,
+                'reported_grade' => null,
+                'reported_grading_scale' => null,
+                'grade_source' => null,
+                'submitted_at' => now(),
+                'review_status' => 'pending',
+                'review_notes' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+            ]);
+        } catch (Throwable $error) {
+            Storage::disk('local')->delete($path);
+
+            throw $error;
+        }
+
+        if ($oldPath && $oldPath !== $path) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        $result = $this->processRecipientMonitoringScan($submission);
+        $programTitle = $application->scholarship?->title ?? 'the scholarship program';
+        $providerMessage = "{$request->user()->name} submitted the {$cycle->title} grade record for {$programTitle}.";
+        PortalNotification::query()->updateOrCreate([
+            'deduplication_key' => "recipient-monitoring-submission:{$submission->id}:provider:{$application->scholarship?->provider_id}",
+        ], [
+            'user_id' => $application->scholarship?->provider_id,
+            'type' => 'recipient_monitoring_submission',
+            'title' => 'Academic progress record submitted',
+            'message' => $providerMessage,
+            'action_url' => route('provider.programs.monitoring', $application->scholarship_id, false),
+            'read_at' => null,
+        ]);
+        $this->notifyAdditionalProviderReviewers(
+            $application,
+            'recipient_monitoring_submission',
+            'Academic progress record submitted',
+            $providerMessage,
+            'overview',
+        );
+
+        ActivityLog::record(
+            $request->user(),
+            'recipient_monitoring_grade_uploaded',
+            "{$request->user()->name} uploaded a grade record for {$cycle->title}.",
+            $request,
+            [
+                'application_id' => $application->id,
+                'monitoring_cycle_id' => $cycle->id,
+                'submission_id' => $submission->id,
+                'ocr_status' => $result['status'],
+            ],
+        );
+
+        $freshApplication = $application->fresh()->load([
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+            'scholarship.events',
+        ]);
+
+        return response()->json([
+            'message' => $result['status'] === AcademicRecordOcrService::STATUS_SUCCEEDED
+                ? 'Grade record uploaded and the academic result was extracted for provider review.'
+                : 'Grade record uploaded. Enter the result shown on the record because automatic extraction needs help.',
+            'application' => $this->applicationPayload($freshApplication),
+        ], $existing ? 200 : 201);
+    }
+
+    public function saveRecipientMonitoringManualGrade(
+        Request $request,
+        ScholarshipApplication $application,
+        RecipientMonitoringCycle $cycle,
+    ): JsonResponse {
+        $this->ensureRecipientMonitoringSubmissionAllowed($request, $application, $cycle);
+        $submission = RecipientMonitoringSubmission::query()
+            ->where('recipient_monitoring_cycle_id', $cycle->id)
+            ->where('scholarship_application_id', $application->id)
+            ->firstOrFail();
+
+        if ($submission->ocr_status === AcademicRecordOcrService::STATUS_SUCCEEDED) {
+            throw ValidationException::withMessages([
+                'grade' => 'The scanner already extracted a result. The provider will compare it with the uploaded record.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'grade' => ['required', 'numeric'],
+            'grading_scale' => ['required', Rule::in([
+                AcademicRequirement::SCALE_PERCENTAGE,
+                AcademicRequirement::SCALE_GRADE_POINT,
+            ])],
+        ]);
+        $grade = (float) $validated['grade'];
+        $validGrade = $validated['grading_scale'] === AcademicRequirement::SCALE_GRADE_POINT
+            ? $grade >= 1 && $grade <= 5
+            : $grade >= 0 && $grade <= 100;
+
+        if (! $validGrade) {
+            throw ValidationException::withMessages([
+                'grade' => $validated['grading_scale'] === AcademicRequirement::SCALE_GRADE_POINT
+                    ? 'Enter the grade point shown on the record, from 1.00 to 5.00.'
+                    : 'Enter the percentage shown on the record, from 0 to 100.',
+            ]);
+        }
+
+        $submission->update([
+            'reported_grade' => $grade,
+            'reported_grading_scale' => $validated['grading_scale'],
+            'grade_source' => 'applicant_manual',
+            'review_status' => 'pending',
+            'review_notes' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+        ]);
+
+        $application->loadMissing('scholarship');
+        PortalNotification::create([
+            'user_id' => $application->scholarship?->provider_id,
+            'type' => 'recipient_monitoring_submission',
+            'title' => 'Academic result updated',
+            'message' => "{$request->user()->name} entered the result shown on the {$cycle->title} grade record.",
+            'action_url' => route('provider.programs.monitoring', $application->scholarship_id, false),
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'recipient_monitoring_grade_entered_manually',
+            "{$request->user()->name} entered the result shown on the {$cycle->title} grade record.",
+            $request,
+            [
+                'application_id' => $application->id,
+                'monitoring_cycle_id' => $cycle->id,
+                'submission_id' => $submission->id,
+            ],
+        );
+
+        $freshApplication = $application->fresh()->load([
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+            'scholarship.events',
+        ]);
+
+        return response()->json([
+            'message' => 'The result was saved with the uploaded record for provider verification.',
+            'application' => $this->applicationPayload($freshApplication),
+        ]);
+    }
+
+    public function viewRecipientMonitoringGrade(
+        Request $request,
+        RecipientMonitoringSubmission $submission,
+    ) {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($submission->applicant_id === $request->user()->id, 403);
+        abort_unless(Storage::disk('local')->exists($submission->path), 404);
+
+        return Storage::disk('local')->response($submission->path, $submission->original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function viewRecipientBenefitReleaseReceipt(
+        Request $request,
+        RecipientBenefitReleaseRecord $record,
+    ) {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($record->applicant_id === $request->user()->id, 403);
+        abort_unless(filled($record->receipt_path) && Storage::disk('local')->exists($record->receipt_path), 404);
+
+        return Storage::disk('local')->response($record->receipt_path, $record->receipt_original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     public function withdrawApplication(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isApplicant(), 403);
@@ -2013,6 +2240,7 @@ class ApplicantDashboardController extends Controller
         $dss = $decisionSupport->scoreApplication($application);
         $readiness = $this->documentReadiness($application);
         $recipientAgreement = RecipientAgreement::payload($application);
+        $recipientMonitoring = $this->recipientMonitoringPayload($application);
         $rubricReview = ReviewRubric::result(
             $application->review_rubric_snapshot ?: ($application->scholarship?->review_rubric ?? []),
             $application->rubric_scores ?? [],
@@ -2068,6 +2296,7 @@ class ApplicantDashboardController extends Controller
             'distribution_scheduled_for' => $application->distribution_scheduled_for?->format('M d, Y'),
             'distribution_instructions' => $application->distribution_instructions,
             'recipient_agreement' => $recipientAgreement,
+            'recipient_monitoring' => $recipientMonitoring,
             'requires_student_response' => $recipientAgreement['requires_response'] ?? false,
             'can_respond' => $recipientAgreement['can_respond'] ?? false,
             'pre_screening_handoff' => PreScreeningHandoffRecord::make($application, $workflow, $readiness, $dss),
@@ -2376,6 +2605,292 @@ class ApplicantDashboardController extends Controller
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'view_url' => route('dashboard.applicant-verification-documents.view', $document),
         ];
+    }
+
+    private function ensureRecipientMonitoringSubmissionAllowed(
+        Request $request,
+        ScholarshipApplication $application,
+        RecipientMonitoringCycle $cycle,
+    ): void {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+        abort_unless($cycle->scholarship_id === $application->scholarship_id, 404);
+
+        $application->loadMissing('scholarship');
+        $isSelected = $application->final_outcome === 'selected'
+            || in_array($application->status, ['awarded', 'distribution_scheduled', 'disbursed', 'renewed', 'benefits_terminated'], true);
+
+        if (! $isSelected) {
+            throw ValidationException::withMessages([
+                'grade_record' => 'Academic monitoring is available only to selected recipients.',
+            ]);
+        }
+
+        if ($application->student_response_status !== 'accepted') {
+            throw ValidationException::withMessages([
+                'grade_record' => 'Accept the recipient agreement before submitting an academic progress record.',
+            ]);
+        }
+
+        if ($application->status === 'benefits_terminated') {
+            throw ValidationException::withMessages([
+                'grade_record' => 'Online monitoring submissions are closed for this recipient record. Contact the provider for assistance.',
+            ]);
+        }
+
+        $correctionRequested = RecipientMonitoringSubmission::query()
+            ->where('recipient_monitoring_cycle_id', $cycle->id)
+            ->where('scholarship_application_id', $application->id)
+            ->where('review_status', 'needs_correction')
+            ->exists();
+
+        if ($cycle->status !== 'open'
+            || (! $correctionRequested && $cycle->opens_at && $cycle->opens_at->isAfter(now()->startOfDay()))
+            || (! $correctionRequested && $cycle->due_at && $cycle->due_at->isBefore(now()->startOfDay()))) {
+            throw ValidationException::withMessages([
+                'grade_record' => 'This academic monitoring period is not currently accepting submissions.',
+            ]);
+        }
+    }
+
+    private function recipientMonitoringPayload(ScholarshipApplication $application): array
+    {
+        $isSelected = $application->final_outcome === 'selected'
+            || in_array($application->status, ['awarded', 'distribution_scheduled', 'disbursed', 'renewed', 'benefits_terminated'], true);
+
+        if (! $isSelected || ! $application->scholarship) {
+            return [
+                'eligible' => false,
+                'cycles' => [],
+                'benefit_releases' => [],
+                'pending_count' => 0,
+            ];
+        }
+
+        $application->loadMissing([
+            'monitoringSubmissions.reviewer',
+            'monitoringSubmissions.reviews.reviewer',
+            'benefitReleaseRecords.release.creator',
+            'benefitReleaseRecords.recorder',
+            'scholarship.monitoringCycles',
+        ]);
+        $agreementAccepted = $application->student_response_status === 'accepted';
+        $benefitsActive = $application->status !== 'benefits_terminated';
+        $cycles = $application->scholarship->monitoringCycles
+            ->whereIn('status', ['open', 'closed'])
+            ->map(function (RecipientMonitoringCycle $cycle) use ($application, $agreementAccepted, $benefitsActive): array {
+                $submission = $application->monitoringSubmissions
+                    ->firstWhere('recipient_monitoring_cycle_id', $cycle->id);
+                $isPastDue = $cycle->due_at?->isBefore(now()->startOfDay()) ?? false;
+                $isNotOpenYet = $cycle->opens_at?->isAfter(now()->startOfDay()) ?? false;
+                $correctionRequested = $submission?->review_status === 'needs_correction';
+                $canSubmit = $agreementAccepted
+                    && $benefitsActive
+                    && $cycle->status === 'open'
+                    && ($correctionRequested || (! $isPastDue && ! $isNotOpenYet));
+
+                return [
+                    'id' => $cycle->id,
+                    'title' => $cycle->title,
+                    'period_type' => $cycle->period_type,
+                    'academic_period' => $cycle->academic_period,
+                    'school_year' => $cycle->school_year,
+                    'opens_at' => $cycle->opens_at?->format('Y-m-d'),
+                    'opens_label' => $cycle->opens_at?->format('M d, Y'),
+                    'due_at' => $cycle->due_at?->format('Y-m-d'),
+                    'due_label' => $cycle->due_at?->format('M d, Y'),
+                    'minimum_grade' => $cycle->minimum_grade,
+                    'grading_scale' => $cycle->grading_scale,
+                    'requirement_label' => AcademicRequirement::requirementLabel($cycle->minimum_grade, $cycle->grading_scale),
+                    'instructions' => $cycle->instructions,
+                    'status' => $correctionRequested
+                        ? 'action_needed'
+                        : ($isPastDue ? 'closed' : ($isNotOpenYet ? 'upcoming' : $cycle->status)),
+                    'can_submit' => $canSubmit,
+                    'correction_requested' => $correctionRequested,
+                    'locked_reason' => $agreementAccepted
+                        ? (! $benefitsActive
+                            ? 'Monitoring is closed for this recipient record.'
+                            : ($isPastDue
+                                ? 'The submission deadline has passed.'
+                                : ($isNotOpenYet ? 'This period is not open yet.' : null)))
+                        : 'Accept the recipient agreement before uploading this record.',
+                    'submission' => $submission
+                        ? $this->applicantRecipientMonitoringSubmissionPayload($submission, $cycle)
+                        : null,
+                ];
+            })
+            ->values();
+        $benefitReleases = $application->benefitReleaseRecords
+            ->sortByDesc(fn (RecipientBenefitReleaseRecord $record) => $record->release?->release_at)
+            ->map(fn (RecipientBenefitReleaseRecord $record): array => $this->applicantBenefitReleasePayload($record))
+            ->values();
+
+        return [
+            'eligible' => true,
+            'agreement_accepted' => $agreementAccepted,
+            'academic_ocr' => $this->academicRecordOcrService->publicConfiguration(),
+            'cycles' => $cycles,
+            'benefit_releases' => $benefitReleases,
+            'pending_count' => $cycles
+                ->filter(fn (array $cycle): bool => $cycle['can_submit']
+                    && ($cycle['submission'] === null || $cycle['correction_requested']))
+                ->count(),
+        ];
+    }
+
+    private function applicantBenefitReleasePayload(RecipientBenefitReleaseRecord $record): array
+    {
+        $release = $record->release;
+
+        return [
+            'id' => $release?->id,
+            'record_id' => $record->id,
+            'title' => $release?->title,
+            'release_at' => $release?->release_at?->format('Y-m-d\TH:i'),
+            'release_label' => $release?->release_at?->format('M d, Y h:i A'),
+            'benefit_description' => $release?->benefit_description,
+            'amount' => $release?->amount,
+            'amount_label' => $release?->amount !== null ? 'PHP '.number_format((float) $release->amount, 2) : null,
+            'release_method' => $release?->release_method,
+            'release_method_label' => match ($release?->release_method) {
+                'bank_transfer' => 'Bank transfer',
+                'e_wallet' => 'E-wallet',
+                'other' => 'Other arrangement',
+                default => 'In person',
+            },
+            'location' => $release?->location,
+            'instructions' => $release?->instructions,
+            'requires_original_verification' => (bool) $release?->requires_original_verification,
+            'status' => $record->status,
+            'status_label' => match ($record->status) {
+                'prepared' => 'Prepared for release',
+                'released' => 'Received',
+                'missed' => 'Appointment missed',
+                'withheld' => 'Release withheld',
+                default => 'Scheduled',
+            },
+            'originals_verified' => $record->originals_verified,
+            'notes' => $record->notes,
+            'recorded_by' => $record->recorder?->name,
+            'recorded_at' => $record->recorded_at?->format('M d, Y h:i A'),
+            'released_at' => $record->released_at?->format('M d, Y h:i A'),
+            'receipt' => $record->receipt_path ? [
+                'id' => $record->id,
+                'original_name' => $record->receipt_original_name,
+                'size' => $record->receipt_size,
+                'view_url' => route('dashboard.benefit-release-records.receipt', $record, false),
+            ] : null,
+        ];
+    }
+
+    private function applicantRecipientMonitoringSubmissionPayload(
+        RecipientMonitoringSubmission $submission,
+        RecipientMonitoringCycle $cycle,
+    ): array {
+        $grade = $submission->grade_source === 'applicant_manual'
+            ? $submission->reported_grade
+            : ($submission->ocr_grade ?? $submission->reported_grade);
+        $scale = $submission->grade_source === 'applicant_manual'
+            ? $submission->reported_grading_scale
+            : ($submission->ocr_grading_scale ?? $submission->reported_grading_scale);
+        $manualStatuses = [
+            AcademicRecordOcrService::STATUS_NOT_REQUESTED,
+            AcademicRecordOcrService::STATUS_NEEDS_REVIEW,
+            AcademicRecordOcrService::STATUS_FAILED,
+            AcademicRecordOcrService::STATUS_UNAVAILABLE,
+        ];
+
+        return [
+            'id' => $submission->id,
+            'original_name' => $submission->original_name,
+            'size' => $submission->size,
+            'submitted_at' => $submission->submitted_at?->format('M d, Y h:i A'),
+            'ocr_status' => $submission->ocr_status,
+            'ocr_provider' => $submission->ocr_provider,
+            'ocr_grade' => $submission->ocr_grade,
+            'ocr_grading_scale' => $submission->ocr_grading_scale,
+            'ocr_label' => $submission->ocr_label,
+            'ocr_message' => $submission->ocr_message,
+            'grade' => $grade,
+            'grading_scale' => $scale,
+            'grade_source' => $submission->grade_source,
+            'grade_label' => AcademicRequirement::studentLabel($grade, $scale),
+            'review_status' => $submission->review_status ?? 'pending',
+            'review_status_label' => match ($submission->review_status) {
+                'met' => 'Requirement met',
+                'not_met' => 'Requirement not met',
+                'needs_correction' => 'Replacement requested',
+                'excused' => 'Exception approved',
+                default => 'Waiting for provider review',
+            },
+            'review_notes' => $submission->review_notes,
+            'reviewed_by' => $submission->reviewer?->name,
+            'reviewed_at' => $submission->reviewed_at?->format('M d, Y h:i A'),
+            'reviews' => $submission->reviews->map(fn ($review): array => [
+                'id' => $review->id,
+                'decision' => $review->decision,
+                'decision_label' => match ($review->decision) {
+                    'met' => 'Requirement met',
+                    'not_met' => 'Requirement not met',
+                    'needs_correction' => 'Replacement requested',
+                    'excused' => 'Exception approved',
+                    default => Str::headline($review->decision),
+                },
+                'notes' => $review->notes,
+                'reviewed_by' => $review->reviewer?->name,
+                'decided_at' => $review->decided_at?->format('M d, Y h:i A'),
+            ])->values(),
+            'comparison' => AcademicRequirement::match(
+                $grade,
+                $scale,
+                $cycle->minimum_grade,
+                $cycle->grading_scale,
+            ),
+            'manual_entry_allowed' => in_array($submission->ocr_status, $manualStatuses, true),
+            'view_url' => route('dashboard.monitoring-submissions.view', $submission, false),
+        ];
+    }
+
+    private function processRecipientMonitoringScan(RecipientMonitoringSubmission $submission): array
+    {
+        if (! Storage::disk('local')->exists($submission->path)) {
+            $result = [
+                'status' => AcademicRecordOcrService::STATUS_FAILED,
+                'provider' => 'ocr_space',
+                'grade' => null,
+                'grading_scale' => null,
+                'label' => null,
+                'message' => 'The stored grade record could not be opened for scanning.',
+            ];
+        } else {
+            $result = $this->academicRecordOcrService->scan(
+                Storage::disk('local')->get($submission->path),
+                $submission->original_name,
+                $submission->mime_type,
+            );
+        }
+
+        $submission->update([
+            'ocr_status' => $result['status'],
+            'ocr_provider' => $result['provider'],
+            'ocr_grade' => $result['grade'],
+            'ocr_grading_scale' => $result['grading_scale'],
+            'ocr_label' => $result['label'],
+            'ocr_message' => $result['message'],
+            'ocr_processed_at' => now(),
+            'reported_grade' => $result['status'] === AcademicRecordOcrService::STATUS_SUCCEEDED
+                ? $result['grade']
+                : null,
+            'reported_grading_scale' => $result['status'] === AcademicRecordOcrService::STATUS_SUCCEEDED
+                ? $result['grading_scale']
+                : null,
+            'grade_source' => $result['status'] === AcademicRecordOcrService::STATUS_SUCCEEDED
+                ? 'ocr'
+                : null,
+        ]);
+
+        return $result;
     }
 
     private function processAcademicRecordScan(User $user, ApplicantVerificationDocument $document): array

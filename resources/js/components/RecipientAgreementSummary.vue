@@ -10,6 +10,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    embedded: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const snapshot = computed(() => props.agreement?.snapshot ?? {});
@@ -67,7 +71,7 @@ function formatAmount(value) {
 
 <template>
     <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <header class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
+        <header v-if="!embedded" class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
             <div class="flex items-start gap-3">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
                     <i class="fa-solid fa-file-signature" aria-hidden="true"></i>

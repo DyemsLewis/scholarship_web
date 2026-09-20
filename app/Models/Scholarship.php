@@ -120,6 +120,20 @@ class Scholarship extends Model
             ->latest('id');
     }
 
+    public function monitoringCycles(): HasMany
+    {
+        return $this->hasMany(RecipientMonitoringCycle::class)
+            ->orderByDesc('due_at')
+            ->orderByDesc('id');
+    }
+
+    public function benefitReleases(): HasMany
+    {
+        return $this->hasMany(RecipientBenefitRelease::class)
+            ->orderByDesc('release_at')
+            ->orderByDesc('id');
+    }
+
     public function benefits(): HasMany
     {
         return $this->hasMany(ScholarshipBenefit::class)->orderBy('sort_order')->orderBy('id');

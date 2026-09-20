@@ -47,6 +47,11 @@ const links = computed(() => [
         label: 'Activities',
         icon: 'fa-regular fa-calendar',
         href: `/provider/programs/${props.programId}/applications?workspace=schedule`,
+    }, {
+        key: 'monitoring',
+        label: 'Monitoring',
+        icon: 'fa-solid fa-chart-line',
+        href: `/provider/programs/${props.programId}/monitoring`,
     }] : []),
     ...(canReviewApplications.value ? [{
         key: 'announcements',
@@ -71,6 +76,10 @@ const activeKey = computed(() => {
         return new URLSearchParams(window.location.search).get('workspace') === 'schedule'
             ? 'schedule'
             : 'applicants';
+    }
+
+    if (path.endsWith('/monitoring')) {
+        return 'monitoring';
     }
 
     return currentHash.value === '#announcements' ? 'announcements' : 'overview';

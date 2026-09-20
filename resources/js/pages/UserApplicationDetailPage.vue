@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref } from 'vue';
 import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantNextActionPanel from '../components/ApplicantNextActionPanel.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
+import ApplicantRecipientMonitoring from '../components/ApplicantRecipientMonitoring.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
@@ -38,6 +39,7 @@ const isSendingCorrection = ref(false);
 const agreementTermsAccepted = ref(false);
 const agreementResponseNote = ref('');
 const isSubmittingAgreement = ref(false);
+const showRecipientAgreementModal = ref(false);
 const formalHandoffOpen = ref(false);
 const activeSection = ref('overview');
 const requiresOriginalVerification = computed(() => ['onsite', 'hybrid'].includes(
@@ -124,6 +126,7 @@ const rubricReview = computed(() => application.value?.rubric_review ?? null);
 const rubricCriteria = computed(() => rubricReview.value?.criteria ?? []);
 const workflow = computed(() => application.value?.workflow ?? {});
 const recipientAgreement = computed(() => application.value?.recipient_agreement ?? null);
+const recipientMonitoring = computed(() => application.value?.recipient_monitoring ?? { eligible: false, cycles: [], pending_count: 0 });
 const formalApplicationHandoff = computed(() => application.value?.formal_application_handoff ?? null);
 const handoffRequiresOriginalDocuments = computed(() => formalApplicationHandoff.value?.mode === 'onsite'
     && (formalApplicationHandoff.value?.requirements?.length ?? 0) > 0);
@@ -135,18 +138,28 @@ const applicantNextStep = computed(() => {
         return 'Review your recipient agreement';
     }
 
+    if (recipientMonitoring.value.pending_count > 0) {
+        return 'Submit your academic progress update';
+    }
+
     return application.value?.correction_status === 'requested'
         ? 'Update the information requested by the provider'
         : (workflow.value.next_action?.label ?? applicantNextAction(application.value));
 });
 const applicantNextActor = computed(() => recipientAgreement.value?.can_respond
     ? 'You'
+    : recipientMonitoring.value.pending_count > 0
+        ? 'You'
     : application.value?.correction_status === 'requested'
         ? 'You'
         : (applicantNextActionDetails.value.actor_label ?? 'Check application'));
 const applicantNextDescription = computed(() => {
     if (recipientAgreement.value?.can_respond) {
         return 'Confirm the support and responsibilities recorded when the provider selected you.';
+    }
+
+    if (recipientMonitoring.value.pending_count > 0) {
+        return 'Upload the grade record requested by the provider before the listed deadline.';
     }
 
     return application.value?.correction_status === 'requested'
@@ -189,12 +202,17 @@ const applicationSections = computed(() => [
     { key: 'overview', label: 'Overview', icon: 'fa-solid fa-route' },
     { key: 'files', label: 'Files', icon: 'fa-solid fa-folder-open', count: filesNeedingAction.value.length },
     { key: 'schedule', label: 'Schedule', icon: 'fa-regular fa-calendar', count: currentSchedule.value ? 1 : 0 },
+    ...(recipientMonitoring.value.eligible ? [{ key: 'monitoring', label: 'Monitoring', icon: 'fa-solid fa-chart-line', count: recipientMonitoring.value.pending_count }] : []),
     { key: 'program', label: 'Program', icon: 'fa-solid fa-graduation-cap' },
     { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
 ]);
 const nextActionButton = computed(() => {
     if (recipientAgreement.value?.can_respond) {
-        return { label: 'Review agreement', section: 'overview', target: 'recipient-agreement' };
+        return { label: 'Review agreement', action: 'agreement' };
+    }
+
+    if (recipientMonitoring.value.pending_count > 0) {
+        return { label: 'Upload grade record', section: 'monitoring' };
     }
 
     if (application.value?.correction_status === 'requested') {
@@ -569,6 +587,12 @@ function closeDocumentPreview() {
     previewDocument.value = null;
 }
 
+function closeRecipientAgreementModal() {
+    if (!isSubmittingAgreement.value) {
+        showRecipientAgreementModal.value = false;
+    }
+}
+
 async function openSection(section, target = null) {
     activeSection.value = section;
 
@@ -584,6 +608,11 @@ async function openSection(section, target = null) {
 }
 
 async function followNextAction() {
+    if (nextActionButton.value?.action === 'agreement') {
+        showRecipientAgreementModal.value = true;
+        return;
+    }
+
     if (nextActionButton.value?.action === 'correction') {
         showCorrectionModal.value = true;
         return;
@@ -603,6 +632,10 @@ async function loadApplication() {
 
         user.value = response.data.user;
         application.value = response.data.application;
+        const requestedSection = new URLSearchParams(window.location.search).get('section');
+        if (requestedSection && applicationSections.value.some((section) => section.key === requestedSection)) {
+            activeSection.value = requestedSection;
+        }
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load application details.';
     } finally {
@@ -755,6 +788,7 @@ async function submitRecipientAgreement(response) {
         application.value = result.data.application;
         agreementTermsAccepted.value = false;
         agreementResponseNote.value = '';
+        showRecipientAgreementModal.value = false;
         showPortalToast({
             type: response === 'accepted' ? 'success' : 'info',
             title: response === 'accepted' ? 'Agreement accepted' : 'Response sent',
@@ -765,6 +799,10 @@ async function submitRecipientAgreement(response) {
     } finally {
         isSubmittingAgreement.value = false;
     }
+}
+
+function applyApplicationUpdate(updatedApplication) {
+    application.value = updatedApplication;
 }
 
 onMounted(loadApplication);
@@ -909,53 +947,38 @@ onMounted(loadApplication);
 
                     <div class="space-y-4">
                         <div class="flex flex-col gap-4">
-                            <div
+                            <section
                                 v-if="activeSection === 'overview' && recipientAgreement"
                                 id="recipient-agreement"
-                                class="scroll-mt-4"
+                                class="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
                             >
-                                <RecipientAgreementSummary :agreement="recipientAgreement" />
-
-                                <div v-if="recipientAgreement.can_respond" class="border-x border-b border-slate-200 bg-white p-4 sm:p-5">
-                                    <label for="agreement-response-note" class="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
-                                        Note to provider
-                                    </label>
-                                    <textarea
-                                        id="agreement-response-note"
-                                        v-model="agreementResponseNote"
-                                        rows="2"
-                                        maxlength="1000"
-                                        placeholder="Optional when accepting; required when declining."
-                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-700 focus:ring-3 focus:ring-slate-100"
-                                    ></textarea>
-                                    <label class="mt-3 flex cursor-pointer items-start gap-3 rounded-md bg-slate-50 p-3 text-sm leading-5 text-slate-700 ring-1 ring-slate-200">
-                                        <input v-model="agreementTermsAccepted" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-slate-500">
-                                        <span>I reviewed the support, recipient responsibilities, and provider terms shown above.</span>
-                                    </label>
-                                    <div class="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row">
-                                        <button
-                                            type="button"
-                                            :disabled="isSubmittingAgreement"
-                                            class="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60 sm:w-44"
-                                            @click="submitRecipientAgreement('accepted')"
-                                        >
-                                            {{ isSubmittingAgreement ? 'Saving...' : 'Accept agreement' }}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            :disabled="isSubmittingAgreement"
-                                            class="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60 sm:w-44"
-                                            @click="submitRecipientAgreement('declined')"
-                                        >
-                                            Decline agreement
-                                        </button>
+                                <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                                    <div class="flex min-w-0 items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
+                                            <i class="fa-solid fa-file-signature" aria-hidden="true"></i>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <h3 class="font-bold text-slate-950">Recipient agreement</h3>
+                                                <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', recipientAgreement.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : recipientAgreement.status === 'declined' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800']">
+                                                    {{ recipientAgreement.status_label }}
+                                                </span>
+                                            </div>
+                                            <p class="mt-1 text-sm leading-5 text-slate-500">
+                                                {{ recipientAgreement.can_respond ? 'Review the support and responsibilities before continuing.' : 'View the support and terms recorded when you were selected.' }}
+                                            </p>
+                                        </div>
                                     </div>
+                                    <button
+                                        type="button"
+                                        class="inline-flex w-fit shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                        @click="showRecipientAgreementModal = true"
+                                    >
+                                        {{ recipientAgreement.can_respond ? 'Review and respond' : 'View agreement' }}
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </button>
                                 </div>
-
-                                <div v-else-if="recipientAgreement.response_note" class="border-x border-b border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700 sm:px-5">
-                                    <strong>Applicant note:</strong> {{ recipientAgreement.response_note }}
-                                </div>
-                            </div>
+                            </section>
 
                             <section v-if="activeSection === 'overview' && application.status_progress" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                                 <div class="student-section-head p-4 sm:p-5">
@@ -1635,6 +1658,14 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
+                            <ApplicantRecipientMonitoring
+                                v-if="activeSection === 'monitoring' && recipientMonitoring.eligible"
+                                :monitoring="recipientMonitoring"
+                                :application-id="application.id"
+                                :program-title="application.scholarship?.title"
+                                @application-updated="applyApplicationUpdate"
+                            />
+
                             <section v-if="activeSection === 'history' && timeline.length" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                                 <div class="flex items-start gap-3">
                                     <span class="student-section-mark"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span>
@@ -1799,6 +1830,100 @@ onMounted(loadApplication);
                 <ApplicantFooter />
             </div>
         </section>
+
+        <Teleport to="body">
+            <div
+                v-if="showRecipientAgreementModal && recipientAgreement"
+                class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
+                role="presentation"
+                @click.self="closeRecipientAgreementModal"
+                @keydown.esc="closeRecipientAgreementModal"
+            >
+                <section
+                    class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="recipient-agreement-modal-title"
+                >
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-5">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
+                                <i class="fa-solid fa-file-signature" aria-hidden="true"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <p class="student-kicker">After selection</p>
+                                <h2 id="recipient-agreement-modal-title" class="mt-1 text-xl font-bold text-slate-950">Review recipient agreement</h2>
+                                <p class="mt-1 text-sm text-slate-500">Review the recorded support and responsibilities before responding.</p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            :disabled="isSubmittingAgreement"
+                            class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+                            aria-label="Close recipient agreement"
+                            @click="closeRecipientAgreementModal"
+                        >
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5">
+                        <RecipientAgreementSummary :agreement="recipientAgreement" compact embedded />
+
+                        <div v-if="recipientAgreement.can_respond" class="mt-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+                            <label for="agreement-response-note" class="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
+                                Note to provider
+                            </label>
+                            <textarea
+                                id="agreement-response-note"
+                                v-model="agreementResponseNote"
+                                rows="3"
+                                maxlength="1000"
+                                placeholder="Optional when accepting; required when declining."
+                                class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-700 focus:ring-3 focus:ring-slate-100"
+                            ></textarea>
+                            <label class="mt-3 flex cursor-pointer items-start gap-3 rounded-md bg-slate-50 p-3 text-sm leading-5 text-slate-700 ring-1 ring-slate-200">
+                                <input v-model="agreementTermsAccepted" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-slate-500">
+                                <span>I reviewed the support, recipient responsibilities, and provider terms shown above.</span>
+                            </label>
+                        </div>
+
+                        <div v-else-if="recipientAgreement.response_note" class="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700">
+                            <strong>Applicant note:</strong> {{ recipientAgreement.response_note }}
+                        </div>
+                    </div>
+
+                    <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-5">
+                        <button
+                            type="button"
+                            :disabled="isSubmittingAgreement"
+                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                            @click="closeRecipientAgreementModal"
+                        >
+                            Close
+                        </button>
+                        <template v-if="recipientAgreement.can_respond">
+                            <button
+                                type="button"
+                                :disabled="isSubmittingAgreement"
+                                class="inline-flex min-h-11 items-center justify-center rounded-md border border-rose-200 bg-white px-5 py-2.5 text-sm font-bold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+                                @click="submitRecipientAgreement('declined')"
+                            >
+                                Decline agreement
+                            </button>
+                            <button
+                                type="button"
+                                :disabled="isSubmittingAgreement"
+                                class="inline-flex min-h-11 items-center justify-center rounded-md bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                                @click="submitRecipientAgreement('accepted')"
+                            >
+                                {{ isSubmittingAgreement ? 'Saving...' : 'Accept agreement' }}
+                            </button>
+                        </template>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
 
         <div v-if="showCorrectionModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6" @click.self="showCorrectionModal = false">
             <form class="w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-2xl" @submit.prevent="submitCorrectionResponse">

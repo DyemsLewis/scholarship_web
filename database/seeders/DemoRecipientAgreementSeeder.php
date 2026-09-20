@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\PortalNotification;
+use App\Models\RecipientMonitoringCycle;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
@@ -32,6 +33,8 @@ class DemoRecipientAgreementSeeder extends Seeder
             $applicant = $this->seedApplicant();
             $scholarship = $this->seedScholarship($provider);
             $application = $this->seedSelectedApplication($provider, $applicant, $scholarship);
+            $cycle = $this->seedMonitoringCycle($provider, $scholarship);
+            $cycle->submissions()->where('scholarship_application_id', $application->id)->delete();
 
             PortalNotification::query()->updateOrCreate([
                 'deduplication_key' => 'demo-recipient-agreement-'.$application->id,
@@ -41,6 +44,16 @@ class DemoRecipientAgreementSeeder extends Seeder
                 'title' => 'Application outcome: Selected',
                 'message' => "You were selected for {$scholarship->title}. Review the recipient agreement in your application.",
                 'action_url' => route('dashboard.applications.show', $application, false),
+                'read_at' => null,
+            ]);
+            PortalNotification::query()->updateOrCreate([
+                'deduplication_key' => "recipient-monitoring:{$cycle->id}:application:{$application->id}",
+            ], [
+                'user_id' => $applicant->id,
+                'type' => 'recipient_monitoring_request',
+                'title' => 'Academic progress update requested',
+                'message' => "{$scholarship->title}: accept the recipient agreement, then upload your {$cycle->title} grade record.",
+                'action_url' => route('dashboard.applications.show', $application, false).'?section=monitoring',
                 'read_at' => null,
             ]);
         });
@@ -276,5 +289,25 @@ class DemoRecipientAgreementSeeder extends Seeder
         );
 
         return $application->fresh();
+    }
+
+    private function seedMonitoringCycle(User $provider, Scholarship $scholarship): RecipientMonitoringCycle
+    {
+        return RecipientMonitoringCycle::query()->updateOrCreate([
+            'scholarship_id' => $scholarship->id,
+            'title' => 'First semester grade update',
+        ], [
+            'created_by' => $provider->id,
+            'period_type' => 'semester',
+            'academic_period' => 'First semester',
+            'school_year' => now()->year.'-'.(now()->year + 1),
+            'opens_at' => now()->startOfDay()->toDateString(),
+            'due_at' => now()->addDays(30)->startOfDay()->toDateString(),
+            'minimum_grade' => 85,
+            'grading_scale' => 'percentage',
+            'instructions' => 'Upload the report card or official grade record that clearly shows the first semester general average. Keep the original ready for provider verification.',
+            'status' => 'open',
+            'published_at' => now(),
+        ]);
     }
 }
