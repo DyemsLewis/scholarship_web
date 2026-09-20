@@ -27,6 +27,7 @@ use App\Support\ApplicationDecisionReason;
 use App\Support\ApplicationSchedulePayload;
 use App\Support\LearnerProgramPath;
 use App\Support\PreScreeningHandoffRecord;
+use App\Support\RecipientAgreement;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipEligibilityCondition;
 use App\Support\ScholarshipEventPayload;
@@ -486,10 +487,14 @@ class ProviderController extends Controller
             ->where('provider_id', $providerId)
             ->count();
 
-        $scholarships = $this->providerScholarshipsQuery($provider)
-            ->withCount($this->providerProgramCountRelations())
-            ->latest()
-            ->get();
+        $canViewPrograms = $provider->hasPortalPermission('manage_programs')
+            || $provider->hasPortalPermission('review_applications');
+        $scholarships = $canViewPrograms
+            ? $this->providerScholarshipsQuery($provider)
+                ->withCount($this->providerProgramCountRelations())
+                ->latest()
+                ->get()
+            : collect();
         $canReviewApplications = $provider->hasPortalPermission('review_applications')
             && $providerOwner->hasVerifiedEmail()
             && $providerOwner->providerProfile?->isVerified();
@@ -503,6 +508,7 @@ class ProviderController extends Controller
                 'ready_result' => 0,
                 'final_decision' => 0,
             ];
+
         return response()->json([
             'user' => [
                 ...$provider->publicPayload(),
@@ -1962,6 +1968,7 @@ class ProviderController extends Controller
 
         if (array_key_exists('awarded_amount', $validated)) {
             $updated->update(['awarded_amount' => $validated['awarded_amount']]);
+            $updated = $this->workflowService->refreshRecipientAgreementSnapshot($updated->fresh());
         }
 
         $updated = $updated->fresh()->load([
@@ -4748,6 +4755,7 @@ class ProviderController extends Controller
         $readiness = $this->documentReadiness($application);
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
+        $recipientAgreement = RecipientAgreement::payload($application);
         $application->loadMissing(['schedules', 'assignedReviewer.providerProfile']);
         $application->scholarship?->loadMissing('events');
         $latestDocumentUploadedAt = $application->documents
@@ -4826,8 +4834,9 @@ class ProviderController extends Controller
                 && $application->reviewed_at
                 && $latestDocumentUploadedAt->gt($application->reviewed_at)
             ),
-            'requires_student_response' => false,
-            'can_receive_student_response' => false,
+            'recipient_agreement' => $recipientAgreement,
+            'requires_student_response' => $recipientAgreement['requires_response'] ?? false,
+            'can_receive_student_response' => $recipientAgreement !== null,
             'pre_screening_handoff' => PreScreeningHandoffRecord::make($application, $workflow, $readiness, $dss),
             'schedules' => $application->schedules
                 ->sortBy('scheduled_at')

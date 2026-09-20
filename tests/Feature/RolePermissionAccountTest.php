@@ -171,6 +171,56 @@ class RolePermissionAccountTest extends TestCase
         $this->actingAs($staff)->get('/provider/reports')->assertForbidden();
     }
 
+    public function test_provider_role_workspaces_only_expose_relevant_program_data(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+        $program = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Role Access Program',
+            'description' => 'A program used to verify role-specific workspace access.',
+            'status' => 'published',
+        ]);
+
+        $coordinator = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'permissions' => ['manage_programs'],
+        ]);
+        $reviewer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'permissions' => ['review_applications'],
+        ]);
+        $support = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'permissions' => ['manage_reports'],
+        ]);
+        $billing = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'permissions' => ['manage_billing'],
+        ]);
+
+        $this->actingAs($coordinator)->get('/provider/programs')->assertOk();
+        $this->actingAs($coordinator)->get('/provider/applications')->assertForbidden();
+        $this->actingAs($reviewer)->get("/provider/programs/{$program->id}")->assertOk();
+        $this->actingAs($reviewer)->get('/provider/applications')->assertOk();
+
+        $this->actingAs($support)->get('/provider/programs')->assertForbidden();
+        $this->actingAs($support)
+            ->getJson('/provider/dashboard/data')
+            ->assertOk()
+            ->assertJsonCount(0, 'scholarships');
+
+        $this->actingAs($billing)->get('/provider/programs')->assertForbidden();
+        $this->actingAs($billing)
+            ->getJson('/provider/dashboard/data')
+            ->assertOk()
+            ->assertJsonCount(0, 'scholarships');
+    }
+
     public function test_new_provider_team_member_verifies_email_before_replacing_temporary_password(): void
     {
         Mail::fake();

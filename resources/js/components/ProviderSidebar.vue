@@ -6,7 +6,14 @@ const hasPermission = (permission) => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes(permission),
 );
-const supportHref = hasPermission('manage_billing') ? '/provider/billing' : '/provider/reports';
+const canManageBilling = hasPermission('manage_billing');
+const canManageReports = hasPermission('manage_reports');
+const supportHref = canManageBilling ? '/provider/billing' : '/provider/reports';
+const supportLabel = canManageBilling && canManageReports
+    ? 'Support'
+    : canManageBilling
+        ? 'Services'
+        : 'Reports';
 const navLinks = [
     { href: '/provider', label: 'Dashboard', icon: 'fa-solid fa-gauge-high', exact: true },
     {
@@ -19,6 +26,7 @@ const navLinks = [
         href: '/provider/programs',
         label: 'Programs',
         icon: 'fa-solid fa-graduation-cap',
+        anyPermission: ['manage_programs', 'review_applications'],
     },
     {
         href: '/provider/applications',
@@ -29,7 +37,7 @@ const navLinks = [
     },
     {
         href: supportHref,
-        label: 'Support',
+        label: supportLabel,
         icon: 'fa-solid fa-headset',
         anyPermission: ['manage_billing', 'manage_reports'],
         requiresApproval: true,

@@ -162,7 +162,9 @@ class DatabaseSeeder extends Seeder
         $this->seedScholarships($tulayAral, $bukasKinabukasan);
 
         if (app()->environment('local')) {
+            $this->call(RoleTestAccountsSeeder::class);
             $this->call(DemoCompletedApplicationSeeder::class);
+            $this->call(DemoRecipientAgreementSeeder::class);
         }
 
         $this->call(DemoProviderServiceSeeder::class);

@@ -9,6 +9,7 @@ import FilePreviewModal from '../components/FilePreviewModal.vue';
 import LeafletMapPreview from '../components/LeafletMapPreview.vue';
 import PreScreeningHandoffRecord from '../components/PreScreeningHandoffRecord.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
+import RecipientAgreementSummary from '../components/RecipientAgreementSummary.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
@@ -34,6 +35,9 @@ const isWithdrawing = ref(false);
 const showCorrectionModal = ref(false);
 const correctionResponse = ref('');
 const isSendingCorrection = ref(false);
+const agreementTermsAccepted = ref(false);
+const agreementResponseNote = ref('');
+const isSubmittingAgreement = ref(false);
 const formalHandoffOpen = ref(false);
 const activeSection = ref('overview');
 const requiresOriginalVerification = computed(() => ['onsite', 'hybrid'].includes(
@@ -119,21 +123,36 @@ const dssDecisionNotice = computed(() => application.value?.dss_breakdown?.decis
 const rubricReview = computed(() => application.value?.rubric_review ?? null);
 const rubricCriteria = computed(() => rubricReview.value?.criteria ?? []);
 const workflow = computed(() => application.value?.workflow ?? {});
+const recipientAgreement = computed(() => application.value?.recipient_agreement ?? null);
 const formalApplicationHandoff = computed(() => application.value?.formal_application_handoff ?? null);
 const handoffRequiresOriginalDocuments = computed(() => formalApplicationHandoff.value?.mode === 'onsite'
     && (formalApplicationHandoff.value?.requirements?.length ?? 0) > 0);
 const applicantNextActionDetails = computed(() => workflow.value.next_action
     ?? application.value?.status_progress?.next_action_details
     ?? {});
-const applicantNextStep = computed(() => application.value?.correction_status === 'requested'
-    ? 'Update the information requested by the provider'
-    : (workflow.value.next_action?.label ?? applicantNextAction(application.value)));
-const applicantNextActor = computed(() => application.value?.correction_status === 'requested'
+const applicantNextStep = computed(() => {
+    if (recipientAgreement.value?.can_respond) {
+        return 'Review your recipient agreement';
+    }
+
+    return application.value?.correction_status === 'requested'
+        ? 'Update the information requested by the provider'
+        : (workflow.value.next_action?.label ?? applicantNextAction(application.value));
+});
+const applicantNextActor = computed(() => recipientAgreement.value?.can_respond
     ? 'You'
-    : (applicantNextActionDetails.value.actor_label ?? 'Check application'));
-const applicantNextDescription = computed(() => application.value?.correction_status === 'requested'
-    ? (application.value.correction_message || 'Review the provider request, update the affected profile details or files, then send your response.')
-    : (applicantNextActionDetails.value.description ?? 'Open the application for the latest instructions.'));
+    : application.value?.correction_status === 'requested'
+        ? 'You'
+        : (applicantNextActionDetails.value.actor_label ?? 'Check application'));
+const applicantNextDescription = computed(() => {
+    if (recipientAgreement.value?.can_respond) {
+        return 'Confirm the support and responsibilities recorded when the provider selected you.';
+    }
+
+    return application.value?.correction_status === 'requested'
+        ? (application.value.correction_message || 'Review the provider request, update the affected profile details or files, then send your response.')
+        : (applicantNextActionDetails.value.description ?? 'Open the application for the latest instructions.');
+});
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
 const applicationIsClosed = computed(() => Boolean(workflow.value.is_closed));
@@ -174,6 +193,10 @@ const applicationSections = computed(() => [
     { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
 ]);
 const nextActionButton = computed(() => {
+    if (recipientAgreement.value?.can_respond) {
+        return { label: 'Review agreement', section: 'overview', target: 'recipient-agreement' };
+    }
+
     if (application.value?.correction_status === 'requested') {
         return { label: 'Review requested update', action: 'correction' };
     }
@@ -698,6 +721,52 @@ async function submitCorrectionResponse() {
     }
 }
 
+async function submitRecipientAgreement(response) {
+    if (!application.value || isSubmittingAgreement.value) {
+        return;
+    }
+
+    if (response === 'accepted' && !agreementTermsAccepted.value) {
+        showPortalToast({
+            type: 'error',
+            title: 'Confirmation required',
+            message: 'Confirm that you reviewed the recipient agreement before accepting it.',
+        });
+        return;
+    }
+
+    if (response === 'declined' && agreementResponseNote.value.trim().length < 5) {
+        showPortalToast({
+            type: 'error',
+            title: 'Reason required',
+            message: 'Briefly tell the provider why you cannot accept the agreement.',
+        });
+        return;
+    }
+
+    isSubmittingAgreement.value = true;
+
+    try {
+        const result = await window.axios.patch(`/dashboard/applications/${application.value.id}/response`, {
+            response,
+            terms_accepted: response === 'accepted' ? agreementTermsAccepted.value : false,
+            note: agreementResponseNote.value.trim() || null,
+        });
+        application.value = result.data.application;
+        agreementTermsAccepted.value = false;
+        agreementResponseNote.value = '';
+        showPortalToast({
+            type: response === 'accepted' ? 'success' : 'info',
+            title: response === 'accepted' ? 'Agreement accepted' : 'Response sent',
+            message: result.data.message,
+        });
+    } catch (handledError) {
+        void handledError;
+    } finally {
+        isSubmittingAgreement.value = false;
+    }
+}
+
 onMounted(loadApplication);
 </script>
 
@@ -793,7 +862,7 @@ onMounted(loadApplication);
                         :actor="applicantNextActor"
                         :title="applicantNextStep"
                         :description="applicantNextDescription"
-                        :closed="applicationIsClosed"
+                        :closed="applicationIsClosed && !recipientAgreement?.can_respond"
                         :action-available="Boolean(nextActionButton)"
                     >
                         <template #action>
@@ -840,6 +909,54 @@ onMounted(loadApplication);
 
                     <div class="space-y-4">
                         <div class="flex flex-col gap-4">
+                            <div
+                                v-if="activeSection === 'overview' && recipientAgreement"
+                                id="recipient-agreement"
+                                class="scroll-mt-4"
+                            >
+                                <RecipientAgreementSummary :agreement="recipientAgreement" />
+
+                                <div v-if="recipientAgreement.can_respond" class="border-x border-b border-slate-200 bg-white p-4 sm:p-5">
+                                    <label for="agreement-response-note" class="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
+                                        Note to provider
+                                    </label>
+                                    <textarea
+                                        id="agreement-response-note"
+                                        v-model="agreementResponseNote"
+                                        rows="2"
+                                        maxlength="1000"
+                                        placeholder="Optional when accepting; required when declining."
+                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-700 focus:ring-3 focus:ring-slate-100"
+                                    ></textarea>
+                                    <label class="mt-3 flex cursor-pointer items-start gap-3 rounded-md bg-slate-50 p-3 text-sm leading-5 text-slate-700 ring-1 ring-slate-200">
+                                        <input v-model="agreementTermsAccepted" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-slate-500">
+                                        <span>I reviewed the support, recipient responsibilities, and provider terms shown above.</span>
+                                    </label>
+                                    <div class="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row">
+                                        <button
+                                            type="button"
+                                            :disabled="isSubmittingAgreement"
+                                            class="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60 sm:w-44"
+                                            @click="submitRecipientAgreement('accepted')"
+                                        >
+                                            {{ isSubmittingAgreement ? 'Saving...' : 'Accept agreement' }}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :disabled="isSubmittingAgreement"
+                                            class="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60 sm:w-44"
+                                            @click="submitRecipientAgreement('declined')"
+                                        >
+                                            Decline agreement
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div v-else-if="recipientAgreement.response_note" class="border-x border-b border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700 sm:px-5">
+                                    <strong>Applicant note:</strong> {{ recipientAgreement.response_note }}
+                                </div>
+                            </div>
+
                             <section v-if="activeSection === 'overview' && application.status_progress" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                                 <div class="student-section-head p-4 sm:p-5">
                                     <div class="flex items-start gap-3">

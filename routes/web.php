@@ -132,10 +132,10 @@ Route::middleware(['auth', 'provider'])
     ->group(function (): void {
         Route::get('/', [ProviderController::class, 'index'])->name('index');
         Route::get('/dashboard/data', [ProviderController::class, 'dashboardData'])->name('dashboard.data');
-        Route::get('/programs', [ProviderController::class, 'programs'])->name('programs');
+        Route::get('/programs', [ProviderController::class, 'programs'])->middleware('permission:manage_programs,review_applications')->name('programs');
         Route::redirect('/exams', '/provider/programs')->name('exams');
         Route::get('/programs/create', [ProviderController::class, 'programForm'])->middleware('permission:manage_programs')->name('programs.create');
-        Route::get('/programs/{scholarship}', [ProviderController::class, 'programWorkspace'])->whereNumber('scholarship')->name('programs.show');
+        Route::get('/programs/{scholarship}', [ProviderController::class, 'programWorkspace'])->middleware('permission:manage_programs,review_applications')->whereNumber('scholarship')->name('programs.show');
         Route::get('/programs/{scholarship}/edit', [ProviderController::class, 'programForm'])->middleware('permission:manage_programs')->name('programs.edit');
         Route::get('/programs/{scholarship}/applications', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications');
         Route::get('/applications', [ProviderController::class, 'applications'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications');
@@ -206,13 +206,13 @@ Route::middleware(['auth', 'provider'])
         Route::patch('/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.status');
         Route::patch('/documents/{document}/status', [ProviderController::class, 'updateDocumentStatus'])->middleware(['permission:review_applications', 'provider.approved'])->name('documents.status');
         Route::get('/export/applications', [ProviderController::class, 'exportApplications'])->middleware(['permission:review_applications', 'provider.approved'])->name('export.applications');
-        Route::get('/scholarships', [ProviderController::class, 'scholarships'])->name('scholarships');
+        Route::get('/scholarships', [ProviderController::class, 'scholarships'])->middleware('permission:manage_programs,review_applications')->name('scholarships');
         Route::post('/scholarships', [ProviderController::class, 'storeScholarship'])->middleware('permission:manage_programs')->name('scholarships.store');
         Route::post('/scholarships/{scholarship}/events', [ProviderController::class, 'upsertScholarshipEvent'])->middleware(['permission:manage_programs', 'provider.approved'])->name('scholarships.events.upsert');
         Route::post('/scholarships/{scholarship}/announcements', [ProviderController::class, 'storeScholarshipAnnouncement'])->middleware(['permission:review_applications', 'provider.approved'])->name('scholarships.announcements.store');
         Route::patch('/scholarships/{scholarship}/events/{event}/complete', [ProviderController::class, 'completeScholarshipEvent'])->middleware(['permission:review_applications', 'provider.approved'])->name('scholarships.events.complete');
         Route::patch('/scholarships/{scholarship}/events/{event}/attendance', [ProviderController::class, 'bulkUpdateScholarshipEventAttendance'])->middleware(['permission:review_applications', 'provider.approved'])->name('scholarships.events.attendance');
-        Route::get('/scholarships/{scholarship}', [ProviderController::class, 'showScholarship'])->name('scholarships.show');
+        Route::get('/scholarships/{scholarship}', [ProviderController::class, 'showScholarship'])->middleware('permission:manage_programs,review_applications')->name('scholarships.show');
         Route::put('/scholarships/{scholarship}', [ProviderController::class, 'updateScholarship'])->middleware('permission:manage_programs')->name('scholarships.update');
         Route::post('/scholarships/{scholarship}/duplicate', [ProviderController::class, 'duplicateScholarship'])->middleware('permission:manage_programs')->name('scholarships.duplicate');
     });

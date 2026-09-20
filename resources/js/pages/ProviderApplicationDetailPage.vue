@@ -7,6 +7,7 @@ import PreScreeningHandoffRecord from '../components/PreScreeningHandoffRecord.v
 import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import RecipientAgreementSummary from '../components/RecipientAgreementSummary.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { decisionReasonOptions } from '../support/applicationDecisionReasons';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
@@ -335,7 +336,6 @@ const hasGuardianDetails = computed(() => {
         || applicant?.guardian_is_account_owner,
     );
 });
-const usesDetailSidebar = computed(() => activeSection.value === 'history');
 const activePrimarySectionIndex = computed(() => primaryDetailSections.findIndex((section) => section.key === activeSection.value));
 const previousPrimarySection = computed(() => (
     activePrimarySectionIndex.value > 0 ? primaryDetailSections[activePrimarySectionIndex.value - 1] : null
@@ -1491,7 +1491,7 @@ onMounted(loadApplication);
                         </a>
                     </section>
 
-                    <div :class="usesDetailSidebar ? 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]' : 'block'">
+                    <div class="block">
                         <div v-if="activeSection !== 'applicant'" class="flex flex-col gap-5">
                             <section v-if="activeSection === 'eligibility'" class="provider-panel order-2 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
@@ -1839,6 +1839,16 @@ onMounted(loadApplication);
                                     </div>
                                     <div v-else class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
                                         {{ completedStageMessage }}
+                                    </div>
+                                </div>
+
+                                <div v-if="application.recipient_agreement" class="mt-5">
+                                    <RecipientAgreementSummary :agreement="application.recipient_agreement" compact />
+                                    <div
+                                        v-if="application.recipient_agreement.response_note"
+                                        class="border-x border-b border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700"
+                                    >
+                                        <strong>Applicant note:</strong> {{ application.recipient_agreement.response_note }}
                                     </div>
                                 </div>
 
@@ -2327,17 +2337,6 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
                             </section>
-                        </div>
-
-                        <aside
-                            v-if="activeSection === 'applicant' || activeSection === 'history'"
-                            :class="activeSection === 'applicant' ? 'grid gap-5 lg:grid-cols-2' : 'space-y-5'"
-                        >
-                            <PreScreeningHandoffRecord
-                                v-if="activeSection === 'applicant' && application.pre_screening_handoff"
-                                :record="application.pre_screening_handoff"
-                                class="lg:col-span-2"
-                            />
 
                             <section v-if="activeSection === 'history' && application.status_progress" class="provider-panel p-5">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -2353,6 +2352,17 @@ onMounted(loadApplication);
                                     {{ application.status_progress.next_action }}
                                 </p>
                             </section>
+                        </div>
+
+                        <aside
+                            v-if="activeSection === 'applicant'"
+                            class="grid gap-5 lg:grid-cols-2"
+                        >
+                            <PreScreeningHandoffRecord
+                                v-if="activeSection === 'applicant' && application.pre_screening_handoff"
+                                :record="application.pre_screening_handoff"
+                                class="lg:col-span-2"
+                            />
 
                             <section v-if="activeSection === 'applicant'" class="provider-panel p-5 lg:col-span-2">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

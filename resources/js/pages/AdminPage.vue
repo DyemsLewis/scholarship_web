@@ -24,6 +24,54 @@ const users = ref([]);
 const programs = ref([]);
 const canManageAccounts = computed(() => Boolean(window.portalUser?.has_full_access || window.portalUser?.permissions?.includes('manage_accounts')));
 const canManageReviews = computed(() => Boolean(window.portalUser?.has_full_access || window.portalUser?.permissions?.includes('manage_reviews')));
+const hasPermission = (permission) => Boolean(
+    window.portalUser?.has_full_access || window.portalUser?.permissions?.includes(permission),
+);
+const roleLabel = computed(() => window.portalUser?.is_managed_account
+    ? (window.portalUser?.account_title || 'Admin staff')
+    : 'Primary administrator');
+const roleWorkspaces = computed(() => [
+    {
+        permission: 'manage_reports',
+        label: 'Reported issues',
+        description: 'Review concerns submitted by applicants and providers.',
+        href: '/admin/reports',
+        action: 'Open reports',
+        icon: 'fa-solid fa-circle-exclamation',
+    },
+    {
+        permission: 'manage_billing',
+        label: 'Service requests',
+        description: 'Coordinate provider meetings, files, and service delivery.',
+        href: '/admin/billing',
+        action: 'Open services',
+        icon: 'fa-solid fa-headset',
+    },
+    {
+        permission: 'view_finance',
+        label: 'Platform finance',
+        description: 'Review payment totals, transactions, and receipts.',
+        href: '/admin/finance',
+        action: 'Open finance',
+        icon: 'fa-solid fa-chart-line',
+    },
+    {
+        permission: 'view_logs',
+        label: 'Activity records',
+        description: 'Inspect account and security activity across the portal.',
+        href: '/admin/logs',
+        action: 'Open records',
+        icon: 'fa-solid fa-clock-rotate-left',
+    },
+].filter((workspace) => hasPermission(workspace.permission)));
+const workspaceDescription = computed(() => {
+    if (canManageReviews.value && canManageAccounts.value) return 'Monitor reviews, accounts, operations, and platform activity.';
+    if (canManageReviews.value) return 'Review applicant, provider, and scholarship verification queues.';
+    if (canManageAccounts.value) return 'Manage portal accounts, access, and account status.';
+    if (roleWorkspaces.value.length === 1) return roleWorkspaces.value[0].description;
+
+    return 'Use the workspaces assigned to your administrative role.';
+});
 const recentUsers = computed(() => users.value.slice(0, 4));
 const platformSignals = computed(() => canManageReviews.value ? [
     {
@@ -142,8 +190,9 @@ onMounted(loadAdminData);
                                 Administration overview
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Review platform concerns and recent activity without leaving the dashboard.
+                                {{ workspaceDescription }}
                             </p>
+                            <span class="mt-3 inline-flex rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ roleLabel }}</span>
                         </div>
 
                         <a
@@ -278,9 +327,22 @@ onMounted(loadAdminData);
 
                     </section>
 
-                    <section v-if="!canManageReviews && !canManageAccounts" class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                        <p class="text-sm font-bold text-slate-950">Your admin workspace is ready.</p>
-                        <p class="mt-1 text-sm text-slate-500">Use the permitted sections in the side panel or update your own profile.</p>
+                    <section v-if="!canManageReviews && !canManageAccounts && roleWorkspaces.length" class="grid gap-4 sm:grid-cols-2">
+                        <a v-for="workspace in roleWorkspaces" :key="workspace.permission" :href="workspace.href" class="admin-panel group flex items-center gap-4 p-5 transition hover:border-slate-400">
+                            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                <i :class="workspace.icon" aria-hidden="true"></i>
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-base font-bold text-slate-950">{{ workspace.label }}</span>
+                                <span class="mt-1 block text-sm leading-5 text-slate-500">{{ workspace.description }}</span>
+                                <span class="mt-3 block text-xs font-bold text-slate-700">{{ workspace.action }} <i class="fa-solid fa-arrow-right ml-1 text-[10px]" aria-hidden="true"></i></span>
+                            </span>
+                        </a>
+                    </section>
+
+                    <section v-if="!canManageReviews && !canManageAccounts && !roleWorkspaces.length" class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                        <p class="text-sm font-bold text-slate-950">Your admin profile is available.</p>
+                        <p class="mt-1 text-sm text-slate-500">No operational permission is currently assigned to this account.</p>
                     </section>
 
                 </div>

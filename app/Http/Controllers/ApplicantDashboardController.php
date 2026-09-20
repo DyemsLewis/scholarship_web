@@ -24,6 +24,7 @@ use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationSchedulePayload;
 use App\Support\PreScreeningHandoffRecord;
+use App\Support\RecipientAgreement;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
@@ -1516,9 +1517,93 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($application->applicant_id === $request->user()->id, 403);
 
+        $application->loadMissing('scholarship');
+
+        if ($application->final_outcome !== 'selected' || blank($application->provider_contract_terms_snapshot)) {
+            return response()->json([
+                'message' => 'No in-platform acceptance is required. The scholarship provider manages confirmation and reward distribution directly.',
+            ], 422);
+        }
+
+        if (filled($application->student_response_status)) {
+            return response()->json([
+                'message' => 'You already responded to this recipient agreement.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'response' => ['required', Rule::in(['accepted', 'declined'])],
+            'terms_accepted' => ['exclude_unless:response,accepted', 'required', 'accepted'],
+            'note' => [Rule::requiredIf($request->input('response') === 'declined'), 'nullable', 'string', 'min:5', 'max:1000'],
+        ]);
+        $response = $validated['response'];
+        $now = now();
+
+        $application->update([
+            'student_response_status' => $response,
+            'student_responded_at' => $now,
+            'student_response_note' => $validated['note'] ?? null,
+            'student_response_terms_accepted_at' => $response === 'accepted' ? $now : null,
+            'student_response_terms_version' => $response === 'accepted'
+                ? $application->provider_contract_terms_version
+                : null,
+            'provider_contract_terms_accepted_at' => $response === 'accepted' ? $now : null,
+            'provider_contract_acceptance_ip' => $response === 'accepted' ? $request->ip() : null,
+            'provider_contract_acceptance_user_agent' => $response === 'accepted'
+                ? Str::limit($request->userAgent() ?? '', 500, '')
+                : null,
+        ]);
+
+        ApplicationStatusHistory::create([
+            'scholarship_application_id' => $application->id,
+            'changed_by' => $request->user()->id,
+            'from_status' => $application->status,
+            'to_status' => "agreement_{$response}",
+            'review_notes' => $response === 'accepted'
+                ? 'Applicant accepted the recipient agreement.'
+                : 'Applicant declined the recipient agreement.',
+            'changed_at' => $now,
+        ]);
+
+        $programTitle = $application->scholarship?->title ?? 'the scholarship program';
+        $providerMessage = $response === 'accepted'
+            ? "{$request->user()->name} accepted the recipient agreement for {$programTitle}."
+            : "{$request->user()->name} declined the recipient agreement for {$programTitle}. Review their note before proceeding.";
+        PortalNotification::create([
+            'user_id' => $application->scholarship->provider_id,
+            'type' => 'recipient_agreement_response',
+            'title' => $response === 'accepted' ? 'Recipient agreement accepted' : 'Recipient agreement declined',
+            'message' => $providerMessage,
+            'action_url' => route('provider.applications.show', $application, false).'?section=decision',
+        ]);
+        $this->notifyAdditionalProviderReviewers(
+            $application,
+            'recipient_agreement_response',
+            $response === 'accepted' ? 'Recipient agreement accepted' : 'Recipient agreement declined',
+            $providerMessage,
+        );
+        ActivityLog::record(
+            $request->user(),
+            "recipient_agreement_{$response}",
+            "{$request->user()->name} {$response} the recipient agreement for application #{$application->id}.",
+            $request,
+            ['application_id' => $application->id, 'agreement_version' => $application->provider_contract_terms_version],
+        );
+
+        $freshApplication = $application->fresh()->load([
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+            'scholarship.events',
+        ]);
+
         return response()->json([
-            'message' => 'No in-platform acceptance is required. The scholarship provider manages confirmation and reward distribution directly.',
-        ], 422);
+            'message' => $response === 'accepted'
+                ? 'Recipient agreement accepted.'
+                : 'Your decision was sent to the provider.',
+            'application' => $this->applicationPayload($freshApplication),
+        ]);
     }
 
     public function withdrawApplication(Request $request, ScholarshipApplication $application): JsonResponse
@@ -1927,6 +2012,7 @@ class ApplicantDashboardController extends Controller
         $decisionSupport = app(DecisionSupportService::class);
         $dss = $decisionSupport->scoreApplication($application);
         $readiness = $this->documentReadiness($application);
+        $recipientAgreement = RecipientAgreement::payload($application);
         $rubricReview = ReviewRubric::result(
             $application->review_rubric_snapshot ?: ($application->scholarship?->review_rubric ?? []),
             $application->rubric_scores ?? [],
@@ -1981,8 +2067,9 @@ class ApplicantDashboardController extends Controller
             'outcome_at' => $application->outcome_at?->format('M d, Y'),
             'distribution_scheduled_for' => $application->distribution_scheduled_for?->format('M d, Y'),
             'distribution_instructions' => $application->distribution_instructions,
-            'requires_student_response' => false,
-            'can_respond' => false,
+            'recipient_agreement' => $recipientAgreement,
+            'requires_student_response' => $recipientAgreement['requires_response'] ?? false,
+            'can_respond' => $recipientAgreement['can_respond'] ?? false,
             'pre_screening_handoff' => PreScreeningHandoffRecord::make($application, $workflow, $readiness, $dss),
             'formal_application_handoff' => $this->formalApplicationHandoffPayload($application),
             'schedules' => $application->schedules

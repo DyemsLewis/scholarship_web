@@ -48,12 +48,12 @@ const links = computed(() => [
         icon: 'fa-regular fa-calendar',
         href: `/provider/programs/${props.programId}/applications?workspace=schedule`,
     }] : []),
-    {
+    ...(canReviewApplications.value ? [{
         key: 'announcements',
         label: 'Updates',
         icon: 'fa-solid fa-bullhorn',
         href: `/provider/programs/${props.programId}#announcements`,
-    },
+    }] : []),
 ]);
 
 const activeKey = computed(() => {

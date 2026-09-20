@@ -8,6 +8,7 @@ use App\Models\ApplicationStatusHistory;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Support\RecipientAgreement;
 use App\Support\ScholarshipSelectionPlan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -389,6 +390,9 @@ class ApplicationWorkflowService
                     ->where('status', 'waitlisted')
                     ->max('waitlist_position') + 1))
                 : null;
+            $agreementSnapshot = $outcome === 'selected'
+                ? RecipientAgreement::snapshot($scholarship, $locked)
+                : null;
             $decision = $locked->stageProgresses->firstWhere('stage_key', 'decision');
             $decision?->update([
                 'status' => $outcome === 'waitlisted'
@@ -412,6 +416,18 @@ class ApplicationWorkflowService
                 'waitlist_position' => $waitlistPosition,
                 'reviewed_by' => $actor->id,
                 'reviewed_at' => $now,
+                'provider_contract_terms_snapshot' => $agreementSnapshot,
+                'provider_contract_terms_version' => $agreementSnapshot
+                    ? RecipientAgreement::version($agreementSnapshot)
+                    : null,
+                'provider_contract_terms_accepted_at' => null,
+                'provider_contract_acceptance_ip' => null,
+                'provider_contract_acceptance_user_agent' => null,
+                'student_response_status' => null,
+                'student_responded_at' => null,
+                'student_response_terms_accepted_at' => null,
+                'student_response_terms_version' => null,
+                'student_response_note' => null,
             ]);
 
             ApplicationStatusHistory::create([
@@ -426,6 +442,22 @@ class ApplicationWorkflowService
 
             return $locked->fresh()->load(['scholarship', 'stageProgresses']);
         });
+    }
+
+    public function refreshRecipientAgreementSnapshot(ScholarshipApplication $application): ScholarshipApplication
+    {
+        if ($application->final_outcome !== 'selected' || filled($application->student_response_status)) {
+            return $application;
+        }
+
+        $application->loadMissing(['scholarship.provider.providerProfile', 'scholarship.benefits']);
+        $snapshot = RecipientAgreement::snapshot($application->scholarship, $application);
+        $application->update([
+            'provider_contract_terms_snapshot' => $snapshot,
+            'provider_contract_terms_version' => RecipientAgreement::version($snapshot),
+        ]);
+
+        return $application->fresh()->load(['scholarship', 'stageProgresses']);
     }
 
     public function requestCorrection(

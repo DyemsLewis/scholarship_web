@@ -29,6 +29,31 @@ const canManageProfile = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_profile'),
 ));
+const canManageReports = computed(() => Boolean(
+    window.portalUser?.has_full_access
+        || window.portalUser?.permissions?.includes('manage_reports'),
+));
+const canManageBilling = computed(() => Boolean(
+    window.portalUser?.has_full_access
+        || window.portalUser?.permissions?.includes('manage_billing'),
+));
+const canViewPrograms = computed(() => canManagePrograms.value || canReviewApplications.value);
+const roleLabel = computed(() => {
+    if (!window.portalUser?.is_managed_account) return 'Organization owner';
+
+    return String(window.portalUser?.account_title || 'Team member')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+});
+const workspaceDescription = computed(() => {
+    if (canManagePrograms.value && canReviewApplications.value) return 'Manage programs, applicant reviews, and outcomes.';
+    if (canManagePrograms.value) return 'Create programs and keep published scholarship details current.';
+    if (canReviewApplications.value) return 'Review applicants, activities, announcements, and decisions.';
+    if (canManageReports.value) return 'Handle applicant concerns connected to Tulay Aral programs.';
+    if (canManageBilling.value) return 'Manage service requests, meetings, payments, and deliverables.';
+
+    return 'View your account and the organization information available to you.';
+});
 
 const recentPrograms = computed(() => scholarships.value.slice(0, 4));
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
@@ -176,6 +201,39 @@ const nextAction = computed(() => {
             href: verificationActionHref.value,
             label: verificationPrompt.value.action,
             icon: 'fa-solid fa-building-shield',
+        };
+    }
+
+    if (!canViewPrograms.value && canManageReports.value) {
+        return {
+            eyebrow: 'Your workspace - Reports',
+            title: 'Review provider and applicant concerns',
+            description: 'Open the report queue, check the concern details, and record the appropriate response or resolution.',
+            href: '/provider/reports',
+            label: 'Open reports',
+            icon: 'fa-solid fa-circle-exclamation',
+        };
+    }
+
+    if (!canViewPrograms.value && canManageBilling.value) {
+        return {
+            eyebrow: 'Your workspace - Services',
+            title: 'Manage Tulay Aral service requests',
+            description: 'Track purchased support, meeting schedules, shared files, payments, and service progress.',
+            href: '/provider/billing/requests',
+            label: 'Open service requests',
+            icon: 'fa-solid fa-headset',
+        };
+    }
+
+    if (!canViewPrograms.value) {
+        return {
+            eyebrow: 'Your workspace - Profile',
+            title: 'Review your account information',
+            description: 'Your access is limited to your personal credentials and the organization information shared with your account.',
+            href: '/provider/profile',
+            label: 'Open profile',
+            icon: 'fa-solid fa-id-badge',
         };
     }
 
@@ -358,8 +416,9 @@ onMounted(loadProviderData);
                                 Welcome, {{ providerName }}
                             </h2>
                             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Manage programs, reviews, and applicant outcomes.
+                                {{ workspaceDescription }}
                             </p>
+                            <span class="mt-3 inline-flex rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ roleLabel }}</span>
                         </div>
                     </div>
                 </header>
@@ -427,7 +486,7 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <div :class="['grid items-stretch gap-4', canReviewApplications ? 'xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]' : '']">
+                    <div v-if="canReviewApplications || canViewPrograms" :class="['grid items-stretch gap-4', canReviewApplications && canViewPrograms ? 'xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]' : '']">
                         <section v-if="canReviewApplications" class="provider-panel h-full overflow-hidden">
                             <header class="flex items-end justify-between gap-4 border-b border-slate-200 px-5 py-4">
                                 <div>
@@ -472,7 +531,7 @@ onMounted(loadProviderData);
                             </div>
                         </section>
 
-                        <section class="provider-panel h-full overflow-hidden">
+                        <section v-if="canViewPrograms" class="provider-panel h-full overflow-hidden">
                             <header class="flex items-end justify-between gap-4 border-b border-slate-200 px-5 py-4">
                                 <div>
                                     <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program lifecycle</p>
@@ -507,7 +566,7 @@ onMounted(loadProviderData);
                         </section>
                     </div>
 
-                    <section class="provider-panel overflow-hidden">
+                    <section v-if="canViewPrograms" class="provider-panel overflow-hidden">
                         <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program cycle</p>
