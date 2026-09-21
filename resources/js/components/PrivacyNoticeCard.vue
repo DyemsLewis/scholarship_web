@@ -8,6 +8,10 @@ const props = defineProps({
         default: 'profile',
         validator: (value) => ['profile', 'documents', 'applications', 'application'].includes(value),
     },
+    compact: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const showPrivacyNotice = ref(false);
@@ -38,7 +42,28 @@ function requestPrivacyHelp() {
 </script>
 
 <template>
-    <section class="mt-4 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+    <section
+        v-if="compact"
+        class="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"
+    >
+        <div class="flex min-w-0 items-center gap-3">
+            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-800">
+                <i class="fa-solid fa-shield-halved text-xs" aria-hidden="true"></i>
+            </span>
+            <p class="truncate text-sm font-bold text-slate-800">Private workspace</p>
+        </div>
+        <button
+            type="button"
+            class="shrink-0 text-xs font-bold text-slate-600 underline decoration-amber-400 underline-offset-4 hover:text-slate-950"
+            @click="showPrivacyNotice = true"
+        >
+            Who can access this?
+        </button>
+
+        <TermsModal v-model="showPrivacyNotice" context="privacy" />
+    </section>
+
+    <section v-else class="mt-4 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div class="flex min-w-0 items-start gap-3">
             <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-800">
                 <i class="fa-solid fa-shield-halved text-sm" aria-hidden="true"></i>

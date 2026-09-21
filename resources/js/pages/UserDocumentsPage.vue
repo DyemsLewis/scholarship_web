@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
@@ -11,14 +10,6 @@ import { labelFromKey } from '../support/display';
 const isLoading = ref(true);
 const uploadingPreparedName = ref('');
 const errorMessage = ref('');
-const stats = ref({
-    applications: 0,
-    prepared: 0,
-    uploaded: 0,
-    accepted: 0,
-    pending: 0,
-    needs_attention: 0,
-});
 const applications = ref([]);
 const preparedDocuments = ref([]);
 const documentOptions = ref([]);
@@ -30,6 +21,30 @@ const documentsPerPage = 7;
 const documentsPage = ref(1);
 const applicationsPerPage = 3;
 const applicationsPage = ref(1);
+const requestedDocumentView = new URLSearchParams(window.location.search).get('view');
+const documentView = ['prepared', 'applications'].includes(requestedDocumentView)
+    ? requestedDocumentView
+    : 'prepared';
+const documentPageContent = {
+    prepared: {
+        eyebrow: 'Prepared files',
+        title: 'Manage reusable documents',
+        description: 'Upload common files once so they are ready when an application requests them.',
+        actionHref: '#upload-document',
+        actionLabel: 'Prepare files',
+        secondaryHref: '/dashboard/documents?view=applications',
+        secondaryLabel: 'Application files',
+    },
+    applications: {
+        eyebrow: 'Application files',
+        title: 'Track submitted requirements',
+        description: 'Check document readiness and open the related application when a file needs attention.',
+        actionHref: '/dashboard/applications?view=action',
+        actionLabel: 'Needs my action',
+        secondaryHref: '/dashboard/documents?view=prepared',
+        secondaryLabel: 'Prepared files',
+    },
+}[documentView];
 const documentDescriptions = {
     'Latest report card or grades': 'Your latest available school grades or report card.',
     'Certificate of enrollment': 'Current proof that you are enrolled in school.',
@@ -67,25 +82,6 @@ const commonDocumentReadyCount = computed(() => documentOptions.value
     .length);
 const applicationTotalPages = computed(() => pageCount(applicationsWithRequirements.value.length, applicationsPerPage));
 const paginatedApplications = computed(() => paginateItems(applicationsWithRequirements.value, applicationsPage.value, applicationsPerPage));
-const libraryStatusTitle = computed(() => {
-    if (stats.value.needs_attention > 0) {
-        return `${stats.value.needs_attention} application file${stats.value.needs_attention === 1 ? '' : 's'} need attention`;
-    }
-
-    if (commonDocumentReadyCount.value === 0) {
-        return 'Prepare your most commonly requested files';
-    }
-
-    return `${commonDocumentReadyCount.value} of ${documentOptions.value.length} common files ready`;
-});
-const libraryStatusText = computed(() => {
-    if (stats.value.needs_attention > 0) {
-        return 'Open the related application to replace any rejected or outdated requirement.';
-    }
-
-    return 'Upload reusable documents here. Provider forms, essays, and other scholarship-specific papers are uploaded inside the application that requests them.';
-});
-
 function documentRequirements(requirements) {
     if (!requirements) {
         return [];
@@ -210,7 +206,6 @@ async function loadDocuments() {
     try {
         const response = await window.axios.get('/dashboard/documents/data');
 
-        stats.value = response.data.stats;
         applications.value = response.data.applications;
         preparedDocuments.value = response.data.prepared_documents ?? [];
         documentOptions.value = response.data.document_options ?? [];
@@ -328,17 +323,17 @@ onMounted(loadDocuments);
         <section class="student-page">
             <div class="student-container">
                 <ApplicantPageHeader
-                    eyebrow="Documents"
-                    title="Prepare common documents"
-                    description="Upload files commonly requested by scholarships. Provider-specific papers are added inside the application that requests them."
+                    :eyebrow="documentPageContent.eyebrow"
+                    :title="documentPageContent.title"
+                    :description="documentPageContent.description"
                     icon="fa-solid fa-folder-open"
-                    action-href="#upload-document"
-                    action-label="Prepare files"
-                    secondary-href="/dashboard/applications"
-                    secondary-label="View applications"
+                    :action-href="documentPageContent.actionHref"
+                    :action-label="documentPageContent.actionLabel"
+                    :secondary-href="documentPageContent.secondaryHref"
+                    :secondary-label="documentPageContent.secondaryLabel"
                 />
 
-                <PrivacyNoticeCard context="documents" />
+                <PrivacyNoticeCard context="documents" compact />
 
                 <div v-if="isLoading" class="student-card mt-5 p-6 text-sm text-slate-500">
                     Loading documents...
@@ -349,20 +344,7 @@ onMounted(loadDocuments);
                         <i class="fa-solid fa-circle-exclamation mt-0.5" aria-hidden="true"></i>
                         <p>{{ errorMessage }}</p>
                     </div>
-                    <section class="student-card p-5">
-                        <div class="flex items-start gap-4">
-                            <span class="student-section-mark shrink-0">
-                                <i class="fa-solid fa-list-check text-sm" aria-hidden="true"></i>
-                            </span>
-                            <div class="min-w-0">
-                                <p class="student-kicker">Document readiness</p>
-                                <h2 class="mt-1 text-lg font-bold text-slate-950">{{ libraryStatusTitle }}</h2>
-                                <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ libraryStatusText }}</p>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="student-card overflow-hidden">
+                    <section v-if="documentView === 'prepared'" class="student-card overflow-hidden">
                         <header class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex items-center gap-3">
                                 <span class="student-section-mark shrink-0">
@@ -385,9 +367,7 @@ onMounted(loadDocuments);
                                 </span>
                                 <div>
                                     <p class="text-sm font-bold text-slate-950">Upload common files once</p>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">
-                                        These files can be reused when a scholarship asks for the same requirement. Provider forms, essays, recommendation templates, and special certificates belong in that scholarship's application.
-                                    </p>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">Reuse these files when a scholarship requests them. Upload program-specific files inside that application.</p>
                                     <p class="mt-1 text-xs font-semibold text-slate-500">Accepted: PDF, JPG, PNG, DOC or DOCX up to 5 MB.</p>
                                 </div>
                             </div>
@@ -531,7 +511,7 @@ onMounted(loadDocuments);
                         </div>
                     </section>
 
-                    <section class="student-card overflow-hidden">
+                    <section v-if="documentView === 'applications'" class="student-card overflow-hidden">
                         <header class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex items-center gap-3">
                                 <span class="student-section-mark shrink-0">
@@ -649,7 +629,6 @@ onMounted(loadDocuments);
                     </section>
                 </div>
 
-                <ApplicantFooter />
             </div>
         </section>
 

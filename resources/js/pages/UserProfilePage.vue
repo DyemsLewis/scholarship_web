@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
@@ -3548,7 +3547,6 @@ watch(() => form.value.grading_scale, (scale) => {
 
                 </div>
 
-                <ApplicantFooter />
             </div>
         </section>
 

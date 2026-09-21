@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import FilePreviewModal from './FilePreviewModal.vue';
 import { showPortalToast } from '../support/portalToast';
 
@@ -16,6 +16,27 @@ const savingManualCycleId = ref(null);
 const acceptedTerms = ref({});
 const manualForms = ref({});
 const previewFile = ref(null);
+const activePanel = ref('academic');
+const monitoringTabs = computed(() => [
+    {
+        key: 'academic',
+        label: 'Academic updates',
+        icon: 'fa-solid fa-chart-line',
+        count: props.monitoring.cycles?.length ?? 0,
+    },
+    {
+        key: 'releases',
+        label: 'Benefit releases',
+        icon: 'fa-solid fa-hand-holding-heart',
+        count: props.monitoring.benefit_releases?.length ?? 0,
+    },
+    {
+        key: 'status',
+        label: 'Support status',
+        icon: 'fa-solid fa-flag-checkered',
+        count: props.monitoring.support_decisions?.length ?? 0,
+    },
+]);
 
 function statusClass(status) {
     if (status === 'open') return 'bg-emerald-100 text-emerald-800';
@@ -169,91 +190,76 @@ async function saveManualGrade(cycle) {
         @close="previewFile = null"
     />
 
-    <section v-if="monitoring.support_decisions?.length" class="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <header class="student-section-head p-4 sm:p-5">
-            <div class="flex items-start gap-3">
-                <span class="student-section-mark"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i></span>
-                <div><p class="student-kicker">Recipient status</p><h3 class="mt-1 text-lg font-bold text-slate-950">{{ monitoring.support_status_label }}</h3><p class="mt-1 text-sm leading-6 text-slate-500">Official renewal and completion decisions recorded by your scholarship provider.</p></div>
-            </div>
-        </header>
-        <div class="divide-y divide-slate-200 border-t border-slate-200">
-            <article v-for="decision in monitoring.support_decisions" :key="decision.id" class="p-4 sm:p-5">
-                <div :class="['flex items-start gap-3 rounded-md border px-3 py-3', supportStatusClass(decision.decision)]">
-                    <i :class="[supportStatusIcon(decision.decision), 'mt-0.5 shrink-0']" aria-hidden="true"></i>
-                    <div class="min-w-0 flex-1">
-                        <div class="flex flex-wrap items-center justify-between gap-2"><p class="text-sm font-bold">{{ decision.decision_label }}</p><span class="text-xs">Effective {{ decision.effective_label }}</span></div>
-                        <p v-if="decision.next_period_terms" class="mt-2 text-sm leading-6">{{ decision.next_period_terms }}</p>
-                        <p v-if="decision.reason" class="mt-2 text-sm leading-6">{{ decision.reason }}</p>
-                        <div v-if="decision.support_ends_label || decision.next_review_label" class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold"><span v-if="decision.support_ends_label">Support through {{ decision.support_ends_label }}</span><span v-if="decision.next_review_label">Next review {{ decision.next_review_label }}</span></div>
-                        <p class="mt-2 text-[11px] opacity-70">Recorded {{ decision.decided_at }}<span v-if="decision.decided_by"> by {{ decision.decided_by }}</span></p>
-                    </div>
-                </div>
-            </article>
-        </div>
-    </section>
-
-    <section v-if="monitoring.benefit_releases?.length" class="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <header class="student-section-head p-4 sm:p-5">
-            <div class="flex items-start gap-3">
-                <span class="student-section-mark"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span>
-                <div>
-                    <p class="student-kicker">Scholarship support</p>
-                    <h3 class="mt-1 text-lg font-bold text-slate-950">Benefit releases</h3>
-                    <p class="mt-1 text-sm leading-6 text-slate-500">Review your release schedule, provider instructions, and recorded receipt status.</p>
-                </div>
-            </div>
-        </header>
-
-        <div class="divide-y divide-slate-200 border-t border-slate-200">
-            <article v-for="release in monitoring.benefit_releases" :key="release.record_id" class="p-4 sm:p-5">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div class="min-w-0">
-                        <div class="flex flex-wrap items-center gap-2"><h4 class="font-bold text-slate-950">{{ release.title }}</h4><span :class="['rounded-md border px-2 py-1 text-[10px] font-bold uppercase', releaseStatusClass(release.status)]">{{ release.status_label }}</span></div>
-                        <p class="mt-1 text-sm font-semibold text-slate-700">{{ release.benefit_description }}<span v-if="release.amount_label"> · {{ release.amount_label }}</span></p>
-                    </div>
-                    <div class="shrink-0 sm:text-right"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Release schedule</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.release_label }}</p></div>
-                </div>
-
-                <div class="mt-3 grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-3">
-                    <div class="bg-slate-50 px-3 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Method</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.release_method_label }}</p></div>
-                    <div class="bg-slate-50 px-3 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Location</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.location || 'Provider-coordinated' }}</p></div>
-                    <div class="bg-slate-50 px-3 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Original records</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.requires_original_verification ? (release.originals_verified ? 'Verified' : 'Bring for verification') : 'Not required at release' }}</p></div>
-                </div>
-
-                <p v-if="release.instructions" class="mt-3 text-sm leading-6 text-slate-600"><strong class="text-slate-900">Provider instruction:</strong> {{ release.instructions }}</p>
-                <div :class="['mt-3 flex items-start gap-3 rounded-md border px-3 py-3', releaseStatusClass(release.status)]">
-                    <i :class="[releaseStatusIcon(release.status), 'mt-0.5 shrink-0']" aria-hidden="true"></i>
-                    <div class="min-w-0 flex-1"><p class="text-sm font-bold">{{ release.status_label }}</p><p v-if="release.notes" class="mt-1 text-xs leading-5">{{ release.notes }}</p><p v-else-if="release.status === 'scheduled'" class="mt-1 text-xs leading-5">Follow the schedule and instructions above. The provider will update this record after the release.</p><p v-if="release.recorded_at" class="mt-1 text-[11px] opacity-70">Updated {{ release.recorded_at }}<span v-if="release.recorded_by"> by {{ release.recorded_by }}</span></p></div>
-                    <button v-if="release.receipt" type="button" class="shrink-0 rounded-md border border-current/20 bg-white/70 px-3 py-2 text-xs font-bold" @click="previewFile = release.receipt">View receipt</button>
-                </div>
-            </article>
-        </div>
-    </section>
-
     <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <header class="student-section-head p-4 sm:p-5">
+            <div class="flex items-start gap-3">
+                <span class="student-section-mark"><i class="fa-solid fa-heart-pulse" aria-hidden="true"></i></span>
+                <div>
+                    <p class="student-kicker">Recipient monitoring</p>
+                    <h3 class="mt-1 text-lg font-bold text-slate-950">Your scholarship support</h3>
+                    <p class="mt-1 text-sm leading-6 text-slate-500">Submit academic updates, review benefit schedules, and follow provider decisions.</p>
+                </div>
+            </div>
+            <span :class="['w-fit rounded-md border px-2.5 py-1 text-xs font-bold', supportStatusClass(monitoring.support_status)]">{{ monitoring.support_status_label }}</span>
+        </header>
+
+        <dl class="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-3">
+            <div class="bg-white px-4 py-3 sm:px-5">
+                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Academic updates</dt>
+                <dd class="mt-1 text-lg font-bold text-slate-950">{{ monitoring.cycles?.length || 0 }}</dd>
+                <p :class="['mt-0.5 text-xs', monitoring.pending_count ? 'font-bold text-amber-700' : 'text-slate-500']">{{ monitoring.pending_count ? `${monitoring.pending_count} need submission` : 'No upload currently due' }}</p>
+            </div>
+            <div class="bg-white px-4 py-3 sm:px-5">
+                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Benefit releases</dt>
+                <dd class="mt-1 text-lg font-bold text-slate-950">{{ monitoring.benefit_releases?.length || 0 }}</dd>
+                <p class="mt-0.5 text-xs text-slate-500">Schedules and receipt records</p>
+            </div>
+            <div class="bg-white px-4 py-3 sm:px-5">
+                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Provider decisions</dt>
+                <dd class="mt-1 text-lg font-bold text-slate-950">{{ monitoring.support_decisions?.length || 0 }}</dd>
+                <p class="mt-0.5 text-xs text-slate-500">Renewal or completion history</p>
+            </div>
+        </dl>
+
+        <nav class="flex gap-1 overflow-x-auto border-t border-slate-200 bg-slate-50 p-1.5" aria-label="Recipient monitoring sections">
+            <button
+                v-for="tab in monitoringTabs"
+                :key="tab.key"
+                type="button"
+                :class="['inline-flex min-w-fit flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-bold transition', activePanel === tab.key ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-950']"
+                @click="activePanel = tab.key"
+            >
+                <i :class="[tab.icon, 'text-xs']" aria-hidden="true"></i>
+                {{ tab.label }}
+                <span :class="['rounded px-1.5 py-0.5 text-[10px]', activePanel === tab.key ? 'bg-white/15 text-white' : 'bg-slate-200 text-slate-600']">{{ tab.count }}</span>
+            </button>
+        </nav>
+    </section>
+
+    <input ref="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png" class="hidden" @change="uploadGradeRecord">
+
+    <section v-if="activePanel === 'academic'" class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <header class="student-section-head p-4 sm:p-5">
             <div class="flex items-start gap-3">
                 <span class="student-section-mark"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
                 <div>
-                    <p class="student-kicker">Recipient monitoring</p>
-                    <h3 class="mt-1 text-lg font-bold text-slate-950">Academic progress updates</h3>
-                    <p class="mt-1 text-sm leading-6 text-slate-500">Upload the requested grade record. OCR.space will read the final result, and the provider will verify it against the file.</p>
+                    <p class="student-kicker">Academic requirements</p>
+                    <h3 class="mt-1 text-lg font-bold text-slate-950">Grade record updates</h3>
+                    <p class="mt-1 text-sm leading-6 text-slate-500">Upload the requested record. The provider verifies the file after the result is extracted.</p>
                 </div>
             </div>
             <span v-if="monitoring.pending_count" class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">{{ monitoring.pending_count }} to submit</span>
         </header>
 
-        <input ref="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png" class="hidden" @change="uploadGradeRecord">
-
         <div v-if="!monitoring.cycles?.length" class="border-t border-slate-200 px-5 py-8 text-center">
             <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500"><i class="fa-regular fa-calendar-check" aria-hidden="true"></i></span>
-            <p class="mt-3 font-bold text-slate-950">No academic update is requested</p>
+            <p class="mt-3 font-bold text-slate-950">No academic update requested</p>
             <p class="mt-1 text-sm text-slate-500">The provider will notify you when a monitoring period opens.</p>
         </div>
 
         <div v-else class="divide-y divide-slate-200 border-t border-slate-200">
-            <article v-for="cycle in monitoring.cycles" :key="cycle.id" class="p-4 sm:p-5">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <article v-for="cycle in monitoring.cycles" :key="cycle.id">
+                <div class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                     <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
                             <h4 class="font-bold text-slate-950">{{ cycle.title }}</h4>
@@ -261,53 +267,100 @@ async function saveManualGrade(cycle) {
                         </div>
                         <p class="mt-1 text-xs leading-5 text-slate-500">{{ cycle.academic_period || 'Academic progress period' }}<span v-if="cycle.school_year"> · {{ cycle.school_year }}</span></p>
                     </div>
-                    <div class="shrink-0 sm:text-right"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Due date</p><p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.due_label }}</p></div>
+                    <div class="shrink-0 sm:text-right"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Submit by</p><p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.due_label }}</p></div>
                 </div>
 
-                <div class="mt-3 grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-2">
-                    <div class="bg-slate-50 px-3 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Required result</p><p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.requirement_label }}</p></div>
-                    <div class="bg-slate-50 px-3 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">File accepted</p><p class="mt-1 text-sm font-bold text-slate-950">PDF, JPG, JPEG, or PNG</p></div>
+                <div class="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-3">
+                    <div class="bg-slate-50 px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Academic period</p><p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.academic_period || 'Progress update' }}</p></div>
+                    <div class="bg-slate-50 px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Required result</p><p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.requirement_label }}</p></div>
+                    <div class="bg-slate-50 px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Accepted files</p><p class="mt-1 text-sm font-bold text-slate-950">PDF, JPG, JPEG, or PNG</p></div>
                 </div>
-                <p v-if="cycle.instructions" class="mt-3 text-sm leading-6 text-slate-600"><strong class="text-slate-900">Provider instruction:</strong> {{ cycle.instructions }}</p>
+                <p v-if="cycle.instructions" class="border-t border-slate-200 px-4 py-3 text-sm leading-6 text-slate-600 sm:px-5"><strong class="text-slate-900">Provider instruction:</strong> {{ cycle.instructions }}</p>
 
-                <div v-if="cycle.submission" class="mt-4 overflow-hidden rounded-md border border-slate-200">
-                    <div class="flex flex-col gap-3 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div class="min-w-0"><p class="truncate text-sm font-bold text-slate-950">{{ cycle.submission.original_name }}</p><p class="mt-1 text-xs text-slate-500">Submitted {{ cycle.submission.submitted_at }}</p></div>
-                        <div class="flex shrink-0 gap-2"><button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="previewFile = cycle.submission">View record</button><button v-if="cycle.can_submit" type="button" :disabled="uploadingCycleId === cycle.id" :class="['rounded-md px-3 py-2 text-xs font-bold disabled:opacity-60', cycle.correction_requested ? 'bg-slate-950 text-white hover:bg-slate-800' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50']" @click="openFilePicker(cycle)">{{ cycle.correction_requested ? 'Upload replacement' : 'Replace' }}</button></div>
+                <div v-if="cycle.submission" class="border-t border-slate-200 p-4 sm:p-5">
+                    <div class="flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="min-w-0"><p class="truncate text-sm font-bold text-slate-950">{{ cycle.submission.original_name }}</p><p class="mt-0.5 text-xs text-slate-500">Submitted {{ cycle.submission.submitted_at }}</p></div>
+                        <div class="flex shrink-0 flex-wrap gap-2"><button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="previewFile = cycle.submission">View record</button><button v-if="cycle.can_submit" type="button" :disabled="uploadingCycleId === cycle.id" :class="['rounded-md px-3 py-2 text-xs font-bold disabled:opacity-60', cycle.correction_requested ? 'bg-slate-950 text-white hover:bg-slate-800' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50']" @click="openFilePicker(cycle)">{{ cycle.correction_requested ? 'Upload replacement' : 'Replace file' }}</button></div>
                     </div>
-                    <div class="border-t border-slate-200 px-3 py-3">
-                        <div :class="['mb-3 flex items-start gap-3 rounded-md border px-3 py-3', reviewClass(cycle.submission.review_status)]">
+
+                    <div class="mt-3 grid gap-3 lg:grid-cols-2">
+                        <div :class="['flex items-start gap-3 rounded-md border px-3 py-3', reviewClass(cycle.submission.review_status)]">
                             <i :class="[reviewIcon(cycle.submission.review_status), 'mt-0.5 shrink-0']" aria-hidden="true"></i>
-                            <div class="min-w-0">
-                                <p class="text-sm font-bold">{{ cycle.submission.review_status_label }}</p>
-                                <p v-if="cycle.submission.review_notes" class="mt-1 text-xs leading-5">{{ cycle.submission.review_notes }}</p>
-                                <p v-else-if="cycle.submission.review_status === 'pending'" class="mt-1 text-xs leading-5">The provider will compare the result with the uploaded record.</p>
-                                <p v-if="cycle.submission.reviewed_at" class="mt-1 text-[11px] opacity-70">Reviewed {{ cycle.submission.reviewed_at }}<span v-if="cycle.submission.reviewed_by"> by {{ cycle.submission.reviewed_by }}</span></p>
-                            </div>
+                            <div class="min-w-0"><p class="text-xs font-bold uppercase tracking-[0.1em] opacity-75">Provider review</p><p class="mt-1 text-sm font-bold">{{ cycle.submission.review_status_label }}</p><p v-if="cycle.submission.review_notes" class="mt-1 text-xs leading-5">{{ cycle.submission.review_notes }}</p><p v-else-if="cycle.submission.review_status === 'pending'" class="mt-1 text-xs leading-5">The provider will compare the result with your uploaded record.</p><p v-if="cycle.submission.reviewed_at" class="mt-1 text-[11px] opacity-70">Reviewed {{ cycle.submission.reviewed_at }}<span v-if="cycle.submission.reviewed_by"> by {{ cycle.submission.reviewed_by }}</span></p></div>
                         </div>
-                        <div v-if="cycle.submission.grade_label" :class="['flex flex-col gap-2 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between', comparisonClass(cycle.submission.comparison?.status)]">
-                            <div><p class="text-[10px] font-bold uppercase tracking-[0.1em] opacity-75">{{ cycle.submission.grade_source === 'ocr' ? 'OCR.space extracted result' : 'Applicant-entered result' }}</p><p class="mt-1 text-lg font-bold">{{ cycle.submission.grade_label }}</p></div>
-                            <p class="text-xs font-bold uppercase">{{ cycle.submission.comparison?.status === 'pass' ? 'Meets listed requirement' : cycle.submission.comparison?.status === 'fail' ? 'Provider review needed' : 'Manual review' }}</p>
+                        <div v-if="cycle.submission.grade_label" :class="['rounded-md border px-3 py-3', comparisonClass(cycle.submission.comparison?.status)]">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.1em] opacity-75">{{ cycle.submission.grade_source === 'ocr' ? 'Extracted result' : 'Applicant-entered result' }}</p>
+                            <div class="mt-1 flex flex-wrap items-end justify-between gap-2"><p class="text-lg font-bold">{{ cycle.submission.grade_label }}</p><p class="text-xs font-bold uppercase">{{ cycle.submission.comparison?.status === 'pass' ? 'Meets listed requirement' : cycle.submission.comparison?.status === 'fail' ? 'Provider review needed' : 'Manual review' }}</p></div>
                         </div>
-                        <div v-else class="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-900"><p class="font-bold">The file was saved, but the final result was not extracted.</p><p class="mt-1 text-xs">{{ cycle.submission.ocr_message }}</p></div>
+                        <div v-else class="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-900"><p class="font-bold">The final result was not extracted</p><p class="mt-1 text-xs">{{ cycle.submission.ocr_message }}</p></div>
+                    </div>
 
-                        <form v-if="cycle.submission.manual_entry_allowed && cycle.can_submit" class="mt-3 rounded-md border border-slate-200 bg-white p-3" @submit.prevent="saveManualGrade(cycle)">
-                            <p class="text-sm font-bold text-slate-950">Enter the result shown on the record</p>
-                            <p class="mt-1 text-xs leading-5 text-slate-500">This does not replace provider verification. It only supplies the value OCR.space could not read.</p>
-                            <div class="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                                <label><span class="mb-1.5 block text-xs font-bold text-slate-700">Grading scale</span><select v-model="manualForm(cycle).grading_scale" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"><option value="percentage">Percentage</option><option value="grade_point">GWA / GPA grade point</option></select></label>
-                                <label><span class="mb-1.5 block text-xs font-bold text-slate-700">Final result</span><input v-model="manualForm(cycle).grade" type="number" step="0.01" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
-                                <button type="submit" :disabled="savingManualCycleId === cycle.id" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">{{ savingManualCycleId === cycle.id ? 'Saving...' : 'Save result' }}</button>
-                            </div>
-                        </form>
+                    <form v-if="cycle.submission.manual_entry_allowed && cycle.can_submit" class="mt-3 rounded-md border border-slate-200 bg-white p-3" @submit.prevent="saveManualGrade(cycle)">
+                        <p class="text-sm font-bold text-slate-950">Enter the result shown on the record</p>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">Use this only when scanning could not read the result. The provider still verifies the uploaded file.</p>
+                        <div class="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                            <label><span class="mb-1.5 block text-xs font-bold text-slate-700">Grading scale</span><select v-model="manualForm(cycle).grading_scale" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"><option value="percentage">Percentage</option><option value="grade_point">GWA / GPA grade point</option></select></label>
+                            <label><span class="mb-1.5 block text-xs font-bold text-slate-700">Final result</span><input v-model="manualForm(cycle).grade" type="number" step="0.01" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
+                            <button type="submit" :disabled="savingManualCycleId === cycle.id" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">{{ savingManualCycleId === cycle.id ? 'Saving...' : 'Save result' }}</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div v-else-if="cycle.can_submit" class="border-t border-slate-200 p-4 sm:p-5">
+                    <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                        <label class="flex cursor-pointer items-start gap-3 text-sm leading-5 text-slate-700"><input v-model="acceptedTerms[cycle.id]" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-950"><span>I confirm this grade record belongs to me and covers the academic period listed above.</span></label>
+                        <button type="button" :disabled="uploadingCycleId === cycle.id" class="mt-3 inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60" @click="openFilePicker(cycle)"><i class="fa-solid fa-arrow-up-from-bracket text-xs"></i>{{ uploadingCycleId === cycle.id ? 'Scanning...' : 'Upload grade record' }}</button>
                     </div>
                 </div>
+                <p v-else-if="!cycle.submission" class="border-t border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600 sm:px-5">{{ cycle.locked_reason }}</p>
+            </article>
+        </div>
+    </section>
 
-                <div v-else-if="cycle.can_submit" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-                    <label class="flex cursor-pointer items-start gap-3 text-sm leading-5 text-slate-700"><input v-model="acceptedTerms[cycle.id]" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-950"><span>I confirm this grade record belongs to me and covers the academic period listed above.</span></label>
-                    <button type="button" :disabled="uploadingCycleId === cycle.id" class="mt-3 inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60" @click="openFilePicker(cycle)"><i class="fa-solid fa-arrow-up-from-bracket text-xs"></i>{{ uploadingCycleId === cycle.id ? 'Scanning...' : 'Upload and scan grade record' }}</button>
+    <section v-else-if="activePanel === 'releases'" class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <header class="student-section-head p-4 sm:p-5">
+            <div class="flex items-start gap-3"><span class="student-section-mark"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span><div><p class="student-kicker">Scholarship support</p><h3 class="mt-1 text-lg font-bold text-slate-950">Benefit releases</h3><p class="mt-1 text-sm leading-6 text-slate-500">Review each schedule, provider instruction, verification requirement, and receipt record.</p></div></div>
+        </header>
+
+        <div v-if="!monitoring.benefit_releases?.length" class="border-t border-slate-200 px-5 py-8 text-center"><span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500"><i class="fa-solid fa-gift" aria-hidden="true"></i></span><p class="mt-3 font-bold text-slate-950">No benefit release scheduled</p><p class="mt-1 text-sm text-slate-500">The provider will post release details here when they are ready.</p></div>
+
+        <div v-else class="divide-y divide-slate-200 border-t border-slate-200">
+            <article v-for="release in monitoring.benefit_releases" :key="release.record_id">
+                <div class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                    <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><h4 class="font-bold text-slate-950">{{ release.title }}</h4><span :class="['rounded-md border px-2 py-1 text-[10px] font-bold uppercase', releaseStatusClass(release.status)]">{{ release.status_label }}</span></div><p class="mt-1 text-sm font-semibold text-slate-700">{{ release.benefit_description }}<span v-if="release.amount_label"> · {{ release.amount_label }}</span></p></div>
+                    <div class="shrink-0 sm:text-right"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Release schedule</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.release_label }}</p></div>
                 </div>
-                <p v-else-if="!cycle.submission" class="mt-3 rounded-md bg-slate-100 px-3 py-2.5 text-sm font-semibold text-slate-600">{{ cycle.locked_reason }}</p>
+                <div class="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-3">
+                    <div class="bg-slate-50 px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Method</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.release_method_label }}</p></div>
+                    <div class="bg-slate-50 px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Location</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.location || 'Provider-coordinated' }}</p></div>
+                    <div class="bg-slate-50 px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Original records</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.requires_original_verification ? (release.originals_verified ? 'Verified' : 'Bring for verification') : 'Not required at release' }}</p></div>
+                </div>
+                <p v-if="release.instructions" class="border-t border-slate-200 px-4 py-3 text-sm leading-6 text-slate-600 sm:px-5"><strong class="text-slate-900">Provider instruction:</strong> {{ release.instructions }}</p>
+                <div class="border-t border-slate-200 p-4 sm:p-5"><div :class="['flex flex-col gap-3 rounded-md border px-3 py-3 sm:flex-row sm:items-start sm:justify-between', releaseStatusClass(release.status)]"><div class="flex min-w-0 items-start gap-3"><i :class="[releaseStatusIcon(release.status), 'mt-0.5 shrink-0']" aria-hidden="true"></i><div><p class="text-sm font-bold">{{ release.status_label }}</p><p v-if="release.notes" class="mt-1 text-xs leading-5">{{ release.notes }}</p><p v-else-if="release.status === 'scheduled'" class="mt-1 text-xs leading-5">Follow the schedule above. The provider will update this record after the release.</p><p v-if="release.recorded_at" class="mt-1 text-[11px] opacity-70">Updated {{ release.recorded_at }}<span v-if="release.recorded_by"> by {{ release.recorded_by }}</span></p></div></div><button v-if="release.receipt" type="button" class="shrink-0 rounded-md border border-current/20 bg-white/70 px-3 py-2 text-xs font-bold" @click="previewFile = release.receipt">View receipt evidence</button></div></div>
+            </article>
+        </div>
+    </section>
+
+    <section v-else class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <header class="student-section-head p-4 sm:p-5">
+            <div class="flex items-start gap-3"><span class="student-section-mark"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i></span><div><p class="student-kicker">Provider decisions</p><h3 class="mt-1 text-lg font-bold text-slate-950">{{ monitoring.support_status_label }}</h3><p class="mt-1 text-sm leading-6 text-slate-500">Review recorded renewal, completion, or early-ending decisions.</p></div></div>
+        </header>
+
+        <div v-if="!monitoring.support_decisions?.length" class="border-t border-slate-200 px-5 py-8 text-center"><span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500"><i class="fa-regular fa-clock" aria-hidden="true"></i></span><p class="mt-3 font-bold text-slate-950">No support decision recorded</p><p class="mt-1 text-sm text-slate-500">Your scholarship support remains active unless the provider records an update.</p></div>
+
+        <div v-else class="divide-y divide-slate-200 border-t border-slate-200">
+            <article v-for="decision in monitoring.support_decisions" :key="decision.id" class="p-4 sm:p-5">
+                <div :class="['overflow-hidden rounded-md border', supportStatusClass(decision.decision)]">
+                    <div class="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex min-w-0 items-center gap-3"><i :class="[supportStatusIcon(decision.decision), 'shrink-0']" aria-hidden="true"></i><div><p class="text-sm font-bold">{{ decision.decision_label }}</p><p class="mt-0.5 text-xs opacity-75">Recorded {{ decision.decided_at }}<span v-if="decision.decided_by"> by {{ decision.decided_by }}</span></p></div></div>
+                        <p class="text-xs font-bold">Effective {{ decision.effective_label }}</p>
+                    </div>
+                    <dl v-if="decision.support_ends_label || decision.next_review_label" class="grid gap-px border-t border-current/15 bg-white/30 sm:grid-cols-2">
+                        <div v-if="decision.support_ends_label" class="px-3 py-2.5"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] opacity-70">Support through</dt><dd class="mt-1 text-sm font-bold">{{ decision.support_ends_label }}</dd></div>
+                        <div v-if="decision.next_review_label" class="px-3 py-2.5"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] opacity-70">Next review</dt><dd class="mt-1 text-sm font-bold">{{ decision.next_review_label }}</dd></div>
+                    </dl>
+                    <div v-if="decision.next_period_terms || decision.reason" class="border-t border-current/15 bg-white/55 px-3 py-3 text-sm leading-6"><p v-if="decision.next_period_terms"><strong>Next-period terms:</strong> {{ decision.next_period_terms }}</p><p v-if="decision.reason" :class="decision.next_period_terms ? 'mt-1' : ''"><strong>Provider note:</strong> {{ decision.reason }}</p></div>
+                </div>
             </article>
         </div>
     </section>

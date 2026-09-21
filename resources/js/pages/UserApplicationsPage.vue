@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantNextActionPanel from '../components/ApplicantNextActionPanel.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
@@ -45,6 +44,46 @@ const documentTermsAccepted = ref(false);
 const documentFileInput = ref(null);
 const activeUploadRequirement = ref('');
 const previewDocument = ref(null);
+const applicationUrlParams = new URLSearchParams(window.location.search);
+const requestedScholarshipId = applicationUrlParams.get('scholarship');
+const requestedApplicationView = applicationUrlParams.get('view');
+const applicationView = ['active', 'action', 'completed', 'monitoring'].includes(requestedApplicationView)
+    ? requestedApplicationView
+    : 'active';
+const applicationViewContent = {
+    active: {
+        eyebrow: 'Active applications',
+        title: 'Follow your current applications',
+        description: 'See the present stage and next step for applications still in progress.',
+        sectionTitle: 'Applications in progress',
+        emptyTitle: 'No active applications',
+        emptyText: 'Browse scholarships when you are ready to begin a new pre-screening application.',
+    },
+    action: {
+        eyebrow: 'Needs my action',
+        title: 'Complete your pending tasks',
+        description: 'Corrections, agreements, schedules, and monitoring requirements that need your response.',
+        sectionTitle: 'Waiting for your response',
+        emptyTitle: 'You have no pending tasks',
+        emptyText: 'Nothing currently requires your response. Provider updates will appear here when action is needed.',
+    },
+    completed: {
+        eyebrow: 'Completed applications',
+        title: 'Review recorded outcomes',
+        description: 'Open completed, declined, withdrawn, or awarded application records.',
+        sectionTitle: 'Application history',
+        emptyTitle: 'No completed applications',
+        emptyText: 'Applications appear here after their selection workflow is closed.',
+    },
+    monitoring: {
+        eyebrow: 'Recipient monitoring',
+        title: 'Maintain your scholarship support',
+        description: 'Open awarded scholarships to submit academic updates and review benefit records.',
+        sectionTitle: 'Scholarships under monitoring',
+        emptyTitle: 'No recipient monitoring records',
+        emptyText: 'Monitoring becomes available after a provider selects you and activates recipient requirements.',
+    },
+}[applicationView];
 
 const steps = [
     { label: 'Program', detail: 'Review the program', icon: 'fa-solid fa-graduation-cap' },
@@ -160,14 +199,6 @@ const selectedEligibilityCriteria = computed(() => {
         };
     });
 });
-const readyApplicationCount = computed(() => applications.value.filter((application) => Number(application.document_readiness?.accepted_percent ?? application.document_readiness?.uploaded_percent ?? 0) >= 100).length);
-const activeApplicationCount = computed(() => applications.value.filter((application) => !application.workflow?.is_closed).length);
-const upcomingScheduleCount = computed(() => applications.value.reduce(
-    (total, application) => total + applicationSchedules(application)
-        .filter((schedule) => schedule.status === 'scheduled')
-        .length,
-    0,
-));
 const applicationQueue = computed(() => [...applications.value].sort((first, second) => {
     const firstNeedsCorrection = Number(first.correction_status === 'requested');
     const secondNeedsCorrection = Number(second.correction_status === 'requested');
@@ -188,6 +219,21 @@ const applicationQueue = computed(() => [...applications.value].sort((first, sec
     const secondRank = second.workflow?.is_closed ? -1 : (stageRank[second.workflow?.current_stage] ?? 0);
 
     return secondRank - firstRank;
+}));
+const visibleApplicationQueue = computed(() => applicationQueue.value.filter((application) => {
+    if (applicationView === 'action') {
+        return applicationNeedsAction(application);
+    }
+
+    if (applicationView === 'completed') {
+        return Boolean(application.workflow?.is_closed);
+    }
+
+    if (applicationView === 'monitoring') {
+        return Boolean(application.recipient_monitoring?.eligible);
+    }
+
+    return !application.workflow?.is_closed;
 }));
 const nextStepLabel = computed(() => steps[currentStep.value + 1]?.label
     ? `Continue to ${steps[currentStep.value + 1].label}`
@@ -364,6 +410,18 @@ function applicationNextActionDetails(application) {
         ?? {};
 }
 
+function applicationNeedsAction(application) {
+    const nextAction = applicationNextActionDetails(application);
+    const actorLabel = String(nextAction.actor_label ?? nextAction.actor ?? '').toLowerCase();
+
+    return application?.correction_status === 'requested'
+        || Boolean(application?.recipient_agreement?.can_respond || application?.requires_student_response)
+        || Number(application?.recipient_monitoring?.pending_count ?? 0) > 0
+        || actorLabel === 'you'
+        || actorLabel.includes('applicant')
+        || actorLabel.includes('recipient');
+}
+
 function applicationActionLabel(application) {
     if (application?.correction_status === 'requested') {
         return 'Review update';
@@ -456,38 +514,6 @@ function timelineStepClass(state) {
     }
 
     return 'border-slate-200 bg-white text-slate-500';
-}
-
-function matchClass(score) {
-    if (Number(score) >= 80) {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (Number(score) >= 50) {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    return 'bg-rose-100 text-rose-800';
-}
-
-function recommendationClass(recommendation) {
-    if (recommendation === 'highly_recommended') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (recommendation === 'recommended') {
-        return 'bg-slate-100 text-slate-700';
-    }
-
-    if (recommendation === 'needs_review') {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    if (recommendation === 'not_recommended') {
-        return 'bg-slate-200 text-slate-700';
-    }
-
-    return 'bg-rose-100 text-rose-800';
 }
 
 function applicationModeLabel(value) {
@@ -695,8 +721,6 @@ async function loadApplications() {
         applications.value = response.data.applications;
         preparedDocuments.value = response.data.prepared_documents ?? [];
 
-        const requestedScholarshipId = new URLSearchParams(window.location.search).get('scholarship');
-
         activeWorkspace.value = requestedScholarshipId ? 'new' : 'applications';
 
         if (requestedScholarshipId) {
@@ -831,9 +855,9 @@ watch(selectedScholarship, (scholarship) => {
         <section class="student-page">
             <div class="student-container">
                 <ApplicantPageHeader
-                    eyebrow="Applications"
-                    title="Manage your submissions"
-                    description="Start pre-screening or check what happens next."
+                    :eyebrow="applicationViewContent.eyebrow"
+                    :title="applicationViewContent.title"
+                    :description="applicationViewContent.description"
                     icon="fa-solid fa-file-signature"
                     action-href="/dashboard/scholarships"
                     action-label="Browse scholarships"
@@ -841,9 +865,9 @@ watch(selectedScholarship, (scholarship) => {
                     secondary-label="Prepare documents"
                 />
 
-                <PrivacyNoticeCard context="applications" />
+                <PrivacyNoticeCard context="applications" compact />
 
-                <nav class="student-card mt-5 grid gap-1.5 p-1.5 sm:grid-cols-2" aria-label="Application workspace">
+                <nav v-if="activeWorkspace === 'new'" class="student-card mt-5 grid gap-1.5 p-1.5 sm:grid-cols-2" aria-label="Application workspace">
                     <button
                         type="button"
                         :class="[
@@ -1334,29 +1358,22 @@ watch(selectedScholarship, (scholarship) => {
                                     Application tracker
                                 </p>
                                 <h3 class="mt-1 text-xl font-bold text-slate-950">
-                                    Your pre-screening submissions
+                                    {{ applicationViewContent.sectionTitle }}
                                 </h3>
-                                <p class="mt-1 text-sm text-slate-500">Open an application when a file, schedule, or decision needs your attention.</p>
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
-                                    {{ activeApplicationCount }} active
-                                </span>
-                                <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
-                                    {{ readyApplicationCount }} files ready
-                                </span>
-                                <span v-if="upcomingScheduleCount" class="rounded-md bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
-                                    {{ upcomingScheduleCount }} upcoming {{ upcomingScheduleCount === 1 ? 'activity' : 'activities' }}
+                                    {{ visibleApplicationQueue.length }} record{{ visibleApplicationQueue.length === 1 ? '' : 's' }}
                                 </span>
                             </div>
                         </div>
 
-                        <div v-if="applications.length === 0" class="m-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                        <div v-if="visibleApplicationQueue.length === 0" class="m-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
                             <p class="text-sm font-bold text-slate-900">
-                                No pre-screening submissions yet
+                                {{ applicationViewContent.emptyTitle }}
                             </p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
-                                Choose a scholarship, confirm your documents, then submit for provider pre-screening.
+                                {{ applicationViewContent.emptyText }}
                             </p>
                             <div class="mt-4 flex flex-col gap-2 sm:flex-row">
                                 <a
@@ -1376,7 +1393,7 @@ watch(selectedScholarship, (scholarship) => {
 
                         <div v-else class="grid gap-4 p-5">
                             <article
-                                v-for="application in applicationQueue"
+                                v-for="application in visibleApplicationQueue"
                                 :key="application.id"
                                 class="overflow-hidden rounded-lg border border-l-4 border-slate-200 border-l-slate-900 bg-white shadow-sm"
                             >
@@ -1422,12 +1439,6 @@ watch(selectedScholarship, (scholarship) => {
                                     <div class="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
                                         <span class="rounded-md bg-slate-100 px-2.5 py-1">
                                             Stage: {{ application.workflow?.current_stage_label || application.status_progress?.label || statusLabel(application.status) }}
-                                        </span>
-                                        <span :class="['rounded-md px-2.5 py-1', recommendationClass(application.dss_recommendation)]">
-                                            Suitability {{ application.dss_score ?? 0 }}%
-                                        </span>
-                                        <span class="rounded-md bg-slate-100 px-2.5 py-1 text-slate-700">
-                                            Documents {{ application.document_readiness?.percent ?? 0 }}%
                                         </span>
                                         <span
                                             v-if="application.student_responded_at"
@@ -1493,7 +1504,6 @@ watch(selectedScholarship, (scholarship) => {
                     </section>
                 </div>
 
-                <ApplicantFooter />
             </div>
         </section>
     </main>

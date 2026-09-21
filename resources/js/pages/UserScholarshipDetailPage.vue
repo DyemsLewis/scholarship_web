@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import ApplicantFooter from '../components/ApplicantFooter.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
@@ -23,6 +22,16 @@ const user = ref(null);
 const scholarship = ref(null);
 const showMapModal = ref(false);
 const showProfileCheckModal = ref(false);
+const detailSections = [
+    { id: 'overview', label: 'Overview', icon: 'fa-solid fa-gift' },
+    { id: 'eligibility', label: 'Eligibility', icon: 'fa-solid fa-user-check' },
+    { id: 'requirements', label: 'Requirements', icon: 'fa-solid fa-folder-open' },
+    { id: 'process', label: 'Process', icon: 'fa-solid fa-route' },
+    { id: 'provider', label: 'Provider', icon: 'fa-solid fa-building-shield' },
+];
+const activeDetailSection = ref(detailSections.some((section) => section.id === window.location.hash.slice(1))
+    ? window.location.hash.slice(1)
+    : 'overview');
 const profileReadiness = ref({
     complete: false,
     completed: 0,
@@ -197,37 +206,6 @@ const keyFacts = computed(() => {
         },
     ];
 });
-const fitHighlights = computed(() => {
-    const current = scholarship.value;
-
-    if (!current) {
-        return [];
-    }
-
-    const yearLevelCheck = eligibilityChecks.value.get('year_level');
-
-    return [
-        { icon: 'fa-solid fa-school', label: 'Education level', value: eligibilityRuleLabel('education_level', current.eligible_education_levels) },
-        { icon: 'fa-solid fa-building-columns', label: 'School type', value: eligibilityRuleLabel('school_type', current.eligible_school_types) },
-        { icon: 'fa-solid fa-book-open', label: 'Track, strand, course, or program', value: eligibilityRuleLabel('course', current.eligible_courses) },
-        {
-            icon: 'fa-solid fa-layer-group',
-            label: 'Grade / year level',
-            value: eligibilityRuleLabel('year_level', current.eligible_year_levels),
-            items: yearLevelCheck?.status === 'info' ? [] : criteriaItems(current.eligible_year_levels),
-        },
-        { icon: 'fa-solid fa-wallet', label: 'Household income', value: eligibilityRuleLabel('income', current.income_requirement) },
-        {
-            icon: 'fa-solid fa-award',
-            label: 'Other scholarship support',
-            value: current.exclude_current_scholarship_recipients
-                ? 'Must not currently receive another scholarship'
-                : 'No restriction',
-        },
-        { icon: 'fa-solid fa-location-dot', label: 'Location coverage', value: eligibilityRuleLabel('location', current.eligible_locations) },
-        { icon: 'fa-solid fa-chart-line', label: 'Academic requirement', value: academicRequirementLabel(current) },
-    ];
-});
 const applyPanelTitle = computed(() => {
     if (scholarship.value?.has_applied) {
         return 'Pre-screening submitted';
@@ -353,32 +331,6 @@ function programEventPlaceLabel(event) {
         : null;
 
     return [mode, place].filter(Boolean).join(' - ');
-}
-
-function criteriaLabel(value) {
-    const items = criteriaItems(value);
-
-    return items.length ? items.join(', ') : 'No restriction';
-}
-
-function eligibilityRuleLabel(key, value) {
-    if (eligibilityChecks.value.get(key)?.status === 'info') {
-        return 'Open to all';
-    }
-
-    return criteriaLabel(value);
-}
-
-function criteriaItems(value) {
-    if (!value) {
-        return [];
-    }
-
-    return String(value)
-        .split(/\r?\n|,/)
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .map(labelFromKey);
 }
 
 function eligibilityCriterionText(value, fallback = '') {
@@ -683,9 +635,28 @@ onMounted(loadScholarship);
                         </section>
                     </header>
 
+                    <nav class="student-card grid gap-1.5 p-1.5 sm:grid-cols-2 xl:grid-cols-5" aria-label="Scholarship details">
+                        <button
+                            v-for="section in detailSections"
+                            :key="section.id"
+                            type="button"
+                            :aria-current="activeDetailSection === section.id ? 'page' : undefined"
+                            :class="[
+                                'flex min-h-11 items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-sm font-bold transition',
+                                activeDetailSection === section.id
+                                    ? 'bg-slate-950 text-white shadow-sm'
+                                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+                            ]"
+                            @click="activeDetailSection = section.id"
+                        >
+                            <i :class="[section.icon, activeDetailSection === section.id ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
+                            {{ section.label }}
+                        </button>
+                    </nav>
+
                     <div class="space-y-5">
                         <section class="space-y-5">
-                            <article v-if="scholarship.benefits?.length" class="student-card p-5 sm:p-6">
+                            <article v-if="activeDetailSection === 'overview' && scholarship.benefits?.length" class="student-card p-5 sm:p-6">
                                 <p class="student-kicker">Support package</p>
                                 <h2 class="mt-1 text-xl font-bold text-slate-950">What recipients receive</h2>
                                 <p class="mt-1 text-sm text-slate-500">Financial and non-cash support included by the provider.</p>
@@ -693,7 +664,7 @@ onMounted(loadScholarship);
                             </article>
 
                             <article
-                                v-if="selectedProviderObjectives.length || scholarship.provider_objective_notes"
+                                v-if="activeDetailSection === 'overview' && (selectedProviderObjectives.length || scholarship.provider_objective_notes)"
                                 class="student-card overflow-hidden"
                             >
                                 <div class="student-section-head border-b border-slate-200 p-5 sm:p-6">
@@ -730,9 +701,9 @@ onMounted(loadScholarship);
                                 </p>
                             </article>
 
-                            <RecipientAgreementPanel :scholarship="scholarship" />
+                            <RecipientAgreementPanel v-if="activeDetailSection === 'overview'" :scholarship="scholarship" />
 
-                            <article id="eligibility" class="student-card scroll-mt-6 p-5 sm:p-6">
+                            <article v-if="activeDetailSection === 'eligibility'" id="eligibility" class="student-card scroll-mt-6 p-5 sm:p-6">
                                 <div class="student-section-head">
                                     <div class="flex items-start gap-3">
                                         <span class="student-section-mark">
@@ -740,8 +711,8 @@ onMounted(loadScholarship);
                                         </span>
                                         <div>
                                             <p class="student-kicker">Eligibility</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Check both eligibility parts</h2>
-                                            <p class="mt-1 text-sm text-slate-500">A profile match is helpful, but you must also meet the provider's written conditions.</p>
+                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Eligibility review</h2>
+                                            <p class="mt-1 text-sm text-slate-500">Profile matching and provider conditions are reviewed separately.</p>
                                         </div>
                                     </div>
                                     <span :class="['w-fit rounded-md px-3 py-1.5 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
@@ -789,48 +760,14 @@ onMounted(loadScholarship);
                                             <p class="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-slate-900">
                                                 {{ scholarship.eligibility || 'The provider has not posted separate written eligibility conditions.' }}
                                             </p>
-                                            <p class="mt-2 text-xs leading-5 text-amber-900">
-                                                This written condition is reviewed by the provider and may not be fully checked by the DSS. You must meet it even when your structured profile match is high.
-                                            </p>
+                                            <p class="mt-2 text-xs leading-5 text-amber-900">The provider confirms conditions the portal cannot verify.</p>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div v-if="eligibilityConditionResults.length" class="mt-4">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">How the required conditions are checked</p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">Automatic checks use your profile. The provider reviews conditions that cannot be checked safely by the portal.</p>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Condition review</p>
                                     <EligibilityConditionList class="mt-3" :conditions="eligibilityConditionResults" />
-                                </div>
-
-                                <div class="mt-5">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">DSS matching restrictions</p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">These are the structured values automatically compared with your saved profile.</p>
-                                </div>
-                                <div class="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                    <div class="grid sm:grid-cols-2">
-                                        <div
-                                            v-for="item in fitHighlights"
-                                            :key="item.label"
-                                            class="flex gap-3 border-b border-slate-200 p-3.5 last:border-b-0 sm:[&:nth-child(odd)]:border-r sm:last:col-span-2 sm:last:border-r-0"
-                                        >
-                                            <span class="mt-0.5 text-sm text-amber-700">
-                                                <i :class="item.icon" aria-hidden="true"></i>
-                                            </span>
-                                            <div class="min-w-0">
-                                                <p class="text-xs font-semibold text-slate-500">{{ item.label }}</p>
-                                                <div v-if="item.items?.length" class="mt-2 flex flex-wrap gap-1.5">
-                                                    <span
-                                                        v-for="level in item.items"
-                                                        :key="level"
-                                                        class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200"
-                                                    >
-                                                        {{ level }}
-                                                    </span>
-                                                </div>
-                                                <p v-else class="mt-1 whitespace-pre-line text-sm font-bold leading-5 text-slate-800">{{ item.value }}</p>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
 
                                 <button
@@ -844,18 +781,17 @@ onMounted(loadScholarship);
                                             <i class="fa-solid fa-list-check" aria-hidden="true"></i>
                                         </span>
                                         <span class="min-w-0">
-                                            <span class="block text-sm font-bold text-slate-900">See how your profile was checked</span>
-                                            <span class="mt-0.5 block text-xs leading-5 text-slate-500">Compare your saved details with each published program rule.</span>
+                                            <span class="block text-sm font-bold text-slate-900">View profile comparison</span>
                                         </span>
                                     </span>
                                     <span class="inline-flex shrink-0 items-center gap-2 text-xs font-bold text-slate-700">
-                                        View comparison
+                                        Open
                                         <i class="fa-solid fa-arrow-right text-[10px] text-amber-700" aria-hidden="true"></i>
                                     </span>
                                 </button>
                             </article>
 
-                            <article id="documents" class="student-card scroll-mt-6 p-5 sm:p-6">
+                            <article v-if="activeDetailSection === 'requirements'" id="documents" class="student-card scroll-mt-6 p-5 sm:p-6">
                                 <div class="student-section-head">
                                     <div class="flex items-start gap-3">
                                         <span class="student-section-mark">
@@ -970,7 +906,7 @@ onMounted(loadScholarship);
                                 </div>
                             </article>
 
-                            <article class="student-card p-5 sm:p-6">
+                            <article v-if="activeDetailSection === 'process'" class="student-card p-5 sm:p-6">
                                 <div class="student-section-head">
                                     <div class="flex items-start gap-3">
                                         <span class="student-section-mark">
@@ -1015,7 +951,7 @@ onMounted(loadScholarship);
                             </article>
                         </section>
 
-                        <section class="student-card overflow-hidden">
+                        <section v-if="activeDetailSection === 'provider'" class="student-card overflow-hidden">
                             <div class="student-section-head p-5 sm:p-6">
                                 <div class="flex items-start gap-3">
                                     <span class="student-section-mark">
@@ -1108,7 +1044,6 @@ onMounted(loadScholarship);
                     </div>
                 </div>
 
-                <ApplicantFooter />
             </div>
         </section>
 

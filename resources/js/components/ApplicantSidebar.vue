@@ -1,44 +1,64 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue';
 import ApplicantReportModal from './ApplicantReportModal.vue';
-import ConfirmationDialog from './ConfirmationDialog.vue';
-import EmailVerificationReminder from './EmailVerificationReminder.vue';
-import NotificationBell from './NotificationBell.vue';
-import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import RoleSidebar from './RoleSidebar.vue';
 
-const currentPath = window.location.pathname.replace(/\/$/, '') || '/dashboard';
-const isMenuOpen = ref(false);
 const isReportModalOpen = ref(false);
 const reportCategory = ref('');
-const {
-    confirmation,
-    requestConfirmation,
-    confirmConfirmation,
-    cancelConfirmation,
-} = useConfirmationDialog();
 
 const navLinks = [
-    { href: '/dashboard', label: 'Dashboard' },
-    { href: '/dashboard/scholarships', label: 'Scholarships' },
-    { href: '/dashboard/applications', label: 'Applications' },
-    { href: '/dashboard/documents', label: 'Documents' },
-    { href: '/dashboard/profile', label: 'Profile' },
+    {
+        href: '/dashboard',
+        label: 'Dashboard',
+        icon: 'fa-solid fa-gauge-high',
+        exact: true,
+    },
+    {
+        href: '/dashboard/scholarships',
+        label: 'Scholarships',
+        icon: 'fa-solid fa-graduation-cap',
+        children: [
+            { href: '/dashboard/scholarships', label: 'Find scholarships', exact: true, queryless: true },
+            { href: '/dashboard/scholarships?view=saved', label: 'Saved scholarships', exact: true },
+            { href: '/dashboard/scholarships?view=compare', label: 'Compare scholarships', exact: true },
+        ],
+    },
+    {
+        href: '/dashboard/applications',
+        label: 'Applications',
+        icon: 'fa-solid fa-file-signature',
+        children: [
+            { href: '/dashboard/applications', label: 'Active applications', exact: true, queryless: true },
+            { href: '/dashboard/applications?view=action', label: 'Needs my action', exact: true },
+            { href: '/dashboard/applications?view=completed', label: 'Completed', exact: true },
+            { href: '/dashboard/applications?view=monitoring', label: 'Recipient monitoring', exact: true },
+        ],
+    },
+    {
+        href: '/dashboard/documents',
+        label: 'Documents',
+        icon: 'fa-solid fa-folder-open',
+        children: [
+            { href: '/dashboard/documents', label: 'Prepared files', exact: true, queryless: true },
+            { href: '/dashboard/documents?view=applications', label: 'Application files', exact: true },
+        ],
+    },
+    {
+        href: '/dashboard/profile',
+        label: 'Profile',
+        icon: 'fa-solid fa-id-card',
+        children: [
+            { href: '/dashboard/profile', label: 'Profile overview', exact: true, queryless: true },
+            { href: '/dashboard/profile?section=personal', label: 'Personal information', exact: true },
+            { href: '/dashboard/profile?section=academic', label: 'Education', exact: true },
+            { href: '/dashboard/profile?section=background', label: 'Goals and involvement', exact: true },
+            { href: '/dashboard/profile?section=location', label: 'Location', exact: true },
+            { href: '/dashboard/profile?section=verification', label: 'Supporting evidence', exact: true },
+        ],
+    },
 ];
 
-function isActive(href) {
-    if (href === '/dashboard') {
-        return currentPath === href;
-    }
-
-    return currentPath === href || currentPath.startsWith(`${href}/`);
-}
-
-function closeMenu() {
-    isMenuOpen.value = false;
-}
-
 function openReportModal(category = '') {
-    closeMenu();
     reportCategory.value = category;
     isReportModalOpen.value = true;
 }
@@ -54,158 +74,20 @@ onMounted(() => {
 onUnmounted(() => {
     window.removeEventListener('portal:open-report', openRequestedReport);
 });
-
-async function requestLogout() {
-    closeMenu();
-
-    const confirmed = await requestConfirmation({
-        title: 'Log out of your account?',
-        message: 'You will need to sign in again to continue using the scholarship portal.',
-        confirmLabel: 'Log out',
-        tone: 'danger',
-    });
-
-    if (!confirmed) {
-        return;
-    }
-
-    await window.axios.post('/logout');
-    window.location.href = '/';
-}
 </script>
 
 <template>
-    <header class="sticky top-0 z-40 border-b border-white/15 bg-[#081426]/95 text-white shadow-[0_10px_30px_rgba(8,20,38,0.18)] backdrop-blur">
-        <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-            <a href="/dashboard" class="group flex items-center gap-3">
-                <span class="flex h-9 w-9 items-center justify-center rounded-md bg-amber-300 font-display text-sm font-bold text-slate-950">
-                    <i class="fa-solid fa-award"></i>
-                </span>
-                <span>
-                    <span class="block font-display text-lg font-bold leading-tight text-white">
-                        Scholarship Portal
-                    </span>
-                </span>
-            </a>
-
-            <nav class="hidden items-center gap-1 md:flex">
-                <a
-                    v-for="link in navLinks"
-                    :key="link.href"
-                    :href="link.href"
-                    :class="[
-                        'rounded-md px-3 py-2 text-sm font-semibold transition lg:px-4',
-                        isActive(link.href)
-                            ? 'bg-white/15 text-white ring-1 ring-white/10'
-                            : 'text-slate-200 hover:bg-white/10 hover:text-white',
-                    ]"
-                >
-                    <span>
-                        {{ link.label }}
-                    </span>
-                </a>
-            </nav>
-
-            <div class="hidden items-center gap-3 md:flex">
-                <NotificationBell />
-                <span class="rounded-md bg-white/10 px-3 py-2 text-xs font-semibold text-slate-200 ring-1 ring-white/10">
-                    Applicant
-                </span>
-                <button
-                    type="button"
-                    class="rounded-md border border-white/20 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white hover:text-slate-950"
-                    @click="requestLogout"
-                >
-                    <i class="fa-solid fa-right-from-bracket mr-2 text-xs"></i>
-                    Logout
-                </button>
-            </div>
-
-            <button
-                type="button"
-                class="rounded-md border border-white/20 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white hover:text-slate-950 md:hidden"
-                @click="isMenuOpen = true"
-                >
-                    <i class="fa-solid fa-bars mr-2"></i>
-                    Menu
-                </button>
-        </div>
-    </header>
-
-    <EmailVerificationReminder class="mx-4 my-3 sm:mx-6 lg:mx-auto lg:max-w-7xl" />
-
-    <div
-        v-if="isMenuOpen"
-        class="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm md:hidden"
-        @click.self="closeMenu"
-    >
-        <aside class="h-full w-[min(21rem,86vw)] bg-[#081426] text-white shadow-2xl">
-            <div class="flex h-full flex-col gap-6 px-5 py-6">
-                <div class="flex items-start justify-between gap-4">
-                    <a href="/dashboard" class="font-display text-xl font-bold text-white" @click="closeMenu">
-                        Scholarship Portal
-                    </a>
-                    <button
-                        type="button"
-                        class="rounded-md border border-white/20 px-3 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white hover:text-slate-950"
-                        @click="closeMenu"
-                    >
-                        <i class="fa-solid fa-xmark mr-2"></i>
-                        Close
-                    </button>
-                </div>
-
-                <div>
-                    <p class="inline-flex rounded-md bg-amber-300/15 px-3 py-1.5 text-xs font-semibold text-amber-100 ring-1 ring-amber-200/20">
-                        Applicant
-                    </p>
-                    <h1 class="mt-4 font-display text-2xl leading-tight font-bold text-white">
-                        Applicant workspace
-                    </h1>
-                </div>
-
-                <nav class="grid gap-2">
-                    <a
-                        v-for="link in navLinks"
-                        :key="link.href"
-                        :href="link.href"
-                        :class="[
-                            'rounded-md border px-4 py-3 transition hover:bg-slate-50',
-                            isActive(link.href)
-                                ? 'border-amber-300 bg-amber-300 text-slate-950'
-                                : 'border-white/10 bg-white/5 text-slate-200 hover:text-slate-950',
-                        ]"
-                        @click="closeMenu"
-                    >
-                        <span class="text-sm font-bold">
-                            {{ link.label }}
-                        </span>
-                    </a>
-                </nav>
-
-                <div class="mt-auto rounded-lg border border-white/10 bg-white/5 p-4">
-                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
-                        Applicant Account
-                    </p>
-                    <div class="mt-4">
-                        <NotificationBell align="left" mode="sidebar" />
-                    </div>
-                    <EmailVerificationReminder class="mt-4" mode="dark" />
-                    <button
-                        type="button"
-                        class="mt-4 w-full rounded-md border border-white/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white hover:text-slate-950"
-                        @click="requestLogout"
-                    >
-                        <i class="fa-solid fa-right-from-bracket mr-2"></i>
-                        Logout
-                    </button>
-                </div>
-            </div>
-        </aside>
-    </div>
+    <RoleSidebar
+        title="Applicant"
+        subtitle="Scholarship Workspace"
+        icon="fa-solid fa-award"
+        home-href="/dashboard"
+        :nav-links="navLinks"
+        logout-message="You will need to sign in again to continue using the scholarship portal."
+    />
 
     <button
-        v-if="!isMenuOpen && !isReportModalOpen"
+        v-if="!isReportModalOpen"
         type="button"
         class="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-amber-300 px-4 py-3 text-sm font-bold text-slate-950 shadow-[0_14px_35px_rgba(8,20,38,0.28)] ring-2 ring-white transition hover:-translate-y-0.5 hover:bg-amber-200 sm:bottom-6 sm:right-6"
         aria-label="Report a problem"
@@ -216,12 +98,6 @@ async function requestLogout() {
         </span>
         Report
     </button>
-
-    <ConfirmationDialog
-        v-bind="confirmation"
-        @confirm="confirmConfirmation"
-        @cancel="cancelConfirmation"
-    />
 
     <ApplicantReportModal v-model="isReportModalOpen" :initial-category="reportCategory" />
 </template>

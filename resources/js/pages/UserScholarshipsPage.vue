@@ -1,7 +1,5 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import ApplicantFooter from '../components/ApplicantFooter.vue';
-import ApplicantGuideStrip from '../components/ApplicantGuideStrip.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import { labelFromKey } from '../support/display';
@@ -30,28 +28,27 @@ const previewScholarship = ref(null);
 const showComparisonModal = ref(false);
 const comparisonStep = ref('select');
 const comparisonSelection = ref([]);
-const dssGuideItems = [
-    { label: 'Profile', icon: 'fa-solid fa-user-check', description: 'Your saved learner details.' },
-    { label: 'Rules', icon: 'fa-solid fa-list-check', description: 'Provider eligibility settings.' },
-    { label: 'Score', icon: 'fa-solid fa-gauge-high', description: 'Fit guide, not final approval.' },
-];
-const finderGuideItems = [
-    {
-        title: 'Filter lightly',
-        text: 'Start broad, then refine.',
-        icon: 'fa-solid fa-sliders',
+const requestedScholarshipView = new URLSearchParams(window.location.search).get('view');
+const scholarshipView = ['find', 'saved', 'compare'].includes(requestedScholarshipView)
+    ? requestedScholarshipView
+    : 'find';
+const scholarshipPageContent = {
+    find: {
+        eyebrow: 'Scholarships',
+        title: 'Find programs that fit',
+        description: 'Search approved scholarships using the criteria that matter to you.',
     },
-    {
-        title: 'Check the fit',
-        text: 'Use match badges first.',
-        icon: 'fa-solid fa-chart-simple',
+    saved: {
+        eyebrow: 'Saved scholarships',
+        title: 'Review programs saved for later',
+        description: 'Keep your shortlist focused before comparing or starting an application.',
     },
-    {
-        title: 'Save or apply',
-        text: 'Keep choices organized.',
-        icon: 'fa-solid fa-bookmark',
+    compare: {
+        eyebrow: 'Scholarship comparison',
+        title: 'Compare two eligible programs',
+        description: 'Review benefits, deadlines, eligibility, and recipient expectations side by side.',
     },
-];
+}[scholarshipView];
 const benefitIcons = {
     cash_grant: 'fa-solid fa-peso-sign',
     tuition_coverage: 'fa-solid fa-graduation-cap',
@@ -769,7 +766,7 @@ function resetFilters() {
     courseFilter.value = '';
     yearFilter.value = '';
     locationFilter.value = '';
-    savedOnly.value = false;
+    savedOnly.value = scholarshipView === 'saved';
 }
 
 async function toggleSave(scholarship) {
@@ -868,9 +865,14 @@ function handlePreviewKeydown(event) {
     }
 }
 
-onMounted(() => {
+onMounted(async () => {
     window.addEventListener('keydown', handlePreviewKeydown);
-    loadScholarships();
+    savedOnly.value = scholarshipView === 'saved';
+    await loadScholarships();
+
+    if (scholarshipView === 'compare' && !errorMessage.value) {
+        openComparisonModal();
+    }
 });
 
 onBeforeUnmount(() => {
@@ -885,17 +887,15 @@ onBeforeUnmount(() => {
         <section class="student-page">
             <div class="student-container">
                 <ApplicantPageHeader
-                    eyebrow="Scholarships"
-                    title="Find programs that fit"
-                    description="Browse approved programs and compare fit quickly."
+                    :eyebrow="scholarshipPageContent.eyebrow"
+                    :title="scholarshipPageContent.title"
+                    :description="scholarshipPageContent.description"
                     icon="fa-solid fa-magnifying-glass-chart"
                     action-href="/dashboard/applications"
                     action-label="Go to applications"
                     secondary-href="/dashboard/profile"
                     secondary-label="Improve profile"
                 />
-
-                <ApplicantGuideStrip class="mt-5" :items="finderGuideItems" />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading scholarships...
@@ -934,26 +934,10 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
 
-                        <details class="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                            <summary class="cursor-pointer text-sm font-bold text-slate-800">
-                                Matching guide
-                            </summary>
-                            <div class="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-3">
-                                <div
-                                    v-for="item in dssGuideItems"
-                                    :key="item.label"
-                                    class="flex gap-3 rounded-md border border-slate-200 bg-white p-3"
-                                >
-                                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-950 text-xs text-amber-200">
-                                        <i :class="item.icon"></i>
-                                    </span>
-                                    <span>
-                                        <span class="block font-bold text-slate-900">{{ item.label }}</span>
-                                        <span class="mt-1 block line-clamp-2 leading-5">{{ item.description }}</span>
-                                    </span>
-                                </div>
-                            </div>
-                        </details>
+                        <div class="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <i class="fa-solid fa-circle-info text-amber-700" aria-hidden="true"></i>
+                            <p><span class="font-bold text-slate-900">Match scores are a guide.</span> Providers still review their written requirements.</p>
+                        </div>
 
                         <div class="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[minmax(14rem,2fr)_auto_minmax(10rem,1fr)_minmax(10rem,1fr)_auto_auto] xl:items-center">
                             <input
@@ -963,7 +947,7 @@ onBeforeUnmount(() => {
                                 class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                             >
 
-                            <label class="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-700">
+                            <label v-if="scholarshipView !== 'saved'" class="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-700">
                                 <span>Saved only</span>
                                 <input
                                     v-model="savedOnly"
@@ -1048,10 +1032,10 @@ onBeforeUnmount(() => {
                         <div v-else-if="filteredScholarships.length === 0" class="student-card p-6">
                             <div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
                                 <p class="text-sm font-bold text-slate-900">
-                                    No scholarships match your filters
+                                    {{ scholarshipView === 'saved' ? 'No saved scholarships yet' : 'No scholarships match your filters' }}
                                 </p>
                                 <p class="mt-1 text-sm leading-6 text-slate-500">
-                                    Try removing one filter or searching with a broader course, location, or category.
+                                    {{ scholarshipView === 'saved' ? 'Save scholarships from the finder to build a shortlist here.' : 'Try removing one filter or searching with a broader course, location, or category.' }}
                                 </p>
                                 <button
                                     type="button"
@@ -1063,7 +1047,7 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
 
-                        <div v-else class="grid items-stretch gap-4 lg:grid-cols-2">
+                        <div v-else class="grid items-stretch gap-4">
                             <article
                                 v-for="scholarship in filteredScholarships"
                                 :key="scholarship.id"
@@ -1126,9 +1110,6 @@ onBeforeUnmount(() => {
                                         <p class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                             <i class="fa-regular fa-calendar mr-1"></i>
                                             {{ compactDeadlineLabel(scholarship) }}
-                                        </p>
-                                        <p v-if="scholarship.program_cycle" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                            {{ scholarship.program_cycle }}
                                         </p>
                                         <p v-if="scholarship.distance_label" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                             <i class="fa-solid fa-location-dot mr-1"></i>
@@ -1210,7 +1191,6 @@ onBeforeUnmount(() => {
                     </section>
                 </section>
 
-                <ApplicantFooter />
             </div>
         </section>
     </main>

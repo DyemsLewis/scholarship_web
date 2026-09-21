@@ -70,7 +70,7 @@ function formatAmount(value) {
 </script>
 
 <template>
-    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section :class="['overflow-hidden rounded-lg border border-slate-200 bg-white', embedded ? '' : 'shadow-sm']">
         <header v-if="!embedded" class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
             <div class="flex items-start gap-3">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
@@ -87,11 +87,16 @@ function formatAmount(value) {
             </span>
         </header>
 
-        <div :class="compact ? 'grid gap-3 p-4 lg:grid-cols-2' : 'grid gap-4 p-4 sm:p-5 lg:grid-cols-2'">
-            <article class="rounded-md border border-slate-200 p-3.5">
-                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Support package</p>
-                <p class="mt-1 font-bold text-slate-950">{{ snapshot.program_title }}</p>
-                <p class="mt-1 text-xs text-slate-500">{{ snapshot.provider_name }}</p>
+        <div :class="embedded ? 'divide-y divide-slate-200' : (compact ? 'grid gap-3 p-4 lg:grid-cols-2' : 'grid gap-4 p-4 sm:p-5 lg:grid-cols-2')">
+            <article :class="embedded ? 'p-4 sm:p-5' : 'rounded-md border border-slate-200 p-3.5'">
+                <div class="flex items-start gap-3">
+                    <span v-if="embedded" class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-100 text-xs font-bold text-amber-800">1</span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">What you will receive</p>
+                        <p class="mt-1 font-bold text-slate-950">{{ snapshot.program_title }}</p>
+                        <p class="mt-1 text-xs text-slate-500">{{ snapshot.provider_name }}</p>
+                    </div>
+                </div>
                 <ul v-if="benefits.length" class="mt-3 space-y-2">
                     <li v-for="benefit in benefits" :key="`${benefit.type}-${benefit.title}`" class="flex items-start gap-2 text-sm leading-5 text-slate-700">
                         <i class="fa-solid fa-gift mt-1 text-[10px] text-amber-700" aria-hidden="true"></i>
@@ -104,22 +109,34 @@ function formatAmount(value) {
                 <p v-else class="mt-3 text-sm text-slate-500">The provider will confirm the final support package.</p>
             </article>
 
-            <article class="rounded-md border border-slate-200 p-3.5">
-                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Support period and commitment</p>
-                <p class="mt-1 font-bold text-slate-950">{{ supportPeriod }}</p>
-                <p class="mt-3 text-sm font-bold text-slate-900">{{ expectationLabel }}</p>
-                <p v-if="expectation.duration" class="mt-1 text-sm leading-5 text-slate-600">{{ expectation.duration }}</p>
-                <p v-if="expectation.noncompliance_consequence" class="mt-3 text-xs leading-5 text-slate-600">
-                    <strong class="text-slate-800">If not completed:</strong> {{ expectation.noncompliance_consequence }}
-                </p>
-                <p v-if="expectation.exit_or_exception_process" class="mt-2 text-xs leading-5 text-slate-600">
-                    <strong class="text-slate-800">Exceptions or withdrawal:</strong> {{ expectation.exit_or_exception_process }}
-                </p>
+            <article :class="embedded ? 'p-4 sm:p-5' : 'rounded-md border border-slate-200 p-3.5'">
+                <div class="flex items-start gap-3">
+                    <span v-if="embedded" class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-100 text-xs font-bold text-amber-800">2</span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">What you agree to</p>
+                        <p class="mt-1 font-bold text-slate-950">{{ expectationLabel }}</p>
+                        <p class="mt-1 text-xs text-slate-500">Support period: {{ supportPeriod }}</p>
+                    </div>
+                </div>
+                <dl class="mt-3 overflow-hidden rounded-md border border-slate-200">
+                    <div v-if="expectation.duration" class="px-3 py-2.5">
+                        <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Timeframe</dt>
+                        <dd class="mt-1 text-sm leading-5 text-slate-700">{{ expectation.duration }}</dd>
+                    </div>
+                    <div v-if="expectation.noncompliance_consequence" :class="['px-3 py-2.5', expectation.duration ? 'border-t border-slate-200' : '']">
+                        <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">If it is not completed</dt>
+                        <dd class="mt-1 text-sm leading-5 text-slate-700">{{ expectation.noncompliance_consequence }}</dd>
+                    </div>
+                    <div v-if="expectation.exit_or_exception_process" :class="['px-3 py-2.5', expectation.duration || expectation.noncompliance_consequence ? 'border-t border-slate-200' : '']">
+                        <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Exceptions or withdrawal</dt>
+                        <dd class="mt-1 text-sm leading-5 text-slate-700">{{ expectation.exit_or_exception_process }}</dd>
+                    </div>
+                </dl>
             </article>
 
-            <article v-if="hasProviderTerms" class="rounded-md border border-slate-200 p-3.5 lg:col-span-2">
-                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Provider terms</p>
-                <dl class="mt-3 grid gap-3 md:grid-cols-3">
+            <article v-if="hasProviderTerms" :class="embedded ? 'bg-slate-50 p-4 sm:p-5' : 'rounded-md border border-slate-200 p-3.5 lg:col-span-2'">
+                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Additional provider terms</p>
+                <dl :class="['mt-3 grid gap-3', embedded ? 'sm:grid-cols-3' : 'md:grid-cols-3']">
                     <div v-if="snapshot.renewal_policy">
                         <dt class="text-xs font-bold text-slate-900">Renewal</dt>
                         <dd class="mt-1 whitespace-pre-line text-xs leading-5 text-slate-600">{{ snapshot.renewal_policy }}</dd>

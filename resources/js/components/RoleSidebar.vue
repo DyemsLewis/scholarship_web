@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import ConfirmationDialog from './ConfirmationDialog.vue';
 import EmailVerificationReminder from './EmailVerificationReminder.vue';
 import NotificationBell from './NotificationBell.vue';
@@ -36,7 +36,8 @@ const props = defineProps({
     },
 });
 
-const currentPath = window.location.pathname.replace(/\/$/, '') || props.homeHref;
+const currentUrl = new URL(window.location.href);
+const currentPath = currentUrl.pathname.replace(/\/$/, '') || props.homeHref;
 const portalUser = window.portalUser ?? {};
 const accountName = computed(() => (
     portalUser.display_name
@@ -63,20 +64,71 @@ const {
     cancelConfirmation,
 } = useConfirmationDialog();
 
+function linkPath(link) {
+    return new URL(link.href, window.location.origin).pathname.replace(/\/$/, '') || '/';
+}
+
+function linkQueryMatches(link) {
+    const targetUrl = new URL(link.href, window.location.origin);
+
+    if ([...targetUrl.searchParams].length === 0) {
+        return !link.queryless || [...currentUrl.searchParams].length === 0;
+    }
+
+    return [...targetUrl.searchParams].every(([key, value]) => currentUrl.searchParams.get(key) === value);
+}
+
 function isActive(link) {
     if (props.active) {
         return props.active === link.key;
     }
 
+    const targetPath = linkPath(link);
+
     if (link.exact) {
-        return currentPath === link.href;
+        return currentPath === targetPath && linkQueryMatches(link);
     }
 
     if (link.activePaths?.some((path) => currentPath === path || currentPath.startsWith(`${path}/`))) {
         return true;
     }
 
-    return currentPath === link.href || currentPath.startsWith(`${link.href}/`);
+    return (currentPath === targetPath || currentPath.startsWith(`${targetPath}/`)) && linkQueryMatches(link);
+}
+
+function isGroupActive(link) {
+    const targetPath = linkPath(link);
+
+    return currentPath === targetPath
+        || currentPath.startsWith(`${targetPath}/`)
+        || link.children?.some((child) => isActive(child));
+}
+
+function groupKey(link) {
+    return link.key || link.href;
+}
+
+const expandedGroups = ref(new Set(
+    props.navLinks
+        .filter((link) => link.children?.length && isGroupActive(link))
+        .map(groupKey),
+));
+
+function isGroupExpanded(link) {
+    return expandedGroups.value.has(groupKey(link));
+}
+
+function toggleGroup(link) {
+    const nextGroups = new Set(expandedGroups.value);
+    const key = groupKey(link);
+
+    if (nextGroups.has(key)) {
+        nextGroups.delete(key);
+    } else {
+        nextGroups.add(key);
+    }
+
+    expandedGroups.value = nextGroups;
 }
 
 async function requestLogout() {
@@ -118,32 +170,65 @@ async function requestLogout() {
             </header>
 
             <nav class="grid content-start gap-1 border-t border-white/10 pt-4 sm:grid-cols-2 lg:min-h-0 lg:flex-1 lg:grid-cols-1 lg:overflow-y-auto [scrollbar-color:rgba(148,163,184,0.25)_transparent] [scrollbar-width:thin]" aria-label="Portal navigation">
-                <a
+                <div
                     v-for="link in navLinks"
                     :key="link.href"
-                    :href="link.href"
-                    :aria-current="isActive(link) ? 'page' : undefined"
-                    :class="[
-                        'group relative flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition',
-                        isActive(link)
-                            ? 'bg-white/[0.09] text-white'
-                            : 'text-slate-400 hover:bg-white/[0.05] hover:text-white',
-                    ]"
                 >
-                    <span
-                        v-if="isActive(link)"
-                        class="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-amber-300"
-                    ></span>
-                    <span
+                    <button
+                        v-if="link.children?.length"
+                        type="button"
                         :class="[
-                            'grid h-6 w-6 shrink-0 place-items-center text-xs transition',
-                            isActive(link) ? 'text-amber-300' : 'text-slate-500 group-hover:text-slate-300',
+                            'group relative flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-semibold transition',
+                            isGroupActive(link)
+                                ? 'bg-white/[0.09] text-white'
+                                : 'text-slate-400 hover:bg-white/[0.05] hover:text-white',
+                        ]"
+                        :aria-expanded="isGroupExpanded(link)"
+                        @click="toggleGroup(link)"
+                    >
+                        <span v-if="isGroupActive(link)" class="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-amber-300"></span>
+                        <span :class="['grid h-6 w-6 shrink-0 place-items-center text-xs transition', isGroupActive(link) ? 'text-amber-300' : 'text-slate-500 group-hover:text-slate-300']">
+                            <i :class="link.icon" aria-hidden="true"></i>
+                        </span>
+                        <span class="min-w-0 flex-1 truncate">{{ link.label }}</span>
+                        <i :class="['fa-solid fa-chevron-down text-[9px] transition-transform', isGroupExpanded(link) ? 'rotate-180 text-slate-300' : 'text-slate-600']" aria-hidden="true"></i>
+                    </button>
+
+                    <div v-if="link.children?.length && isGroupExpanded(link)" class="ml-9 mt-1 grid gap-0.5 border-l border-white/10 pl-2">
+                        <a
+                            v-for="child in link.children"
+                            :key="child.href"
+                            :href="child.href"
+                            :aria-current="isActive(child) ? 'page' : undefined"
+                            :class="[
+                                'rounded-md px-3 py-2 text-xs font-semibold transition',
+                                isActive(child)
+                                    ? 'bg-amber-300 text-slate-950'
+                                    : 'text-slate-500 hover:bg-white/[0.05] hover:text-white',
+                            ]"
+                        >
+                            {{ child.label }}
+                        </a>
+                    </div>
+
+                    <a
+                        v-if="!link.children?.length"
+                        :href="link.href"
+                        :aria-current="isActive(link) ? 'page' : undefined"
+                        :class="[
+                            'group relative flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition',
+                            isActive(link)
+                                ? 'bg-white/[0.09] text-white'
+                                : 'text-slate-400 hover:bg-white/[0.05] hover:text-white',
                         ]"
                     >
-                        <i :class="link.icon" aria-hidden="true"></i>
-                    </span>
-                    <span class="min-w-0 truncate">{{ link.label }}</span>
-                </a>
+                        <span v-if="isActive(link)" class="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-amber-300"></span>
+                        <span :class="['grid h-6 w-6 shrink-0 place-items-center text-xs transition', isActive(link) ? 'text-amber-300' : 'text-slate-500 group-hover:text-slate-300']">
+                            <i :class="link.icon" aria-hidden="true"></i>
+                        </span>
+                        <span class="min-w-0 truncate">{{ link.label }}</span>
+                    </a>
+                </div>
             </nav>
 
             <div class="mt-4 shrink-0 border-t border-white/10 pt-3">

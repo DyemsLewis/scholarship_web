@@ -1,7 +1,5 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
-import ApplicantFooter from '../components/ApplicantFooter.vue';
-import ApplicantNextActionPanel from '../components/ApplicantNextActionPanel.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantRecipientMonitoring from '../components/ApplicantRecipientMonitoring.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
@@ -154,6 +152,26 @@ const applicantNextActor = computed(() => recipientAgreement.value?.can_respond
     : application.value?.correction_status === 'requested'
         ? 'You'
         : (applicantNextActionDetails.value.actor_label ?? 'Check application'));
+const applicantOwnsNextAction = computed(() => {
+    const actor = String(applicantNextActor.value ?? '').toLowerCase();
+
+    return actor === 'you' || actor.includes('applicant') || actor.includes('recipient');
+});
+const applicantNextEyebrow = computed(() => {
+    if (applicationIsClosed.value && !recipientAgreement.value?.can_respond) {
+        return 'Application complete';
+    }
+
+    if (applicantOwnsNextAction.value) {
+        return 'Your next action';
+    }
+
+    const actor = String(applicantNextActor.value ?? '');
+
+    return /provider|admin|review team|platform/i.test(actor)
+        ? `Waiting for ${actor}`
+        : 'Next step';
+});
 const applicantNextDescription = computed(() => {
     if (recipientAgreement.value?.can_respond) {
         return 'Confirm the support and responsibilities recorded when the provider selected you.';
@@ -891,7 +909,7 @@ onMounted(loadApplication);
                 <ApplicantPageHeader
                     eyebrow="My application"
                     title="Application details"
-                    description="Check your status, next required action, files, and provider updates."
+                    description="See your current status and continue with the next required action."
                     icon="fa-solid fa-file-circle-check"
                     action-href="/dashboard/applications"
                     action-label="Back to submissions"
@@ -899,7 +917,7 @@ onMounted(loadApplication);
                     secondary-label="Documents"
                 />
 
-                <PrivacyNoticeCard context="application" />
+                <PrivacyNoticeCard context="application" compact />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading application details...
@@ -914,7 +932,7 @@ onMounted(loadApplication);
                         {{ errorMessage }}
                     </div>
 
-                    <section class="student-card overflow-hidden border-l-4 border-l-amber-400">
+                    <section class="student-card overflow-hidden">
                         <div class="flex flex-col gap-5 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                             <div class="flex min-w-0 gap-4">
                                 <img
@@ -943,6 +961,28 @@ onMounted(loadApplication);
                             </div>
                         </div>
 
+                        <div :class="['grid gap-4 border-t p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:px-5', applicationIsClosed && !recipientAgreement?.can_respond ? 'border-slate-200 bg-slate-50' : 'border-amber-200 bg-amber-50']">
+                            <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md', applicationIsClosed && !recipientAgreement?.can_respond ? 'bg-emerald-100 text-emerald-800' : applicantOwnsNextAction ? 'bg-amber-300 text-slate-950' : 'bg-slate-950 text-amber-300']">
+                                <i :class="applicationIsClosed && !recipientAgreement?.can_respond ? 'fa-solid fa-check' : 'fa-solid fa-arrow-right'" aria-hidden="true"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                                    {{ applicantNextEyebrow }}
+                                </p>
+                                <h3 class="mt-1 text-base font-bold text-slate-950">{{ applicantNextStep }}</h3>
+                                <p class="mt-1 text-sm leading-5 text-slate-600">{{ applicantNextDescription }}</p>
+                            </div>
+                            <button
+                                v-if="nextActionButton"
+                                type="button"
+                                class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                @click="followNextAction"
+                            >
+                                {{ nextActionButton.label }}
+                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                            </button>
+                        </div>
+
                         <dl class="grid border-t border-slate-200 bg-slate-50/80 text-sm sm:grid-cols-2 lg:grid-cols-4">
                             <div class="border-b border-slate-200 px-4 py-3 sm:border-r lg:border-b-0">
                                 <dt class="text-xs font-semibold text-slate-500">Submitted</dt>
@@ -962,24 +1002,6 @@ onMounted(loadApplication);
                             </div>
                         </dl>
                     </section>
-
-                    <ApplicantNextActionPanel
-                        :actor="applicantNextActor"
-                        :title="applicantNextStep"
-                        :description="applicantNextDescription"
-                        :closed="applicationIsClosed && !recipientAgreement?.can_respond"
-                        :action-available="Boolean(nextActionButton)"
-                    >
-                        <template #action>
-                            <button
-                                type="button"
-                                class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                @click="followNextAction"
-                            >
-                                {{ nextActionButton?.label }}
-                            </button>
-                        </template>
-                    </ApplicantNextActionPanel>
 
                     <nav class="overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm" aria-label="Application details sections">
                         <div class="flex min-w-max gap-1 sm:min-w-0" role="tablist">
@@ -1047,8 +1069,8 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'overview' && application.status_progress" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="student-section-head p-4 sm:p-5">
+                            <details v-if="activeSection === 'overview' && application.status_progress" class="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                <summary class="student-section-head cursor-pointer list-none p-4 transition hover:bg-slate-50 sm:p-5 [&::-webkit-details-marker]:hidden">
                                     <div class="flex items-start gap-3">
                                         <span class="student-section-mark">
                                             <i class="fa-solid fa-route" aria-hidden="true"></i>
@@ -1058,10 +1080,10 @@ onMounted(loadApplication);
                                             <h3 class="mt-1 text-lg font-bold text-slate-950">
                                             {{ application.status_progress.current_stage_label }}
                                             </h3>
-                                            <p class="mt-1 text-sm leading-5 text-slate-500">See what is complete, where you are now, and what remains.</p>
                                         </div>
                                     </div>
-                                    <div class="w-full sm:w-44">
+                                    <div class="flex w-full items-center gap-3 sm:w-52">
+                                        <div class="min-w-0 flex-1">
                                         <div class="flex items-center justify-between text-xs font-bold text-slate-600">
                                             <span>Progress</span>
                                             <span>{{ application.status_progress.percent }}%</span>
@@ -1069,8 +1091,10 @@ onMounted(loadApplication);
                                         <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
                                             <div class="h-full rounded-full bg-slate-950 transition-all" :style="{ width: `${application.status_progress.percent}%` }"></div>
                                         </div>
+                                        </div>
+                                        <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
                                     </div>
-                                </div>
+                                </summary>
                                 <div class="border-t border-slate-200 bg-slate-50/70 p-3 sm:p-4">
                                     <ol class="grid gap-2 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">
                                         <li
@@ -1092,7 +1116,7 @@ onMounted(loadApplication);
                                         </li>
                                     </ol>
                                 </div>
-                            </section>
+                            </details>
 
                             <PreScreeningHandoffRecord
                                 v-if="activeSection === 'overview' && application.pre_screening_handoff"
@@ -1846,7 +1870,6 @@ onMounted(loadApplication);
                     </div>
                 </div>
 
-                <ApplicantFooter />
             </div>
         </section>
 
@@ -2012,86 +2035,125 @@ onMounted(loadApplication);
                 @keydown.esc="closeRecipientAgreementModal"
             >
                 <section
-                    class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
+                    class="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="recipient-agreement-modal-title"
                 >
-                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-5">
-                        <div class="flex min-w-0 items-start gap-3">
-                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
-                                <i class="fa-solid fa-file-signature" aria-hidden="true"></i>
-                            </span>
-                            <div class="min-w-0">
-                                <p class="student-kicker">After selection</p>
-                                <h2 id="recipient-agreement-modal-title" class="mt-1 text-xl font-bold text-slate-950">Review recipient agreement</h2>
-                                <p class="mt-1 text-sm text-slate-500">Review the recorded support and responsibilities before responding.</p>
+                    <header class="border-b border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex min-w-0 items-start gap-3.5">
+                                <span class="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-800">
+                                    <i class="fa-solid fa-file-signature" aria-hidden="true"></i>
+                                </span>
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <p class="student-kicker">Recipient agreement</p>
+                                        <span
+                                            :class="[
+                                                'rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide',
+                                                recipientAgreement.status === 'accepted'
+                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                    : recipientAgreement.status === 'declined'
+                                                        ? 'bg-rose-100 text-rose-700'
+                                                        : 'bg-amber-100 text-amber-800',
+                                            ]"
+                                        >
+                                            {{ recipientAgreement.status_label }}
+                                        </span>
+                                    </div>
+                                    <h2 id="recipient-agreement-modal-title" class="mt-1 text-xl font-bold text-slate-950 sm:text-2xl">Review your support and responsibilities</h2>
+                                    <p class="mt-1 max-w-2xl text-sm leading-5 text-slate-600">Read what the provider will give, what is expected from you, and the terms recorded for this scholarship.</p>
+                                </div>
                             </div>
+                            <button
+                                type="button"
+                                :disabled="isSubmittingAgreement"
+                                class="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+                                aria-label="Close recipient agreement"
+                                @click="closeRecipientAgreementModal"
+                            >
+                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                            </button>
                         </div>
-                        <button
-                            type="button"
-                            :disabled="isSubmittingAgreement"
-                            class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
-                            aria-label="Close recipient agreement"
-                            @click="closeRecipientAgreementModal"
-                        >
-                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                        </button>
                     </header>
 
-                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5">
+                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-100 p-3 sm:p-5">
                         <RecipientAgreementSummary :agreement="recipientAgreement" compact embedded />
 
-                        <div v-if="recipientAgreement.can_respond" class="mt-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-                            <label for="agreement-response-note" class="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
-                                Note to provider
-                            </label>
-                            <textarea
-                                id="agreement-response-note"
-                                v-model="agreementResponseNote"
-                                rows="3"
-                                maxlength="1000"
-                                placeholder="Optional when accepting; required when declining."
-                                class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-700 focus:ring-3 focus:ring-slate-100"
-                            ></textarea>
-                            <label class="mt-3 flex cursor-pointer items-start gap-3 rounded-md bg-slate-50 p-3 text-sm leading-5 text-slate-700 ring-1 ring-slate-200">
-                                <input v-model="agreementTermsAccepted" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-slate-500">
-                                <span>I reviewed the support, recipient responsibilities, and provider terms shown above.</span>
-                            </label>
+                        <div v-if="recipientAgreement.can_respond" class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <div class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
+                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-950 text-xs font-bold text-white">3</span>
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Your response</p>
+                                    <h3 class="mt-1 font-bold text-slate-950">Confirm that you understand the agreement</h3>
+                                    <p class="mt-1 text-sm leading-5 text-slate-600">Accept to continue as a recipient, or decline and explain your reason to the provider.</p>
+                                </div>
+                            </div>
+                            <div class="space-y-4 p-4 sm:p-5">
+                                <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3.5 text-sm leading-5 text-slate-700">
+                                    <input v-model="agreementTermsAccepted" type="checkbox" class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-950 focus:ring-slate-500">
+                                    <span><strong class="text-slate-950">I reviewed this agreement.</strong> I understand the support, recipient responsibilities, and provider terms shown above.</span>
+                                </label>
+                                <div>
+                                    <div class="flex items-end justify-between gap-3">
+                                        <label for="agreement-response-note" class="text-xs font-bold text-slate-800">Note to provider</label>
+                                        <span class="text-[11px] text-slate-500">Optional to accept, required to decline</span>
+                                    </div>
+                                    <textarea
+                                        id="agreement-response-note"
+                                        v-model="agreementResponseNote"
+                                        rows="3"
+                                        maxlength="1000"
+                                        placeholder="Add a question or explain why you cannot accept the agreement."
+                                        class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-700 focus:ring-3 focus:ring-slate-100"
+                                    ></textarea>
+                                    <p class="mt-1 text-right text-[11px] text-slate-400">{{ agreementResponseNote.length }}/1000</p>
+                                </div>
+                            </div>
                         </div>
 
-                        <div v-else-if="recipientAgreement.response_note" class="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700">
-                            <strong>Applicant note:</strong> {{ recipientAgreement.response_note }}
+                        <div v-else-if="recipientAgreement.response_note" class="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-4 sm:px-5">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Your recorded note</p>
+                            <p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ recipientAgreement.response_note }}</p>
                         </div>
                     </div>
 
-                    <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-5">
-                        <button
-                            type="button"
-                            :disabled="isSubmittingAgreement"
-                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
-                            @click="closeRecipientAgreementModal"
-                        >
-                            Close
-                        </button>
-                        <template v-if="recipientAgreement.can_respond">
+                    <footer class="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                        <p v-if="recipientAgreement.can_respond" class="text-xs leading-5 text-slate-500">
+                            Your response is recorded and shared with the provider.
+                        </p>
+                        <p v-else class="text-xs leading-5 text-slate-500">
+                            This agreement is retained with your application record.
+                        </p>
+                        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
                             <button
                                 type="button"
                                 :disabled="isSubmittingAgreement"
-                                class="inline-flex min-h-11 items-center justify-center rounded-md border border-rose-200 bg-white px-5 py-2.5 text-sm font-bold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
-                                @click="submitRecipientAgreement('declined')"
+                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                                @click="closeRecipientAgreementModal"
                             >
-                                Decline agreement
+                                Close
                             </button>
-                            <button
-                                type="button"
-                                :disabled="isSubmittingAgreement"
-                                class="inline-flex min-h-11 items-center justify-center rounded-md bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                                @click="submitRecipientAgreement('accepted')"
-                            >
-                                {{ isSubmittingAgreement ? 'Saving...' : 'Accept agreement' }}
-                            </button>
-                        </template>
+                            <template v-if="recipientAgreement.can_respond">
+                                <button
+                                    type="button"
+                                    :disabled="isSubmittingAgreement"
+                                    class="inline-flex min-h-11 items-center justify-center rounded-md border border-rose-200 bg-white px-5 py-2.5 text-sm font-bold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+                                    @click="submitRecipientAgreement('declined')"
+                                >
+                                    Decline agreement
+                                </button>
+                                <button
+                                    type="button"
+                                    :disabled="isSubmittingAgreement"
+                                    class="inline-flex min-h-11 items-center justify-center rounded-md bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                                    @click="submitRecipientAgreement('accepted')"
+                                >
+                                    {{ isSubmittingAgreement ? 'Saving...' : 'Accept agreement' }}
+                                </button>
+                            </template>
+                        </div>
                     </footer>
                 </section>
             </div>

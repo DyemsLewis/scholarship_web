@@ -826,6 +826,10 @@ const recipientAgreementReady = computed(() => {
         && hasText(scholarshipForm.value.recipientAgreement.noncompliance_consequence)
         && hasText(scholarshipForm.value.recipientAgreement.exit_or_exception_process);
 });
+const recipientCommitmentPreview = computed(() => commitmentEntries()
+    .map((entry) => entry.value)
+    .filter(Boolean)
+    .join(' '));
 const programReadinessItems = computed(() => [
     {
         label: 'Program overview',
@@ -4540,16 +4544,27 @@ onBeforeUnmount(() => {
                                 </section>
 
                                 <section v-show="activeFormSubsection.application === 'expectations'" class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                    <div class="grid items-start gap-4 border-b border-slate-200 bg-slate-50 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.8fr)] sm:p-5">
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider expectation</p>
-                                            <p class="mt-1 text-base font-bold text-slate-950">What your organization expects from recipients</p>
-                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Applicants and administrators will compare this expectation with the support package. Disclose the duty, timeframe, possible consequence, and a fair exception process.
-                                            </p>
+                                    <div class="border-b border-slate-200 bg-slate-50 p-4 sm:p-5">
+                                        <div class="flex items-start gap-3">
+                                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white text-amber-700 ring-1 ring-slate-200">
+                                                <i class="fa-solid fa-handshake" aria-hidden="true"></i>
+                                            </span>
+                                            <div>
+                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Recipient terms</p>
+                                                <p class="mt-1 text-base font-bold text-slate-950">Set clear expectations before applicants continue</p>
+                                                <p class="mt-1 max-w-3xl text-xs leading-5 text-slate-500">
+                                                    Explain what recipients must do, how long it applies, what happens if it is not completed, and how exceptions are handled.
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div :class="fieldStackClass">
-                                            <label :class="labelClass" for="scholarship-commitment-option">Expected recipient contribution</label>
+                                    </div>
+
+                                    <div class="border-b border-slate-200 p-4 sm:p-5">
+                                        <div class="max-w-3xl">
+                                            <label :class="labelClass" for="scholarship-commitment-option">
+                                                Expected recipient contribution
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
                                             <select
                                                 id="scholarship-commitment-option"
                                                 v-model="selectedCommitmentOption"
@@ -4560,79 +4575,109 @@ onBeforeUnmount(() => {
                                                     {{ option.label }}
                                                 </option>
                                             </select>
+                                            <p class="mt-2 text-xs leading-5 text-slate-500">Choose the closest option. Select a custom preview when your requirement does not fit the presets.</p>
                                         </div>
                                     </div>
 
-                                    <div v-if="selectedCommitmentOption === 'provider_briefing'" class="m-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 sm:m-5">
-                                        <p class="text-sm font-bold text-amber-950">The provider expectation cannot be assessed yet</p>
-                                        <p class="mt-1 text-xs leading-5 text-amber-900">Applicants and administrators cannot compare the expectation with the scholarship support until the expected contribution is disclosed.</p>
-                                    </div>
-
-                                    <div v-else-if="selectedCommitmentOption === 'none'" class="m-4 flex items-start gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 sm:m-5">
-                                        <i class="fa-solid fa-circle-check mt-0.5 text-emerald-700" aria-hidden="true"></i>
-                                        <div>
-                                            <p class="text-sm font-bold text-emerald-950">No contribution expected from recipients</p>
-                                            <p class="mt-1 text-xs leading-5 text-emerald-900">Applicants will be told that the provider does not require service, activities, reports, or another commitment in return.</p>
-                                        </div>
-                                    </div>
-
-                                    <div v-else class="p-4 sm:p-5">
-                                        <div v-if="selectedCommitmentOption === 'custom'">
-                                        <label :class="labelClass" for="scholarship-custom-commitment">
-                                            What the provider expects
-                                            <span :class="requiredHintClass">Required</span>
-                                        </label>
-                                        <textarea
-                                            id="scholarship-custom-commitment"
-                                            v-model="customCommitmentText"
-                                            rows="3"
-                                            maxlength="600"
-                                            placeholder="State exactly what the recipient is expected to do."
-                                            :class="inputClass"
-                                            @input="applyCustomCommitment"
-                                        ></textarea>
-                                        <div class="mt-2 flex justify-end text-xs text-slate-500">
-                                            <span>{{ customCommitmentText.length }}/600</span>
-                                        </div>
-                                        </div>
-
-                                        <div class="mt-4 grid gap-4 md:grid-cols-2">
-                                            <div :class="fieldStackClass">
-                                                <label :class="labelClass" for="scholarship-agreement-duration">How long the expectation applies</label>
-                                                <textarea
-                                                    id="scholarship-agreement-duration"
-                                                    v-model="scholarshipForm.recipientAgreement.duration"
-                                                    rows="3"
-                                                    maxlength="500"
-                                                    placeholder="Example: One activity before the end of the current school year."
-                                                    :class="inputClass"
-                                                ></textarea>
-                                            </div>
-                                            <div :class="fieldStackClass">
-                                                <label :class="labelClass" for="scholarship-agreement-consequence">What happens if it is not completed</label>
-                                                <textarea
-                                                    id="scholarship-agreement-consequence"
-                                                    v-model="scholarshipForm.recipientAgreement.noncompliance_consequence"
-                                                    rows="3"
-                                                    maxlength="1000"
-                                                    placeholder="Explain what may happen and whether the provider reviews the circumstances first."
-                                                    :class="inputClass"
-                                                ></textarea>
-                                            </div>
-                                            <div :class="[fieldStackClass, 'md:col-span-2']">
-                                                <label :class="labelClass" for="scholarship-agreement-exit">Exception, adjustment, or withdrawal process</label>
-                                                <textarea
-                                                    id="scholarship-agreement-exit"
-                                                    v-model="scholarshipForm.recipientAgreement.exit_or_exception_process"
-                                                    rows="3"
-                                                    maxlength="1000"
-                                                    placeholder="Explain who the recipient contacts if illness, transfer, withdrawal, or another circumstance prevents completion."
-                                                    :class="inputClass"
-                                                ></textarea>
+                                    <div class="p-4 sm:p-5">
+                                        <div v-if="selectedCommitmentOption === 'provider_briefing'" class="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+                                            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/70 text-amber-700"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span>
+                                            <div>
+                                                <p class="text-sm font-bold text-amber-950">Add the terms before publishing</p>
+                                                <p class="mt-1 text-xs leading-5 text-amber-900">Applicants and administrators need to review the expected contribution before the program can be assessed fairly.</p>
                                             </div>
                                         </div>
-                                    </div>
 
+                                        <div v-else-if="selectedCommitmentOption === 'none'" class="flex items-start gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3">
+                                            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/70 text-emerald-700"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></span>
+                                            <div>
+                                                <p class="text-sm font-bold text-emerald-950">No contribution expected from recipients</p>
+                                                <p class="mt-1 text-xs leading-5 text-emerald-900">Applicants will see that no service, activity, report, or other commitment is required in return for the support.</p>
+                                            </div>
+                                        </div>
+
+                                        <template v-else>
+                                            <div class="rounded-md border border-slate-200 bg-slate-50 p-4">
+                                                <div class="flex items-start gap-3">
+                                                    <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-eye" aria-hidden="true"></i></span>
+                                                    <div class="min-w-0 flex-1">
+                                                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Applicant preview</p>
+                                                        <p v-if="selectedCommitmentOption !== 'custom'" class="mt-1 text-sm font-semibold leading-6 text-slate-800">{{ recipientCommitmentPreview }}</p>
+                                                        <div v-else class="mt-2">
+                                                            <label class="sr-only" for="scholarship-custom-commitment">What the provider expects</label>
+                                                            <textarea
+                                                                id="scholarship-custom-commitment"
+                                                                v-model="customCommitmentText"
+                                                                rows="3"
+                                                                maxlength="600"
+                                                                placeholder="State exactly what the recipient is expected to do."
+                                                                :class="inputClass"
+                                                                @input="applyCustomCommitment"
+                                                            ></textarea>
+                                                            <div class="mt-1.5 flex items-center justify-between text-xs text-slate-500">
+                                                                <span>This wording will be shown to applicants.</span>
+                                                                <span>{{ customCommitmentText.length }}/600</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
+                                                <div class="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
+                                                    <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">1</span>
+                                                    <div :class="fieldStackClass">
+                                                        <label :class="labelClass" for="scholarship-agreement-duration">
+                                                            How long the expectation applies
+                                                            <span :class="requiredHintClass">Required</span>
+                                                        </label>
+                                                        <textarea
+                                                            id="scholarship-agreement-duration"
+                                                            v-model="scholarshipForm.recipientAgreement.duration"
+                                                            rows="3"
+                                                            maxlength="500"
+                                                            placeholder="Example: One activity before the end of the current school year."
+                                                            :class="inputClass"
+                                                        ></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
+                                                    <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">2</span>
+                                                    <div :class="fieldStackClass">
+                                                        <label :class="labelClass" for="scholarship-agreement-consequence">
+                                                            What happens if it is not completed
+                                                            <span :class="requiredHintClass">Required</span>
+                                                        </label>
+                                                        <textarea
+                                                            id="scholarship-agreement-consequence"
+                                                            v-model="scholarshipForm.recipientAgreement.noncompliance_consequence"
+                                                            rows="3"
+                                                            maxlength="1000"
+                                                            placeholder="Explain what may happen and whether the provider reviews the circumstances first."
+                                                            :class="inputClass"
+                                                        ></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="grid gap-3 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
+                                                    <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">3</span>
+                                                    <div :class="fieldStackClass">
+                                                        <label :class="labelClass" for="scholarship-agreement-exit">
+                                                            Exception, adjustment, or withdrawal process
+                                                            <span :class="requiredHintClass">Required</span>
+                                                        </label>
+                                                        <textarea
+                                                            id="scholarship-agreement-exit"
+                                                            v-model="scholarshipForm.recipientAgreement.exit_or_exception_process"
+                                                            rows="3"
+                                                            maxlength="1000"
+                                                            placeholder="Explain who the recipient contacts if illness, transfer, withdrawal, or another circumstance prevents completion."
+                                                            :class="inputClass"
+                                                        ></textarea>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
                                 </section>
                             </fieldset>
 

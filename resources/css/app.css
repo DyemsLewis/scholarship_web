@@ -36,14 +36,14 @@
 
 @layer components {
     .student-shell {
-        @apply min-h-screen text-slate-900;
+        @apply min-h-screen text-slate-900 lg:grid lg:grid-cols-[16rem_1fr];
         background:
             linear-gradient(180deg, rgba(8, 20, 38, 0.04), transparent 14rem),
             #f8fafc;
     }
 
     .student-page {
-        @apply px-4 py-7 sm:px-6 sm:py-8 lg:px-8 lg:py-10;
+        @apply min-w-0 px-4 py-7 sm:px-6 sm:py-8 lg:px-8 lg:py-10;
     }
 
     .provider-shell,

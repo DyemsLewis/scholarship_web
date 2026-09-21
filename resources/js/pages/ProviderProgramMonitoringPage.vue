@@ -588,95 +588,110 @@ onMounted(loadMonitoring);
                     </template>
 
                     <template v-else-if="activeTab === 'monitoring'">
-                        <section class="provider-panel mt-4 overflow-hidden">
-                            <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                                <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Grade records</p>
-                                    <h2 class="mt-1 text-lg font-bold text-slate-950">Academic monitoring periods</h2>
-                                    <p class="mt-1 text-sm text-slate-500">Collect one grade record, then confirm whether it meets the requirement.</p>
-                                </div>
-                                <span v-if="cycles.length" class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ cycles.length }} {{ cycles.length === 1 ? 'period' : 'periods' }}</span>
-                            </header>
+                        <section v-if="!cycles.length" class="provider-panel mt-4 px-5 py-10 text-center sm:px-6">
+                            <span class="mx-auto grid h-12 w-12 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
+                            <h2 class="mt-4 text-lg font-bold text-slate-950">No monitoring periods yet</h2>
+                            <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-600">Create a period when selected recipients need to submit a new academic record for review.</p>
+                            <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openComposer">Create first period</button>
+                        </section>
 
-                            <div v-if="!cycles.length" class="px-5 py-10 text-center sm:px-6">
-                                <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
-                                <h3 class="mt-3 font-bold text-slate-950">No monitoring period yet</h3>
-                                <p class="mx-auto mt-1 max-w-lg text-sm leading-6 text-slate-500">Open a period when recipients need to submit a new grade record.</p>
-                                <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openComposer">Create first period</button>
-                            </div>
-
-                            <div v-else class="divide-y divide-slate-200">
-                                <article v-for="cycle in cycles" :key="cycle.id">
-                                    <button type="button" class="flex w-full flex-col gap-3 px-5 py-4 text-left transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-6" @click="toggleCycle(cycle.id)">
+                        <section v-else class="mt-4 space-y-3">
+                            <article v-for="cycle in cycles" :key="cycle.id" class="provider-panel overflow-hidden">
+                                <button type="button" class="flex w-full flex-col gap-3 px-5 py-4 text-left sm:flex-row sm:items-center sm:justify-between sm:px-6" @click="toggleCycle(cycle.id)">
+                                    <div class="flex min-w-0 items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i></span>
                                         <div class="min-w-0">
                                             <div class="flex flex-wrap items-center gap-2">
-                                                <h3 class="font-bold text-slate-950">{{ cycle.title }}</h3>
+                                                <h2 class="font-bold text-slate-950">{{ cycle.title }}</h2>
                                                 <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', cycle.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">{{ cycle.status }}</span>
                                             </div>
                                             <p class="mt-1 text-xs leading-5 text-slate-500">{{ cycle.academic_period || labelFromKey(cycle.period_type) }}<span v-if="cycle.school_year"> · {{ cycle.school_year }}</span> · Due {{ cycle.due_label }}</p>
                                         </div>
-                                        <div class="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-end">
-                                            <div class="flex gap-4 text-xs">
-                                                <span><strong class="text-sm text-slate-950">{{ cycle.submitted_count }}</strong> received</span>
-                                                <span :class="cycle.action_needed_count ? 'text-amber-700' : 'text-slate-500'"><strong class="text-sm">{{ cycle.action_needed_count }}</strong> to review</span>
-                                            </div>
-                                            <i :class="['fa-solid fa-chevron-down text-xs text-slate-400 transition', cycleIsOpen(cycle.id) ? 'rotate-180' : '']" aria-hidden="true"></i>
+                                    </div>
+                                    <div class="flex items-center gap-4 sm:text-right">
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">{{ cycle.submitted_count }} of {{ cycle.recipients.length }} received</p>
+                                            <p :class="['text-xs', cycle.action_needed_count ? 'font-bold text-amber-700' : 'text-slate-500']">{{ cycle.action_needed_count ? `${cycle.action_needed_count} need provider review` : `${cycle.reviewed_count} ${Number(cycle.reviewed_count) === 1 ? 'review' : 'reviews'} completed` }}</p>
                                         </div>
-                                    </button>
+                                        <i :class="['fa-solid fa-chevron-down text-xs text-slate-400 transition', cycleIsOpen(cycle.id) ? 'rotate-180' : '']" aria-hidden="true"></i>
+                                    </div>
+                                </button>
 
-                                    <div v-if="cycleIsOpen(cycle.id)" class="border-t border-slate-200 bg-slate-50/70">
-                                        <div class="grid border-b border-slate-200 sm:grid-cols-3 sm:divide-x sm:divide-slate-200">
-                                            <div class="px-5 py-3 sm:px-6">
-                                                <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Requirement</p>
-                                                <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.requirement_label }}</p>
-                                            </div>
-                                            <div class="border-t border-slate-200 px-5 py-3 sm:border-t-0 sm:px-6">
-                                                <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Submission deadline</p>
-                                                <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.due_label }}</p>
-                                            </div>
-                                            <div class="border-t border-slate-200 px-5 py-3 sm:border-t-0 sm:px-6">
-                                                <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Waiting for upload</p>
-                                                <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.pending_count }} recipients</p>
-                                            </div>
+                                <div v-if="cycleIsOpen(cycle.id)" class="border-t border-slate-200">
+                                    <div class="grid gap-px bg-slate-200 sm:grid-cols-3">
+                                        <div class="bg-slate-50 px-5 py-3">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Academic period</p>
+                                            <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.academic_period || labelFromKey(cycle.period_type) }}</p>
+                                            <p v-if="cycle.school_year" class="mt-0.5 text-xs text-slate-500">School year {{ cycle.school_year }}</p>
                                         </div>
-                                        <p v-if="cycle.instructions" class="border-b border-slate-200 bg-white px-5 py-3 text-sm leading-6 text-slate-600 sm:px-6"><strong class="text-slate-900">Instructions:</strong> {{ cycle.instructions }}</p>
-
-                                        <div class="hidden grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b border-slate-200 bg-white px-6 py-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 lg:grid">
-                                            <span>Recipient</span>
-                                            <span>Grade record</span>
-                                            <span>Provider review</span>
-                                            <span class="text-right">Action</span>
+                                        <div class="bg-slate-50 px-5 py-3">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Grade requirement</p>
+                                            <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.requirement_label }}</p>
+                                            <p class="mt-0.5 text-xs text-slate-500">Used as a review guide</p>
                                         </div>
-                                        <div class="divide-y divide-slate-200 bg-white">
-                                            <article v-for="recipient in cycle.recipients" :key="recipient.application_id" class="grid gap-3 px-5 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-center lg:gap-4">
-                                                <div class="min-w-0">
-                                                    <p class="font-bold text-slate-950">{{ recipient.name }}</p>
-                                                    <p class="mt-0.5 truncate text-xs text-slate-500">{{ recipient.email }}</p>
-                                                    <span v-if="recipient.agreement_status !== 'accepted'" class="mt-1.5 inline-flex rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">Agreement {{ recipient.agreement_status }}</span>
-                                                </div>
-                                                <div>
-                                                    <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Grade record</p>
-                                                    <p class="mt-1 font-bold text-slate-950 lg:mt-0">{{ recipient.submission?.grade_label || (recipient.submission ? 'Result needs review' : 'Not submitted') }}</p>
-                                                    <div v-if="recipient.submission" class="mt-1 flex flex-wrap items-center gap-1.5">
-                                                        <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', comparisonClass(recipient.submission.comparison?.status)]">{{ comparisonLabel(recipient.submission) }}</span>
-                                                        <span class="text-xs text-slate-500">{{ recipient.submission.grade_source === 'ocr' ? 'OCR extracted' : recipient.submission.grade_source === 'applicant_manual' ? 'Entered by applicant' : 'Manual check' }}</span>
-                                                    </div>
-                                                    <p v-else class="mt-1 text-xs text-slate-400">Waiting for upload</p>
-                                                </div>
-                                                <div>
-                                                    <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Provider review</p>
-                                                    <span v-if="recipient.submission" :class="['mt-1 inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase lg:mt-0', reviewStatusClass(recipient.submission.review_status)]">{{ recipient.submission.review_status_label }}</span>
-                                                    <span v-else class="mt-1 block text-xs font-semibold text-slate-400 lg:mt-0">Available after upload</span>
-                                                </div>
-                                                <div class="flex flex-wrap gap-2 lg:justify-end">
-                                                    <button v-if="recipient.submission" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReview(cycle, recipient)">{{ recipient.submission.review_status === 'pending' ? 'Review record' : 'View review' }}</button>
-                                                    <a :href="recipient.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View applicant</a>
-                                                </div>
-                                            </article>
+                                        <div class="bg-slate-50 px-5 py-3">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Submission window</p>
+                                            <p class="mt-1 text-sm font-bold text-slate-950">Due {{ cycle.due_label }}</p>
+                                            <p class="mt-0.5 text-xs text-slate-500">{{ cycle.pending_count }} still awaiting upload</p>
                                         </div>
                                     </div>
-                                </article>
-                            </div>
+                                    <p v-if="cycle.instructions" class="border-t border-slate-200 px-5 py-3 text-sm leading-6 text-slate-600 sm:px-6"><strong class="text-slate-900">Recipient instructions:</strong> {{ cycle.instructions }}</p>
+
+                                    <div class="overflow-x-auto border-t border-slate-200">
+                                        <table class="w-full min-w-[820px] text-left text-sm">
+                                            <colgroup>
+                                                <col class="w-[28%]">
+                                                <col class="w-[29%]">
+                                                <col class="w-[23%]">
+                                                <col class="w-[20%]">
+                                            </colgroup>
+                                            <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                                                <tr>
+                                                    <th class="px-5 py-3">Recipient</th>
+                                                    <th class="px-4 py-3">Submitted result</th>
+                                                    <th class="px-4 py-3">Provider review</th>
+                                                    <th class="px-5 py-3 text-right">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-200 bg-white">
+                                                <tr v-for="recipient in cycle.recipients" :key="recipient.application_id">
+                                                    <td class="align-top px-5 py-3.5">
+                                                        <div class="flex min-h-6 flex-wrap items-center gap-2">
+                                                            <p class="font-bold leading-5 text-slate-950">{{ recipient.name }}</p>
+                                                            <span v-if="recipient.agreement_status !== 'accepted'" class="inline-flex rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">Agreement {{ recipient.agreement_status }}</span>
+                                                        </div>
+                                                        <p class="mt-0.5 text-xs text-slate-500">{{ recipient.email }}</p>
+                                                    </td>
+                                                    <td class="align-top px-4 py-3.5">
+                                                        <div class="flex min-h-6 items-center">
+                                                            <p class="font-bold leading-5 text-slate-950">{{ recipient.submission?.grade_label || (recipient.submission ? 'Result needs review' : 'Not submitted') }}</p>
+                                                        </div>
+                                                        <p v-if="recipient.submission" class="mt-0.5 text-xs text-slate-500">
+                                                            {{ recipient.submission.grade_source === 'ocr' ? 'OCR extracted' : recipient.submission.grade_source === 'applicant_manual' ? 'Applicant entered' : 'Manual check' }} · {{ comparisonLabel(recipient.submission) }}
+                                                        </p>
+                                                        <p v-else class="mt-0.5 text-xs text-slate-400">Waiting for academic record</p>
+                                                    </td>
+                                                    <td class="align-top px-4 py-3.5">
+                                                        <div class="flex min-h-6 items-center">
+                                                            <span v-if="recipient.submission" :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', reviewStatusClass(recipient.submission.review_status)]">{{ recipient.submission.review_status_label }}</span>
+                                                            <span v-else class="text-xs font-semibold text-slate-400">Not available</span>
+                                                        </div>
+                                                        <p v-if="recipient.submission?.reviewed_at" class="mt-0.5 text-xs text-slate-500">Updated {{ recipient.submission.reviewed_at }}</p>
+                                                        <p v-else-if="recipient.submission" class="mt-0.5 text-xs text-slate-500">Waiting for provider review</p>
+                                                        <p v-else class="mt-0.5 text-xs text-slate-400">Available after upload</p>
+                                                    </td>
+                                                    <td class="align-top px-5 py-3.5">
+                                                        <div class="flex min-h-9 items-start justify-end gap-2">
+                                                            <button v-if="recipient.submission" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReview(cycle, recipient)">{{ recipient.submission.review_status === 'pending' ? 'Review record' : 'View review' }}</button>
+                                                            <a :href="recipient.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant</a>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </article>
                         </section>
                     </template>
 
@@ -712,15 +727,47 @@ onMounted(loadMonitoring);
                                     </div>
                                     <p v-if="release.instructions" class="border-t border-slate-200 px-5 py-3 text-sm leading-6 text-slate-600 sm:px-6"><strong class="text-slate-900">Instructions:</strong> {{ release.instructions }}</p>
                                     <div class="overflow-x-auto border-t border-slate-200">
-                                        <table class="w-full min-w-[850px] text-left text-sm">
-                                            <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500"><tr><th class="px-5 py-3">Recipient</th><th class="px-4 py-3">Release status</th><th class="px-4 py-3">Originals</th><th class="px-4 py-3">Acknowledgement</th><th class="px-5 py-3 text-right">Action</th></tr></thead>
+                                        <table class="w-full min-w-[820px] text-left text-sm">
+                                            <colgroup>
+                                                <col class="w-[28%]">
+                                                <col class="w-[23%]">
+                                                <col class="w-[29%]">
+                                                <col class="w-[20%]">
+                                            </colgroup>
+                                            <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                                                <tr>
+                                                    <th class="px-5 py-3">Recipient</th>
+                                                    <th class="px-4 py-3">Release status</th>
+                                                    <th class="px-4 py-3">Verification</th>
+                                                    <th class="px-5 py-3 text-right">Action</th>
+                                                </tr>
+                                            </thead>
                                             <tbody class="divide-y divide-slate-200 bg-white">
                                                 <tr v-for="record in release.records" :key="record.id">
-                                                    <td class="px-5 py-3"><p class="font-bold text-slate-950">{{ record.name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ record.email }}</p></td>
-                                                    <td class="px-4 py-3"><span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', releaseStatusClass(record.status)]">{{ record.status_label }}</span><p v-if="record.recorded_at" class="mt-1 text-xs text-slate-500">{{ record.recorded_at }}</p></td>
-                                                    <td class="px-4 py-3"><span class="text-xs font-bold" :class="record.originals_verified ? 'text-emerald-700' : 'text-slate-500'">{{ record.originals_verified ? 'Verified' : 'Not recorded' }}</span></td>
-                                                    <td class="px-4 py-3"><button v-if="record.receipt" type="button" class="text-xs font-bold text-slate-700 underline decoration-slate-300 underline-offset-4" @click="previewFile = record.receipt">View receipt</button><span v-else-if="record.notes" class="text-xs text-slate-600">Recorded by note</span><span v-else class="text-xs text-slate-400">None yet</span></td>
-                                                    <td class="px-5 py-3"><div class="flex justify-end gap-2"><button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReleaseResult(release, record)">Record result</button><a :href="record.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant</a></div></td>
+                                                    <td class="align-top px-5 py-3.5">
+                                                        <div class="flex min-h-6 items-center"><p class="font-bold leading-5 text-slate-950">{{ record.name }}</p></div>
+                                                        <p class="mt-0.5 text-xs text-slate-500">{{ record.email }}</p>
+                                                    </td>
+                                                    <td class="align-top px-4 py-3.5">
+                                                        <div class="flex min-h-6 items-center"><span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', releaseStatusClass(record.status)]">{{ record.status_label }}</span></div>
+                                                        <p class="mt-0.5 text-xs text-slate-500">{{ record.recorded_at ? `Updated ${record.recorded_at}` : 'Waiting for release result' }}</p>
+                                                    </td>
+                                                    <td class="align-top px-4 py-3.5">
+                                                        <div class="flex min-h-6 items-center">
+                                                            <p :class="['text-xs font-bold', record.originals_verified ? 'text-emerald-700' : 'text-slate-700']">
+                                                                {{ release.requires_original_verification ? (record.originals_verified ? 'Original records verified' : 'Original verification pending') : 'Original records not required' }}
+                                                            </p>
+                                                        </div>
+                                                        <button v-if="record.receipt" type="button" class="mt-0.5 text-xs font-bold text-slate-700 underline decoration-slate-300 underline-offset-4" @click="previewFile = record.receipt">View receipt evidence</button>
+                                                        <p v-else-if="record.notes" class="mt-0.5 text-xs text-slate-500">Release documented by provider note</p>
+                                                        <p v-else class="mt-0.5 text-xs text-slate-400">No receipt evidence recorded</p>
+                                                    </td>
+                                                    <td class="align-top px-5 py-3.5">
+                                                        <div class="flex min-h-9 items-start justify-end gap-2">
+                                                            <button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReleaseResult(release, record)">Record result</button>
+                                                            <a :href="record.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant</a>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -738,22 +785,52 @@ onMounted(loadMonitoring);
                             </header>
 
                             <div v-if="!supportRecipients.length" class="px-5 py-10 text-center"><p class="font-bold text-slate-950">No selected recipients yet</p><p class="mt-1 text-sm text-slate-500">Recipients appear here after accepting their scholarship offer.</p></div>
-                            <div v-else class="divide-y divide-slate-200">
-                                <article v-for="recipient in supportRecipients" :key="recipient.application_id" class="px-5 py-4 sm:px-6">
-                                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                                        <div class="min-w-0 flex-1">
-                                            <div class="flex flex-wrap items-center gap-2"><h3 class="font-bold text-slate-950">{{ recipient.name }}</h3><span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', supportStatusClass(recipient.support_status)]">{{ recipient.support_status_label }}</span></div>
-                                            <p class="mt-1 text-xs text-slate-500">{{ recipient.email }}</p>
-                                            <p class="mt-2 text-sm leading-6" :class="recipient.renewal_eligible ? 'text-emerald-700' : 'text-slate-600'"><strong>{{ recipient.renewal_eligibility_label }}:</strong> {{ recipient.renewal_eligibility_reason }}</p>
-                                        </div>
-                                        <dl class="grid shrink-0 grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 text-center sm:min-w-[270px]">
-                                            <div class="bg-slate-50 px-3 py-2.5"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Monitoring</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ recipient.requirements_met }}/{{ recipient.requirements_total }} confirmed</dd></div>
-                                            <div class="bg-slate-50 px-3 py-2.5"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Releases</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ recipient.released_count }}/{{ recipient.release_count }} received</dd></div>
-                                        </dl>
-                                        <div class="flex shrink-0 flex-wrap gap-2"><button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openRecipientRecord(recipient)"><i class="fa-solid fa-clock-rotate-left mr-1.5" aria-hidden="true"></i>Recipient record</button><button v-if="!recipient.is_closed" type="button" class="rounded-md bg-slate-950 px-3 py-2.5 text-xs font-bold text-white hover:bg-slate-800" @click="openSupportDecision(recipient)">Record outcome</button><a :href="recipient.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant</a></div>
-                                    </div>
-                                    <div v-if="recipient.latest_decision" class="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm"><div class="flex flex-wrap items-center justify-between gap-2"><strong class="text-slate-950">{{ recipient.latest_decision.decision_label }}</strong><span class="text-xs text-slate-500">Effective {{ recipient.latest_decision.effective_label }} · {{ recipient.latest_decision.decided_by }}</span></div><p v-if="recipient.latest_decision.next_period_terms" class="mt-1 leading-5 text-slate-600">{{ recipient.latest_decision.next_period_terms }}</p><p v-if="recipient.latest_decision.reason" class="mt-1 leading-5 text-slate-600">{{ recipient.latest_decision.reason }}</p></div>
-                                </article>
+                            <div v-else class="overflow-x-auto">
+                                <table class="w-full min-w-[1080px] text-left text-sm">
+                                    <colgroup>
+                                        <col class="w-[24%]">
+                                        <col class="w-[20%]">
+                                        <col class="w-[29%]">
+                                        <col class="w-[27%]">
+                                    </colgroup>
+                                    <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                                        <tr>
+                                            <th class="px-5 py-3">Recipient</th>
+                                            <th class="px-4 py-3">Program progress</th>
+                                            <th class="px-4 py-3">Support status</th>
+                                            <th class="px-5 py-3 text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-200 bg-white">
+                                        <tr v-for="recipient in supportRecipients" :key="recipient.application_id">
+                                            <td class="align-top px-5 py-3.5">
+                                                <div class="flex min-h-6 items-center"><p class="font-bold leading-5 text-slate-950">{{ recipient.name }}</p></div>
+                                                <p class="mt-0.5 text-xs text-slate-500">{{ recipient.email }}</p>
+                                            </td>
+                                            <td class="align-top px-4 py-3.5">
+                                                <div class="flex min-h-6 items-center"><p class="font-bold text-slate-950">{{ recipient.requirements_met }} of {{ recipient.requirements_total }} checks confirmed</p></div>
+                                                <p class="mt-0.5 text-xs text-slate-500">{{ recipient.released_count }} of {{ recipient.release_count }} releases received</p>
+                                            </td>
+                                            <td class="align-top px-4 py-3.5">
+                                                <div class="flex min-h-6 flex-wrap items-center gap-2">
+                                                    <span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', supportStatusClass(recipient.support_status)]">{{ recipient.support_status_label }}</span>
+                                                    <span :class="['text-xs font-bold', recipient.renewal_eligible ? 'text-emerald-700' : 'text-slate-500']">{{ recipient.renewal_eligibility_label }}</span>
+                                                </div>
+                                                <p class="mt-0.5 text-xs leading-5 text-slate-500">
+                                                    {{ recipient.latest_decision ? `${recipient.latest_decision.decision_label} effective ${recipient.latest_decision.effective_label}${recipient.latest_decision.decided_by ? ` by ${recipient.latest_decision.decided_by}` : ''}` : recipient.renewal_eligibility_reason }}
+                                                </p>
+                                                <p v-if="recipient.latest_decision?.next_period_terms" class="mt-0.5 text-xs leading-5 text-slate-500">{{ recipient.latest_decision.next_period_terms }}</p>
+                                                <p v-if="recipient.latest_decision?.reason" class="mt-0.5 text-xs leading-5 text-slate-500">{{ recipient.latest_decision.reason }}</p>
+                                            </td>
+                                            <td class="align-top px-5 py-3.5">
+                                                <div class="flex min-h-9 flex-wrap items-start justify-end gap-2">
+                                                    <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openRecipientRecord(recipient)">Recipient record</button>
+                                                    <button v-if="!recipient.is_closed" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openSupportDecision(recipient)">Record outcome</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </section>
                     </template>
