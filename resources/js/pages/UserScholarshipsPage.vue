@@ -891,10 +891,6 @@ onBeforeUnmount(() => {
                     :title="scholarshipPageContent.title"
                     :description="scholarshipPageContent.description"
                     icon="fa-solid fa-magnifying-glass-chart"
-                    action-href="/dashboard/applications"
-                    action-label="Go to applications"
-                    secondary-href="/dashboard/profile"
-                    secondary-label="Improve profile"
                 />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
@@ -909,12 +905,7 @@ onBeforeUnmount(() => {
                     <section class="student-card overflow-hidden">
                         <div class="flex flex-col gap-3 bg-slate-950 p-4 text-white lg:flex-row lg:items-center lg:justify-between">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
-                                    Filters
-                                </p>
-                                <h3 class="mt-1 font-display text-xl font-bold">
-                                    Narrow the list
-                                </h3>
+                                <h3 class="font-display text-lg font-bold">Search and filter</h3>
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 <button
@@ -928,15 +919,7 @@ onBeforeUnmount(() => {
                                 <p class="rounded-md bg-white/10 px-3 py-2 text-xs font-bold text-slate-200">
                                     {{ filteredScholarships.length }} program{{ filteredScholarships.length === 1 ? '' : 's' }} matched
                                 </p>
-                                <p class="rounded-md bg-white/10 px-3 py-2 text-xs font-bold text-slate-200">
-                                    {{ activeFilterCount }} filter{{ activeFilterCount === 1 ? '' : 's' }} active
-                                </p>
                             </div>
-                        </div>
-
-                        <div class="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            <i class="fa-solid fa-circle-info text-amber-700" aria-hidden="true"></i>
-                            <p><span class="font-bold text-slate-900">Match scores are a guide.</span> Providers still review their written requirements.</p>
                         </div>
 
                         <div class="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[minmax(14rem,2fr)_auto_minmax(10rem,1fr)_minmax(10rem,1fr)_auto_auto] xl:items-center">
@@ -1061,14 +1044,6 @@ onBeforeUnmount(() => {
                                         <div class="flex shrink-0 items-center gap-2">
                                             <button
                                                 type="button"
-                                                class="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-2.5 text-xs font-bold text-white transition hover:bg-white/20"
-                                                @click="openScholarshipPreview(scholarship)"
-                                            >
-                                                <i class="fa-regular fa-eye"></i>
-                                                Preview
-                                            </button>
-                                            <button
-                                                type="button"
                                                 :disabled="savingId === scholarship.id"
                                                 :aria-label="scholarship.is_saved ? `Remove ${scholarship.title} from saved programs` : `Save ${scholarship.title}`"
                                                 :title="scholarship.is_saved ? 'Remove from saved programs' : 'Save program'"
@@ -1110,10 +1085,6 @@ onBeforeUnmount(() => {
                                         <p class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                             <i class="fa-regular fa-calendar mr-1"></i>
                                             {{ compactDeadlineLabel(scholarship) }}
-                                        </p>
-                                        <p v-if="scholarship.distance_label" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                            <i class="fa-solid fa-location-dot mr-1"></i>
-                                            {{ scholarship.distance_label }}
                                         </p>
                                     </div>
 

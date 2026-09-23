@@ -30,8 +30,16 @@ return new class extends Migration
 
         Schema::create('recipient_monitoring_submissions', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('recipient_monitoring_cycle_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('scholarship_application_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('recipient_monitoring_cycle_id');
+            $table->foreign('recipient_monitoring_cycle_id', 'rm_sub_cycle_fk')
+                ->references('id')
+                ->on('recipient_monitoring_cycles')
+                ->cascadeOnDelete();
+            $table->foreignId('scholarship_application_id');
+            $table->foreign('scholarship_application_id', 'rm_sub_application_fk')
+                ->references('id')
+                ->on('scholarship_applications')
+                ->cascadeOnDelete();
             $table->foreignId('applicant_id')->constrained('users')->cascadeOnDelete();
             $table->string('original_name');
             $table->string('path');

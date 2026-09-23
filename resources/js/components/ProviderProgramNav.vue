@@ -57,7 +57,7 @@ const links = computed(() => [
         key: 'announcements',
         label: 'Updates',
         icon: 'fa-solid fa-bullhorn',
-        href: `/provider/programs/${props.programId}#announcements`,
+        href: `/provider/programs/${props.programId}/updates`,
     }] : []),
 ]);
 
@@ -80,6 +80,10 @@ const activeKey = computed(() => {
 
     if (path.endsWith('/monitoring')) {
         return 'monitoring';
+    }
+
+    if (path.endsWith('/updates')) {
+        return 'announcements';
     }
 
     return currentHash.value === '#announcements' ? 'announcements' : 'overview';

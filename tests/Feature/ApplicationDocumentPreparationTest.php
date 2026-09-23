@@ -251,6 +251,7 @@ class ApplicationDocumentPreparationTest extends TestCase
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',
             'household_size' => 4,
+            'current_scholarship_status' => 'none',
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { formatFileSize } from '../support/display';
 
 const appElement = document.getElementById('app');
@@ -382,30 +383,21 @@ onMounted(loadApplicant);
                     <span class="truncate font-semibold text-slate-950">{{ applicant?.name || applicant?.username || 'Applicant record' }}</span>
                 </nav>
 
-                <header class="admin-hero">
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div class="max-w-3xl">
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Applicant review</p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ applicant?.name || applicant?.username || 'Verify academic information' }}</h2>
-                            <p class="mt-3 text-sm leading-6 text-slate-600">Compare the applicant's profile with the submitted school and academic records, then record a clear decision.</p>
-                            <div v-if="applicant" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
-                                <span>{{ applicant.email || 'Email not provided' }}</span>
-                                <span>{{ applicant.contact_number || 'Contact not provided' }}</span>
-                                <span>{{ statusLabel(applicant.education_level || 'Education not provided') }}</span>
-                            </div>
-                        </div>
-                        <div v-if="applicant" class="flex flex-wrap items-center gap-2 lg:justify-end">
+                <TaskPageHeader
+                    theme="admin"
+                    eyebrow="Applicant review"
+                    :title="applicant?.name || applicant?.username || 'Verify academic information'"
+                    description="Compare the saved profile with its supporting records, then record the verification decision."
+                    icon="fa-solid fa-user-check"
+                >
+                    <template v-if="applicant" #meta>
+                        <span>{{ applicant.email || 'Email not provided' }}</span>
+                        <span>{{ statusLabel(applicant.education_level || 'Education not provided') }}</span>
+                    </template>
+                    <template v-if="applicant" #actions>
                             <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(applicantReviewStatus(applicant))]">
                                 {{ applicantReviewStatusLabel(applicant) }}
                             </span>
-                            <button
-                                type="button"
-                                class="grid h-10 w-10 place-items-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
-                                aria-label="Refresh applicant record"
-                                @click="loadApplicant"
-                            >
-                                <i class="fa-solid fa-rotate text-xs" aria-hidden="true"></i>
-                            </button>
                             <button
                                 v-if="academicRecord && activeReviewSection !== 'decision'"
                                 type="button"
@@ -415,9 +407,8 @@ onMounted(loadApplicant);
                                 Record decision
                                 <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                             </button>
-                        </div>
-                    </div>
-                </header>
+                    </template>
+                </TaskPageHeader>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading applicant review details...

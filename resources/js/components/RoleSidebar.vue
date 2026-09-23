@@ -78,6 +78,16 @@ function linkQueryMatches(link) {
     return [...targetUrl.searchParams].every(([key, value]) => currentUrl.searchParams.get(key) === value);
 }
 
+function linkHashMatches(link) {
+    const targetUrl = new URL(link.href, window.location.origin);
+
+    if (targetUrl.hash) {
+        return currentUrl.hash === targetUrl.hash;
+    }
+
+    return !link.hashless || !currentUrl.hash;
+}
+
 function isActive(link) {
     if (props.active) {
         return props.active === link.key;
@@ -86,14 +96,16 @@ function isActive(link) {
     const targetPath = linkPath(link);
 
     if (link.exact) {
-        return currentPath === targetPath && linkQueryMatches(link);
+        return currentPath === targetPath && linkQueryMatches(link) && linkHashMatches(link);
     }
 
     if (link.activePaths?.some((path) => currentPath === path || currentPath.startsWith(`${path}/`))) {
         return true;
     }
 
-    return (currentPath === targetPath || currentPath.startsWith(`${targetPath}/`)) && linkQueryMatches(link);
+    return (currentPath === targetPath || currentPath.startsWith(`${targetPath}/`))
+        && linkQueryMatches(link)
+        && linkHashMatches(link);
 }
 
 function isGroupActive(link) {
@@ -101,6 +113,7 @@ function isGroupActive(link) {
 
     return currentPath === targetPath
         || currentPath.startsWith(`${targetPath}/`)
+        || link.activePaths?.some((path) => currentPath === path || currentPath.startsWith(`${path}/`))
         || link.children?.some((child) => isActive(child));
 }
 

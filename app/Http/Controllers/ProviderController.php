@@ -139,6 +139,39 @@ class ProviderController extends Controller
         return view('provider-programs');
     }
 
+    public function programEditDirectory(Request $request): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isProvider(), 403);
+
+        return view('provider-program-edit-directory');
+    }
+
+    public function programManageDirectory(Request $request): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isProvider(), 403);
+
+        return view('provider-program-manage-directory');
+    }
+
+    public function recipientMonitoringDirectory(Request $request): View|RedirectResponse
+    {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isProvider(), 403);
+
+        return view('provider-recipient-monitoring-directory');
+    }
+
     public function programWorkspace(Request $request, Scholarship $scholarship): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -178,7 +211,7 @@ class ProviderController extends Controller
         $providerOwner = $request->user()->providerOrganizationOwner();
 
         if (! $providerOwner->hasVerifiedEmail() || ! $providerOwner->providerProfile?->isVerified()) {
-            return redirect()->to(route('provider.profile').'#verification-documents');
+            return redirect()->route('provider.profile.verification');
         }
 
         return view('provider-program-form');

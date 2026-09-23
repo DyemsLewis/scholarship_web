@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const isLoading = ref(true);
 const isProgramLoading = ref(false);
@@ -40,36 +41,44 @@ const providers = ref([]);
 const applicants = ref([]);
 const scholarships = ref([]);
 const benefitRecords = ref([]);
-const reviewTabs = computed(() => [
-    {
-        value: 'providers',
-        label: 'Providers',
-        count: stats.value.providers,
+const reviewPageConfig = computed(() => ({
+    providers: {
+        eyebrow: 'Provider reviews',
+        title: 'Verify provider organizations',
+        description: 'Confirm organization details and proof before granting publishing access.',
+        icon: 'fa-solid fa-building-shield',
+        total: stats.value.providers,
         pending: stats.value.pending_providers,
-        description: 'Organization identity and publishing access',
+        searchPlaceholder: 'Search provider name or address',
     },
-    {
-        value: 'programs',
-        label: 'Programs',
-        count: stats.value.pending_programs + stats.value.published_programs + stats.value.rejected_programs,
+    programs: {
+        eyebrow: 'Program reviews',
+        title: 'Review scholarship programs',
+        description: 'Check the offer, eligibility, and application process before publication.',
+        icon: 'fa-solid fa-graduation-cap',
+        total: stats.value.pending_programs + stats.value.published_programs + stats.value.rejected_programs,
         pending: stats.value.pending_programs,
-        description: 'Scholarship details before publication',
+        searchPlaceholder: 'Search program or provider',
     },
-    {
-        value: 'applicants',
-        label: 'Applicants',
-        count: stats.value.applicants,
+    applicants: {
+        eyebrow: 'Applicant reviews',
+        title: 'Verify applicant records',
+        description: 'Compare saved academic information with the supporting records submitted.',
+        icon: 'fa-solid fa-user-check',
+        total: stats.value.applicants,
         pending: stats.value.pending_applicants,
-        description: 'Academic results and submitted grade records',
+        searchPlaceholder: 'Search applicant, email, or school',
     },
-    {
-        value: 'benefits',
-        label: 'Benefit oversight',
-        count: stats.value.benefit_records,
+    benefits: {
+        eyebrow: 'Benefit evidence',
+        title: 'Review benefit release records',
+        description: 'Check provider evidence and flags that require administrative attention.',
+        icon: 'fa-solid fa-file-shield',
+        total: stats.value.benefit_records,
         pending: stats.value.benefits_needing_attention,
-        description: 'Release evidence and recipient consistency',
+        searchPlaceholder: 'Search recipient, provider, or program',
     },
-]);
+}[activeReviewType.value]));
 
 const filteredProviders = computed(() => {
     const query = reviewSearch.value.trim().toLowerCase();
@@ -142,6 +151,18 @@ const benefitStatusFilters = computed(() => [
     { value: 'note', label: 'Note only', count: stats.value.benefits_note_only },
     { value: 'all', label: 'All records', count: stats.value.benefit_records },
 ]);
+const activeStatusFilters = computed(() => ({
+    providers: statusFilters.value,
+    programs: programStatusFilters.value,
+    applicants: applicantStatusFilters.value,
+    benefits: benefitStatusFilters.value,
+}[activeReviewType.value] ?? []));
+const activeStatusValue = computed(() => ({
+    providers: selectedStatus.value,
+    programs: selectedProgramStatus.value,
+    applicants: selectedApplicantStatus.value,
+    benefits: selectedBenefitStatus.value,
+}[activeReviewType.value]));
 const filteredBenefitRecords = computed(() => {
     const query = reviewSearch.value.trim().toLowerCase();
 
@@ -185,16 +206,6 @@ const reviewRange = computed(() => {
 
     return `${start}-${end} of ${activeReviewItems.value.length}`;
 });
-
-function selectReviewType(type) {
-    activeReviewType.value = type;
-    reviewSearch.value = '';
-    reviewPage.value = 1;
-
-    const url = new URL(window.location.href);
-    url.searchParams.set('type', type);
-    window.history.replaceState(window.history.state, '', url);
-}
 
 function statusClass(status) {
     if (['approved', 'awarded', 'disbursed', 'renewed', 'published'].includes(status)) {
@@ -292,6 +303,19 @@ async function selectProgramStatus(status) {
     await loadReviewData({ programOnly: true });
 }
 
+async function selectActiveStatus(status) {
+    reviewPage.value = 1;
+
+    if (activeReviewType.value === 'programs') {
+        await selectProgramStatus(status);
+        return;
+    }
+
+    if (activeReviewType.value === 'providers') selectedStatus.value = status;
+    if (activeReviewType.value === 'applicants') selectedApplicantStatus.value = status;
+    if (activeReviewType.value === 'benefits') selectedBenefitStatus.value = status;
+}
+
 async function loadReviewData(options = {}) {
     if (options.programOnly) {
         isProgramLoading.value = true;
@@ -333,20 +357,18 @@ onMounted(loadReviewData);
 
         <section class="admin-page">
             <div class="admin-container">
-                <header class="admin-hero">
-                    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Review Workspace
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Review one queue at a time
-                            </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Review provider identity, programs, applicants, and benefit-release evidence from one workspace.
-                            </p>
-                        </div>
-
+                <TaskPageHeader
+                    theme="admin"
+                    :eyebrow="reviewPageConfig.eyebrow"
+                    :title="reviewPageConfig.title"
+                    :description="reviewPageConfig.description"
+                    :icon="reviewPageConfig.icon"
+                >
+                    <template #meta>
+                        <span>{{ reviewPageConfig.pending }} awaiting attention</span>
+                        <span>{{ reviewPageConfig.total }} total records</span>
+                    </template>
+                    <template #actions>
                         <button
                             type="button"
                             class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
@@ -354,10 +376,10 @@ onMounted(loadReviewData);
                         >
                             Refresh queue
                         </button>
-                    </div>
-                </header>
+                    </template>
+                </TaskPageHeader>
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="admin-panel mt-5 p-6 text-sm text-slate-500">
                     Loading review details...
                 </div>
 
@@ -366,84 +388,42 @@ onMounted(loadReviewData);
                         {{ errorMessage }}
                     </p>
                     <section class="admin-panel overflow-hidden">
-                        <nav class="grid gap-1 p-2 md:grid-cols-2 xl:grid-cols-4" aria-label="Admin review queues">
-                            <button
-                                v-for="tab in reviewTabs"
-                                :key="tab.value"
-                                type="button"
-                                :aria-current="activeReviewType === tab.value ? 'page' : undefined"
-                                :class="[
-                                    'flex min-w-0 items-center gap-3 rounded-md p-3 text-left transition',
-                                    activeReviewType === tab.value
-                                        ? 'bg-slate-950 text-white'
-                                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
-                                ]"
-                                @click="selectReviewType(tab.value)"
-                            >
-                                <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm font-bold', activeReviewType === tab.value ? 'bg-white/10' : 'bg-slate-100 text-slate-700']">
-                                    {{ tab.count }}
-                                </span>
-                                <span class="min-w-0 flex-1">
-                                    <span class="flex items-center gap-2 text-sm font-bold">
-                                        {{ tab.label }}
-                                        <span v-if="tab.pending" class="h-2 w-2 rounded-full bg-amber-400" aria-label="Pending reviews"></span>
-                                    </span>
-                                    <span :class="['mt-0.5 block truncate text-xs', activeReviewType === tab.value ? 'text-slate-300' : 'text-slate-500']">{{ tab.description }}</span>
-                                </span>
-                            </button>
-                        </nav>
-                        <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex flex-col gap-3 bg-slate-50 p-3 lg:flex-row lg:items-center">
                             <label class="relative w-full sm:max-w-md">
                                 <span class="sr-only">Search active review queue</span>
                                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
                                 <input
                                     v-model="reviewSearch"
                                     type="search"
-                                    :placeholder="`Search ${activeReviewType}`"
+                                    :placeholder="reviewPageConfig.searchPlaceholder"
                                     class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                                 >
                             </label>
-                            <p class="shrink-0 text-xs font-semibold text-slate-500">Showing {{ reviewRange }}</p>
+                            <label class="flex min-w-0 items-center gap-2 lg:ml-auto">
+                                <span class="shrink-0 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Status</span>
+                                <select
+                                    :value="activeStatusValue"
+                                    class="min-w-44 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-slate-500"
+                                    @change="selectActiveStatus($event.target.value)"
+                                >
+                                    <option v-for="filter in activeStatusFilters" :key="filter.value" :value="filter.value">
+                                        {{ filter.label }} ({{ filter.count }})
+                                    </option>
+                                </select>
+                            </label>
+                            <p class="shrink-0 text-xs font-semibold text-slate-500">{{ reviewRange }}</p>
                         </div>
                     </section>
 
-                    <section v-if="activeReviewType === 'providers'" class="admin-panel p-5">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                Provider Verification
-                            </p>
-                            <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                Approve scholarship providers
-                            </h3>
-                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                Review organization details and proof before granting publishing access.
-                            </p>
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <button
-                                    v-for="filter in statusFilters"
-                                    :key="filter.value"
-                                    type="button"
-                                    :class="[
-                                        'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                        selectedStatus === filter.value
-                                            ? 'border-slate-900 bg-slate-900 text-white'
-                                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
-                                    ]"
-                                    @click="selectedStatus = filter.value"
-                                >
-                                    {{ filter.label }} ({{ filter.count }})
-                                </button>
-                            </div>
-                        </div>
-
-                        <div v-if="filteredProviders.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                    <section v-if="activeReviewType === 'providers'" class="admin-panel overflow-hidden">
+                        <div v-if="filteredProviders.length === 0" class="p-6">
                             <p class="text-sm font-bold text-slate-900">No provider reviews in this view</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
                                 New provider registrations appear here after they submit their organization details and verification proof.
                             </p>
                         </div>
 
-                        <div v-else class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                        <div v-else class="divide-y divide-slate-200">
                             <article
                                 v-for="provider in visibleReviewItems"
                                 :key="provider.id"
@@ -479,49 +459,19 @@ onMounted(loadReviewData);
                         </div>
                     </section>
 
-                    <section v-else-if="activeReviewType === 'programs'" class="admin-panel p-5">
-                        <div>
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Program Review Queue
-                                </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Approve submitted scholarships
-                                </h3>
-                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                    Review submitted programs before publication or return them for correction.
-                                </p>
-                            </div>
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <button
-                                    v-for="filter in programStatusFilters"
-                                    :key="filter.value"
-                                    type="button"
-                                    :class="[
-                                        'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                        selectedProgramStatus === filter.value
-                                            ? 'border-slate-900 bg-slate-900 text-white'
-                                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50',
-                                    ]"
-                                    @click="selectProgramStatus(filter.value)"
-                                >
-                                    {{ filter.label }} ({{ filter.count }})
-                                </button>
-                            </div>
-                        </div>
-
-                        <div v-if="isProgramLoading" class="mt-5 rounded-md border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                    <section v-else-if="activeReviewType === 'programs'" class="admin-panel overflow-hidden">
+                        <div v-if="isProgramLoading" class="p-5 text-sm text-slate-500">
                             Loading {{ statusLabel(selectedProgramStatus).toLowerCase() }} programs...
                         </div>
 
-                        <div v-else-if="filteredPrograms.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                        <div v-else-if="filteredPrograms.length === 0" class="p-6">
                             <p class="text-sm font-bold text-slate-900">No {{ statusLabel(selectedProgramStatus).toLowerCase() }} programs</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
                                 Choose another status to review programs at a different stage.
                             </p>
                         </div>
 
-                        <div v-else class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                        <div v-else class="divide-y divide-slate-200">
                             <article
                                 v-for="scholarship in visibleReviewItems"
                                 :id="`program-${scholarship.id}`"
@@ -556,49 +506,22 @@ onMounted(loadReviewData);
                         </div>
                     </section>
 
-                    <section v-else-if="activeReviewType === 'applicants'" class="admin-panel p-5">
-                        <div>
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant Review</p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">Applicant verification oversight</h3>
-                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                    Review new academic proof and monitor decisions already completed by admins or scholarship providers.
-                                </p>
-                            </div>
-
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <button
-                                    v-for="filter in applicantStatusFilters"
-                                    :key="filter.value"
-                                    type="button"
-                                    :class="[
-                                        'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                        selectedApplicantStatus === filter.value
-                                            ? 'border-slate-900 bg-slate-900 text-white'
-                                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
-                                    ]"
-                                    @click="selectedApplicantStatus = filter.value"
-                                >
-                                    {{ filter.label }} ({{ filter.count }})
-                                </button>
-                            </div>
-                        </div>
-
-                        <div v-if="applicants.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                    <section v-else-if="activeReviewType === 'applicants'" class="admin-panel overflow-hidden">
+                        <div v-if="applicants.length === 0" class="p-6">
                             <p class="text-sm font-bold text-slate-900">No applicant accounts yet</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
                                 Applicant proof submissions will appear here after students or guardians upload a profile document.
                             </p>
                         </div>
 
-                        <div v-else-if="filteredApplicants.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                        <div v-else-if="filteredApplicants.length === 0" class="p-6">
                             <p class="text-sm font-bold text-slate-900">No applicants in this review status</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
                                 Choose another filter to view completed reviews or applicants who have not uploaded proof yet.
                             </p>
                         </div>
 
-                        <div v-else class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                        <div v-else class="divide-y divide-slate-200">
                             <article
                                 v-for="applicant in visibleReviewItems"
                                 :key="applicant.id"
@@ -639,30 +562,6 @@ onMounted(loadReviewData);
                     </section>
 
                     <section v-else class="admin-panel overflow-hidden">
-                        <header class="border-b border-slate-200 px-5 py-5 sm:px-6">
-                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Benefit Oversight</p>
-                            <h3 class="mt-2 text-xl font-bold text-slate-950">Check whether recipient support is documented</h3>
-                            <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-                                Compare recipient results under the same provider release. Flags identify records that need human review; they do not automatically declare a provider unfair.
-                            </p>
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <button
-                                    v-for="filter in benefitStatusFilters"
-                                    :key="filter.value"
-                                    type="button"
-                                    :class="[
-                                        'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                        selectedBenefitStatus === filter.value
-                                            ? 'border-slate-900 bg-slate-900 text-white'
-                                            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50',
-                                    ]"
-                                    @click="selectedBenefitStatus = filter.value"
-                                >
-                                    {{ filter.label }} ({{ filter.count }})
-                                </button>
-                            </div>
-                        </header>
-
                         <div v-if="benefitRecords.length === 0" class="px-5 py-10 text-center sm:px-6">
                             <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span>
                             <p class="mt-3 font-bold text-slate-950">No benefit releases recorded yet</p>

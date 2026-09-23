@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
-import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { showPortalToast } from '../support/portalToast';
 
 const isLoading = ref(true);
@@ -302,41 +302,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 
         <section class="provider-page">
             <div class="provider-container">
-                <header class="provider-hero">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase text-amber-700">Provider support</p>
-                            <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                {{ activeView === 'requests' ? 'Your support requests' : 'Support services for your team' }}
-                            </h1>
-                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                <template v-if="activeView === 'requests'">Track payment and support progress.</template>
-                                <template v-else>Request optional, one-time help for your provider workspace.</template>
-                            </p>
-                        </div>
-                        <a
-                            v-if="activeView === 'requests'"
-                            href="/provider/billing"
-                            class="inline-flex w-fit items-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                        >
-                            <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-                            Back to services
-                        </a>
-                        <div v-else :class="['flex w-fit items-center gap-3 rounded-md border bg-white px-3.5 py-3 shadow-sm', gateway.configured ? 'border-emerald-200' : 'border-amber-200']">
-                            <span :class="['grid h-9 w-9 place-items-center rounded-md', gateway.configured ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']">
-                                <i :class="['fa-solid', gateway.configured ? 'fa-lock' : 'fa-clock']" aria-hidden="true"></i>
-                            </span>
-                            <div>
-                                <p class="text-xs font-bold text-slate-900">Secure online payment</p>
-                                <p :class="['mt-0.5 text-[11px] font-semibold', gateway.configured ? 'text-emerald-700' : 'text-amber-700']">
-                                    {{ gateway.configured ? 'Available' : 'Temporarily unavailable' }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </header>
-
-                <ProviderSectionNav section="support" />
+                <TaskPageHeader
+                    theme="provider"
+                    eyebrow="Provider support"
+                    :title="activeView === 'requests' ? 'Your service requests' : 'Optional support services'"
+                    :description="activeView === 'requests' ? 'Track payment, meetings, support work, and completed requests.' : 'Purchase one-time assistance only when your team needs additional platform help.'"
+                    :icon="activeView === 'requests' ? 'fa-solid fa-receipt' : 'fa-solid fa-headset'"
+                    :action-href="activeView === 'requests' ? '/provider/billing' : '/provider/billing/requests'"
+                    :action-label="activeView === 'requests' ? 'Browse services' : 'View your requests'"
+                >
+                    <template #meta>
+                        <span v-if="activeView === 'requests'">{{ purchases.length }} request{{ purchases.length === 1 ? '' : 's' }}</span>
+                        <span v-else>{{ plans.length }} one-time service{{ plans.length === 1 ? '' : 's' }}</span>
+                        <span>{{ gateway.configured ? 'Secure payment available' : 'Payment temporarily unavailable' }}</span>
+                    </template>
+                </TaskPageHeader>
 
                 <div v-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">
                     {{ errorMessage }}
@@ -347,27 +327,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                 </div>
 
                 <template v-else>
-                    <section v-if="activeView === 'services'" class="provider-panel mt-5 flex items-start gap-3 px-4 py-3.5 sm:items-center">
-                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-amber-300">
-                            <i class="fa-solid fa-shield-heart" aria-hidden="true"></i>
-                        </span>
-                        <div>
-                            <p class="text-sm font-bold text-slate-950">Core portal tools remain free</p>
-                            <p class="mt-0.5 text-xs leading-5 text-slate-500">Program publishing, applicant review, matching, and notifications are not affected by service purchases.</p>
-                        </div>
-                    </section>
-
                     <section v-if="activeView === 'services'" class="provider-panel mt-4 overflow-hidden">
-                        <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
-                            <div>
-                                <p class="text-xs font-bold uppercase text-amber-700">Available support</p>
-                                <h2 class="mt-1 text-xl font-bold text-slate-950">Choose the help you need</h2>
-                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Review the scope and one-time price.</p>
-                            </div>
-                            <p class="text-xs font-semibold text-slate-500">No subscription required</p>
+                        <div class="border-b border-slate-200 px-5 py-4">
+                            <h2 class="font-bold text-slate-950">Choose a service</h2>
+                            <p class="mt-1 text-sm text-slate-500">Each service is a separate one-time request, not a subscription.</p>
                         </div>
 
-                        <div class="grid gap-4 p-5 sm:p-6 lg:grid-cols-3">
+                        <div class="grid gap-4 p-5 sm:p-6 md:grid-cols-2 xl:grid-cols-3">
                             <article v-for="plan in plans" :key="plan.code" class="flex h-full flex-col overflow-hidden rounded-md border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md">
                                 <div class="flex-1 p-4 sm:p-5">
                                     <div class="flex items-start justify-between gap-3">
@@ -378,20 +344,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                     </div>
 
                                     <h3 class="mt-4 text-base font-bold text-slate-950">{{ plan.name }}</h3>
-                                    <p class="mt-2 min-h-[3rem] text-sm leading-6 text-slate-500">{{ plan.description }}</p>
+                                    <p class="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{{ plan.description }}</p>
 
-                                    <div v-if="plan.best_for" class="mt-4 min-h-[4.25rem] rounded-md border border-amber-100 bg-amber-50/70 px-3 py-2.5">
-                                        <p class="text-[10px] font-bold uppercase text-amber-800">Best for</p>
-                                        <p class="mt-1 text-xs leading-5 text-slate-700">{{ plan.best_for }}</p>
-                                    </div>
+                                    <p v-if="plan.best_for" class="mt-3 line-clamp-2 text-xs leading-5 text-slate-600"><span class="font-bold text-slate-800">Use this when:</span> {{ plan.best_for }}</p>
 
-                                    <p class="mt-4 text-[10px] font-bold uppercase text-slate-500">What you receive</p>
-                                    <ul class="mt-2 space-y-2">
-                                        <li v-for="feature in plan.features" :key="feature" class="flex items-start gap-2 text-sm leading-5 text-slate-700">
-                                            <i class="fa-solid fa-check mt-1 text-[10px] text-emerald-600" aria-hidden="true"></i>
-                                            <span>{{ feature }}</span>
-                                        </li>
-                                    </ul>
+                                    <details class="group mt-4 rounded-md border border-slate-200 bg-slate-50">
+                                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-xs font-bold text-slate-700">
+                                            Included support
+                                            <i class="fa-solid fa-chevron-down text-[9px] text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                        </summary>
+                                        <ul class="space-y-2 border-t border-slate-200 bg-white px-3 py-3">
+                                            <li v-for="feature in plan.features" :key="feature" class="flex items-start gap-2 text-xs leading-5 text-slate-600">
+                                                <i class="fa-solid fa-check mt-1 text-[9px] text-emerald-600" aria-hidden="true"></i>
+                                                <span>{{ feature }}</span>
+                                            </li>
+                                        </ul>
+                                    </details>
                                 </div>
 
                                 <div class="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
@@ -412,12 +380,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                         </div>
                     </section>
 
-                    <section v-if="activeView === 'requests'" class="provider-panel mt-5 overflow-hidden">
-                        <div class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-5 py-4">
+                    <section v-if="activeView === 'requests'" class="provider-panel mt-4 overflow-hidden">
+                        <div class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
                             <div>
-                                <p class="text-xs font-bold uppercase text-amber-700">Your requests</p>
-                                <h2 class="mt-1 text-xl font-bold text-slate-950">Payment and support progress</h2>
-                                <p class="mt-1 text-sm leading-6 text-slate-500">See each request's current stage.</p>
+                                <h2 class="font-bold text-slate-950">Request history</h2>
+                                <p class="mt-1 text-sm text-slate-500">Open a paid request to manage its meeting and support work.</p>
                             </div>
                             <span class="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">{{ purchases.length }} request{{ purchases.length === 1 ? '' : 's' }}</span>
                         </div>
@@ -436,8 +403,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                             </div>
                         </div>
 
-                        <div v-else class="divide-y divide-slate-200">
-                            <article v-for="purchase in purchases" :key="purchase.id" class="grid gap-3 px-4 py-3 transition hover:bg-slate-50/70 xl:grid-cols-[minmax(16rem,1fr)_minmax(20rem,1.25fr)_13rem] xl:items-center">
+                        <div v-else>
+                            <div class="hidden grid-cols-[minmax(16rem,1fr)_minmax(20rem,1.25fr)_13rem] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 xl:grid">
+                                <span>Service request</span>
+                                <span>Progress</span>
+                                <span class="text-right">Payment and action</span>
+                            </div>
+                            <article v-for="purchase in purchases" :key="purchase.id" class="grid gap-3 border-b border-slate-200 px-4 py-3 transition last:border-b-0 hover:bg-slate-50/70 xl:grid-cols-[minmax(16rem,1fr)_minmax(20rem,1.25fr)_13rem] xl:items-center">
                                 <div class="min-w-0">
                                     <p class="truncate text-sm font-bold text-slate-950">{{ purchase.plan_name }}</p>
                                     <p class="mt-1 font-mono text-[11px] text-slate-500">{{ purchase.reference_number }}</p>
@@ -451,7 +423,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                                     <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
                                         <div :class="['h-full rounded-full transition-all', purchaseProgress(purchase).barClass]" :style="{ width: `${purchaseProgress(purchase).percent}%` }"></div>
                                     </div>
-                                    <p class="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{{ purchaseProgress(purchase).description }}</p>
+                                    <p class="mt-2 line-clamp-1 text-xs leading-5 text-slate-500">{{ purchaseProgress(purchase).description }}</p>
                                 </div>
 
                                 <div class="w-full xl:w-52 xl:text-right">

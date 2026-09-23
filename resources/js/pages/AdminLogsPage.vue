@@ -1,12 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
-import AdminSectionNav from '../components/AdminSectionNav.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
 const selectedAction = ref('all');
+const selectedEntry = ref(null);
 const entries = ref([]);
 const filters = ref({ all: 0 });
 const pagination = ref({
@@ -93,11 +94,6 @@ async function loadLogs(page = 1) {
     }
 }
 
-function applyAction(action) {
-    selectedAction.value = action;
-    loadLogs(1);
-}
-
 onMounted(() => loadLogs());
 </script>
 
@@ -107,107 +103,82 @@ onMounted(() => loadLogs());
 
         <section class="admin-page">
             <div class="admin-container">
-                <header class="admin-hero">
-                    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Logs
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Activity Logs
-                            </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Review clean admin activity records. The page shows {{ pagination.per_page }} entries at a time.
-                            </p>
-                        </div>
+                <TaskPageHeader
+                    theme="admin"
+                    eyebrow="Activity records"
+                    title="Review platform activity"
+                    description="Review account and security actions recorded by the platform."
+                    icon="fa-solid fa-clock-rotate-left"
+                >
+                    <template #meta>
+                        <span>{{ pagination.total }} recorded actions</span>
+                        <span>Showing {{ pagination.from ?? 0 }}-{{ pagination.to ?? 0 }}</span>
+                    </template>
+                </TaskPageHeader>
 
-                        <button
-                            type="button"
-                            class="rounded-md bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-200"
-                            @click="loadLogs(pagination.current_page)"
-                        >
-                            Refresh Logs
-                        </button>
-                    </div>
-                </header>
-
-                <AdminSectionNav section="operations" />
-
-                <section class="admin-panel mt-5 p-5">
-                    <div>
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Activity Trail</p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">Recent platform activity</h3>
-                        <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                            Showing {{ pagination.from ?? 0 }} to {{ pagination.to ?? 0 }} of {{ pagination.total }} records.
-                        </p>
-                    </div>
-
-                    <div class="mt-4 flex flex-wrap gap-2">
-                        <button
-                            v-for="filter in actionFilters"
-                            :key="filter.value"
-                            type="button"
-                            :class="[
-                                'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                selectedAction === filter.value
-                                    ? 'border-slate-900 bg-slate-900 text-white'
-                                    : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'
-                            ]"
-                            @click="applyAction(filter.value)"
-                        >
-                            {{ filter.label }} ({{ filter.count }})
+                <section class="admin-panel mt-5 overflow-hidden">
+                    <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <label class="flex min-w-0 flex-1 items-center gap-3 sm:max-w-sm">
+                            <span class="shrink-0 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Show</span>
+                            <select v-model="selectedAction" class="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-amber-500" @change="loadLogs(1)">
+                                <option v-for="filter in actionFilters" :key="filter.value" :value="filter.value">
+                                    {{ filter.label }} ({{ filter.count }})
+                                </option>
+                            </select>
+                        </label>
+                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100" @click="loadLogs(pagination.current_page)">
+                            <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+                            Refresh
                         </button>
                     </div>
 
-                    <div v-if="isLoading" class="mt-5 rounded-md border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                    <div v-if="isLoading" class="p-8 text-center text-sm text-slate-500">
                         Loading activity logs...
                     </div>
 
-                    <div v-else-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
+                    <div v-else-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                         {{ errorMessage }}
                     </div>
 
-                    <div v-else-if="entries.length" class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                    <div v-else-if="entries.length" class="divide-y divide-slate-200">
                         <article
                             v-for="entry in entries"
                             :key="entry.id"
-                            class="flex items-start gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
+                            class="flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50"
                         >
                             <div :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md text-xs', actionClass(entry.action)]">
                                 <i :class="['fa-solid', actionIcon(entry.action)]" aria-hidden="true"></i>
                             </div>
 
                             <div class="min-w-0 flex-1">
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ entry.description }}</h4>
+                                            <h4 class="line-clamp-1 text-sm font-bold leading-5 text-slate-950">{{ entry.description }}</h4>
                                             <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', actionClass(entry.action)]">
                                                 {{ actionLabel(entry.action) }}
                                             </span>
                                         </div>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            {{ entry.actor_name }} &middot; {{ actionLabel(entry.actor_role || 'system') }}
-                                            <template v-if="entry.ip_address"> &middot; {{ entry.ip_address }}</template>
+                                            {{ entry.actor_name }} &middot; {{ actionLabel(entry.actor_role || 'system') }} &middot; {{ entry.created_at }}
                                         </p>
                                     </div>
-                                    <time class="shrink-0 text-xs font-semibold text-slate-400">{{ entry.created_at }}</time>
+                                    <button type="button" class="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="selectedEntry = entry">
+                                        View details
+                                    </button>
                                 </div>
-                                <p v-if="entry.metadata_summary" class="mt-1.5 line-clamp-2 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs leading-5 text-slate-500">
-                                    {{ entry.metadata_summary }}
-                                </p>
                             </div>
                         </article>
                     </div>
 
-                    <div v-else class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                    <div v-else class="p-8 text-center">
                         <p class="text-sm font-bold text-slate-900">No activity for this filter</p>
-                        <p class="mt-1 text-sm leading-6 text-slate-500">Choose another activity type to see other records.</p>
+                        <p class="mt-1 text-sm text-slate-500">Choose another activity type to see other records.</p>
                     </div>
 
                     <div
                         v-if="pagination.last_page > 1"
-                        class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between"
+                        class="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
                     >
                         <p class="text-sm text-slate-500">Page {{ pagination.current_page }} of {{ pagination.last_page }}</p>
                         <div class="flex gap-2">
@@ -234,5 +205,53 @@ onMounted(() => loadLogs());
                 <AdminFooter />
             </div>
         </section>
+
+        <div v-if="selectedEntry" class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/65 p-4" role="dialog" aria-modal="true" aria-labelledby="activity-record-title" @click.self="selectedEntry = null">
+            <section class="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+                <header class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-950 p-5 text-white">
+                    <div class="min-w-0">
+                        <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Activity record</p>
+                        <h2 id="activity-record-title" class="mt-1 text-xl font-black">{{ actionLabel(selectedEntry.action) }}</h2>
+                    </div>
+                    <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-white/20 text-slate-300 hover:bg-white/10 hover:text-white" aria-label="Close activity details" @click="selectedEntry = null">
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                    </button>
+                </header>
+
+                <div class="overflow-y-auto p-5 sm:p-6">
+                    <p class="text-base font-bold leading-6 text-slate-950">{{ selectedEntry.description }}</p>
+
+                    <dl class="mt-5 grid gap-4 border-y border-slate-200 py-5 sm:grid-cols-2">
+                        <div>
+                            <dt class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Performed by</dt>
+                            <dd class="mt-1 text-sm font-semibold text-slate-900">{{ selectedEntry.actor_name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Account role</dt>
+                            <dd class="mt-1 text-sm font-semibold text-slate-900">{{ actionLabel(selectedEntry.actor_role || 'system') }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Recorded at</dt>
+                            <dd class="mt-1 text-sm font-semibold text-slate-900">{{ selectedEntry.created_at }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">IP address</dt>
+                            <dd class="mt-1 font-mono text-sm font-semibold text-slate-900">{{ selectedEntry.ip_address || 'Not recorded' }}</dd>
+                        </div>
+                    </dl>
+
+                    <div class="mt-5">
+                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Recorded details</p>
+                        <p class="mt-2 rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+                            {{ selectedEntry.metadata_summary || 'No additional details were recorded for this action.' }}
+                        </p>
+                    </div>
+                </div>
+
+                <footer class="flex shrink-0 justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
+                    <button type="button" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="selectedEntry = null">Close</button>
+                </footer>
+            </section>
+        </div>
     </main>
 </template>

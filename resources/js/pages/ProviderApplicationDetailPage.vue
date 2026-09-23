@@ -8,6 +8,7 @@ import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewMod
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import RecipientAgreementSummary from '../components/RecipientAgreementSummary.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { decisionReasonOptions } from '../support/applicationDecisionReasons';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
@@ -124,10 +125,10 @@ function safeProviderUrl(value) {
 const applicationListUrl = computed(() => safeProviderUrl(requestedReturnTo)
     || (application.value?.scholarship?.id
         ? `/provider/programs/${application.value.scholarship.id}/applications?workspace=applications`
-        : '/provider/applications'));
+        : '/provider/applications/review'));
 const programApplicantUrl = computed(() => application.value?.scholarship?.id
     ? `/provider/programs/${application.value.scholarship.id}/applications?workspace=applications`
-    : '/provider/applications');
+    : '/provider/applications/review');
 
 function applicationNavigationUrl(item) {
     if (!item?.url) {
@@ -266,14 +267,14 @@ const programWorkspaceUrl = computed(() => {
 
     return scholarshipId
         ? `/provider/programs/${scholarshipId}/applications?workspace=${workspaceSection}`
-        : '/provider/applications';
+        : '/provider/applications/review';
 });
 const programActivityUrl = computed(() => {
     const scholarshipId = application.value?.scholarship?.id;
 
     return scholarshipId
         ? `/provider/programs/${scholarshipId}/applications?workspace=schedule`
-        : '/provider/applications';
+        : '/provider/applications/activities';
 });
 const applicantProfileProofs = computed(() => application.value?.applicant?.profile_proofs ?? []);
 const academicProfileProof = computed(() => applicantProfileProofs.value.find(
@@ -1343,25 +1344,19 @@ onMounted(loadApplication);
                     <span class="truncate font-semibold text-slate-950">{{ application?.applicant?.name || 'Applicant record' }}</span>
                 </nav>
 
-                <header class="provider-hero">
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div class="max-w-3xl">
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Applicant Review
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                {{ application?.applicant?.name || 'Applicant record' }}
-                            </h2>
-                            <p class="mt-3 text-sm leading-6 text-slate-600">
-                                {{ application?.scholarship?.title || 'Scholarship program' }}
-                            </p>
-                            <div v-if="application" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
-                                <span>{{ application.applicant?.email || 'Email not provided' }}</span>
-                                <span>{{ application.applicant?.contact_number || 'Contact not provided' }}</span>
-                                <span>Submitted {{ application.submitted_at || 'recently' }}</span>
-                            </div>
-                        </div>
-                        <div v-if="application" class="flex flex-col items-start gap-3 lg:items-end">
+                <TaskPageHeader
+                    theme="provider"
+                    eyebrow="Applicant review"
+                    :title="application?.applicant?.name || 'Applicant record'"
+                    :description="application?.scholarship?.title || 'Scholarship program'"
+                    icon="fa-solid fa-user-check"
+                >
+                    <template v-if="application" #meta>
+                        <span>{{ application.applicant?.email || 'Email not provided' }}</span>
+                        <span>Submitted {{ application.submitted_at || 'recently' }}</span>
+                    </template>
+                    <template v-if="application" #actions>
+                        <div class="flex flex-col items-start gap-2 lg:items-end">
                             <div v-if="applicationNavigation.total > 1" class="flex items-center gap-2 rounded-md border border-slate-200 bg-white p-1 shadow-sm">
                                 <a
                                     v-if="applicationNavigation.previous_application"
@@ -1400,8 +1395,8 @@ onMounted(loadApplication);
                                 </button>
                             </div>
                         </div>
-                    </div>
-                </header>
+                    </template>
+                </TaskPageHeader>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading applicant review...
@@ -1468,29 +1463,6 @@ onMounted(loadApplication);
                         </nav>
                     </section>
 
-                    <section
-                        v-if="programWorkspaceAction && activeSection !== 'decision'"
-                        class="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-                    >
-                        <div class="flex min-w-0 items-start gap-3">
-                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
-                                <i class="fa-solid fa-arrow-up-right-dots text-sm" aria-hidden="true"></i>
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Program action needed</p>
-                                <p class="mt-1 text-sm font-bold text-slate-950">{{ programWorkspaceAction.title }}</p>
-                                <p class="mt-0.5 text-xs leading-5 text-slate-600">{{ programWorkspaceAction.description }}</p>
-                            </div>
-                        </div>
-                        <a
-                            :href="programWorkspaceUrl"
-                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                        >
-                            Manage program activity
-                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                        </a>
-                    </section>
-
                     <div class="block">
                         <div v-if="activeSection !== 'applicant'" class="flex flex-col gap-5">
                             <section v-if="activeSection === 'eligibility'" class="provider-panel order-2 overflow-hidden">
@@ -1498,9 +1470,6 @@ onMounted(loadApplication);
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Eligibility check</p>
                                         <h3 class="mt-2 text-xl font-bold text-slate-950">Published criteria comparison</h3>
-                                        <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-                                            Compare the applicant profile with the program rules. Confirm important details against the submitted proof before deciding.
-                                        </p>
                                     </div>
                                     <div class="shrink-0 sm:text-right">
                                         <p class="text-2xl font-bold text-slate-950">{{ application.eligibility_breakdown?.score ?? 0 }}%</p>

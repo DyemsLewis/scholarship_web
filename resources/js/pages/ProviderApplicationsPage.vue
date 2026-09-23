@@ -5,6 +5,7 @@ import LocationMapModal from '../components/LocationMapModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import {
     citiesForLocation,
@@ -16,6 +17,12 @@ import {
 
 const appElement = document.getElementById('app');
 const pageSearchParams = new URLSearchParams(window.location.search);
+const currentApplicationsPath = window.location.pathname.replace(/\/$/, '');
+const currentApplicationsSection = currentApplicationsPath.split('/').at(-1);
+const applicationWorkspaceMode = ['review', 'activities', 'results', 'decisions', 'recipients', 'waitlist']
+    .includes(currentApplicationsSection)
+    ? currentApplicationsSection
+    : 'all';
 const initialScholarshipId = appElement?.dataset.scholarshipId ?? pageSearchParams.get('scholarship_id') ?? '';
 const initialScholarshipTitle = appElement?.dataset.scholarshipTitle ?? '';
 const requestedWorkspaceSection = pageSearchParams.get('workspace');
@@ -31,7 +38,23 @@ const legacyQueueAliases = {
 };
 const normalizedRequestedQueueFilter = legacyQueueAliases[requestedQueueFilter] ?? requestedQueueFilter;
 const queueFilterValues = ['needs_review', 'waiting_activity', 'ready_result', 'final_decision', 'selected', 'waitlisted', 'all'];
+const defaultQueueFilter = {
+    review: 'needs_review',
+    activities: 'waiting_activity',
+    results: 'ready_result',
+    decisions: 'final_decision',
+    recipients: 'selected',
+    waitlist: 'waitlisted',
+}[applicationWorkspaceMode] ?? 'needs_review';
 const queueSortValues = ['priority', 'dss', 'documents', 'oldest'];
+const defaultQueueSort = ['recipients', 'waitlist'].includes(applicationWorkspaceMode) ? 'dss' : 'priority';
+const allowedInitialQueueSorts = {
+    activities: ['priority', 'dss', 'oldest'],
+    results: ['priority', 'dss', 'oldest'],
+    decisions: ['priority', 'dss', 'oldest'],
+    recipients: ['dss', 'oldest'],
+    waitlist: ['dss', 'oldest'],
+}[applicationWorkspaceMode] ?? queueSortValues;
 const isLoading = ref(true);
 const errorMessage = ref('');
 const applications = ref([]);
@@ -42,8 +65,12 @@ const selectedScholarshipContext = ref(initialScholarshipId ? {
     id: Number(initialScholarshipId),
     title: initialScholarshipTitle,
 } : null);
-const selectedQueueFilter = ref(queueFilterValues.includes(normalizedRequestedQueueFilter) ? normalizedRequestedQueueFilter : 'needs_review');
-const selectedQueueSort = ref(queueSortValues.includes(requestedQueueSort) ? requestedQueueSort : 'priority');
+const selectedQueueFilter = ref(
+    applicationWorkspaceMode === 'all' && queueFilterValues.includes(normalizedRequestedQueueFilter)
+        ? normalizedRequestedQueueFilter
+        : defaultQueueFilter,
+);
+const selectedQueueSort = ref(allowedInitialQueueSorts.includes(requestedQueueSort) ? requestedQueueSort : defaultQueueSort);
 const applicationSearch = ref(pageSearchParams.get('search') ?? '');
 const applicationPage = ref(Number.isInteger(requestedApplicationPage) && requestedApplicationPage > 0 ? requestedApplicationPage : 1);
 const applicationPagination = ref({ current_page: 1, last_page: 1, per_page: 10, total: 0, from: null, to: null });
@@ -53,7 +80,7 @@ const totalProviderApplications = ref(0);
 const applicationsPerPage = 10;
 const activeWorkspaceSection = ref(['applications', 'schedule'].includes(requestedWorkspaceSection)
     ? requestedWorkspaceSection
-    : 'applications');
+    : (applicationWorkspaceMode === 'activities' && initialScholarshipId ? 'schedule' : 'applications'));
 const programEvents = ref([]);
 const scheduleEditorType = ref('');
 const scheduleSaving = ref(false);
@@ -165,13 +192,79 @@ const exportApplicationsUrl = computed(() => {
 
     return `/provider/export/applications?scholarship_id=${encodeURIComponent(selectedScholarshipId.value)}`;
 });
-const pageKicker = computed(() => (hasProgramContext.value ? 'Program Applicants' : 'Applicants'));
+const workspaceCopy = {
+    review: {
+        kicker: 'Applicant review',
+        title: 'Review submitted applications',
+        description: 'Check applicant profiles, eligibility, and submitted files.',
+        listTitle: 'Applications ready for review',
+        listDescription: 'Open a record to verify its details and record the pre-screening decision.',
+    },
+    activities: {
+        kicker: 'Activity schedules',
+        title: 'Manage activity schedules',
+        description: 'Find applicants waiting for an exam or interview schedule.',
+        listTitle: 'Applicants waiting for an activity',
+        listDescription: 'Open a program workspace to publish or review its shared schedule.',
+    },
+    results: {
+        kicker: 'Activity results',
+        title: 'Record completed results',
+        description: 'Find applicants whose completed stage needs a result.',
+        listTitle: 'Results ready to record',
+        listDescription: 'Open an applicant record and record the completed stage outcome.',
+    },
+    decisions: {
+        kicker: 'Final decisions',
+        title: 'Complete award decisions',
+        description: 'Review applicants who are ready to be selected, waitlisted, or declined.',
+        listTitle: 'Applicants awaiting a decision',
+        listDescription: 'Open a completed application before recording its final outcome.',
+    },
+    recipients: {
+        kicker: 'Recipient records',
+        title: 'Selected recipients',
+        description: 'Review applicants selected for scholarship support.',
+        listTitle: 'Selected recipient records',
+        listDescription: 'Open a recipient record to review the award outcome and support status.',
+    },
+    waitlist: {
+        kicker: 'Waitlist',
+        title: 'Waitlisted applicants',
+        description: 'Review qualified alternates separately from selected recipients.',
+        listTitle: 'Waitlist records',
+        listDescription: 'Open an applicant record to review or update the alternate decision.',
+    },
+};
+const focusedWorkspaceCopy = computed(() => workspaceCopy[applicationWorkspaceMode] ?? null);
+const focusedWorkflowModes = ['review', 'activities', 'results', 'decisions'];
+const focusedOutcomeModes = ['recipients', 'waitlist'];
+const isFocusedWorkflowWorkspace = computed(() => (
+    !hasProgramContext.value && focusedWorkflowModes.includes(applicationWorkspaceMode)
+));
+const isFocusedOutcomeWorkspace = computed(() => (
+    !hasProgramContext.value && focusedOutcomeModes.includes(applicationWorkspaceMode)
+));
+const isDedicatedQueueWorkspace = computed(() => (
+    isFocusedWorkflowWorkspace.value || isFocusedOutcomeWorkspace.value
+));
+const pageIcon = computed(() => ({
+    review: 'fa-solid fa-file-circle-check',
+    activities: 'fa-solid fa-calendar-check',
+    results: 'fa-solid fa-clipboard-check',
+    decisions: 'fa-solid fa-gavel',
+    recipients: 'fa-solid fa-award',
+    waitlist: 'fa-solid fa-list-ol',
+}[applicationWorkspaceMode] ?? (activeWorkspaceSection.value === 'schedule'
+    ? 'fa-solid fa-calendar-check'
+    : 'fa-solid fa-users-viewfinder')));
+const pageKicker = computed(() => (hasProgramContext.value ? 'Program Applicants' : focusedWorkspaceCopy.value?.kicker || 'Applicants'));
 const pageTitle = computed(() => (hasProgramContext.value
     ? selectedScholarshipContext.value?.title || 'Scholarship program'
-    : 'Applicant workflow'));
+    : focusedWorkspaceCopy.value?.title || 'Applicant workflow'));
 const pageDescription = computed(() => (hasProgramContext.value
     ? 'Review applicants, publish activities, and record outcomes.'
-    : 'Find applicants who need review or a recorded result.'));
+    : focusedWorkspaceCopy.value?.description || 'Find applicants who need review or a recorded result.'));
 const reviewFilterOptions = computed(() => [
     {
         value: 'needs_review',
@@ -202,6 +295,65 @@ const reviewFilterOptions = computed(() => [
         count: Number(queueFilterCounts.value.final_decision ?? 0),
     },
 ]);
+const visibleReviewFilterOptions = computed(() => {
+    if (hasProgramContext.value || applicationWorkspaceMode === 'all') {
+        return reviewFilterOptions.value;
+    }
+
+    const visibleValues = {
+        review: ['needs_review'],
+        activities: ['waiting_activity'],
+        results: ['ready_result'],
+        decisions: ['final_decision'],
+        recipients: ['selected'],
+        waitlist: ['waitlisted'],
+    }[applicationWorkspaceMode] ?? [];
+
+    return reviewFilterOptions.value.filter((option) => visibleValues.includes(option.value));
+});
+const showOutcomeNavigation = computed(() => (
+    applicationWorkspaceMode === 'all' && !hasProgramContext.value
+));
+const listTitle = computed(() => focusedWorkspaceCopy.value?.listTitle || 'What needs attention');
+const listDescription = computed(() => focusedWorkspaceCopy.value?.listDescription || (
+    hasProgramContext.value
+        ? 'Choose a task. Saved results move applicants forward automatically.'
+        : 'Choose a queue to view applicants needing that action.'
+));
+const focusedQueueCount = computed(() => Number(queueFilterCounts.value[selectedQueueFilter.value] ?? 0));
+const queueSortOptions = computed(() => {
+    if (isFocusedOutcomeWorkspace.value) {
+        return [
+            { value: 'dss', label: 'Highest match' },
+            { value: 'oldest', label: 'Oldest application' },
+        ];
+    }
+
+    if (isFocusedWorkflowWorkspace.value && applicationWorkspaceMode !== 'review') {
+        return [
+            { value: 'priority', label: 'Priority first' },
+            { value: 'oldest', label: 'Oldest first' },
+            { value: 'dss', label: 'Highest match' },
+        ];
+    }
+
+    return [
+        { value: 'priority', label: 'Priority first' },
+        { value: 'oldest', label: 'Oldest first' },
+        { value: 'dss', label: 'Highest match' },
+        { value: 'documents', label: 'Document issues' },
+    ];
+});
+const showReviewerAssignment = computed(() => (
+    canAssignReviewers.value
+    && selectedQueueFilter.value === 'needs_review'
+));
+const showSubmissionMetric = computed(() => (
+    hasProgramContext.value || ['review', 'all'].includes(applicationWorkspaceMode)
+));
+const showReadinessMetrics = computed(() => (
+    hasProgramContext.value || ['review', 'decisions', 'all'].includes(applicationWorkspaceMode)
+));
 const outcomeFilterOptions = computed(() => [
     {
         value: 'selected',
@@ -298,6 +450,18 @@ function applicationQueueLabel(application) {
 }
 
 function applicationActionLabel(application) {
+    if (applicationWorkspaceMode === 'recipients' && !hasProgramContext.value) {
+        return 'Open recipient';
+    }
+
+    if (applicationWorkspaceMode === 'waitlist' && !hasProgramContext.value) {
+        return 'Review alternate';
+    }
+
+    if (applicationWorkspaceMode === 'activities' && !hasProgramContext.value) {
+        return 'Manage schedule';
+    }
+
     if (workflowClosed(application)) {
         return 'View record';
     }
@@ -315,6 +479,14 @@ function applicationActionLabel(application) {
     }
 
     return 'Record result';
+}
+
+function applicationPrimaryActionUrl(application) {
+    if (applicationWorkspaceMode === 'activities' && !hasProgramContext.value && application.scholarship?.id) {
+        return `/provider/programs/${application.scholarship.id}/applications?workspace=schedule`;
+    }
+
+    return applicationDetailUrl(application);
 }
 
 function providerNextAction(application) {
@@ -957,21 +1129,18 @@ onMounted(loadProviderData);
                     <span class="font-semibold text-slate-950">{{ activeWorkspaceSection === 'schedule' ? 'Activities' : 'Applicants' }}</span>
                 </nav>
 
-                <header class="provider-hero">
-                    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                {{ pageKicker }}
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                {{ pageTitle }}
-                            </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                {{ pageDescription }}
-                            </p>
-                        </div>
-                    </div>
-                </header>
+                <TaskPageHeader
+                    theme="provider"
+                    :eyebrow="pageKicker"
+                    :title="pageTitle"
+                    :description="pageDescription"
+                    :icon="pageIcon"
+                >
+                    <template v-if="isDedicatedQueueWorkspace" #meta>
+                        <span>{{ focusedQueueCount }} in this queue</span>
+                        <span>{{ visibleApplicationRange }}</span>
+                    </template>
+                </TaskPageHeader>
 
                 <ProviderProgramNav
                     v-if="hasProgramContext"
@@ -1196,7 +1365,7 @@ onMounted(loadProviderData);
                         </form>
                     </section>
 
-                    <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="provider-panel overflow-hidden">
+                    <section v-if="showOutcomeNavigation" class="provider-panel overflow-hidden">
                         <div class="border-b border-slate-200 px-5 py-4">
                             <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">After final decision</p>
                             <h3 class="mt-1 text-xl font-bold text-slate-950">Recipients and waitlist</h3>
@@ -1234,17 +1403,15 @@ onMounted(loadProviderData);
                     </section>
 
                     <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="provider-panel p-4 sm:p-5">
-                        <div>
-                            <h3 class="text-xl font-bold text-slate-950">What needs attention</h3>
-                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                {{ hasProgramContext
-                                    ? 'Choose a task. Saved results move applicants forward automatically.'
-                                    : 'Choose a queue to view applicants needing that action.' }}
+                        <div v-if="!isDedicatedQueueWorkspace">
+                            <h3 class="text-xl font-bold text-slate-950">{{ listTitle }}</h3>
+                            <p v-if="applicationWorkspaceMode === 'all' || hasProgramContext" class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                                {{ listDescription }}
                             </p>
 
-                            <div class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                            <div v-if="visibleReviewFilterOptions.length > 1" class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                                 <button
-                                    v-for="filter in reviewFilterOptions"
+                                    v-for="filter in visibleReviewFilterOptions"
                                     :key="filter.value"
                                     type="button"
                                     :class="[
@@ -1269,7 +1436,7 @@ onMounted(loadProviderData);
                             </div>
                         </div>
 
-                        <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div :class="['flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between', isDedicatedQueueWorkspace ? '' : 'mt-4']">
                             <label class="relative w-full lg:max-w-md">
                                 <span class="sr-only">Search applicants</span>
                                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
@@ -1282,6 +1449,7 @@ onMounted(loadProviderData);
                             </label>
                             <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                                 <button
+                                    v-if="hasProgramContext || applicationWorkspaceMode === 'all'"
                                     type="button"
                                     :class="[
                                         'rounded-md border px-3 py-2.5 text-sm font-bold transition',
@@ -1299,10 +1467,7 @@ onMounted(loadProviderData);
                                         v-model="selectedQueueSort"
                                         class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-500 sm:w-44"
                                     >
-                                        <option value="priority">Priority first</option>
-                                        <option value="oldest">Oldest first</option>
-                                        <option value="dss">Highest match</option>
-                                        <option value="documents">Document issues</option>
+                                        <option v-for="option in queueSortOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                                     </select>
                                 </label>
                                 <button
@@ -1377,10 +1542,15 @@ onMounted(loadProviderData);
                             <article
                                 v-for="application in visibleApplications"
                                 :key="application.id"
-                                class="grid gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-center"
+                                :class="[
+                                    'grid gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:items-center',
+                                    showReviewerAssignment
+                                        ? 'lg:grid-cols-[minmax(0,1fr)_18rem]'
+                                        : 'lg:grid-cols-[minmax(0,1fr)_auto]',
+                                ]"
                             >
                                 <div class="flex min-w-0 items-center gap-3">
-                                    <label v-if="hasProgramContext" :title="canBulkAdvance(application) ? 'Select applicant' : 'This applicant is not ready for the selected bulk action.'" class="grid h-8 w-8 shrink-0 place-items-center">
+                                    <label v-if="hasProgramContext && showBulkActions" :title="canBulkAdvance(application) ? 'Select applicant' : 'This applicant is not ready for the selected bulk action.'" class="grid h-8 w-8 shrink-0 place-items-center">
                                         <input v-model="selectedBulkApplicationIds" type="checkbox" :value="application.id" :disabled="!canBulkAdvance(application)" class="h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-30">
                                         <span class="sr-only">Select {{ application.applicant?.name || 'applicant' }}</span>
                                     </label>
@@ -1407,10 +1577,10 @@ onMounted(loadProviderData);
                                             {{ application.scholarship?.title || 'Scholarship' }} - {{ application.applicant?.email || 'No email provided' }}
                                         </p>
                                         <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
-                                            <span>Submitted {{ application.submitted_at || 'recently' }}</span>
+                                            <span v-if="showSubmissionMetric">Submitted {{ application.submitted_at || 'recently' }}</span>
                                             <span v-if="showWaitingTime(application)">Waiting {{ application.waiting_days }}d</span>
-                                            <span>Match {{ application.dss_score ?? 0 }}%</span>
-                                            <span>Files {{ application.document_readiness?.percent ?? 0 }}%</span>
+                                            <span v-if="showReadinessMetrics">Match {{ application.dss_score ?? 0 }}%</span>
+                                            <span v-if="showReadinessMetrics">Files {{ application.document_readiness?.percent ?? 0 }}%</span>
                                             <span v-if="documentIssueCount(application)" class="text-amber-700">
                                                 {{ documentIssueCount(application) }} file issue{{ documentIssueCount(application) === 1 ? '' : 's' }}
                                             </span>
@@ -1418,13 +1588,18 @@ onMounted(loadProviderData);
                                             <span v-if="application.correction_status === 'requested'" class="text-amber-700">Correction requested</span>
                                             <span v-if="application.correction_status === 'submitted'" class="text-sky-700">Correction ready to review</span>
                                             <span v-if="application.status === 'waitlisted' && application.waitlist_position" class="text-sky-700">Alternate #{{ application.waitlist_position }}</span>
+                                            <span v-if="applicationWorkspaceMode === 'recipients' && application.outcome_at" class="text-emerald-700">Selected {{ application.outcome_at }}</span>
                                             <span class="text-slate-700">Next: {{ providerNextAction(application) }}</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div :class="['flex w-full shrink-0 gap-2 lg:w-72 lg:justify-center', hasProgramContext ? 'pl-11 lg:pl-0' : 'pl-14 lg:pl-0']">
-                                    <label v-if="canAssignReviewers && reviewersForApplication(application).length" class="min-w-0 flex-1 lg:w-44 lg:flex-none">
+                                <div :class="[
+                                    'flex w-full shrink-0 gap-2 lg:justify-end',
+                                    showReviewerAssignment ? 'lg:w-72' : 'lg:w-auto',
+                                    hasProgramContext && showBulkActions ? 'pl-11 lg:pl-0' : 'pl-14 lg:pl-0',
+                                ]">
+                                    <label v-if="showReviewerAssignment && reviewersForApplication(application).length" class="min-w-0 flex-1 lg:w-44 lg:flex-none">
                                         <span class="sr-only">Assigned reviewer for {{ application.applicant?.name || 'applicant' }}</span>
                                         <select
                                             :value="application.assigned_reviewer?.id ?? ''"
@@ -1439,7 +1614,7 @@ onMounted(loadProviderData);
                                         </select>
                                     </label>
                                     <a
-                                        :href="applicationDetailUrl(application)"
+                                        :href="applicationPrimaryActionUrl(application)"
                                         class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800"
                                     >
                                         {{ applicationActionLabel(application) }}

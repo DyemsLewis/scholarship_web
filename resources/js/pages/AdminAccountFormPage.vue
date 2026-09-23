@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
 import { limitPhoneNumber } from '../support/phoneNumber';
@@ -22,6 +23,13 @@ const supportLink = ref('');
 const verificationDocuments = ref([]);
 const previewDocument = ref(null);
 const applicantVerificationNotes = ref('');
+const formSections = [
+    { key: 'identity', label: 'Identity', icon: 'fa-solid fa-user' },
+    { key: 'access', label: 'Role and access', icon: 'fa-solid fa-shield-halved' },
+    { key: 'signin', label: 'Sign-in details', icon: 'fa-solid fa-key' },
+];
+const activeFormSection = ref('identity');
+const activeWorkspaceSection = ref('details');
 const {
     confirmation,
     requestConfirmation,
@@ -222,6 +230,51 @@ const applicantVerificationDocumentOptions = {
 const hasAcademicVerificationDocument = computed(() => verificationDocuments.value.some(
     (document) => document.document_type === 'academic_record',
 ));
+const workspaceSections = computed(() => [
+    { key: 'details', label: 'Account details', icon: 'fa-solid fa-address-card' },
+    ...(isEditMode.value && account.value ? [{ key: 'security', label: 'Security', icon: 'fa-solid fa-lock' }] : []),
+    ...(isEditMode.value && account.value?.role === 'applicant'
+        ? [{ key: 'evidence', label: 'Applicant evidence', icon: 'fa-solid fa-file-shield' }]
+        : []),
+]);
+const activeFormSectionIndex = computed(() => formSections.findIndex(
+    (section) => section.key === activeFormSection.value,
+));
+const previousFormSection = computed(() => formSections[activeFormSectionIndex.value - 1] ?? null);
+const nextFormSection = computed(() => formSections[activeFormSectionIndex.value + 1] ?? null);
+
+async function focusFirstInvalidField(scope = formElement.value) {
+    const invalidField = [...(scope?.querySelectorAll('input, select, textarea') ?? [])]
+        .find((field) => !field.disabled && !field.checkValidity());
+
+    if (!invalidField) {
+        return true;
+    }
+
+    const section = invalidField.closest('[data-form-section]')?.dataset.formSection;
+
+    if (section) {
+        activeWorkspaceSection.value = 'details';
+        activeFormSection.value = section;
+        await nextTick();
+    }
+
+    invalidField.reportValidity();
+    invalidField.focus();
+    return false;
+}
+
+async function continueForm() {
+    const currentSection = formElement.value?.querySelector(`[data-form-section="${activeFormSection.value}"]`);
+
+    if (!await focusFirstInvalidField(currentSection)) {
+        return;
+    }
+
+    if (nextFormSection.value) {
+        activeFormSection.value = nextFormSection.value.key;
+    }
+}
 
 function handleMiddleInitialInput(event) {
     form.value.middleInitial = event.target.value.replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase();
@@ -256,6 +309,8 @@ function applyAdminRolePreset() {
 function resetForm() {
     form.value = emptyForm();
     account.value = null;
+    activeWorkspaceSection.value = 'details';
+    activeFormSection.value = 'identity';
     supportLink.value = '';
     suspensionReason.value = '';
     errorMessage.value = '';
@@ -286,7 +341,7 @@ async function saveAccount() {
     errorMessage.value = '';
     supportLink.value = '';
 
-    if (!formElement.value?.reportValidity()) {
+    if (!await focusFirstInvalidField()) {
         return;
     }
 
@@ -294,6 +349,9 @@ async function saveAccount() {
 
     if (numberDigits.length !== 11) {
         errorMessage.value = 'Enter an 11-digit contact number.';
+        activeWorkspaceSection.value = 'details';
+        activeFormSection.value = 'identity';
+        await nextTick();
         formElement.value
             ?.querySelector('#admin-contact-number')
             ?.setCustomValidity(errorMessage.value);
@@ -307,6 +365,9 @@ async function saveAccount() {
 
     if ((!isEditMode.value || hasPasswordInput) && form.value.password !== form.value.passwordConfirmation) {
         errorMessage.value = 'Passwords must match.';
+        activeWorkspaceSection.value = 'details';
+        activeFormSection.value = 'signin';
+        await nextTick();
         formElement.value
             ?.querySelector('#admin-password-confirmation')
             ?.setCustomValidity(errorMessage.value);
@@ -318,6 +379,8 @@ async function saveAccount() {
 
     if (needsAdminPermissions.value && form.value.permissions.length === 0) {
         errorMessage.value = 'Select at least one admin permission.';
+        activeWorkspaceSection.value = 'details';
+        activeFormSection.value = 'access';
         return;
     }
 
@@ -536,41 +599,84 @@ onMounted(loadAccount);
 
         <section class="admin-page">
             <div class="admin-container">
-                <header class="admin-hero">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                User Access
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                {{ isEditMode ? 'Edit user account' : 'Create user account' }}
-                            </h2>
-                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                Add the person's details, choose an account type, and set their portal access.
-                            </p>
-                        </div>
+                <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
+                    <a href="/admin/manage-users" class="font-bold text-slate-600 transition hover:text-slate-950">Accounts</a>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
+                    <span class="truncate font-semibold text-slate-950">{{ isEditMode ? 'Edit account' : 'Create account' }}</span>
+                </nav>
 
-                        <a
-                            href="/admin/manage-users"
-                            class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                        >
-                            <i class="fa-solid fa-arrow-left mr-2" aria-hidden="true"></i>
-                            Back to users
-                        </a>
-                    </div>
-                </header>
+                <TaskPageHeader
+                    theme="admin"
+                    eyebrow="User access"
+                    :title="isEditMode ? 'Edit user account' : 'Create user account'"
+                    description="Set the person's identity, account type, and permitted portal access."
+                    :icon="isEditMode ? 'fa-solid fa-user-gear' : 'fa-solid fa-user-plus'"
+                />
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading account...
                 </div>
 
+                <nav
+                    v-if="!isLoading && workspaceSections.length > 1"
+                    class="admin-panel mt-5 grid gap-1 p-1 sm:grid-cols-3"
+                    aria-label="Account workspace sections"
+                >
+                    <button
+                        v-for="section in workspaceSections"
+                        :key="section.key"
+                        type="button"
+                        :aria-current="activeWorkspaceSection === section.key ? 'page' : undefined"
+                        :class="[
+                            'flex items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-sm font-bold transition',
+                            activeWorkspaceSection === section.key
+                                ? 'bg-slate-950 text-white'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                        ]"
+                        @click="activeWorkspaceSection = section.key"
+                    >
+                        <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', activeWorkspaceSection === section.key ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-600']">
+                            <i :class="section.icon" aria-hidden="true"></i>
+                        </span>
+                        {{ section.label }}
+                    </button>
+                </nav>
+
+                <p
+                    v-if="errorMessage && activeWorkspaceSection !== 'details'"
+                    class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"
+                >
+                    {{ errorMessage }}
+                </p>
+
                 <form
-                    v-else
+                    v-if="!isLoading && activeWorkspaceSection === 'details'"
                     ref="formElement"
-                    class="mt-6 grid gap-5"
+                    class="mt-4 grid gap-4"
                     @submit.prevent="saveAccount"
                 >
-                    <section class="admin-panel overflow-hidden">
+                    <nav class="admin-panel grid gap-1 p-1 sm:grid-cols-3" aria-label="Account form steps">
+                        <button
+                            v-for="(section, index) in formSections"
+                            :key="section.key"
+                            type="button"
+                            :aria-current="activeFormSection === section.key ? 'step' : undefined"
+                            :class="[
+                                'flex items-center gap-2.5 rounded-md px-3 py-2.5 text-left transition',
+                                activeFormSection === section.key
+                                    ? 'bg-slate-950 text-white'
+                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                            ]"
+                            @click="activeFormSection = section.key"
+                        >
+                            <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold', activeFormSection === section.key ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-600']">
+                                {{ index + 1 }}
+                            </span>
+                            <span class="min-w-0 truncate text-sm font-bold">{{ section.label }}</span>
+                        </button>
+                    </nav>
+
+                    <section v-show="activeFormSection === 'identity'" data-form-section="identity" class="admin-panel overflow-hidden">
                         <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
                             <div class="flex items-center gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
@@ -643,7 +749,7 @@ onMounted(loadAccount);
                         </div>
                     </section>
 
-                    <section class="admin-panel overflow-hidden">
+                    <section v-show="activeFormSection === 'access'" data-form-section="access" class="admin-panel overflow-hidden">
                         <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
                             <div class="flex items-center gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-300 text-slate-950">
@@ -763,7 +869,7 @@ onMounted(loadAccount);
                         </div>
                     </section>
 
-                    <section class="admin-panel overflow-hidden">
+                    <section v-show="activeFormSection === 'signin'" data-form-section="signin" class="admin-panel overflow-hidden">
                         <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
                             <div class="flex items-center gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-200 text-slate-800">
@@ -814,23 +920,33 @@ onMounted(loadAccount);
                         </p>
                     </section>
 
-                    <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                        <div class="min-h-5">
+                    <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                        <div class="min-h-5 text-xs font-semibold text-slate-500">
                             <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">
                                 {{ errorMessage }}
                             </p>
+                            <p v-else>Step {{ activeFormSectionIndex + 1 }} of {{ formSections.length }}</p>
                         </div>
 
                         <div class="flex flex-col gap-2 sm:flex-row">
                             <button
-                                v-if="!isEditMode"
+                                v-if="previousFormSection"
                                 type="button"
                                 class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                                @click="resetForm"
+                                @click="activeFormSection = previousFormSection.key"
                             >
-                                Clear
+                                Back
                             </button>
                             <button
+                                v-if="nextFormSection"
+                                type="button"
+                                class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                @click="continueForm"
+                            >
+                                Continue
+                            </button>
+                            <button
+                                v-else
                                 type="submit"
                                 :disabled="isSaving"
                                 class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-80"
@@ -842,7 +958,7 @@ onMounted(loadAccount);
                 </form>
 
                 <section
-                    v-if="isEditMode && account"
+                    v-if="isEditMode && account && activeWorkspaceSection === 'security'"
                     class="admin-panel mt-4 overflow-hidden"
                 >
                     <div class="border-b border-slate-200 p-5 sm:p-6">
@@ -1010,7 +1126,7 @@ onMounted(loadAccount);
                 </section>
 
                 <section
-                    v-if="isEditMode && account?.role === 'applicant'"
+                    v-if="isEditMode && account?.role === 'applicant' && activeWorkspaceSection === 'evidence'"
                     class="admin-panel mt-4 overflow-hidden"
                 >
                     <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">

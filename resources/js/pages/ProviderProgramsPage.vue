@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
@@ -34,10 +35,10 @@ const canManageProfile = computed(() => Boolean(
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
 const lifecycleOptions = computed(() => {
     const options = [
-        { value: 'drafts', label: 'Drafts', description: 'Finish setup or correct feedback.', icon: 'fa-solid fa-pen-ruler' },
-        { value: 'review', label: 'In admin review', description: 'Waiting for a publishing decision.', icon: 'fa-solid fa-shield-halved' },
-        { value: 'published', label: 'Published', description: 'Visible to eligible applicants.', icon: 'fa-solid fa-bullhorn' },
-        { value: 'closed', label: 'Closed', description: 'Keep final program records.', icon: 'fa-solid fa-box-archive' },
+        { value: 'drafts', label: 'Drafts' },
+        { value: 'review', label: 'In admin review' },
+        { value: 'published', label: 'Published' },
+        { value: 'closed', label: 'Closed' },
     ];
 
     return options.map((option) => ({
@@ -157,17 +158,8 @@ function programStatusClass(status) {
 }
 
 function programPrimaryAction(scholarship) {
-    if (['draft', 'rejected'].includes(scholarship.status) && canManagePrograms.value) {
-        return {
-            label: scholarship.status === 'rejected' ? 'Fix program' : 'Continue setup',
-            href: `/provider/programs/${scholarship.id}/edit`,
-        };
-    }
-
     return {
-        label: scholarship.status === 'closed'
-            ? 'View records'
-            : (scholarship.status === 'pending_review' ? 'View status' : 'Manage'),
+        label: 'View summary',
         href: `/provider/programs/${scholarship.id}`,
     };
 }
@@ -208,35 +200,27 @@ onMounted(loadProviderData);
 
         <section class="provider-page">
             <div class="provider-container">
-                <header class="provider-hero">
-                    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Provider Programs
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Scholarship programs
-                            </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Create, publish, and manage each scholarship program.
-                            </p>
-                        </div>
+                <TaskPageHeader
+                    theme="provider"
+                    eyebrow="Programs"
+                    title="Scholarship programs"
+                    description="Find a program and continue its current task."
+                    icon="fa-solid fa-graduation-cap"
+                    :action-href="canPostScholarships && canManagePrograms ? '/provider/programs/create' : ''"
+                    :action-label="canPostScholarships && canManagePrograms ? 'Create program' : ''"
+                >
+                    <template #meta>
+                        <span>{{ scholarships.length }} total</span>
+                        <span>{{ lifecycleOptions.find((item) => item.value === 'published')?.count ?? 0 }} published</span>
+                        <span>{{ lifecycleOptions.find((item) => item.value === 'drafts')?.count ?? 0 }} need setup</span>
+                    </template>
+                </TaskPageHeader>
 
-                        <a
-                            v-if="canPostScholarships && canManagePrograms"
-                            href="/provider/programs/create"
-                            class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                        >
-                            Create program
-                        </a>
-                    </div>
-                </header>
-
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="provider-panel mt-4 p-6 text-sm text-slate-500">
                     Loading scholarship programs...
                 </div>
 
-                <div v-else-if="errorMessage" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
+                <div v-else-if="errorMessage" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
                     {{ errorMessage }}
                 </div>
 
@@ -257,50 +241,16 @@ onMounted(loadProviderData);
                             </p>
                         </div>
                         <a
-                            href="/provider/profile#verification-documents"
+                            href="/provider/profile/verification"
                             class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
                         >
                             {{ canManageProfile && !verificationDocumentCount ? 'Upload proof' : 'View verification' }}
                         </a>
                     </div>
 
-                    <section class="provider-panel p-4 sm:p-5">
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program lifecycle</p>
-                            <h3 class="mt-1 text-lg font-bold text-slate-950">Programs by stage</h3>
-                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                Filter programs and continue the next action.
-                            </p>
-                        </div>
-
-                        <div class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                            <button
-                                v-for="option in lifecycleOptions"
-                                :key="option.value"
-                                type="button"
-                                :class="[
-                                    'flex min-h-20 items-start gap-3 rounded-md border p-3 text-left transition',
-                                    statusFilter === option.value
-                                        ? 'border-slate-900 bg-slate-900 text-white'
-                                        : 'border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-400 hover:bg-white',
-                                ]"
-                                @click="statusFilter = option.value"
-                            >
-                                <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', statusFilter === option.value ? 'bg-white/10 text-amber-300' : 'bg-white text-slate-600 ring-1 ring-slate-200']">
-                                    <i :class="option.icon" aria-hidden="true"></i>
-                                </span>
-                                <span class="min-w-0 flex-1">
-                                    <span class="flex items-center justify-between gap-2">
-                                        <span class="text-sm font-bold">{{ option.label }}</span>
-                                        <span :class="['rounded px-2 py-0.5 text-xs font-bold', statusFilter === option.value ? 'bg-white/10' : 'bg-white text-slate-700 ring-1 ring-slate-200']">{{ option.count }}</span>
-                                    </span>
-                                    <span :class="['mt-1 block text-xs leading-5', statusFilter === option.value ? 'text-slate-300' : 'text-slate-500']">{{ option.description }}</span>
-                                </span>
-                            </button>
-                        </div>
-
-                        <div class="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                            <label class="relative w-full sm:max-w-sm">
+                    <section class="provider-panel overflow-hidden">
+                        <div class="grid gap-3 border-b border-slate-200 bg-slate-50/70 p-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto] sm:items-center">
+                            <label class="relative w-full">
                                 <span class="sr-only">Search programs</span>
                                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
                                 <input
@@ -310,17 +260,14 @@ onMounted(loadProviderData);
                                     class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                                 >
                             </label>
-                            <div class="flex items-center gap-3">
-                                <button type="button" :class="['rounded-md border px-3 py-2.5 text-xs font-bold transition', statusFilter === 'all' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100']" @click="statusFilter = 'all'">
-                                    All programs ({{ scholarships.length }})
-                                </button>
-                                <p class="hidden text-xs font-semibold text-slate-500 md:block">
-                                Showing {{ filteredScholarships.length }} of {{ scholarships.length }}
-                                </p>
-                            </div>
+                            <select v-model="statusFilter" aria-label="Program status" class="rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-slate-500">
+                                <option value="all">All stages ({{ scholarships.length }})</option>
+                                <option v-for="option in lifecycleOptions" :key="option.value" :value="option.value">{{ option.label }} ({{ option.count }})</option>
+                            </select>
+                            <p class="text-xs font-semibold text-slate-500 sm:text-right">{{ filteredScholarships.length }} shown</p>
                         </div>
 
-                        <div v-if="scholarships.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                        <div v-if="scholarships.length === 0" class="p-8 text-center">
                             <p class="text-sm font-bold text-slate-900">No programs yet</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">
                                 {{ canPostScholarships
@@ -330,7 +277,7 @@ onMounted(loadProviderData);
                         </div>
 
                         <template v-else>
-                            <div v-if="filteredScholarships.length" class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                            <div v-if="filteredScholarships.length" class="bg-white">
                                 <div class="hidden grid-cols-[minmax(0,1fr)_7rem_10rem_8rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 lg:grid">
                                     <span>Program</span>
                                     <span class="text-center">Applicants</span>
@@ -381,7 +328,7 @@ onMounted(loadProviderData);
                                     </div>
                                     <a
                                         :href="programPrimaryAction(scholarship).href"
-                                        class="ml-14 inline-flex w-auto shrink-0 items-center justify-center rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800 sm:ml-0 lg:justify-self-center"
+                                        class="inline-flex w-full shrink-0 items-center justify-center rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800 sm:ml-14 sm:w-fit lg:ml-0 lg:justify-self-center"
                                     >
                                         {{ programPrimaryAction(scholarship).label }}
                                         <i class="fa-solid fa-arrow-right ml-2 text-[10px]" aria-hidden="true"></i>
@@ -389,7 +336,7 @@ onMounted(loadProviderData);
                                 </article>
                             </div>
 
-                            <div v-else class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                            <div v-else class="p-8 text-center">
                                 <p class="text-sm font-bold text-slate-900">No programs match this view</p>
                                 <p class="mt-1 text-sm leading-6 text-slate-500">Choose another status or adjust your search.</p>
                                 <button

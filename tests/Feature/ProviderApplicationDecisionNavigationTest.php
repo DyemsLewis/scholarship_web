@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ApplicationSchedule;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
@@ -112,6 +113,18 @@ class ProviderApplicationDecisionNavigationTest extends TestCase
 
         $current = $workflow->recordStageResult($workflow->start($current), 'screening', 'passed', $provider);
         $next = $workflow->recordStageResult($workflow->start($next), 'screening', 'passed', $provider);
+
+        ApplicationSchedule::create([
+            'scholarship_application_id' => $current->id,
+            'type' => 'exam',
+            'title' => 'Scholarship exam',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'status' => 'completed',
+            'completed_at' => now(),
+            'created_by' => $provider->id,
+            'updated_by' => $provider->id,
+        ]);
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$current->id}/stages/exam/result", [

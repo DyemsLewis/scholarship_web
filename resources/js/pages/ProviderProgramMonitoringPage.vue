@@ -4,6 +4,7 @@ import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { labelFromKey } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 
@@ -14,7 +15,9 @@ const benefitReleases = ref([]);
 const releaseCandidates = ref([]);
 const supportRecipients = ref([]);
 const programSummary = ref(null);
-const activeTab = ref('summary');
+const monitoringViews = ['summary', 'monitoring', 'releases', 'outcomes'];
+const requestedMonitoringView = new URLSearchParams(window.location.search).get('view');
+const activeTab = ref(monitoringViews.includes(requestedMonitoringView) ? requestedMonitoringView : 'summary');
 const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
@@ -43,52 +46,35 @@ const recipientRecord = ref(null);
 const recipientRecordError = ref('');
 const isLoadingRecipientRecord = ref(false);
 
-const totalSubmitted = computed(() => cycles.value.reduce(
-    (total, cycle) => total + Number(cycle.submitted_count || 0),
-    0,
-));
-const openPeriodCount = computed(() => cycles.value.filter((cycle) => cycle.status === 'open').length);
-const totalReviewed = computed(() => cycles.value.reduce(
-    (total, cycle) => total + Number(cycle.reviewed_count || 0),
-    0,
-));
-const totalReleased = computed(() => benefitReleases.value.reduce(
-    (total, release) => total + Number(release.released_count || 0),
-    0,
-));
 const eligibleCandidates = computed(() => releaseCandidates.value.filter((candidate) => candidate.eligible));
 const activeSupportCount = computed(() => supportRecipients.value.filter((recipient) => !recipient.is_closed).length);
-const renewedSupportCount = computed(() => supportRecipients.value.filter((recipient) => recipient.support_status === 'renewed').length);
-const closedSupportCount = computed(() => supportRecipients.value.filter((recipient) => recipient.is_closed).length);
 const renewalReadyCount = computed(() => supportRecipients.value.filter((recipient) => recipient.renewal_eligible && !recipient.is_closed).length);
-const headerStats = computed(() => {
-    if (activeTab.value === 'summary') {
-        return [
-            { label: 'Active support', value: programSummary.value?.recipients?.active ?? 0 },
-            { label: 'Need attention', value: programSummary.value?.attention_count ?? 0 },
-            { label: 'Upcoming work', value: programSummary.value?.upcoming_count ?? 0 },
-        ];
-    }
-    if (activeTab.value === 'monitoring') {
-        return [
-            { label: 'Open periods', value: openPeriodCount.value },
-            { label: 'Records received', value: totalSubmitted.value },
-            { label: 'Reviews completed', value: totalReviewed.value },
-        ];
-    }
-    if (activeTab.value === 'releases') {
-        return [
-            { label: 'Release schedules', value: benefitReleases.value.length },
-            { label: 'Recipients released', value: totalReleased.value },
-            { label: 'Ready today', value: eligibleCandidates.value.length },
-        ];
-    }
-    return [
-        { label: 'Active support', value: activeSupportCount.value },
-        { label: 'Renewed', value: renewedSupportCount.value },
-        { label: 'Closed records', value: closedSupportCount.value },
-    ];
-});
+const viewTabs = computed(() => [
+    {
+        value: 'summary',
+        label: 'Overview',
+        icon: 'fa-solid fa-table-columns',
+        count: Number(programSummary.value?.attention_count ?? 0),
+    },
+    {
+        value: 'monitoring',
+        label: 'Academic checks',
+        icon: 'fa-solid fa-chart-line',
+        count: cycles.value.reduce((total, cycle) => total + Number(cycle.action_needed_count ?? 0), 0),
+    },
+    {
+        value: 'releases',
+        label: 'Benefit releases',
+        icon: 'fa-solid fa-hand-holding-heart',
+        count: benefitReleases.value.reduce((total, release) => total + Number(release.pending_count ?? 0), 0),
+    },
+    {
+        value: 'outcomes',
+        label: 'Support outcomes',
+        icon: 'fa-solid fa-flag-checkered',
+        count: renewalReadyCount.value,
+    },
+]);
 
 function defaultForm() {
     return {
@@ -161,7 +147,22 @@ function openSummaryItem(item) {
         return;
     }
 
-    activeTab.value = item.type === 'release' ? 'releases' : 'monitoring';
+    setActiveTab(item.type === 'release' ? 'releases' : 'monitoring');
+}
+
+function setActiveTab(view) {
+    if (!monitoringViews.includes(view)) return;
+
+    activeTab.value = view;
+    const url = new URL(window.location.href);
+
+    if (view === 'summary') {
+        url.searchParams.delete('view');
+    } else {
+        url.searchParams.set('view', view);
+    }
+
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
 async function openRecipientRecord(recipient) {
@@ -480,80 +481,56 @@ onMounted(loadMonitoring);
                 <div v-if="isLoading" class="provider-panel mt-5 p-6 text-sm text-slate-500">Loading recipient monitoring...</div>
 
                 <template v-else-if="scholarship">
-                    <section class="provider-panel mt-5 overflow-hidden">
-                        <header class="bg-[#081426] px-5 py-5 text-white sm:px-6">
-                            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                                <div class="flex min-w-0 items-center gap-4">
-                                    <img :src="scholarship.image_url" :alt="scholarship.title" class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5">
-                                    <div class="min-w-0">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Selected recipients</p>
-                                        <h1 class="mt-1 truncate text-2xl font-bold">Recipient support</h1>
-                                        <p class="mt-1 text-sm text-slate-300">Confirm continuing requirements, then schedule and record each benefit release.</p>
-                                    </div>
-                                </div>
-                                <button v-if="activeTab === 'monitoring'" type="button" class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300" @click="openComposer">
-                                    <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-                                    New monitoring period
-                                </button>
-                                <button v-else-if="activeTab === 'releases'" type="button" class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300" @click="openReleaseComposer">
-                                    <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-                                    Schedule release
-                                </button>
-                                <button v-else-if="activeTab === 'outcomes'" type="button" :disabled="!activeSupportCount" class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300 disabled:opacity-50" @click="openSupportDecision()">
-                                    <i class="fa-solid fa-flag-checkered text-xs" aria-hidden="true"></i>
-                                    Record outcome
-                                </button>
-                            </div>
-                        </header>
-                        <dl class="grid divide-y divide-slate-200 bg-white sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-                            <div class="px-5 py-3.5">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Selected recipients</dt>
-                                <dd class="mt-1 text-lg font-bold text-slate-950">{{ scholarship.selected_recipients_count }}</dd>
-                            </div>
-                            <div v-for="stat in headerStats" :key="stat.label" class="px-5 py-3.5">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ stat.label }}</dt>
-                                <dd class="mt-1 text-lg font-bold text-slate-950">{{ stat.value }}</dd>
-                            </div>
-                        </dl>
-                    </section>
+                    <TaskPageHeader
+                        theme="provider"
+                        eyebrow="Recipient support"
+                        :title="scholarship.title"
+                        description="Review ongoing requirements, benefit releases, and recipient outcomes."
+                        icon="fa-solid fa-chart-line"
+                    >
+                        <template #meta>
+                            <span>{{ scholarship.selected_recipients_count }} selected recipient{{ Number(scholarship.selected_recipients_count) === 1 ? '' : 's' }}</span>
+                            <span>{{ activeSupportCount }} active support record{{ activeSupportCount === 1 ? '' : 's' }}</span>
+                        </template>
+                        <template #actions>
+                            <button v-if="activeTab === 'monitoring'" type="button" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="openComposer">
+                                <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
+                                New period
+                            </button>
+                            <button v-else-if="activeTab === 'releases'" type="button" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="openReleaseComposer">
+                                <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
+                                Schedule release
+                            </button>
+                            <button v-else-if="activeTab === 'outcomes'" type="button" :disabled="!activeSupportCount" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" @click="openSupportDecision()">
+                                <i class="fa-solid fa-flag-checkered text-xs" aria-hidden="true"></i>
+                                Record outcome
+                            </button>
+                        </template>
+                    </TaskPageHeader>
 
                     <ProviderProgramNav :program-id="scholarship.id" active="monitoring" />
 
                     <p v-if="errorMessage" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
 
-                    <div class="provider-panel mt-4 grid gap-1 p-1.5 sm:grid-cols-2 lg:grid-cols-4">
-                        <button type="button" :class="['rounded-md px-4 py-2.5 text-sm font-bold transition', activeTab === 'summary' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']" @click="activeTab = 'summary'">
-                            <i class="fa-solid fa-table-columns mr-2 text-xs" aria-hidden="true"></i>Program summary
-                        </button>
-                        <button type="button" :class="['flex-1 rounded-md px-4 py-2.5 text-sm font-bold transition', activeTab === 'monitoring' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']" @click="activeTab = 'monitoring'">
-                            <i class="fa-solid fa-chart-line mr-2 text-xs" aria-hidden="true"></i>Academic monitoring
-                        </button>
-                        <button type="button" :class="['flex-1 rounded-md px-4 py-2.5 text-sm font-bold transition', activeTab === 'releases' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']" @click="activeTab = 'releases'">
-                            <i class="fa-solid fa-hand-holding-heart mr-2 text-xs" aria-hidden="true"></i>Benefit releases
-                        </button>
-                        <button type="button" :class="['flex-1 rounded-md px-4 py-2.5 text-sm font-bold transition', activeTab === 'outcomes' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']" @click="activeTab = 'outcomes'">
-                            <i class="fa-solid fa-flag-checkered mr-2 text-xs" aria-hidden="true"></i>Support outcomes
+                    <div class="provider-panel mt-4 grid gap-1 p-1.5 sm:grid-cols-2 lg:grid-cols-4" aria-label="Recipient monitoring views">
+                        <button
+                            v-for="view in viewTabs"
+                            :key="view.value"
+                            type="button"
+                            :aria-current="activeTab === view.value ? 'page' : undefined"
+                            :class="['flex items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-bold transition', activeTab === view.value ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']"
+                            @click="setActiveTab(view.value)"
+                        >
+                            <i :class="[view.icon, 'text-xs', activeTab === view.value ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
+                            <span>{{ view.label }}</span>
+                            <span v-if="view.count" :class="['rounded px-1.5 py-0.5 text-[10px]', activeTab === view.value ? 'bg-white/10 text-white' : 'bg-amber-100 text-amber-800']">{{ view.count }}</span>
                         </button>
                     </div>
 
                     <template v-if="activeTab === 'summary'">
                         <section class="provider-panel mt-4 overflow-hidden">
-                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Program health</p>
-                                <h2 class="mt-1 text-lg font-bold text-slate-950">Recipient support at a glance</h2>
-                                <p class="mt-1 text-sm leading-6 text-slate-500">Use this summary to identify records that need action before opening the detailed workspace.</p>
-                            </header>
-                            <dl class="grid gap-px bg-slate-200 sm:grid-cols-2 lg:grid-cols-4">
-                                <div class="bg-white px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Active recipients</dt><dd class="mt-1 text-2xl font-bold text-slate-950">{{ programSummary?.recipients?.active || 0 }}</dd><p class="mt-1 text-xs text-slate-500">Open recipient support records</p></div>
-                                <div class="bg-white px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Agreement pending</dt><dd class="mt-1 text-2xl font-bold text-slate-950">{{ programSummary?.recipients?.agreement_pending || 0 }}</dd><p class="mt-1 text-xs text-slate-500">Recipients who have not accepted terms</p></div>
-                                <div class="bg-white px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Ready for renewal</dt><dd class="mt-1 text-2xl font-bold text-slate-950">{{ programSummary?.recipients?.renewal_ready || 0 }}</dd><p class="mt-1 text-xs text-slate-500">Requirements and releases are up to date</p></div>
-                                <div class="bg-white px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Released benefits</dt><dd class="mt-1 text-2xl font-bold text-slate-950">{{ programSummary?.releases?.released || 0 }}</dd><p class="mt-1 text-xs text-slate-500">Individual releases confirmed received</p></div>
-                            </dl>
-                        </section>
-
-                        <section class="provider-panel mt-4 overflow-hidden">
                             <header class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Action queue</p><h2 class="mt-1 text-lg font-bold text-slate-950">Needs attention</h2><p class="mt-1 text-sm text-slate-500">Only overdue, unreviewed, missed, withheld, or agreement-related records appear here.</p></div>
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Action queue</p><h2 class="mt-1 text-lg font-bold text-slate-950">Needs attention</h2><p class="mt-1 text-sm text-slate-500">Overdue, unreviewed, or incomplete recipient records.</p></div>
                                 <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold', programSummary?.attention_count ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800']">{{ programSummary?.attention_count || 0 }} open</span>
                             </header>
                             <div v-if="!programSummary?.attention?.length" class="px-5 py-8 text-center sm:px-6"><span class="mx-auto grid h-10 w-10 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span><p class="mt-3 font-bold text-slate-950">No urgent recipient records</p><p class="mt-1 text-sm text-slate-500">Current agreements, reviews, and release results are up to date.</p></div>
@@ -566,7 +543,7 @@ onMounted(loadMonitoring);
                         </section>
 
                         <section class="provider-panel mt-4 overflow-hidden">
-                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Calendar</p><h2 class="mt-1 text-lg font-bold text-slate-950">Upcoming work</h2><p class="mt-1 text-sm text-slate-500">Published monitoring deadlines and benefit release schedules, ordered by date.</p></header>
+                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Calendar</p><h2 class="mt-1 text-lg font-bold text-slate-950">Upcoming work</h2></header>
                             <div v-if="!programSummary?.upcoming?.length" class="px-5 py-8 text-center text-sm text-slate-500">No upcoming monitoring deadline or benefit release is currently scheduled.</div>
                             <div v-else class="divide-y divide-slate-200">
                                 <article v-for="item in programSummary.upcoming" :key="`${item.type}-${item.title}-${item.date}`" class="flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -591,7 +568,7 @@ onMounted(loadMonitoring);
                         <section v-if="!cycles.length" class="provider-panel mt-4 px-5 py-10 text-center sm:px-6">
                             <span class="mx-auto grid h-12 w-12 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
                             <h2 class="mt-4 text-lg font-bold text-slate-950">No monitoring periods yet</h2>
-                            <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-600">Create a period when selected recipients need to submit a new academic record for review.</p>
+                            <p class="mx-auto mt-1 max-w-xl text-sm text-slate-600">Request the next academic record from selected recipients.</p>
                             <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openComposer">Create first period</button>
                         </section>
 
@@ -699,7 +676,7 @@ onMounted(loadMonitoring);
                         <section v-if="!benefitReleases.length" class="provider-panel mt-4 px-5 py-10 text-center sm:px-6">
                             <span class="mx-auto grid h-12 w-12 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span>
                             <h2 class="mt-4 text-lg font-bold text-slate-950">No benefit releases scheduled</h2>
-                            <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-600">Schedule a release only for recipients whose due monitoring requirements are confirmed. Each recipient receives their own release status and receipt record.</p>
+                            <p class="mx-auto mt-1 max-w-xl text-sm text-slate-600">Schedule support for recipients with confirmed requirements.</p>
                             <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openReleaseComposer">Schedule first release</button>
                         </section>
 
@@ -780,7 +757,7 @@ onMounted(loadMonitoring);
                     <template v-else>
                         <section class="provider-panel mt-4 overflow-hidden">
                             <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">End-of-cycle decision</p><h2 class="mt-1 text-lg font-bold text-slate-950">Renew or close recipient support</h2><p class="mt-1 text-sm leading-6 text-slate-500">Use verified monitoring and release records before recording the recipient's next status.</p></div>
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">End-of-cycle decision</p><h2 class="mt-1 text-lg font-bold text-slate-950">Renew or close recipient support</h2></div>
                                 <span class="w-fit rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{{ renewalReadyCount }} ready for renewal</span>
                             </header>
 

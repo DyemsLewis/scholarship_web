@@ -62,10 +62,13 @@ Required production settings:
 - Set `APP_ENV=production`.
 - Set `APP_DEBUG=false`.
 - Set `APP_URL` to the real domain.
+- Set `TRUSTED_PROXIES` to the exact reverse-proxy or load-balancer IPs supplied by the host.
 - Generate a real `APP_KEY` with `php artisan key:generate`.
 - Use real MySQL database credentials.
 - Change the default admin password before running `php artisan db:seed`.
 - Point the web server document root to the Laravel `public` folder.
+- Keep `storage`, `bootstrap/cache`, and `public/uploads` writable by the PHP process.
+- Put `storage` and `public/uploads` on persistent storage when using an ephemeral or container host.
 - Run `npm run build` before deployment or during the host build step.
 - Keep a queue worker running for notification email delivery.
 - Run `php artisan schedule:run` every minute using the host's cron or task scheduler.
@@ -76,15 +79,16 @@ Recommended production commands:
 
 ```bash
 composer install --no-dev --optimize-autoloader
-npm install
+npm ci
 npm run build
 php artisan migrate --force
-php artisan db:seed --force
+php artisan db:seed --class=ProductionAdminSeeder --force
 php artisan storage:link
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+php artisan optimize
+php artisan platform:readiness --strict
 ```
+
+The production administrator seeder creates only the first administrator from `ADMIN_EMAIL`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD`. It rejects placeholder or weak passwords and does not create demo providers, applicants, or programs. Do not run the general `DatabaseSeeder` on a public production database because it is intentionally a local demonstration dataset.
 
 Recommended background processes:
 
@@ -97,7 +101,7 @@ On production, supervise the queue worker so it restarts automatically. Configur
 
 ## Backups And Retention
 
-The scheduler creates a verified database and upload archive at 2:00 AM when `PLATFORM_BACKUP_ENABLED=true`. Each archive includes a manifest and a `.sha256` checksum. Backups older than `PLATFORM_BACKUP_RETENTION_DAYS` are removed only after a new archive passes verification.
+The scheduler creates a verified database and upload archive at 2:00 AM when `PLATFORM_BACKUP_ENABLED=true`. The archive covers private documents, storage-backed public files, and provider/program images in `public/uploads`. Each archive includes a manifest and a `.sha256` checksum. Backups older than `PLATFORM_BACKUP_RETENTION_DAYS` are removed only after a new archive passes verification.
 
 Run and inspect a backup manually:
 
@@ -121,7 +125,7 @@ Restore drill:
 1. Compare the archive hash with its `.sha256` file and extract the archive on a staging machine.
 2. Put Laravel in maintenance mode and stop the queue worker before a real restore.
 3. Import `database/database.sql` into an empty MySQL database, or replace the SQLite file with `database/database.sqlite`.
-4. Restore `storage/private` to `storage/app/private` and `storage/public` to `storage/app/public`.
+4. Restore `storage/private` to `storage/app/private`, `storage/public` to `storage/app/public`, and `public/uploads` to `public/uploads`.
 5. Run `php artisan migrate --force`, `php artisan optimize:clear`, and `php artisan platform:readiness --strict`.
 6. Restart the queue worker, open `/up`, verify a private document preview, and then run `php artisan up`.
 
@@ -143,6 +147,24 @@ Laravel exposes a basic health route:
 ```
 
 Use `https://your-domain.com/up` to confirm the hosted app responds.
+
+## Web Server Notes
+
+For Apache hosting, enable `mod_rewrite`, allow Laravel's `public/.htaccess`, and keep the document root on `public/`. The included `public/uploads/.htaccess` blocks uploaded files from being executed as server-side scripts.
+
+For Nginx, route missing files to `public/index.php` and deny script execution inside the upload directory:
+
+```nginx
+location /uploads/ {
+    try_files $uri =404;
+}
+
+location ~* ^/uploads/.*\.(php|phtml|phar|cgi|pl|py|sh)$ {
+    deny all;
+}
+```
+
+If the host uses a reverse proxy or load balancer, use its documented proxy IPs in `TRUSTED_PROXIES`. Avoid `*` unless the origin server cannot be reached directly from the internet.
 
 ## Optional Provider Payments
 

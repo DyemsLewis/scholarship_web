@@ -694,8 +694,6 @@ onMounted(loadDashboard);
                     icon="fa-solid fa-table-columns"
                     action-href="/dashboard/scholarships"
                     action-label="Browse scholarships"
-                    secondary-href="/dashboard/applications"
-                    secondary-label="View applications"
                 />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -55,76 +56,41 @@ const workspaceDescription = computed(() => {
     return 'View your account and the organization information available to you.';
 });
 
-const recentPrograms = computed(() => scholarships.value.slice(0, 4));
+const recentPrograms = computed(() => scholarships.value.slice(0, 3));
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
 const providerName = computed(() => user.value?.provider_name || user.value?.name || 'Provider');
 const publishedProgramCount = computed(() => scholarships.value.filter((program) => program.status === 'published').length);
-const totalApplicationCount = computed(() => scholarships.value.reduce(
-    (total, program) => total + Number(program.applications_count ?? 0),
-    0,
-));
 const draftPrograms = computed(() => scholarships.value.filter((program) => program.status === 'draft'));
 const rejectedPrograms = computed(() => scholarships.value.filter((program) => program.status === 'rejected'));
 const pendingPrograms = computed(() => scholarships.value.filter((program) => program.status === 'pending_review'));
-const closedPrograms = computed(() => scholarships.value.filter((program) => program.status === 'closed'));
 const applicantWorkQueues = computed(() => [
     {
         key: 'needs_review',
         label: 'Needs review',
         description: 'Check applicant details, eligibility, and files.',
         icon: 'fa-solid fa-user-check',
-        href: '/provider/applications?filter=needs_review',
+        href: '/provider/applications/review',
     },
     {
         key: 'ready_result',
         label: 'Ready for result',
         description: 'Record completed activity or formal application results.',
         icon: 'fa-solid fa-clipboard-check',
-        href: '/provider/applications?filter=ready_result',
+        href: '/provider/applications/results',
     },
     {
         key: 'final_decision',
         label: 'Final decision',
         description: 'Select, waitlist, or decline qualified applicants.',
         icon: 'fa-solid fa-award',
-        href: '/provider/applications?filter=final_decision',
+        href: '/provider/applications/decisions',
     },
     {
         key: 'waiting_activity',
         label: 'Waiting for activity',
         description: 'Applicants are waiting for an exam or interview.',
         icon: 'fa-solid fa-calendar-day',
-        href: '/provider/applications?filter=waiting_activity',
-    },
-]);
-const programLifecycle = computed(() => [
-    {
-        label: 'Needs setup',
-        description: 'Drafts or programs returned for changes',
-        count: draftPrograms.value.length + rejectedPrograms.value.length,
-        href: '/provider/programs',
-        icon: 'fa-solid fa-pen-ruler',
-    },
-    {
-        label: 'In admin review',
-        description: 'Submitted and waiting for publication review',
-        count: pendingPrograms.value.length,
-        href: '/provider/programs?status=pending_review',
-        icon: 'fa-solid fa-hourglass-half',
-    },
-    {
-        label: 'Published',
-        description: 'Visible to eligible applicants',
-        count: publishedProgramCount.value,
-        href: '/provider/programs?status=published',
-        icon: 'fa-solid fa-bullhorn',
-    },
-    {
-        label: 'Closed',
-        description: 'Programs no longer accepting applications',
-        count: closedPrograms.value.length,
-        href: '/provider/programs?status=closed',
-        icon: 'fa-solid fa-box-archive',
+        href: '/provider/applications/activities',
     },
 ]);
 const providerProfileNeedsCompletion = computed(() => [
@@ -136,10 +102,10 @@ const providerProfileNeedsCompletion = computed(() => [
 ].some((value) => !String(value ?? '').trim()));
 const verificationActionHref = computed(() => {
     if (user.value?.can_post_scholarships || providerProfileNeedsCompletion.value) {
-        return '/provider/profile';
+        return '/provider/profile/details';
     }
 
-    return '/provider/profile#verification-documents';
+    return '/provider/profile/verification';
 });
 const verificationPrompt = computed(() => {
     if (!user.value?.email_verified) {
@@ -231,7 +197,7 @@ const nextAction = computed(() => {
             eyebrow: 'Your workspace - Profile',
             title: 'Review your account information',
             description: 'Your access is limited to your personal credentials and the organization information shared with your account.',
-            href: '/provider/profile',
+            href: '/provider/profile/details',
             label: 'Open profile',
             icon: 'fa-solid fa-id-badge',
         };
@@ -253,7 +219,7 @@ const nextAction = computed(() => {
             eyebrow: 'Priority - Applicant review',
             title: `${applicationWorkflowCounts.value.needs_review} applicant${applicationWorkflowCounts.value.needs_review === 1 ? '' : 's'} need review`,
             description: 'Review eligibility, applicant information, and submitted files before advancing or declining each application.',
-            href: '/provider/applications?filter=needs_review',
+            href: '/provider/applications/review',
             label: 'Review applicants',
             icon: 'fa-solid fa-user-check',
         };
@@ -264,7 +230,7 @@ const nextAction = computed(() => {
             eyebrow: 'Priority - Record results',
             title: `${applicationWorkflowCounts.value.ready_result} applicant${applicationWorkflowCounts.value.ready_result === 1 ? '' : 's'} ready for a result`,
             description: 'A formal application, exam, or interview is complete and ready for your decision.',
-            href: '/provider/applications?filter=ready_result',
+            href: '/provider/applications/results',
             label: 'Record results',
             icon: 'fa-solid fa-clipboard-check',
         };
@@ -275,7 +241,7 @@ const nextAction = computed(() => {
             eyebrow: 'Priority - Final decisions',
             title: `${applicationWorkflowCounts.value.final_decision} applicant${applicationWorkflowCounts.value.final_decision === 1 ? '' : 's'} await a final decision`,
             description: 'Complete recipient selection for applicants who finished the required stages.',
-            href: '/provider/applications?filter=final_decision',
+            href: '/provider/applications/decisions',
             label: 'Make decisions',
             icon: 'fa-solid fa-award',
         };
@@ -310,7 +276,7 @@ const nextAction = computed(() => {
             eyebrow: 'Applicant activities',
             title: `${applicationWorkflowCounts.value.waiting_activity} applicant${applicationWorkflowCounts.value.waiting_activity === 1 ? '' : 's'} waiting for an activity`,
             description: 'Check the shared exam or interview schedule and keep applicants moving through the selection process.',
-            href: '/provider/applications?filter=waiting_activity',
+            href: '/provider/applications/activities',
             label: 'Check activities',
             icon: 'fa-solid fa-calendar-day',
         };
@@ -330,18 +296,6 @@ function verificationLabel(status) {
     return String(status ?? 'pending')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function verificationClass(status) {
-    if (status === 'approved') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
 }
 
 function statusClass(status) {
@@ -406,79 +360,58 @@ onMounted(loadProviderData);
 
         <section class="provider-page">
             <div class="provider-container">
-                <header class="provider-hero">
-                    <div>
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Provider workspace
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Welcome, {{ providerName }}
-                            </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                {{ workspaceDescription }}
-                            </p>
-                            <span class="mt-3 inline-flex rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ roleLabel }}</span>
-                        </div>
-                    </div>
-                </header>
+                <TaskPageHeader
+                    theme="provider"
+                    eyebrow="Provider dashboard"
+                    :title="providerName"
+                    :description="workspaceDescription"
+                    icon="fa-solid fa-gauge-high"
+                >
+                    <template #meta>
+                        <span>{{ roleLabel }}</span>
+                        <span>{{ verificationLabel(user?.verification_status) }} provider</span>
+                        <span v-if="canViewPrograms">{{ scholarships.length }} program{{ scholarships.length === 1 ? '' : 's' }}</span>
+                    </template>
+                </TaskPageHeader>
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="provider-panel mt-4 p-6 text-sm text-slate-500">
                     Loading provider dashboard...
                 </div>
 
-                <div v-else-if="errorMessage" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
+                <div v-else-if="errorMessage" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
                     {{ errorMessage }}
                 </div>
 
                 <div v-else class="provider-content-stack">
                     <section
                         :class="[
-                            'relative overflow-hidden rounded-lg border p-4 shadow-sm sm:p-5',
-                            user?.can_post_scholarships
-                                ? 'border-slate-800 bg-slate-950 text-white'
-                                : 'border-amber-200 bg-amber-50',
+                            'provider-panel overflow-hidden border-l-4',
+                            user?.can_post_scholarships ? 'border-l-slate-950' : 'border-l-amber-400',
                         ]"
                     >
-                        <div v-if="user?.can_post_scholarships" class="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border-[42px] border-amber-300/10"></div>
-                        <div class="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="flex min-w-0 items-start gap-4">
+                        <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                            <div class="flex min-w-0 items-start gap-3">
                                 <span
-                                    :class="[
-                                        'grid h-11 w-11 shrink-0 place-items-center rounded-md',
-                                        user?.can_post_scholarships ? 'bg-amber-300 text-slate-950' : 'bg-amber-200 text-amber-900',
-                                    ]"
+                                    class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"
                                 >
                                     <i :class="[nextAction.icon, 'text-sm']" aria-hidden="true"></i>
                                 </span>
                                 <div class="min-w-0">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <p :class="['text-[10px] font-bold uppercase tracking-[0.16em]', user?.can_post_scholarships ? 'text-amber-300' : 'text-amber-800']">
-                                            {{ nextAction.eyebrow }}
-                                        </p>
-                                        <span :class="['rounded px-2 py-1 text-[9px] font-bold uppercase', verificationClass(user?.verification_status)]">
-                                            {{ verificationLabel(user?.verification_status) }} provider
-                                        </span>
-                                    </div>
-                                    <h3 :class="['mt-1 text-xl font-bold', user?.can_post_scholarships ? 'text-white' : 'text-slate-950']">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">{{ nextAction.eyebrow }}</p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
                                         {{ nextAction.title }}
                                     </h3>
-                                    <p :class="['mt-1 max-w-3xl text-sm leading-6', user?.can_post_scholarships ? 'text-slate-300' : 'text-amber-950/80']">
+                                    <p class="mt-1 max-w-3xl text-sm leading-5 text-slate-600">
                                         {{ nextAction.description }}
                                     </p>
-                                    <p v-if="!user?.can_post_scholarships && user?.verification_notes" class="mt-2 text-xs leading-5 text-amber-900">
+                                    <p v-if="!user?.can_post_scholarships && user?.verification_notes" class="mt-2 text-xs leading-5 text-amber-800">
                                         <span class="font-bold">Admin note:</span> {{ user.verification_notes }}
                                     </p>
                                 </div>
                             </div>
                             <a
                                 :href="nextAction.href"
-                                :class="[
-                                    'inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition',
-                                    user?.can_post_scholarships
-                                        ? 'bg-white text-slate-950 hover:bg-amber-300'
-                                        : 'bg-slate-950 text-white hover:bg-slate-800',
-                                ]"
+                                class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                             >
                                 {{ nextAction.label }}
                                 <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
@@ -486,15 +419,15 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <div v-if="canReviewApplications || canViewPrograms" :class="['grid items-stretch gap-4', canReviewApplications && canViewPrograms ? 'xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]' : '']">
-                        <section v-if="canReviewApplications" class="provider-panel h-full overflow-hidden">
+                    <div v-if="canReviewApplications">
+                        <section class="provider-panel h-full overflow-hidden">
                             <header class="flex items-end justify-between gap-4 border-b border-slate-200 px-5 py-4">
                                 <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant work</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">What needs your attention</h3>
+                                    <h3 class="text-lg font-bold text-slate-950">Applicant tasks</h3>
+                                    <p class="mt-1 text-xs text-slate-500">Open the queue that needs action.</p>
                                 </div>
-                                <a href="/provider/applications" class="shrink-0 text-xs font-bold text-slate-600 transition hover:text-slate-950">
-                                    All applications <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i>
+                                <a href="/provider/applications/review" class="shrink-0 text-xs font-bold text-slate-600 transition hover:text-slate-950">
+                                    Open review <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i>
                                 </a>
                             </header>
 
@@ -504,7 +437,7 @@ onMounted(loadProviderData);
                                     :key="queue.key"
                                     :href="queue.href"
                                     :class="[
-                                        'group flex min-h-24 items-start gap-3 border-slate-200 px-4 py-3.5 transition hover:bg-slate-50',
+                                        'group flex items-center gap-3 border-slate-200 px-4 py-3 transition hover:bg-slate-50',
                                         index < applicantWorkQueues.length - 1 ? 'border-b' : '',
                                         index === 2 ? 'sm:border-b-0' : '',
                                         index % 2 === 0 ? 'sm:border-r' : '',
@@ -525,43 +458,8 @@ onMounted(loadProviderData);
                                             <span class="text-sm font-bold text-slate-950">{{ queue.label }}</span>
                                             <span class="text-lg font-bold leading-none text-slate-950">{{ applicationWorkflowCounts[queue.key] ?? 0 }}</span>
                                         </span>
-                                        <span class="mt-1 block text-xs leading-5 text-slate-500">{{ queue.description }}</span>
                                     </span>
                                 </a>
-                            </div>
-                        </section>
-
-                        <section v-if="canViewPrograms" class="provider-panel h-full overflow-hidden">
-                            <header class="flex items-end justify-between gap-4 border-b border-slate-200 px-5 py-4">
-                                <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program lifecycle</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">Where programs stand</h3>
-                                </div>
-                                <a href="/provider/programs" class="shrink-0 text-xs font-bold text-slate-600 transition hover:text-slate-950">
-                                    View all <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i>
-                                </a>
-                            </header>
-                            <div class="divide-y divide-slate-200">
-                                <a
-                                    v-for="stage in programLifecycle"
-                                    :key="stage.label"
-                                    :href="stage.href"
-                                    class="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50"
-                                >
-                                    <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100 text-[11px] text-slate-600">
-                                        <i :class="stage.icon" aria-hidden="true"></i>
-                                    </span>
-                                    <span class="min-w-0 flex-1">
-                                        <span class="block text-sm font-bold text-slate-950">{{ stage.label }}</span>
-                                        <span class="mt-0.5 block truncate text-[11px] text-slate-500">{{ stage.description }}</span>
-                                    </span>
-                                    <span class="text-base font-bold text-slate-950">{{ stage.count }}</span>
-                                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-300 transition group-hover:text-slate-700" aria-hidden="true"></i>
-                                </a>
-                            </div>
-                            <div class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs text-slate-600">
-                                <span v-if="canReviewApplications">{{ totalApplicationCount }} total application{{ totalApplicationCount === 1 ? '' : 's' }}</span>
-                                <span>{{ scholarships.length }} program{{ scholarships.length === 1 ? '' : 's' }}</span>
                             </div>
                         </section>
                     </div>
@@ -569,9 +467,8 @@ onMounted(loadProviderData);
                     <section v-if="canViewPrograms" class="provider-panel overflow-hidden">
                         <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program cycle</p>
-                                <h3 class="mt-1 text-lg font-bold text-slate-950">Programs in motion</h3>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Open a program to continue its next action.</p>
+                                <h3 class="text-lg font-bold text-slate-950">Recent programs</h3>
+                                <p class="mt-1 text-xs text-slate-500">Continue the next program task.</p>
                             </div>
                             <div class="flex gap-2">
                                 <a v-if="user?.can_post_scholarships && canManagePrograms" href="/provider/programs/create" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">New program</a>

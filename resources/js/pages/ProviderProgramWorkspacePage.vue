@@ -2,11 +2,14 @@
 import { computed, nextTick, onMounted, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
+import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { labelFromKey } from '../support/display';
 
 const scholarshipId = document.getElementById('app')?.dataset.scholarshipId;
+const isUpdatesView = window.location.pathname.replace(/\/$/, '').endsWith('/updates')
+    || window.location.hash === '#announcements';
 const scholarship = ref(null);
 const isLoading = ref(true);
 const isDuplicating = ref(false);
@@ -143,7 +146,7 @@ const recommendedAction = computed(() => {
                 title: 'Complete organization verification',
                 description: 'Applicant records become available after the provider account is approved.',
                 label: 'View verification',
-                href: '/provider/profile#verification-documents',
+                href: '/provider/profile/verification',
             }
             : {
                 eyebrow: 'Program status',
@@ -252,20 +255,6 @@ function targetLabel(program) {
 
     return levels.slice(0, 2).map(labelFromKey).join(', ')
         + (levels.length > 2 ? ` +${levels.length - 2}` : '');
-}
-
-function activityState(activity) {
-    if (!activity.event) return 'Not scheduled';
-    if (activity.event.status === 'completed') return 'Completed';
-
-    return activity.event.scheduled_label || 'Scheduled';
-}
-
-function activityStateClass(activity) {
-    if (!activity.event) return 'bg-amber-100 text-amber-800';
-    if (activity.event.status === 'completed') return 'bg-emerald-100 text-emerald-800';
-
-    return 'bg-sky-100 text-sky-800';
 }
 
 async function loadProgram() {
@@ -411,7 +400,13 @@ onMounted(loadProgram);
                         </dl>
                     </section>
 
-                    <div class="mt-4 grid gap-4">
+                    <ProviderProgramNav
+                        :program-id="scholarship.id"
+                        :active="isUpdatesView ? 'announcements' : 'overview'"
+                        :can-manage="canManagePrograms"
+                    />
+
+                    <div v-if="!isUpdatesView" class="mt-4 grid gap-4">
                         <section v-if="recommendedAction" class="self-start overflow-hidden rounded-lg border border-amber-200 bg-amber-50 shadow-sm">
                             <div class="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
                                 <div class="flex min-w-0 items-start gap-3">
@@ -435,7 +430,7 @@ onMounted(loadProgram);
                                 <a v-if="canAccessApplicantWorkspace" :href="`${applicantWorkspaceUrl}?filter=all`" class="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-400 hover:bg-white">
                                     All applicant records <i class="fa-solid fa-arrow-right text-xs text-slate-400" aria-hidden="true"></i>
                                 </a>
-                                <a v-if="canSendAnnouncements" href="#announcements" class="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-400 hover:bg-white">
+                                <a v-if="canSendAnnouncements" :href="`/provider/programs/${scholarship.id}/updates`" class="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-400 hover:bg-white">
                                     Applicant updates <i class="fa-solid fa-bullhorn text-xs text-slate-400" aria-hidden="true"></i>
                                 </a>
                                 <button v-if="canManagePrograms" type="button" :disabled="isDuplicating" class="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-sm font-bold text-slate-800 transition hover:border-slate-400 hover:bg-white disabled:opacity-60" @click="duplicateProgram">
@@ -445,59 +440,7 @@ onMounted(loadProgram);
                         </section>
                     </div>
 
-                    <section v-if="canAccessApplicantWorkspace || !providerIsApproved" class="provider-panel mt-4 overflow-hidden">
-                        <header class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
-                            <div>
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant workflow</p>
-                                <h2 class="mt-1 text-xl font-bold text-slate-950">Work by next action</h2>
-                                <p class="mt-1 text-sm text-slate-600">Open applicants grouped by their next task.</p>
-                            </div>
-                            <a v-if="canAccessApplicantWorkspace" :href="`${applicantWorkspaceUrl}?filter=all`" class="text-xs font-bold text-slate-600 transition hover:text-slate-950">View all records <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i></a>
-                        </header>
-
-                        <div v-if="canAccessApplicantWorkspace" class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
-                            <a v-for="queue in workflowQueues" :key="queue.key" :href="queue.href" class="group flex min-h-28 flex-col bg-white p-3.5 transition hover:bg-slate-50">
-                                <span class="flex items-start justify-between gap-3">
-                                    <span class="grid h-9 w-9 place-items-center rounded-md bg-slate-100 text-slate-700"><i :class="queue.icon" aria-hidden="true"></i></span>
-                                    <span :class="['rounded-md px-2.5 py-1 text-sm font-bold', queue.count > 0 ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-500']">{{ queue.count }}</span>
-                                </span>
-                                <span class="mt-3 text-sm font-bold text-slate-950">{{ queue.label }}</span>
-                                <span class="mt-1 text-xs leading-5 text-slate-500">{{ queue.description }}</span>
-                                <span class="mt-auto pt-3 text-xs font-bold text-slate-700 group-hover:text-slate-950">Open queue <i class="fa-solid fa-arrow-right ml-1 text-[10px]" aria-hidden="true"></i></span>
-                            </a>
-                        </div>
-                        <div v-else class="px-5 py-5 text-sm text-slate-600 sm:px-6">
-                            <p v-if="!providerIsApproved" class="font-semibold text-amber-800">Provider verification is required before applicant records become available. <a href="/provider/profile#verification-documents" class="font-bold text-slate-900 hover:underline">View verification</a></p>
-                        </div>
-                    </section>
-
-                    <section v-if="canAccessApplicantWorkspace && activityStatuses.length" class="provider-panel mt-4 overflow-hidden">
-                        <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program activities</p>
-                            <h2 class="mt-1 text-xl font-bold text-slate-950">Exam and interview status</h2>
-                            <p class="mt-1 text-sm text-slate-600">Publish a shared schedule, then record results after completion.</p>
-                        </header>
-                        <div class="divide-y divide-slate-200">
-                            <article v-for="activity in activityStatuses" :key="activity.type" class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                                <div class="flex min-w-0 items-start gap-3">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i :class="activity.type === 'exam' ? 'fa-solid fa-clipboard-question' : 'fa-solid fa-comments'" aria-hidden="true"></i></span>
-                                    <div class="min-w-0">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <h3 class="font-bold text-slate-950">{{ activity.label }}</h3>
-                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', activityStateClass(activity)]">{{ activityState(activity) }}</span>
-                                        </div>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">
-                                            {{ activity.active_applicants }} currently at this stage
-                                            <span v-if="activity.waiting_applicants"> · {{ activity.waiting_applicants }} waiting for completion</span>
-                                        </p>
-                                    </div>
-                                </div>
-                                <a v-if="canAccessApplicantWorkspace" :href="`${applicantWorkspaceUrl}?workspace=schedule&filter=waiting_activity`" class="inline-flex w-fit shrink-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Manage activity <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
-                            </article>
-                        </div>
-                    </section>
-
-                    <section v-if="canSendAnnouncements" id="announcements" class="provider-panel mt-4 scroll-mt-5 overflow-hidden">
+                    <section v-if="isUpdatesView && canSendAnnouncements" id="announcements" class="provider-panel mt-4 overflow-hidden">
                         <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                             <div>
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program communication</p>

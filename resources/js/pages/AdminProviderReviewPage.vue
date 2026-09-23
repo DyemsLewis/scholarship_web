@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { formatFileSize } from '../support/display';
 
 const appElement = document.getElementById('app');
@@ -298,30 +299,21 @@ onMounted(loadProvider);
                     <span class="truncate font-semibold text-slate-950">{{ provider?.provider_name || provider?.name || 'Provider record' }}</span>
                 </nav>
 
-                <header class="admin-hero">
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div class="max-w-3xl">
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Provider review</p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ provider?.provider_name || provider?.name || 'Verify provider organization' }}</h2>
-                            <p class="mt-3 text-sm leading-6 text-slate-600">Confirm the organization record and supporting proof before granting publishing access.</p>
-                            <div v-if="provider" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
-                                <span>{{ statusLabel(provider.provider_type || 'Provider organization') }}</span>
-                                <span>{{ provider.provider_contact_email || provider.email || 'Email not provided' }}</span>
-                                <span>{{ provider.provider_contact_number || provider.contact_number || 'Contact not provided' }}</span>
-                            </div>
-                        </div>
-                        <div v-if="provider" class="flex flex-wrap items-center gap-2 lg:justify-end">
+                <TaskPageHeader
+                    theme="admin"
+                    eyebrow="Provider review"
+                    :title="provider?.provider_name || provider?.name || 'Verify provider organization'"
+                    description="Confirm the organization and its proof before granting program publishing access."
+                    icon="fa-solid fa-building-shield"
+                >
+                    <template v-if="provider" #meta>
+                        <span>{{ statusLabel(provider.provider_type || 'Provider organization') }}</span>
+                        <span>{{ provider.provider_contact_email || provider.email || 'Email not provided' }}</span>
+                    </template>
+                    <template v-if="provider" #actions>
                             <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(provider.verification_status)]">
                                 {{ statusLabel(provider.verification_status) }}
                             </span>
-                            <button
-                                type="button"
-                                class="grid h-10 w-10 place-items-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
-                                aria-label="Refresh provider record"
-                                @click="loadProvider"
-                            >
-                                <i class="fa-solid fa-rotate text-xs" aria-hidden="true"></i>
-                            </button>
                             <button
                                 v-if="activeReviewSection !== 'decision'"
                                 type="button"
@@ -331,9 +323,8 @@ onMounted(loadProvider);
                                 Record decision
                                 <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                             </button>
-                        </div>
-                    </div>
-                </header>
+                    </template>
+                </TaskPageHeader>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading provider review details...

@@ -27,6 +27,7 @@ import {
 import { showPortalToast } from '../support/portalToast';
 
 const isLoading = ref(true);
+const showProfileGuidance = ref(false);
 const isSaving = ref(false);
 const errorMessage = ref('');
 const locationMessage = ref('');
@@ -2196,11 +2197,9 @@ watch(() => form.value.grading_scale, (scale) => {
                     icon="fa-solid fa-id-card"
                     action-href="/dashboard/scholarships"
                     action-label="See matches"
-                    secondary-href="/dashboard/documents"
-                    secondary-label="Prepare files"
                 />
 
-                <PrivacyNoticeCard context="profile" />
+                <PrivacyNoticeCard context="profile" compact />
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading profile...
@@ -2264,12 +2263,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         </div>
 
                         <div class="grid border-t border-slate-200 bg-slate-50 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                            <div class="px-5 py-4 sm:px-6">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider-facing profile</p>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">
-                                    This is the information a provider reviews after you submit an application. Use the edit buttons below to keep it current.
-                                </p>
-                            </div>
+                            <div class="px-5 py-3 text-sm font-bold text-slate-700 sm:px-6">Provider-facing profile</div>
                             <a
                                 href="/dashboard/scholarships"
                                 class="flex h-full items-center justify-between gap-5 border-t border-slate-200 px-5 py-4 text-sm font-bold text-slate-900 transition hover:bg-white md:border-l md:border-t-0 sm:px-6"
@@ -2285,7 +2279,6 @@ watch(() => form.value.grading_scale, (scale) => {
                             <div>
                                 <p class="student-kicker">Shared profile</p>
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">Information providers will review</h3>
-                                <p class="mt-1 text-sm leading-6 text-slate-500">Edit a group directly from this preview. Empty details are clearly marked before you apply.</p>
                             </div>
                             <span class="inline-flex w-fit items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
                                 <i class="fa-solid fa-lock" aria-hidden="true"></i>
@@ -2339,7 +2332,6 @@ watch(() => form.value.grading_scale, (scale) => {
                             </span>
                             <span class="min-w-0 flex-1">
                                 <span class="block text-sm font-bold text-slate-950">Supporting evidence</span>
-                                <span class="mt-1 block text-xs leading-5 text-slate-500">Records here support the academic and enrollment information in your profile.</span>
                             </span>
                             <span class="shrink-0 text-xs font-bold text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
                             <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
@@ -2351,7 +2343,6 @@ watch(() => form.value.grading_scale, (scale) => {
                             </span>
                             <span class="min-w-0 flex-1">
                                 <span class="block text-sm font-bold text-slate-950">Prepared documents</span>
-                                <span class="mt-1 block text-xs leading-5 text-slate-500">Keep reusable application files in your document library.</span>
                             </span>
                             <span class="shrink-0 text-xs font-bold text-slate-600">{{ preparedDocumentsCount }} saved</span>
                             <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
@@ -2359,7 +2350,7 @@ watch(() => form.value.grading_scale, (scale) => {
                     </section>
                 </div>
 
-                <div v-else class="mt-6 space-y-5">
+                <div v-else :class="['applicant-profile-editor mt-6 space-y-5', showProfileGuidance ? 'show-guidance' : '']">
                     <section class="student-card overflow-hidden">
                         <div class="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
                             <div class="flex min-w-0 items-start gap-3">
@@ -2382,6 +2373,10 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
 
                             <div v-if="profileView === 'edit'" class="flex items-center gap-3">
+                                <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950" @click="showProfileGuidance = !showProfileGuidance">
+                                    <i :class="['fa-solid mr-1.5 text-[10px]', showProfileGuidance ? 'fa-eye-slash' : 'fa-circle-question']" aria-hidden="true"></i>
+                                    {{ showProfileGuidance ? 'Hide guidance' : 'Show guidance' }}
+                                </button>
                                 <span :class="['text-xs font-bold', hasUnsavedChanges ? 'text-amber-700' : 'text-slate-400']">
                                     {{ hasUnsavedChanges ? 'Unsaved changes' : 'Saved' }}
                                 </span>

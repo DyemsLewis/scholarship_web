@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
-import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { limitPhoneNumber } from '../support/phoneNumber';
 
 const accountId = window.location.pathname.match(/\/provider\/team\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
@@ -41,6 +41,14 @@ const rolePresets = {
     billing_staff: ['manage_billing'],
     custom: [],
 };
+const assignableRoleOptions = computed(() => {
+    const allowed = availablePermissions.value.map((permission) => permission.value);
+
+    return roleOptions.filter((role) => (
+        role.value === 'custom'
+        || (rolePresets[role.value] ?? []).every((permission) => allowed.includes(permission))
+    ));
+});
 const selectedRoleOption = computed(() => roleOptions.find((role) => role.value === form.value.accountTitle));
 const permissionsLocked = computed(() => form.value.accountTitle !== 'custom');
 const selectedPermissions = computed(() => availablePermissions.value.filter((permission) => (
@@ -93,6 +101,9 @@ async function loadAccount() {
         canAssignAllPrograms.value = response.data.can_assign_all_programs !== false;
 
         if (!accountId) {
+            if (!assignableRoleOptions.value.some((role) => role.value === form.value.accountTitle)) {
+                form.value.accountTitle = assignableRoleOptions.value.find((role) => role.value !== 'custom')?.value ?? 'custom';
+            }
             if (!canAssignAllPrograms.value) {
                 form.value.programAccessMode = 'selected';
             }
@@ -188,37 +199,28 @@ onMounted(loadAccount);
 
         <section class="provider-page">
             <div class="provider-container">
-                <header class="provider-hero">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Team Access</p>
-                            <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ isEditMode ? 'Edit team account' : 'Create team account' }}</h1>
-                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Set staff details, role, and access.</p>
-                        </div>
-                        <a href="/provider/team" class="rounded-md border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100">
-                            <i class="fa-solid fa-arrow-left mr-2" aria-hidden="true"></i>
-                            Back to team
-                        </a>
-                    </div>
-                </header>
-
-                <ProviderSectionNav section="organization" />
+                <TaskPageHeader
+                    theme="provider"
+                    eyebrow="Team and access"
+                    :title="isEditMode ? 'Edit team member' : 'Add team member'"
+                    :description="isEditMode ? 'Update this member\'s account, workspace role, and program access.' : 'Create a delegated account without sharing the provider representative login.'"
+                    icon="fa-solid fa-user-shield"
+                    secondary-href="/provider/team"
+                    secondary-label="Back to team"
+                >
+                    <template #meta>
+                        <span>{{ isEditMode ? 'Existing delegated account' : 'New delegated account' }}</span>
+                        <span>{{ form.permissions.length }} permission{{ form.permissions.length === 1 ? '' : 's' }}</span>
+                    </template>
+                </TaskPageHeader>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">Loading account...</div>
 
-                <form v-else ref="formElement" class="mt-6 grid gap-5" @submit.prevent="saveAccount">
+                <form v-else ref="formElement" class="mt-4 grid gap-4" @submit.prevent="saveAccount">
                     <section class="provider-panel overflow-hidden">
-                        <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-                            <div class="flex items-center gap-3">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-white">
-                                    <i class="fa-solid fa-user" aria-hidden="true"></i>
-                                </span>
-                                <div>
-                                    <h2 class="text-base font-bold text-slate-950">Staff identity</h2>
-                                    <p class="mt-0.5 text-xs text-slate-500">Contact details shown in the provider workspace.</p>
-                                </div>
-                            </div>
-                            <span class="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">01</span>
+                        <div class="border-b border-slate-200 px-5 py-4 sm:px-6">
+                            <h2 class="font-bold text-slate-950">Account details</h2>
+                            <p class="mt-1 text-sm text-slate-500">Identity and contact information for this staff member.</p>
                         </div>
 
                         <div class="grid gap-4 p-5 sm:p-6">
@@ -269,7 +271,7 @@ onMounted(loadAccount);
                                         type="tel"
                                         inputmode="numeric"
                                         autocomplete="tel"
-                                        maxlength="20"
+                                        maxlength="11"
                                         required
                                         placeholder="09XX XXX XXXX"
                                         :class="inputClass"
@@ -281,17 +283,9 @@ onMounted(loadAccount);
                     </section>
 
                     <section class="provider-panel overflow-hidden">
-                        <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-                            <div class="flex items-center gap-3">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-300 text-slate-950">
-                                    <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
-                                </span>
-                                <div>
-                                    <h2 class="text-base font-bold text-slate-950">Role and access</h2>
-                                    <p class="mt-0.5 text-xs text-slate-500">Start with a role preset, then adjust access if needed.</p>
-                                </div>
-                            </div>
-                            <span class="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">02</span>
+                        <div class="border-b border-slate-200 px-5 py-4 sm:px-6">
+                            <h2 class="font-bold text-slate-950">Role and access</h2>
+                            <p class="mt-1 text-sm text-slate-500">Choose the work this member can perform and the programs they can open.</p>
                         </div>
 
                         <div class="p-5 sm:p-6">
@@ -304,14 +298,11 @@ onMounted(loadAccount);
                                     :class="inputClass"
                                     @change="applyRolePreset"
                                 >
-                                    <option v-for="role in roleOptions" :key="role.value" :value="role.value">
+                                    <option v-for="role in assignableRoleOptions" :key="role.value" :value="role.value">
                                         {{ role.label }}
                                     </option>
                                 </select>
-                                <p class="mt-2 text-xs leading-5 text-slate-500">
-                                    {{ selectedRoleOption?.description }}
-                                    {{ permissionsLocked ? 'Permissions are applied automatically.' : 'Choose only the access this role needs.' }}
-                                </p>
+                                <p class="mt-2 text-xs text-slate-500">{{ selectedRoleOption?.description }}</p>
                             </div>
 
                             <div class="mt-5 border-t border-slate-200 pt-5">
@@ -325,33 +316,24 @@ onMounted(loadAccount);
                                     <span class="text-xs font-bold text-slate-500">{{ form.permissions.length }} selected</span>
                                 </div>
 
-                                <div v-if="permissionsLocked" class="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4">
-                                    <div class="flex items-start gap-3">
-                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-slate-950">
-                                            <i class="fa-solid fa-lock" aria-hidden="true"></i>
-                                        </span>
-                                        <div class="min-w-0">
-                                            <p class="text-sm font-bold text-slate-950">{{ selectedRoleOption?.label }} access</p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-600">The selected role controls these permissions. Choose Custom role only when a different combination is needed.</p>
-                                        </div>
-                                    </div>
-                                    <div class="mt-3 flex flex-wrap gap-2">
+                                <div v-if="permissionsLocked" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                    <div class="flex flex-wrap gap-2">
                                         <span
                                             v-for="permission in selectedPermissions"
                                             :key="permission.value"
-                                            class="rounded-md border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700"
+                                            class="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700"
                                         >
                                             {{ permission.label }}
                                         </span>
                                     </div>
                                 </div>
 
-                                <div v-else class="mt-3 grid gap-2 md:grid-cols-2">
+                                <div v-else class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                                     <label
                                         v-for="permission in availablePermissions"
                                         :key="permission.value"
                                         :class="[
-                                            'flex gap-3 rounded-md border p-3 transition',
+                                            'flex items-center gap-3 rounded-md border p-3 transition',
                                             'cursor-pointer',
                                             form.permissions.includes(permission.value)
                                                 ? 'border-amber-400 bg-amber-50'
@@ -364,10 +346,7 @@ onMounted(loadAccount);
                                             :value="permission.value"
                                             class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-amber-400"
                                         >
-                                        <span>
-                                            <span class="block text-sm font-bold text-slate-900">{{ permission.label }}</span>
-                                            <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ permission.description }}</span>
-                                        </span>
+                                        <span class="text-sm font-bold text-slate-900">{{ permission.label }}</span>
                                     </label>
                                 </div>
                                 <p v-if="form.permissions.length === 0" class="mt-2 text-xs font-semibold text-rose-700">Select at least one permission.</p>
@@ -376,7 +355,6 @@ onMounted(loadAccount);
                             <div class="mt-5 border-t border-slate-200 pt-5">
                                 <div>
                                     <p class="text-sm font-bold text-slate-900">Program access</p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">Limit which scholarship programs this team member can open and manage.</p>
                                 </div>
 
                                 <div class="mt-3 grid gap-2 md:grid-cols-2">
@@ -432,17 +410,9 @@ onMounted(loadAccount);
                     </section>
 
                     <section class="provider-panel overflow-hidden">
-                        <div class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-                            <div class="flex items-center gap-3">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-200 text-slate-800">
-                                    <i class="fa-solid fa-key" aria-hidden="true"></i>
-                                </span>
-                                <div>
-                                    <h2 class="text-base font-bold text-slate-950">Sign-in details</h2>
-                                    <p class="mt-0.5 text-xs text-slate-500">Set a temporary password for this staff account.</p>
-                                </div>
-                            </div>
-                            <span class="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">03</span>
+                        <div class="border-b border-slate-200 px-5 py-4 sm:px-6">
+                            <h2 class="font-bold text-slate-950">{{ isEditMode ? 'Password reset' : 'Temporary password' }}</h2>
+                            <p class="mt-1 text-sm text-slate-500">{{ isEditMode ? 'Leave both fields blank to keep the current password.' : 'The member verifies their email before choosing a new password.' }}</p>
                         </div>
 
                         <div class="grid gap-4 p-5 md:grid-cols-2 sm:p-6">
@@ -474,13 +444,12 @@ onMounted(loadAccount);
                                 >
                             </div>
                         </div>
-                        <p v-if="!isEditMode" class="border-t border-slate-200 bg-amber-50 px-5 py-3 text-xs leading-5 text-amber-900 sm:px-6">
-                            A welcome email will include the username and sign-in link. Share the temporary password separately. Staff can update their email, username, and contact details in Profile after signing in.
-                        </p>
+                        <p v-if="!isEditMode" class="border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs leading-5 text-slate-600 sm:px-6">Share the temporary password separately; it is not included in the welcome email.</p>
                     </section>
 
                     <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                        <p class="min-h-5 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
+                        <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
+                        <span v-else class="text-xs font-semibold text-slate-500">The member can only receive access available to your account.</span>
                         <button type="submit" :disabled="isSaving" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-70">
                             {{ isSaving ? 'Saving...' : isEditMode ? 'Update account' : 'Create account' }}
                         </button>

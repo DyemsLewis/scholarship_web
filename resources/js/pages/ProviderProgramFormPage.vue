@@ -6,6 +6,7 @@ import ProgramBenefitsEditor from '../components/ProgramBenefitsEditor.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { limitPhoneNumber } from '../support/phoneNumber';
@@ -30,6 +31,7 @@ import { providerObjectiveDetails, providerObjectiveOptions } from '../support/p
 const scholarshipId = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit$/)?.[1] ?? null;
 const isEditMode = computed(() => Boolean(scholarshipId));
 const isLoading = ref(true);
+const showFormGuidance = ref(false);
 const isSaving = ref(false);
 const errorMessage = ref('');
 const formError = ref('');
@@ -2702,26 +2704,20 @@ onBeforeUnmount(() => {
 
         <section class="provider-page">
             <div class="provider-container provider-container-narrow">
-                <header class="provider-hero flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="min-w-0">
-                        <p class="text-xs font-bold uppercase text-amber-700">
-                            {{ isEditMode ? 'Edit program' : 'New program' }}
-                        </p>
-                        <h2 class="mt-1 truncate font-display text-2xl font-bold text-slate-950">
-                            {{ scholarshipForm.title || (isEditMode ? 'Edit scholarship program' : 'Create scholarship program') }}
-                        </h2>
-                    </div>
-
-                    <div class="flex justify-start sm:justify-end">
-                        <a
-                            href="/provider/programs"
-                            class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                        >
-                            <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-                            Back to programs
-                        </a>
-                    </div>
-                </header>
+                <TaskPageHeader
+                    theme="provider"
+                    :eyebrow="isEditMode ? 'Edit program' : 'New program'"
+                    :title="scholarshipForm.title || (isEditMode ? 'Edit scholarship program' : 'Create scholarship program')"
+                    :description="isEditMode ? 'Update one program section at a time without changing its existing applicant records.' : 'Build the scholarship in focused sections, then review it before publishing.'"
+                    icon="fa-solid fa-pen-to-square"
+                    secondary-href="/provider/programs"
+                    secondary-label="Back to programs"
+                >
+                    <template #meta>
+                        <span>Current section: {{ activeFormSectionMeta.label }}</span>
+                        <span>{{ completedProgramReadinessCount }} of {{ programReadinessItems.length }} required areas complete</span>
+                    </template>
+                </TaskPageHeader>
 
                 <ProviderProgramNav v-if="isEditMode" :program-id="scholarshipId" active="settings" can-manage />
 
@@ -2741,9 +2737,7 @@ onBeforeUnmount(() => {
                         <p class="font-bold">
                             Provider verification required
                         </p>
-                        <p class="mt-1 leading-6">
-                            Your provider account is currently {{ user?.verification_status || 'pending' }}. An admin must approve the provider account before scholarships can be created or updated.
-                        </p>
+                        <p class="mt-1">Admin approval is required before programs can be created or updated.</p>
                     </div>
 
                     <div
@@ -2754,15 +2748,8 @@ onBeforeUnmount(() => {
                             <i class="fa-solid fa-shield-halved mt-0.5 text-amber-700" aria-hidden="true"></i>
                             <div>
                                 <p class="font-bold text-slate-950">Existing applicant process protected</p>
-                                <p class="mt-1 leading-6">
-                                    {{ existingApplicationCount }} applicant{{ existingApplicationCount === 1 ? '' : 's' }} already {{ existingApplicationCount === 1 ? 'uses' : 'use' }} this review path, so its stages are locked.
-                                    <template v-if="hasSchedulableSelectionStage">
-                                        You can still publish or update the {{ schedulableSelectionStageLabel }} schedule from Activities.
-                                    </template>
-                                    <template v-else>
-                                        This plan has no exam or interview, so no activity schedule is needed; formal application instructions can still be updated.
-                                    </template>
-                                    Duplicate the program to use a different selection flow.
+                                <p class="mt-1 leading-5">
+                                    {{ existingApplicationCount }} applicant{{ existingApplicationCount === 1 ? '' : 's' }} already {{ existingApplicationCount === 1 ? 'uses' : 'use' }} this flow. Stages are locked, but schedules and handoff details remain editable. Duplicate the program to change its flow.
                                 </p>
                             </div>
                         </div>
@@ -2783,7 +2770,7 @@ onBeforeUnmount(() => {
 
                     <form
                         ref="scholarshipFormElement"
-                        class="scroll-mt-4 space-y-4"
+                        :class="['provider-program-form scroll-mt-4 space-y-4', showFormGuidance ? 'show-guidance' : '']"
                         novalidate
                         @submit.prevent="saveScholarship"
                     >
@@ -2810,9 +2797,17 @@ onBeforeUnmount(() => {
 
                         <div class="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
                             <div class="border-b border-slate-200 px-5 py-4 sm:px-7">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Program editor</p>
-                                <h3 class="mt-1 text-xl font-bold text-slate-950">{{ activeFormSectionMeta.label }}</h3>
-                                <p class="mt-1 text-sm text-slate-500">{{ activeFormSectionMeta.help }}</p>
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Program editor</p>
+                                        <h3 class="mt-1 text-xl font-bold text-slate-950">{{ activeFormSectionMeta.label }}</h3>
+                                    </div>
+                                    <button type="button" class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950" @click="showFormGuidance = !showFormGuidance">
+                                        <i :class="['fa-solid mr-1.5 text-[10px]', showFormGuidance ? 'fa-eye-slash' : 'fa-circle-question']" aria-hidden="true"></i>
+                                        {{ showFormGuidance ? 'Hide guidance' : 'Show guidance' }}
+                                    </button>
+                                </div>
+                                <p v-if="showFormGuidance" class="mt-2 max-w-2xl text-xs leading-5 text-slate-500">{{ activeFormSectionMeta.help }}</p>
 
                                 <nav
                                     v-if="activeFormSubsectionTabs.length"
@@ -2847,9 +2842,7 @@ onBeforeUnmount(() => {
                         >
                             <div v-show="activeFormSection === 'details'" class="space-y-5">
                                 <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Listing identity</p>
-                                    <h4 class="mt-1 text-base font-bold text-slate-950">How the program appears to applicants</h4>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">Use an official title and a short description applicants can understand before opening the full listing.</p>
+                                    <h4 class="text-base font-bold text-slate-950">Applicant listing</h4>
                                 </div>
 
                                 <div :class="fieldStackClass">
@@ -2898,7 +2891,7 @@ onBeforeUnmount(() => {
                                             >
                                                 Use provider logo
                                             </button>
-                                            <a v-else href="/provider/profile" class="text-xs font-bold text-slate-800 underline decoration-slate-300 underline-offset-2 hover:text-amber-700">
+                                            <a v-else href="/provider/profile/details" class="text-xs font-bold text-slate-800 underline decoration-slate-300 underline-offset-2 hover:text-amber-700">
                                                 Add provider logo
                                             </a>
                                         </div>
@@ -3095,7 +3088,6 @@ onBeforeUnmount(() => {
                                         <div>
                                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider purpose</p>
                                             <h4 class="mt-1 text-base font-bold text-slate-950">What this scholarship aims to achieve</h4>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">Explain why your organization is offering the scholarship. Any contribution expected from recipients is disclosed separately in the application section.</p>
                                         </div>
                                     </div>
 
@@ -3143,7 +3135,6 @@ onBeforeUnmount(() => {
                                 <div v-show="activeFormSection === 'support'" class="md:col-span-2">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Support package</p>
                                     <h4 class="mt-1 text-base font-bold text-slate-950">What selected applicants will receive</h4>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">Add each financial or non-cash benefit separately so applicants can understand the complete package.</p>
                                 </div>
 
                                 <ProgramBenefitsEditor

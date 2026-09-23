@@ -360,25 +360,12 @@ onMounted(loadDocuments);
                             </p>
                         </header>
 
-                        <div id="upload-document" class="scroll-mt-5 border-b border-slate-200 bg-slate-50 px-5 py-4">
-                            <div class="flex items-start gap-3">
-                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
-                                </span>
-                                <div>
-                                    <p class="text-sm font-bold text-slate-950">Upload common files once</p>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">Reuse these files when a scholarship requests them. Upload program-specific files inside that application.</p>
-                                    <p class="mt-1 text-xs font-semibold text-slate-500">Accepted: PDF, JPG, PNG, DOC or DOCX up to 5 MB.</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="border-b border-slate-200 px-5 py-4">
+                        <div id="upload-document" class="scroll-mt-5 border-b border-slate-200 px-5 py-4">
                             <TermsAgreement
                                 v-model="preparedDocumentTermsAccepted"
                                 context="document"
                             />
-                            <p class="mt-2 text-xs text-slate-500">Agree once, then click Upload beside the file you want to prepare.</p>
+                            <p class="mt-2 text-xs text-slate-500">PDF, JPG, PNG, DOC or DOCX, up to 5 MB.</p>
                         </div>
 
                         <div class="divide-y divide-slate-200">
@@ -534,9 +521,7 @@ onMounted(loadDocuments);
                                 </span>
                                 <div>
                                     <h3 class="text-sm font-bold text-slate-950">No application files to track yet</h3>
-                                    <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Once you submit an application, its document progress and provider review status will appear here.
-                                    </p>
+                                    <p class="mt-1 text-sm text-slate-500">Submitted application files will appear here.</p>
                                 </div>
                             </div>
                             <a

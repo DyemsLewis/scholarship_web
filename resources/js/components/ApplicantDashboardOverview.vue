@@ -14,9 +14,12 @@ const props = defineProps({
 const emit = defineEmits(['open-reminder']);
 
 const allAttentionItems = computed(() => props.reminders.filter((item) => item.key !== 'clear'));
-const attentionItems = computed(() => allAttentionItems.value.slice(0, 3));
-const recentApplications = computed(() => props.applications.slice(0, 3));
-const topRecommendations = computed(() => props.recommendations.slice(0, 2));
+const attentionItems = computed(() => allAttentionItems.value.slice(0, 2));
+const recentApplications = computed(() => props.applications.slice(0, 2));
+const topRecommendations = computed(() => props.recommendations.slice(0, 1));
+const pendingReadinessItems = computed(() => props.readinessItems
+    .filter((item) => item.percent !== 100 && item.status !== 'Verified')
+    .slice(0, 2));
 const dashboardStats = computed(() => [
     {
         label: 'Active applications',
@@ -38,13 +41,6 @@ const dashboardStats = computed(() => [
         detail: props.profileReadiness.complete ? 'Ready for matching' : 'Complete missing information',
         href: '/dashboard/profile',
         icon: 'fa-solid fa-id-card',
-    },
-    {
-        label: 'Strong matches',
-        value: props.recommendations.length,
-        detail: props.recommendations.length ? 'Eligible recommendations' : 'No recommendations yet',
-        href: '/dashboard/scholarships',
-        icon: 'fa-solid fa-award',
     },
 ]);
 
@@ -68,7 +64,7 @@ function reminderClicked(event, reminder) {
 
 <template>
     <div class="mt-6 space-y-5">
-        <section class="student-card grid overflow-hidden sm:grid-cols-2 xl:grid-cols-4" aria-label="Dashboard summary">
+        <section class="student-card grid overflow-hidden sm:grid-cols-3" aria-label="Dashboard summary">
             <a
                 v-for="stat in dashboardStats"
                 :key="stat.label"
@@ -91,7 +87,6 @@ function reminderClicked(event, reminder) {
                     <p class="student-kicker">Task list</p>
                     <h2 id="dashboard-next-steps" class="mt-1 text-lg font-bold text-slate-950">Your next steps</h2>
                 </div>
-                <span class="rounded-md bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">Start at the top</span>
             </header>
 
             <a :href="priorityAction.href" class="group grid gap-4 border-b border-amber-200 bg-amber-50 p-4 transition hover:bg-amber-100/70 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:px-5">
@@ -114,8 +109,8 @@ function reminderClicked(event, reminder) {
                 </span>
             </a>
 
-            <div class="divide-y divide-slate-200">
-                <a v-for="item in readinessItems" :key="item.label" :href="item.href" class="group grid gap-3 p-4 transition hover:bg-slate-50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:px-5">
+            <div v-if="pendingReadinessItems.length" class="divide-y divide-slate-200">
+                <a v-for="item in pendingReadinessItems" :key="item.label" :href="item.href" class="group grid gap-3 p-4 transition hover:bg-slate-50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:px-5">
                     <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs', item.percent === 100 || item.status === 'Verified' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">
                         <i :class="item.percent === 100 || item.status === 'Verified' ? 'fa-solid fa-check' : 'fa-solid fa-minus'" aria-hidden="true"></i>
                     </span>

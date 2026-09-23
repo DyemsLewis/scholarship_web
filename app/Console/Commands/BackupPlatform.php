@@ -237,6 +237,13 @@ class BackupPlatform extends Command
             $locations['storage/public'] = storage_path('app/public');
         }
 
+        if (config('platform.backup.include_public_uploads', true)) {
+            $locations['public/uploads'] = (string) config(
+                'platform.backup.public_uploads_path',
+                public_path('uploads'),
+            );
+        }
+
         return $locations;
     }
 

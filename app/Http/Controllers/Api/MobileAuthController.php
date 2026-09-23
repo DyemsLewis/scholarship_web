@@ -781,7 +781,7 @@ class MobileAuthController extends Controller
             'type' => 'application',
             'title' => 'New scholarship application',
             'message' => "{$user->name} submitted an application for {$scholarship->title}.",
-            'action_url' => '/provider/applications',
+            'action_url' => '/provider/applications/review',
         ]);
         PortalNotification::create([
             'user_id' => $user->id,

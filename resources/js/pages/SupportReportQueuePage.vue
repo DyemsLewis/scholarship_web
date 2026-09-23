@@ -1,12 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
-import AdminSectionNav from '../components/AdminSectionNav.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
-import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const isAdmin = window.location.pathname.startsWith('/admin');
 const Sidebar = isAdmin ? AdminSidebar : ProviderSidebar;
@@ -39,12 +38,7 @@ const pageCopy = computed(() => ({
     title: isAdmin ? 'Applicant and provider reports' : 'Reports and support',
     description: isAdmin
         ? 'Review concerns submitted by applicants and coordinate program reports with providers.'
-        : 'Handle applicant concerns and track reports sent to platform support.',
-    queueEyebrow: isAdmin ? 'Report Review Queue' : 'Issue Queue',
-    queueTitle: isAdmin ? 'Review submitted concerns' : 'Applicant concerns and your reports',
-    queueDescription: isAdmin
-        ? 'Open a report to review its details and record the platform support response.'
-        : 'Respond to applicants or check your team reports.',
+        : 'Respond to applicant concerns and follow problems sent to platform support.',
 }));
 const statusFilters = computed(() => [
     { value: 'open', label: isAdmin ? 'Needs action' : 'Open', count: counts.value.open },
@@ -257,36 +251,36 @@ onMounted(() => loadReports());
 
         <section :class="isAdmin ? 'admin-page' : 'provider-page'">
             <div :class="isAdmin ? 'admin-container' : 'provider-container'">
-                <header :class="isAdmin ? 'admin-hero' : 'provider-hero'">
-                    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+                <TaskPageHeader
+                    :theme="isAdmin ? 'admin' : 'provider'"
+                    :eyebrow="pageCopy.eyebrow"
+                    :title="pageCopy.title"
+                    :description="pageCopy.description"
+                    icon="fa-solid fa-circle-exclamation"
+                >
+                    <template #meta>
+                        <span>{{ counts.open }} needing action</span>
+                        <span>{{ counts.all }} total reports</span>
+                    </template>
+                    <template v-if="!isAdmin" #actions>
+                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="openProviderReportForm">
+                            <i class="fa-solid fa-circle-exclamation text-amber-300" aria-hidden="true"></i>
+                            Report a problem
+                        </button>
+                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50" @click="loadReports(pagination.current_page)">
+                            <i class="fa-solid fa-rotate-right text-xs" aria-hidden="true"></i>
+                            Refresh
+                        </button>
+                    </template>
+                </TaskPageHeader>
+
+                <section :class="[isAdmin ? 'admin-panel' : 'provider-panel', 'mt-5 overflow-hidden']">
+                    <div v-if="!isAdmin" class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">{{ pageCopy.eyebrow }}</p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ pageCopy.title }}</h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
+                            <h3 class="font-bold text-slate-950">Issue queue</h3>
+                            <p class="mt-1 text-sm text-slate-500">Open an item to review its details or update your team response.</p>
                         </div>
-                        <div class="flex flex-col gap-2 sm:flex-row">
-                            <button v-if="!isAdmin" type="button" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="openProviderReportForm">
-                                <i class="fa-solid fa-circle-exclamation text-amber-300" aria-hidden="true"></i>
-                                Report a problem
-                            </button>
-                            <button type="button" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50" @click="loadReports(pagination.current_page)">
-                                <i class="fa-solid fa-rotate-right text-xs" aria-hidden="true"></i>
-                                Refresh reports
-                            </button>
-                        </div>
-                    </div>
-                </header>
-
-                <AdminSectionNav v-if="isAdmin" section="operations" />
-                <ProviderSectionNav v-else section="support" />
-
-                <section :class="[isAdmin ? 'admin-panel' : 'provider-panel', 'mt-5 p-5']">
-                    <div>
-                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">{{ pageCopy.queueEyebrow }}</p>
-                        <h3 class="mt-2 text-xl font-bold text-slate-950">{{ pageCopy.queueTitle }}</h3>
-                        <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{{ pageCopy.queueDescription }}</p>
-
-                        <div class="mt-4 flex flex-wrap gap-2">
+                        <div class="flex flex-wrap gap-2">
                             <button
                                 v-for="filter in statusFilters"
                                 :key="filter.value"
@@ -304,19 +298,45 @@ onMounted(() => loadReports());
                         </div>
                     </div>
 
-                    <div v-if="isLoading" class="mt-5 rounded-md border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                    <div v-else class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/80 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <label class="flex items-center gap-2">
+                            <span class="shrink-0 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Status</span>
+                            <select
+                                :value="selectedStatus"
+                                class="min-w-44 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-slate-500"
+                                @change="changeFilter($event.target.value)"
+                            >
+                                <option v-for="filter in statusFilters" :key="filter.value" :value="filter.value">
+                                    {{ filter.label }} ({{ filter.count }})
+                                </option>
+                            </select>
+                        </label>
+                        <p class="text-xs font-semibold text-slate-500">
+                            {{ pagination.total }} report{{ pagination.total === 1 ? '' : 's' }} in this view
+                        </p>
+                    </div>
+
+                    <div v-if="isLoading" class="p-6 text-sm text-slate-500">
                         Loading reports...
                     </div>
 
-                    <p v-else-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
+                    <p v-else-if="errorMessage" class="border-t border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
                         {{ errorMessage }}
                     </p>
 
-                    <div v-else-if="reports.length" class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                    <div v-else-if="reports.length" :class="isAdmin ? 'divide-y divide-slate-200 bg-white' : 'bg-white'">
+                        <div v-if="!isAdmin" class="hidden grid-cols-[minmax(0,1fr)_16rem_8rem] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 lg:grid">
+                            <span>Report</span>
+                            <span>Status</span>
+                            <span class="text-center">Action</span>
+                        </div>
                         <article
                             v-for="report in reports"
                             :key="report.id"
-                            class="grid gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1fr)_16rem_8rem] lg:items-center"
+                            :class="[
+                                'grid gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:items-center',
+                                isAdmin ? 'lg:grid-cols-[minmax(0,1fr)_13rem_6rem]' : 'lg:grid-cols-[minmax(0,1fr)_16rem_8rem]',
+                            ]"
                         >
                             <div class="flex min-w-0 items-center gap-3">
                                 <div class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-white ring-1 ring-slate-200">
@@ -330,13 +350,12 @@ onMounted(() => loadReports());
                                             {{ statusLabel(report.status) }}
                                         </span>
                                     </div>
-                                    <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">{{ report.description }}</p>
-                                    <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
+                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500">
                                         <span>{{ reporterName(report) }}</span>
-                                        <span>{{ reporterType(report) }}</span>
                                         <span>{{ report.category_label }}</span>
                                         <span v-if="report.privacy_request_type_label" class="text-amber-700">{{ report.privacy_request_type_label }}</span>
-                                        <span v-if="report.program">{{ report.program.title }}</span>
+                                        <span v-if="!isAdmin">{{ reporterType(report) }}</span>
+                                        <span v-if="!isAdmin && report.program">{{ report.program.title }}</span>
                                         <span>{{ report.created_at }}</span>
                                     </div>
                                 </div>
@@ -344,24 +363,31 @@ onMounted(() => loadReports());
 
                             <div class="hidden min-w-0 text-left lg:block">
                                 <span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', statusClass(report.status)]">{{ statusLabel(report.status) }}</span>
-                                <p :class="['mt-1.5 text-xs font-bold', report.overall_status === 'resolved' ? 'text-emerald-700' : 'text-slate-600']">
-                                    {{ overallStatusLabel(report.overall_status) }}
+                                <p v-if="isAdmin" class="mt-1.5 truncate text-[11px] font-semibold text-slate-500">
+                                    {{ report.requires_both_roles ? 'Shared with provider' : 'Admin handling' }}
                                 </p>
-                                <p class="mt-1 truncate text-[11px] text-slate-500">{{ handlingMessage(report) }}</p>
+                                <template v-else>
+                                    <p :class="['mt-1.5 text-xs font-bold', report.overall_status === 'resolved' ? 'text-emerald-700' : 'text-slate-600']">
+                                        {{ overallStatusLabel(report.overall_status) }}
+                                    </p>
+                                    <p class="mt-1 truncate text-[11px] text-slate-500">{{ handlingMessage(report) }}</p>
+                                </template>
                             </div>
 
                             <button type="button" class="inline-flex w-full shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800" @click="openReport(report)">
-                                View details
+                                Open
                             </button>
                         </article>
                     </div>
 
-                    <div v-else class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                    <div v-else class="p-6">
                         <p class="text-sm font-bold text-slate-900">No reports in this view</p>
-                        <p class="mt-1 text-sm leading-6 text-slate-500">Choose another status or submit a report when your team encounters a problem.</p>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">
+                            {{ isAdmin ? 'Choose another status to review completed concerns.' : 'Choose another status or submit a report when your team encounters a problem.' }}
+                        </p>
                     </div>
 
-                    <div v-if="pagination.last_page > 1" class="mt-4 flex items-center justify-between gap-3">
+                    <div v-if="pagination.last_page > 1" class="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3">
                         <button
                             type="button"
                             :disabled="pagination.current_page <= 1"

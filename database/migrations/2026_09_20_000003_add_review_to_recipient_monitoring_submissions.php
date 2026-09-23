@@ -17,7 +17,11 @@ return new class extends Migration
 
         Schema::create('recipient_monitoring_reviews', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('recipient_monitoring_submission_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('recipient_monitoring_submission_id');
+            $table->foreign('recipient_monitoring_submission_id', 'rm_review_submission_fk')
+                ->references('id')
+                ->on('recipient_monitoring_submissions')
+                ->cascadeOnDelete();
             $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->string('decision')->index();
             $table->text('notes')->nullable();

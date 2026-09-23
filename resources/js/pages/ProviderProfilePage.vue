@@ -3,8 +3,8 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
-import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
@@ -15,10 +15,14 @@ const isSaving = ref(false);
 const errorMessage = ref('');
 const validationErrors = ref({});
 const user = ref(null);
-const activeProfileSection = ref({
-    '#representative-account': 'representative',
-    '#verification-documents': 'verification',
-}[window.location.hash] ?? 'details');
+const currentProfilePath = window.location.pathname.replace(/\/$/, '');
+const activeProfileSection = ref(
+    currentProfilePath.endsWith('/verification') || window.location.hash === '#verification-documents'
+        ? 'verification'
+        : currentProfilePath.endsWith('/representative') || window.location.hash === '#representative-account'
+            ? 'representative'
+            : 'details',
+);
 const verificationDocuments = ref([]);
 const verificationDocumentType = ref('organization_registration');
 const verificationDocumentFile = ref(null);
@@ -72,11 +76,28 @@ const verificationDocumentOptions = [
     { value: 'school_or_office_proof', label: 'School / office proof' },
     { value: 'other', label: 'Other proof document' },
 ];
-const providerTypeLabels = Object.fromEntries(
-    providerTypeOptions.filter((option) => option.value).map((option) => [option.value, option.label]),
-);
 const labelClass = 'text-xs font-bold uppercase tracking-[0.14em] text-slate-500';
 const inputClass = 'mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const profilePageCopy = computed(() => ({
+    details: {
+        kicker: 'Organization profile',
+        title: 'Provider details',
+        description: 'Keep the organization identity and applicant contact information accurate.',
+        icon: 'fa-solid fa-building',
+    },
+    verification: {
+        kicker: 'Organization access',
+        title: 'Provider verification',
+        description: 'Submit organization proof and follow its administrator review status.',
+        icon: 'fa-solid fa-shield-halved',
+    },
+    representative: {
+        kicker: 'Account owner',
+        title: 'Representative account',
+        description: 'Manage the private identity and sign-in details for this provider account.',
+        icon: 'fa-solid fa-user-tie',
+    },
+}[activeProfileSection.value]));
 const providerInitials = computed(() => {
     const name = user.value?.provider_name || user.value?.name || 'Provider';
 
@@ -193,18 +214,6 @@ function verificationLabel(status) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function verificationClass(status) {
-    if (status === 'approved') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
 function documentTypeLabel(type) {
     return verificationDocumentOptions.find((option) => option.value === type)?.label
         ?? String(type ?? 'Document').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -219,14 +228,11 @@ function closeDocumentPreview() {
 }
 
 function selectProfileSection(section) {
-    activeProfileSection.value = section;
-
-    const url = new URL(window.location.href);
-    url.hash = {
-        representative: 'representative-account',
-        verification: 'verification-documents',
-    }[section] ?? '';
-    window.history.replaceState(window.history.state, '', url);
+    window.location.href = {
+        representative: '/provider/profile/representative',
+        verification: '/provider/profile/verification',
+        details: '/provider/profile/details',
+    }[section] ?? '/provider/profile/details';
 }
 
 function handleVerificationFile(event) {
@@ -433,19 +439,24 @@ onBeforeUnmount(() => {
 
         <section class="provider-page">
             <div class="provider-container">
-                <header class="provider-hero">
-                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                        Organization Profile
-                    </p>
-                    <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                        Organization and account
-                    </h2>
-                    <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                        Manage organization details, verification, and representative access.
-                    </p>
-                </header>
-
-                <ProviderSectionNav section="organization" />
+                <TaskPageHeader
+                    theme="provider"
+                    :eyebrow="profilePageCopy.kicker"
+                    :title="profilePageCopy.title"
+                    :description="profilePageCopy.description"
+                    :icon="profilePageCopy.icon"
+                >
+                    <template #meta>
+                        <span v-if="activeProfileSection === 'details'">
+                            {{ providerProfileComplete ? 'Required details complete' : 'Required details incomplete' }}
+                        </span>
+                        <span v-if="activeProfileSection === 'verification'">
+                            {{ verificationDocumentCount }} proof file{{ verificationDocumentCount === 1 ? '' : 's' }}
+                        </span>
+                        <span v-if="activeProfileSection === 'representative'">{{ representativeName }}</span>
+                        <span>{{ verificationLabel(user?.verification_status) }} provider</span>
+                    </template>
+                </TaskPageHeader>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading provider profile...
@@ -455,170 +466,27 @@ onBeforeUnmount(() => {
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
-                    <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-sm">
-                        <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                            <div class="flex min-w-0 items-center gap-4">
-                                <img
-                                    v-if="providerLogoPreview"
-                                    :src="providerLogoPreview"
-                                    :alt="`${user?.provider_name || 'Provider'} logo`"
-                                    class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-white/20"
-                                >
-                                <div v-else class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-amber-300 text-lg font-black text-slate-950">
-                                    {{ providerInitials }}
-                                </div>
-                                <div class="min-w-0">
-                                    <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">
-                                        {{ providerTypeLabels[user?.provider_type] || 'Scholarship provider' }}
-                                    </p>
-                                    <h3 class="mt-1 truncate font-display text-2xl font-bold text-white">
-                                        {{ user?.provider_name || user?.name || 'Provider' }}
-                                    </h3>
-                                    <p class="mt-1 line-clamp-1 max-w-2xl text-sm leading-6 text-slate-300">
-                                        {{ user?.provider_description || 'Add a short organization description so applicants know who provides the scholarship.' }}
-                                    </p>
-                                </div>
-                            </div>
-                            <span :class="['w-fit shrink-0 rounded-md px-3 py-1.5 text-xs font-bold uppercase', verificationClass(user?.verification_status)]">
-                                {{ verificationLabel(user?.verification_status) }} provider
-                            </span>
-                        </div>
-                        <div class="grid border-t border-white/10 bg-white/[0.04] sm:grid-cols-3 sm:divide-x sm:divide-white/10">
-                            <div class="flex items-start gap-3 p-4">
-                                <i class="fa-solid fa-user-tie mt-0.5 text-amber-300" aria-hidden="true"></i>
-                                <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Representative</p>
-                                    <p class="mt-1 truncate text-sm font-semibold text-white">{{ representativeName }}</p>
-                                </div>
-                            </div>
-                            <div class="flex items-start gap-3 border-t border-white/10 p-4 sm:border-t-0">
-                                <i class="fa-solid fa-headset mt-0.5 text-amber-300" aria-hidden="true"></i>
-                                <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Applicant contact</p>
-                                    <p class="mt-1 truncate text-sm font-semibold text-white">{{ user?.provider_contact_email || 'Email not set' }}</p>
-                                    <p class="mt-0.5 truncate text-xs text-slate-400">{{ user?.provider_contact_number || 'Phone not set' }}</p>
-                                </div>
-                            </div>
-                            <div class="flex items-start gap-3 border-t border-white/10 p-4 sm:border-t-0">
-                                <i class="fa-solid fa-location-dot mt-0.5 text-amber-300" aria-hidden="true"></i>
-                                <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Office</p>
-                                    <p class="mt-1 line-clamp-2 text-sm font-semibold text-white">{{ user?.provider_address || 'Address not set' }}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <nav class="provider-panel grid gap-2 p-2 md:grid-cols-3" aria-label="Provider profile sections">
-                        <button
-                            type="button"
-                            :aria-current="activeProfileSection === 'details' ? 'page' : undefined"
-                            :class="[
-                                'flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
-                                activeProfileSection === 'details'
-                                    ? 'bg-slate-950 text-white'
-                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
-                            ]"
-                            @click="selectProfileSection('details')"
-                        >
-                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', activeProfileSection === 'details' ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">
-                                <i class="fa-solid fa-building" aria-hidden="true"></i>
-                            </span>
-                            <span>
-                                <span class="block text-sm font-bold">Provider details</span>
-                            </span>
-                        </button>
-                        <button
-                            type="button"
-                            :aria-current="activeProfileSection === 'verification' ? 'page' : undefined"
-                            :class="[
-                                'flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
-                                activeProfileSection === 'verification'
-                                    ? 'bg-slate-950 text-white'
-                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
-                            ]"
-                            @click="selectProfileSection('verification')"
-                        >
-                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', activeProfileSection === 'verification' ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">
-                                <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
-                            </span>
-                            <span class="min-w-0">
-                                <span class="flex flex-wrap items-center gap-2 text-sm font-bold">
-                                    Verification
-                                    <span :class="['rounded px-2 py-0.5 text-[9px] uppercase', verificationClass(user?.verification_status)]">{{ verificationLabel(user?.verification_status) }}</span>
-                                </span>
-                            </span>
-                        </button>
-                        <button
-                            type="button"
-                            :aria-current="activeProfileSection === 'representative' ? 'page' : undefined"
-                            :class="[
-                                'flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition',
-                                activeProfileSection === 'representative'
-                                    ? 'bg-slate-950 text-white'
-                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
-                            ]"
-                            @click="selectProfileSection('representative')"
-                        >
-                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', activeProfileSection === 'representative' ? 'bg-white/10' : 'bg-slate-100 text-slate-600']">
-                                <i class="fa-solid fa-user-tie" aria-hidden="true"></i>
-                            </span>
-                            <span>
-                                <span class="block text-sm font-bold">Representative account</span>
-                            </span>
-                        </button>
-                    </nav>
-
                     <section v-show="activeProfileSection === 'verification'" id="verification-documents" class="provider-panel scroll-mt-6 p-5 sm:p-6">
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="flex items-center gap-3">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                    <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
-                                </span>
+                        <div :class="['rounded-md border p-4 text-sm', verificationGuidance.className]">
+                            <div class="flex items-start gap-3">
+                                <i class="fa-solid fa-circle-info mt-1" aria-hidden="true"></i>
                                 <div>
-                                    <h3 class="font-bold text-slate-950">Provider verification</h3>
-                                    <p class="mt-0.5 text-sm text-slate-500">Submit organization proof for admin review and publishing access.</p>
-                                </div>
-                            </div>
-                            <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                                {{ canManageProfile ? `${verificationDocuments.length} file${verificationDocuments.length === 1 ? '' : 's'}` : 'Restricted files' }}
-                            </span>
-                        </div>
-
-                        <div class="mt-5 grid overflow-hidden rounded-md border border-slate-200 sm:grid-cols-3 sm:divide-x sm:divide-slate-200">
-                            <div class="flex items-center gap-3 border-b border-slate-200 p-3 sm:border-b-0">
-                                <i :class="['fa-solid text-sm', user?.email_verified ? 'fa-circle-check text-emerald-600' : 'fa-clock text-amber-600']" aria-hidden="true"></i>
-                                <div>
-                                    <p class="text-xs font-bold text-slate-900">Email</p>
-                                    <p class="text-[11px] text-slate-500">{{ user?.email_verified ? 'Verified' : 'Verification needed' }}</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-3 border-b border-slate-200 p-3 sm:border-b-0">
-                                <i :class="['fa-solid text-sm', hasVerificationDocument ? 'fa-circle-check text-emerald-600' : 'fa-file-circle-plus text-amber-600']" aria-hidden="true"></i>
-                                <div>
-                                    <p class="text-xs font-bold text-slate-900">Organization proof</p>
-                                    <p class="text-[11px] text-slate-500">{{ hasVerificationDocument ? 'Submitted' : 'File needed' }}</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-3 p-3">
-                                <i :class="['fa-solid text-sm', user?.verification_status === 'approved' ? 'fa-circle-check text-emerald-600' : 'fa-user-shield text-amber-600']" aria-hidden="true"></i>
-                                <div>
-                                    <p class="text-xs font-bold text-slate-900">Administrator review</p>
-                                    <p class="text-[11px] text-slate-500">{{ verificationLabel(user?.verification_status) }}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div :class="['mt-5 rounded-md border p-4 text-sm', verificationGuidance.className]">
                             <p class="font-bold">
                                 {{ verificationGuidance.title }}
                             </p>
-                            <p class="mt-1 leading-6">
+                            <p class="mt-1 leading-5">
                                 {{ verificationGuidance.description }}
                             </p>
                             <p v-if="user?.verification_notes && !user?.can_post_scholarships" class="mt-2 text-xs leading-5">
                                 <span class="font-bold">Admin note:</span> {{ user.verification_notes }}
                             </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="canManageProfile && providerProfileComplete" class="mt-5">
+                            <h3 class="font-bold text-slate-950">Submit organization proof</h3>
+                            <p class="mt-1 text-sm text-slate-500">Attach a readable document for administrator review.</p>
                         </div>
 
                         <TermsAgreement
@@ -628,7 +496,7 @@ onBeforeUnmount(() => {
                             context="providerDocument"
                         />
 
-                        <div v-if="canManageProfile && providerProfileComplete" class="mt-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
+                        <div v-if="canManageProfile && providerProfileComplete" class="mt-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 md:grid-cols-2 md:items-end">
                             <label>
                                 <span :class="labelClass">Document type</span>
                                 <select v-model="verificationDocumentType" :class="inputClass">
@@ -653,10 +521,10 @@ onBeforeUnmount(() => {
                             <button
                                 type="button"
                                 :disabled="isUploadingDocument || !verificationDocumentTermsAccepted || !verificationDocumentFile"
-                                class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                class="w-fit rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 md:col-span-2"
                                 @click="uploadVerificationDocument"
                             >
-                                {{ isUploadingDocument ? 'Uploading...' : !verificationDocumentTermsAccepted ? 'Accept terms first' : 'Upload proof' }}
+                                {{ isUploadingDocument ? 'Uploading...' : 'Upload proof' }}
                             </button>
                         </div>
 
@@ -671,11 +539,19 @@ onBeforeUnmount(() => {
                             Organization proof files are visible only to the provider owner and staff with organization profile access.
                         </div>
 
-                        <div v-else-if="verificationDocuments.length === 0" class="mt-5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                            No verification documents uploaded yet.
+                        <div v-else-if="verificationDocuments.length === 0" class="mt-5 border-t border-slate-200 pt-5">
+                            <div class="flex items-center justify-between gap-3">
+                                <h3 class="font-bold text-slate-950">Submitted proof</h3>
+                                <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">0 files</span>
+                            </div>
+                            <p class="mt-3 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">No verification documents uploaded yet.</p>
                         </div>
 
-                        <div v-else class="mt-5 grid gap-3">
+                        <div v-else class="mt-5 grid gap-3 border-t border-slate-200 pt-5">
+                            <div class="flex items-center justify-between gap-3">
+                                <h3 class="font-bold text-slate-950">Submitted proof</h3>
+                                <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ verificationDocuments.length }} file{{ verificationDocuments.length === 1 ? '' : 's' }}</span>
+                            </div>
                             <div
                                 v-for="document in verificationDocuments"
                                 :key="document.id"
@@ -713,22 +589,10 @@ onBeforeUnmount(() => {
                     </section>
 
                     <form v-show="activeProfileSection === 'details'" class="provider-panel overflow-hidden" @submit.prevent="saveProviderProfile('organization')">
-                        <div class="flex items-center gap-3 p-5 sm:p-6">
-                            <span class="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                <i class="fa-solid fa-building" aria-hidden="true"></i>
-                            </span>
-                            <div>
-                                <p class="font-bold text-slate-950">Provider details</p>
-                                <p class="mt-0.5 text-sm text-slate-500">Information shown to applicants and used to contact your organization.</p>
-                            </div>
-                        </div>
-
-                        <section class="grid gap-5 border-t border-slate-200 p-5 sm:p-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
-                            <div>
-                                <p class="text-sm font-bold text-slate-950">Organization</p>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">
-                                    {{ canManageProfile ? 'Public details applicants use to recognize the scholarship provider.' : 'Organization details are managed by authorized provider staff.' }}
-                                </p>
+                        <section class="p-5 sm:p-6">
+                            <div class="mb-5 border-b border-slate-200 pb-4">
+                                <p class="font-bold text-slate-950">Organization identity</p>
+                                <p class="mt-1 text-sm text-slate-500">Shown with your scholarships and public provider profile.</p>
                             </div>
                             <div>
                                 <div class="mb-5 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[4rem_minmax(0,1fr)] sm:items-center">
@@ -761,7 +625,7 @@ onBeforeUnmount(() => {
                                                 {{ isUploadingLogo ? 'Uploading...' : 'Save logo' }}
                                             </button>
                                         </div>
-                                        <p class="mt-1.5 text-xs leading-5 text-slate-500">JPG, PNG, or WebP up to 4MB. This can be reused as a program logo.</p>
+                                        <p class="mt-1.5 text-xs leading-5 text-slate-500">JPG, PNG, or WebP up to 4MB. Reused as the default program logo.</p>
                                         <span v-if="fieldError('logo_file')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('logo_file') }}</span>
                                     </div>
                                 </div>
@@ -786,14 +650,16 @@ onBeforeUnmount(() => {
                                     <span v-if="fieldError('provider_website')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_website') }}</span>
                                 </label>
                                 <label>
-                                    <span :class="labelClass">Address</span>
+                                    <span :class="labelClass">Office address</span>
                                     <input v-model="form.provider_address" type="text" required placeholder="Office address" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
                                     <span v-if="fieldError('provider_address')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_address') }}</span>
                                 </label>
                             </div>
 
-                            <label class="mt-4 block">
-                                <span :class="labelClass">Description</span>
+                            <div class="mt-5 border-t border-slate-200 pt-5">
+                                <h3 class="font-bold text-slate-950">About the provider</h3>
+                                <label class="mt-3 block">
+                                <span :class="labelClass">Public description</span>
                                 <textarea
                                     v-model="form.provider_description"
                                     rows="4"
@@ -802,9 +668,13 @@ onBeforeUnmount(() => {
                                     :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"
                                 ></textarea>
                                 <span v-if="fieldError('provider_description')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_description') }}</span>
-                            </label>
+                                </label>
+                            </div>
 
-                            <div class="mt-4 grid gap-4 md:grid-cols-2">
+                            <div class="mt-5 border-t border-slate-200 pt-5">
+                                <h3 class="font-bold text-slate-950">Applicant contact</h3>
+                                <p class="mt-1 text-sm text-slate-500">Applicants use these details for scholarship questions.</p>
+                                <div class="mt-3 grid gap-4 md:grid-cols-2">
                                 <label>
                                     <span :class="labelClass">Provider email</span>
                                     <input v-model="form.provider_contact_email" type="email" autocomplete="organization-email" required placeholder="scholarships@example.org" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
@@ -812,9 +682,10 @@ onBeforeUnmount(() => {
                                 </label>
                                 <label>
                                     <span :class="labelClass">Provider phone</span>
-                                    <input :value="form.provider_contact_number" type="tel" inputmode="tel" autocomplete="organization-tel" required maxlength="20" placeholder="0917 000 0000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']" @input="form.provider_contact_number = limitPhoneNumber($event.target.value)">
+                                    <input :value="form.provider_contact_number" type="tel" inputmode="numeric" autocomplete="organization-tel" required maxlength="11" placeholder="09170000000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']" @input="form.provider_contact_number = limitPhoneNumber($event.target.value)">
                                     <span v-if="fieldError('provider_contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_number') }}</span>
                                 </label>
+                                </div>
                             </div>
                             </div>
                         </section>
@@ -822,7 +693,7 @@ onBeforeUnmount(() => {
                         <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                             <p class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
                                 <i :class="['fa-solid fa-circle text-[8px]', providerProfileComplete ? 'text-emerald-500' : 'text-amber-500']" aria-hidden="true"></i>
-                                {{ providerProfileComplete ? 'Provider details are complete.' : 'Complete the required provider details before verification.' }}
+                                {{ providerProfileComplete ? 'Required details complete' : 'Complete required details before verification' }}
                             </p>
                             <button type="submit" :disabled="isSaving || !canManageProfile" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
                                 {{ isSaving ? 'Saving...' : 'Save provider details' }}
@@ -831,23 +702,14 @@ onBeforeUnmount(() => {
                     </form>
 
                     <form v-show="activeProfileSection === 'representative'" id="representative-account" class="provider-panel overflow-hidden" @submit.prevent="saveProviderProfile('representative')">
-                        <div class="flex items-center gap-3 p-5 sm:p-6">
-                            <span class="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                <i class="fa-solid fa-user-tie" aria-hidden="true"></i>
-                            </span>
-                            <div>
-                                <p class="font-bold text-slate-950">Representative account</p>
-                                <p class="mt-0.5 text-sm text-slate-500">Private login and contact details for the person managing this provider account.</p>
-                            </div>
-                        </div>
-
-                        <section class="grid gap-5 border-t border-slate-200 p-5 sm:p-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
-                            <div>
-                                <p class="text-sm font-bold text-slate-950">Representative account</p>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Private login and contact details for the person managing this account.</p>
+                        <section class="p-5 sm:p-6">
+                            <div class="mb-5 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                                <i class="fa-solid fa-lock mr-2 text-slate-500" aria-hidden="true"></i>
+                                These private account details are separate from the public provider contacts shown to applicants.
                             </div>
                             <div>
-                                <div class="grid gap-4 md:grid-cols-[1fr_5rem_1fr]">
+                                <h3 class="font-bold text-slate-950">Representative identity</h3>
+                                <div class="mt-4 grid gap-4 md:grid-cols-[1fr_5rem_1fr]">
                                 <label>
                                     <span :class="labelClass">First name</span>
                                     <input v-model="form.first_name" type="text" required placeholder="First name" :class="inputClass">
@@ -865,7 +727,9 @@ onBeforeUnmount(() => {
                                 </label>
                             </div>
 
-                            <div class="mt-4 grid gap-4 md:grid-cols-2">
+                            <div class="mt-5 border-t border-slate-200 pt-5">
+                                <h3 class="font-bold text-slate-950">Sign-in and contact</h3>
+                                <div class="mt-4 grid gap-4 md:grid-cols-2">
                                 <label>
                                     <span :class="labelClass">Login email</span>
                                     <input v-model="form.email" type="email" required placeholder="provider@example.com" :class="inputClass">
@@ -878,22 +742,15 @@ onBeforeUnmount(() => {
                                 </label>
                                 <label>
                                     <span :class="labelClass">Representative phone</span>
-                                    <input :value="form.contact_number" type="tel" inputmode="tel" required maxlength="20" placeholder="0917 000 0000" :class="inputClass" @input="form.contact_number = limitPhoneNumber($event.target.value)">
+                                    <input :value="form.contact_number" type="tel" inputmode="numeric" required maxlength="11" placeholder="09170000000" :class="inputClass" @input="form.contact_number = limitPhoneNumber($event.target.value)">
                                     <span v-if="fieldError('contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('contact_number') }}</span>
                                 </label>
+                                </div>
                             </div>
-                            <p class="mt-4 inline-flex items-center gap-2 text-xs text-slate-500">
-                                <i class="fa-solid fa-lock text-slate-400" aria-hidden="true"></i>
-                                These representative details are not used as applicant-facing program contacts.
-                            </p>
                             </div>
                         </section>
 
-                        <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                            <p class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
-                                <i class="fa-solid fa-lock text-slate-400" aria-hidden="true"></i>
-                                Representative details remain separate from applicant-facing provider contacts.
-                            </p>
+                        <div class="flex justify-end border-t border-slate-200 bg-slate-50 p-4 sm:px-6">
                             <button type="submit" :disabled="isSaving" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
                                 {{ isSaving ? 'Saving...' : 'Save representative details' }}
                             </button>

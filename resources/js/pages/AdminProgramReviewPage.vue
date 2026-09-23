@@ -6,6 +6,7 @@ import EligibilityConditionList from '../components/EligibilityConditionList.vue
 import LocationMapModal from '../components/LocationMapModal.vue';
 import RecipientAgreementPanel from '../components/RecipientAgreementPanel.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { labelFromKey } from '../support/display';
 import { providerObjectiveDetails } from '../support/providerObjectives';
 
@@ -513,27 +514,20 @@ onMounted(loadScholarship);
 
         <section class="admin-page">
             <div class="admin-container">
-                <header class="admin-hero">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Program review</p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">Review scholarship program</h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Confirm the offer, eligibility, and applicant process before publishing the program.</p>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            <a
-                                href="/admin/reviews?type=programs"
-                                class="inline-flex items-center rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                            >
-                                Back to reviews
-                            </a>
-                            <button
-                                type="button"
-                                class="w-fit rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                                @click="loadScholarship"
-                            >
-                                Refresh
-                            </button>
+                <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
+                    <a href="/admin/reviews?type=programs" class="font-bold text-slate-600 transition hover:text-slate-950">Program reviews</a>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
+                    <span class="truncate font-semibold text-slate-950">{{ scholarship?.title || 'Program record' }}</span>
+                </nav>
+
+                <TaskPageHeader
+                    theme="admin"
+                    eyebrow="Program review"
+                    :title="scholarship?.title || 'Review scholarship program'"
+                    description="Confirm the offer, eligibility, and applicant process before making a publishing decision."
+                    icon="fa-solid fa-graduation-cap"
+                >
+                    <template #actions>
                             <button
                                 v-if="activeReviewSection !== 'decision'"
                                 type="button"
@@ -542,9 +536,8 @@ onMounted(loadScholarship);
                             >
                                 Record decision
                             </button>
-                        </div>
-                    </div>
-                </header>
+                    </template>
+                </TaskPageHeader>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading program review details...

@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
@@ -472,16 +471,10 @@ onMounted(loadScholarship);
 
         <section class="student-page">
             <div class="student-container">
-                <ApplicantPageHeader
-                    eyebrow="Scholarship"
-                    title="Program details"
-                    description="Check what you receive, who can apply, what to prepare, and what happens next."
-                    icon="fa-solid fa-graduation-cap"
-                    action-href="/dashboard/scholarships"
-                    action-label="Back to scholarships"
-                    secondary-href="/dashboard/applications"
-                    secondary-label="Applications"
-                />
+                <a href="/dashboard/scholarships" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
+                    <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
+                    Back to scholarships
+                </a>
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading scholarship details...
@@ -493,8 +486,8 @@ onMounted(loadScholarship);
 
                 <div v-else-if="scholarship" class="mt-6 space-y-5">
                     <header class="student-card overflow-hidden">
-                        <div class="grid xl:grid-cols-[minmax(0,1fr)_21rem]">
-                            <div class="border-b border-slate-200 bg-white p-5 sm:p-6 xl:border-r xl:border-b-0">
+                        <div>
+                            <div class="bg-white p-5 sm:p-6">
                                 <div class="flex items-start gap-4">
                                     <img
                                         :src="scholarship.image_url"
@@ -533,7 +526,7 @@ onMounted(loadScholarship);
                                 </p>
                             </div>
 
-                            <div class="bg-slate-950 p-5 text-white sm:p-6">
+                            <div class="border-t border-slate-800 bg-slate-950 p-5 text-white sm:p-6">
                                 <div class="flex items-center justify-between gap-3">
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
                                         Can I apply?
@@ -559,7 +552,7 @@ onMounted(loadScholarship);
                                     </div>
                                 </div>
 
-                                <div class="mt-5 grid gap-2">
+                                <div class="mt-4 grid gap-2 sm:grid-flow-col sm:auto-cols-fr">
                                     <a
                                         v-if="scholarship.has_applied"
                                         href="/dashboard/applications"
@@ -629,7 +622,6 @@ onMounted(loadScholarship);
                                 <div class="min-w-0">
                                     <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ fact.label }}</p>
                                     <p class="mt-1 text-sm font-bold leading-5 text-slate-950">{{ fact.value }}</p>
-                                    <p class="mt-0.5 text-xs leading-5 text-slate-500">{{ fact.detail }}</p>
                                 </div>
                             </article>
                         </section>
@@ -659,7 +651,6 @@ onMounted(loadScholarship);
                             <article v-if="activeDetailSection === 'overview' && scholarship.benefits?.length" class="student-card p-5 sm:p-6">
                                 <p class="student-kicker">Support package</p>
                                 <h2 class="mt-1 text-xl font-bold text-slate-950">What recipients receive</h2>
-                                <p class="mt-1 text-sm text-slate-500">Financial and non-cash support included by the provider.</p>
                                 <ScholarshipBenefitsPanel class="mt-5" :benefits="scholarship.benefits" uniform />
                             </article>
 
@@ -675,7 +666,6 @@ onMounted(loadScholarship);
                                         <div>
                                             <p class="student-kicker">Provider purpose</p>
                                             <h2 class="mt-1 text-xl font-bold text-slate-950">Why this scholarship is offered</h2>
-                                            <p class="mt-1 text-sm leading-6 text-slate-600">This explains why the provider created the scholarship. Any contribution expected from recipients is disclosed separately below.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -960,7 +950,6 @@ onMounted(loadScholarship);
                                     <div>
                                         <p class="student-kicker">Scholarship provider</p>
                                         <h2 class="mt-1 text-xl font-bold text-slate-950">Who manages this program</h2>
-                                        <p class="mt-1 text-sm leading-6 text-slate-500">Use the official contact and location below if you need clarification before submitting.</p>
                                     </div>
                                 </div>
                                 <a
@@ -1068,9 +1057,6 @@ onMounted(loadScholarship);
                             <div class="min-w-0">
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Eligibility comparison</p>
                                 <h2 id="profile-check-modal-title" class="mt-1 text-xl font-bold text-slate-950">How your profile was checked</h2>
-                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                    Your saved profile was compared with the program's published matching restrictions. Written provider conditions are reviewed separately.
-                                </p>
                             </div>
                         </div>
                         <button

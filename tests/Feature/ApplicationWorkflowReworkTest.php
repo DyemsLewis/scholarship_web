@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ApplicationSchedule;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipEvent;
@@ -23,7 +24,7 @@ class ApplicationWorkflowReworkTest extends TestCase
         Mail::fake();
     }
 
-    public function test_provider_configured_stage_order_advances_without_attendance_or_schedule_completion(): void
+    public function test_provider_configured_stage_order_advances_after_activity_completion(): void
     {
         [$provider, $application] = $this->application([
             'screening',
@@ -40,6 +41,18 @@ class ApplicationWorkflowReworkTest extends TestCase
 
         $application = $workflow->recordStageResult($application, 'formal_application', 'passed', $provider);
         $this->assertSame('exam', $application->workflow_stage);
+
+        ApplicationSchedule::create([
+            'scholarship_application_id' => $application->id,
+            'type' => 'exam',
+            'title' => 'Scholarship exam',
+            'scheduled_at' => now()->subHour(),
+            'mode' => 'onsite',
+            'status' => 'completed',
+            'completed_at' => now(),
+            'created_by' => $provider->id,
+            'updated_by' => $provider->id,
+        ]);
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/stages/exam/result", [

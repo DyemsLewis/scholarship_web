@@ -1,11 +1,12 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
-import AdminSectionNav from '../components/AdminSectionNav.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
+const activeView = ref('receipts');
 const search = ref('');
 const period = ref('all');
 const summary = ref({
@@ -113,41 +114,66 @@ onMounted(() => loadFinance());
 
         <section class="admin-page">
             <div class="admin-container">
-                <header class="admin-hero">
-                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Financial oversight</p>
-                    <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">Platform finance</h1>
-                    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                        Monitor confirmed provider service payments and inspect their transaction receipts. Scholarship awards are not included.
-                    </p>
-                </header>
+                <TaskPageHeader
+                    theme="admin"
+                    eyebrow="Financial oversight"
+                    title="Platform finance"
+                    description="Review provider service payments and transaction receipts. Scholarship awards are excluded."
+                    icon="fa-solid fa-chart-line"
+                >
+                    <template #meta>
+                        <span>{{ money(summary.lifetime) }} received</span>
+                        <span>{{ summary.successful_payments }} confirmed payments</span>
+                        <span>{{ summary.pending_payments }} pending</span>
+                    </template>
+                </TaskPageHeader>
 
-                <AdminSectionNav section="operations" />
+                <nav class="admin-panel mt-5 flex gap-1 p-1.5" aria-label="Finance sections">
+                    <button
+                        type="button"
+                        :class="['flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition sm:flex-none', activeView === 'receipts' ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-100']"
+                        @click="activeView = 'receipts'"
+                    >
+                        <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+                        Receipts
+                        <span :class="['rounded px-1.5 py-0.5 text-[10px]', activeView === 'receipts' ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600']">{{ pagination.total }}</span>
+                    </button>
+                    <button
+                        type="button"
+                        :class="['flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition sm:flex-none', activeView === 'overview' ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-100']"
+                        @click="activeView = 'overview'"
+                    >
+                        <i class="fa-solid fa-chart-column" aria-hidden="true"></i>
+                        Overview
+                    </button>
+                </nav>
 
                 <div v-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">
                     {{ errorMessage }}
                 </div>
 
-                <template v-if="!isLoading || receipts.length">
-                    <section class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        <article class="admin-panel border-l-4 border-l-amber-400 p-5">
+                <div v-if="activeView === 'overview' && isLoading" class="admin-panel mt-4 p-10 text-center text-sm font-semibold text-slate-500">
+                    Loading financial overview...
+                </div>
+
+                <template v-if="activeView === 'overview' && (!isLoading || receipts.length)">
+                    <section class="admin-panel mt-4 grid overflow-hidden sm:grid-cols-2 xl:grid-cols-4">
+                        <article class="border-b border-slate-200 p-4 sm:border-r xl:border-b-0">
                             <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Today</p>
-                            <p class="mt-3 text-2xl font-black text-slate-950">{{ money(summary.today) }}</p>
-                            <p class="mt-1 text-xs text-slate-500">Confirmed since midnight</p>
+                            <p class="mt-2 text-xl font-black text-slate-950">{{ money(summary.today) }}</p>
                         </article>
-                        <article class="admin-panel border-l-4 border-l-slate-900 p-5">
+                        <article class="border-b border-slate-200 p-4 xl:border-b-0 xl:border-r">
                             <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">This month</p>
-                            <p class="mt-3 text-2xl font-black text-slate-950">{{ money(summary.month) }}</p>
-                            <p class="mt-1 text-xs text-slate-500">Confirmed this calendar month</p>
+                            <p class="mt-2 text-xl font-black text-slate-950">{{ money(summary.month) }}</p>
                         </article>
-                        <article class="admin-panel border-l-4 border-l-sky-600 p-5">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Lifetime total</p>
-                            <p class="mt-3 text-2xl font-black text-slate-950">{{ money(summary.lifetime) }}</p>
-                            <p class="mt-1 text-xs text-slate-500">All confirmed service payments</p>
+                        <article class="border-b border-slate-200 p-4 sm:border-r sm:border-b-0">
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">All time</p>
+                            <p class="mt-2 text-xl font-black text-slate-950">{{ money(summary.lifetime) }}</p>
                         </article>
-                        <article class="admin-panel border-l-4 border-l-emerald-600 p-5">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Successful payments</p>
-                            <p class="mt-3 text-2xl font-black text-slate-950">{{ summary.successful_payments }}</p>
-                            <p class="mt-1 text-xs text-slate-500">{{ summary.pending_payments }} pending, {{ summary.failed_payments }} failed</p>
+                        <article class="p-4">
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Payment status</p>
+                            <p class="mt-2 text-xl font-black text-slate-950">{{ summary.successful_payments }} confirmed</p>
+                            <p class="mt-0.5 text-xs text-slate-500">{{ summary.pending_payments }} pending, {{ summary.failed_payments }} failed</p>
                         </article>
                     </section>
 
@@ -191,12 +217,11 @@ onMounted(() => loadFinance());
                     </section>
                 </template>
 
-                <section class="admin-panel mt-4 overflow-hidden">
+                <section v-if="activeView === 'receipts'" class="admin-panel mt-4 overflow-hidden">
                     <div class="border-b border-slate-200 p-5 sm:flex sm:items-end sm:justify-between sm:gap-5">
                         <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Receipts</p>
-                            <h2 class="mt-1 text-xl font-black text-slate-950">Payment records</h2>
-                            <p class="mt-1 text-sm text-slate-500">A read-only record of confirmed provider service payments.</p>
+                            <h2 class="text-lg font-black text-slate-950">Payment records</h2>
+                            <p class="mt-1 text-sm text-slate-500">Confirmed provider service payments only.</p>
                         </div>
                         <p class="mt-3 text-xs font-bold text-slate-500 sm:mt-0">{{ pagination.total }} receipt{{ pagination.total === 1 ? '' : 's' }}</p>
                     </div>
@@ -220,20 +245,18 @@ onMounted(() => loadFinance());
                         <p class="mt-1 text-sm text-slate-500">Try another period or search term.</p>
                     </div>
                     <div v-else class="overflow-x-auto">
-                        <table class="min-w-[900px] table-fixed divide-y divide-slate-200 text-left text-sm">
+                        <table class="min-w-[800px] table-fixed divide-y divide-slate-200 text-left text-sm">
                             <colgroup>
-                                <col class="w-36">
+                                <col class="w-72">
                                 <col>
-                                <col class="w-52">
                                 <col class="w-40">
                                 <col class="w-32">
-                                <col class="w-36">
+                                <col class="w-28">
                             </colgroup>
                             <thead class="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
                                 <tr>
-                                    <th class="px-4 py-2.5 text-center font-bold">Receipt</th>
+                                    <th class="px-4 py-2.5 font-bold">Receipt</th>
                                     <th class="px-4 py-2.5 font-bold">Provider</th>
-                                    <th class="px-4 py-2.5 font-bold">Service</th>
                                     <th class="px-4 py-2.5 text-center font-bold">Paid</th>
                                     <th class="px-4 py-2.5 text-center font-bold">Amount</th>
                                     <th class="px-4 py-2.5 text-center font-bold">Action</th>
@@ -241,17 +264,19 @@ onMounted(() => loadFinance());
                             </thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="receipt in receipts" :key="receipt.id" class="hover:bg-slate-50/70">
-                                    <td class="whitespace-nowrap px-4 py-3 text-center font-mono text-xs font-bold text-slate-700">{{ receipt.receipt_number }}</td>
+                                    <td class="px-4 py-3">
+                                        <p class="truncate font-mono text-xs font-bold text-slate-700">{{ receipt.receipt_number }}</p>
+                                        <p class="mt-1 line-clamp-1 text-xs font-semibold text-slate-500">{{ receipt.service }}</p>
+                                    </td>
                                     <td class="px-4 py-3">
                                         <p class="line-clamp-2 font-bold leading-5 text-slate-950">{{ receipt.provider }}</p>
                                         <p class="mt-0.5 truncate text-xs text-slate-500">{{ receipt.provider_email }}</p>
                                     </td>
-                                    <td class="px-4 py-3 text-xs font-semibold leading-5 text-slate-700">{{ receipt.service }}</td>
                                     <td class="whitespace-nowrap px-4 py-3 text-center text-xs text-slate-600">{{ dateTime(receipt.paid_at) }}</td>
                                     <td class="whitespace-nowrap px-4 py-3 text-center font-bold text-slate-950">{{ money(receipt.amount, receipt.currency) }}</td>
                                     <td class="px-4 py-3 text-center">
                                         <button type="button" class="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="selectedReceipt = receipt">
-                                            View receipt <i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>
+                                            View <i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>
                                         </button>
                                     </td>
                                 </tr>
@@ -273,7 +298,7 @@ onMounted(() => loadFinance());
         </section>
 
         <div v-if="selectedReceipt" class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/65 p-4" role="dialog" aria-modal="true" aria-labelledby="receipt-title" @click.self="selectedReceipt = null">
-            <section class="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl">
+            <section class="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
                 <header class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-950 p-5 text-white">
                     <div>
                         <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Payment receipt</p>
@@ -283,7 +308,7 @@ onMounted(() => loadFinance());
                         <i class="fa-solid fa-xmark" aria-hidden="true"></i>
                     </button>
                 </header>
-                <div class="p-5 sm:p-6">
+                <div class="overflow-y-auto p-5 sm:p-6">
                     <div class="flex items-start justify-between gap-4 border-b border-slate-200 pb-5">
                         <div>
                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Provider</p>
@@ -328,7 +353,7 @@ onMounted(() => loadFinance());
                         This record confirms a provider service payment received by the platform. It is separate from scholarship funds or applicant awards.
                     </p>
                 </div>
-                <footer class="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
+                <footer class="flex shrink-0 justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
                     <button type="button" class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="selectedReceipt = null">Close receipt</button>
                 </footer>
             </section>

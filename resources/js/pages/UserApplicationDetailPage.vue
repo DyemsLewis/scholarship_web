@@ -1,13 +1,11 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
-import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantRecipientMonitoring from '../components/ApplicantRecipientMonitoring.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import PreScreeningHandoffRecord from '../components/PreScreeningHandoffRecord.vue';
-import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import RecipientAgreementSummary from '../components/RecipientAgreementSummary.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
@@ -906,18 +904,10 @@ onMounted(loadApplication);
 
         <section class="student-page">
             <div class="student-container">
-                <ApplicantPageHeader
-                    eyebrow="My application"
-                    title="Application details"
-                    description="See your current status and continue with the next required action."
-                    icon="fa-solid fa-file-circle-check"
-                    action-href="/dashboard/applications"
-                    action-label="Back to submissions"
-                    secondary-href="/dashboard/documents"
-                    secondary-label="Documents"
-                />
-
-                <PrivacyNoticeCard context="application" compact />
+                <a href="/dashboard/applications" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
+                    <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
+                    Back to applications
+                </a>
 
                 <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
                     Loading application details...
@@ -1465,8 +1455,6 @@ onMounted(loadApplication);
                                     </a>
                                 </div>
 
-                                <p class="line-clamp-2 border-t border-slate-200 px-4 py-3 text-sm leading-5 text-slate-600 sm:px-5">{{ application.scholarship?.description || 'No program description was provided.' }}</p>
-
                                 <dl class="mx-4 grid border-y border-slate-200 sm:mx-5 sm:grid-cols-3">
                                     <div class="border-b border-slate-200 py-3 sm:border-b-0 sm:border-r sm:pr-3">
                                         <dt class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Deadline</dt>
@@ -1543,7 +1531,6 @@ onMounted(loadApplication);
                                         <div>
                                             <p class="student-kicker">Profile match</p>
                                             <h3 class="mt-0.5 text-base font-bold text-slate-950">How your profile fits this program</h3>
-                                            <p class="mt-0.5 text-xs text-slate-500">A guide based on your submitted profile, not the provider's final decision.</p>
                                         </div>
                                     </div>
                                     <div class="flex w-fit items-baseline gap-2 rounded-md bg-slate-950 px-3 py-2 text-white">
@@ -1553,17 +1540,7 @@ onMounted(loadApplication);
                                 </div>
 
                                 <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                                    <div class="flex min-w-0 items-start gap-3">
-                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-amber-700 ring-1 ring-slate-200">
-                                            <i class="fa-solid fa-list-check" aria-hidden="true"></i>
-                                        </span>
-                                        <div class="min-w-0">
-                                            <p class="text-sm font-bold text-slate-950">See what matched your profile</p>
-                                            <p class="mt-0.5 text-xs leading-5 text-slate-500">
-                                                {{ application.eligibility_breakdown?.criteria?.length || 0 }} checks compare your submitted information with this program's rules.
-                                            </p>
-                                        </div>
-                                    </div>
+                                    <p class="text-sm font-bold text-slate-700">{{ application.eligibility_breakdown?.criteria?.length || 0 }} eligibility checks recorded</p>
                                     <button
                                         type="button"
                                         class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-100"
@@ -1894,9 +1871,6 @@ onMounted(loadApplication);
                             <div class="min-w-0">
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Profile match</p>
                                 <h2 id="application-profile-match-title" class="mt-1 text-xl font-bold text-slate-950">Your profile and this program</h2>
-                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                    See the information saved with your application and the program rule it was compared with.
-                                </p>
                             </div>
                         </div>
                         <button

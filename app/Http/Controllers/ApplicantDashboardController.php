@@ -1295,7 +1295,7 @@ class ApplicantDashboardController extends Controller
             'type' => 'application',
             'title' => 'New scholarship application',
             'message' => "{$request->user()->name} submitted an application for {$scholarship->title}.",
-            'action_url' => '/provider/applications',
+            'action_url' => '/provider/applications/review',
         ]);
         PortalNotification::create([
             'user_id' => $request->user()->id,

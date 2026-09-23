@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -180,36 +181,31 @@ onMounted(loadAdminData);
 
         <section class="admin-page">
             <div class="admin-container">
-                <header class="admin-hero">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Admin Dashboard
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Administration overview
-                            </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                {{ workspaceDescription }}
-                            </p>
-                            <span class="mt-3 inline-flex rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ roleLabel }}</span>
-                        </div>
-
+                <TaskPageHeader
+                    theme="admin"
+                    eyebrow="Admin dashboard"
+                    title="Administration overview"
+                    :description="workspaceDescription"
+                    icon="fa-solid fa-gauge-high"
+                >
+                    <template #meta>
+                        <span>{{ roleLabel }}</span>
+                    </template>
+                    <template v-if="canManageAccounts" #actions>
                         <a
-                            v-if="canManageAccounts"
                             href="/admin/manage-users"
                             class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
                         >
                             Manage users
                         </a>
-                    </div>
-                </header>
+                    </template>
+                </TaskPageHeader>
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="admin-panel mt-5 p-6 text-sm text-slate-500">
                     Loading admin dashboard...
                 </div>
 
-                <div v-else-if="errorMessage" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
+                <div v-else-if="errorMessage" class="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
                     {{ errorMessage }}
                 </div>
 

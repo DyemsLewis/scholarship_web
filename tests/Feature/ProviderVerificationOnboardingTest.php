@@ -20,7 +20,7 @@ class ProviderVerificationOnboardingTest extends TestCase
         $provider = User::factory()->unverified()->create(['role' => 'provider']);
         $provider->providerProfile()->update(['verification_status' => 'approved']);
 
-        $verificationUrl = route('provider.profile').'#verification-documents';
+        $verificationUrl = route('provider.profile.verification');
 
         $this->actingAs($provider)
             ->get('/provider/programs/create')

@@ -100,6 +100,7 @@ class ScholarshipBenefitPackageTest extends TestCase
             'provider_id' => $provider->id,
             'title' => 'Published Support Program',
             'description' => 'An already approved scholarship program.',
+            'image_path' => 'images/programs/tulay-aral-logo.png',
             'status' => 'published',
         ]);
         $scholarship->benefits()->create([

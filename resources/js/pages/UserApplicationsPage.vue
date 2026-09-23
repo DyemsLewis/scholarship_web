@@ -861,8 +861,6 @@ watch(selectedScholarship, (scholarship) => {
                     icon="fa-solid fa-file-signature"
                     action-href="/dashboard/scholarships"
                     action-label="Browse scholarships"
-                    secondary-href="/dashboard/documents"
-                    secondary-label="Prepare documents"
                 />
 
                 <PrivacyNoticeCard context="applications" compact />
@@ -956,7 +954,6 @@ watch(selectedScholarship, (scholarship) => {
                                     <h3 class="mt-1 text-lg font-bold">{{ steps[currentStep].label }}</h3>
                                     <p class="mt-0.5 truncate text-xs text-slate-300">{{ selectedScholarship?.title || 'Select a scholarship to begin' }}</p>
                                 </div>
-                                <span class="hidden text-xs font-semibold text-slate-400 sm:block">{{ steps[currentStep].detail }}</span>
                             </div>
                         </header>
 
@@ -1281,9 +1278,12 @@ watch(selectedScholarship, (scholarship) => {
                                         </div>
                                     </section>
 
-                                    <section class="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                                        <div class="flex items-center justify-between gap-3"><div><p class="student-kicker">After you submit</p><h3 class="mt-1 text-lg font-bold text-slate-950">Provider selection flow</h3></div><span class="text-xs font-bold text-slate-500">{{ selectedSelectionPlan.length }} stages</span></div>
-                                        <ol class="mt-4 grid gap-2 sm:grid-cols-2">
+                                    <details class="group overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
+                                            <div><p class="student-kicker">After you submit</p><h3 class="mt-1 text-base font-bold text-slate-950">Provider selection flow</h3></div>
+                                            <span class="flex items-center gap-3 text-xs font-bold text-slate-500">{{ selectedSelectionPlan.length }} stages <i class="fa-solid fa-chevron-down text-[10px] transition group-open:rotate-180" aria-hidden="true"></i></span>
+                                        </summary>
+                                        <ol class="grid gap-2 border-t border-slate-200 p-4 sm:grid-cols-2 sm:p-5">
                                             <li v-for="(stage, index) in selectedSelectionPlan" :key="stage.value" class="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-4 py-3">
                                                 <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-900 text-xs font-bold text-white">{{ index + 1 }}</span>
                                                 <div>
@@ -1292,7 +1292,7 @@ watch(selectedScholarship, (scholarship) => {
                                                 </div>
                                             </li>
                                         </ol>
-                                    </section>
+                                    </details>
 
                                     <RecipientAgreementPanel :scholarship="selectedScholarship" />
 

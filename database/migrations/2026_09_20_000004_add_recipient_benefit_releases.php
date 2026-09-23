@@ -29,8 +29,16 @@ return new class extends Migration
 
         Schema::create('recipient_benefit_release_records', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('recipient_benefit_release_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('scholarship_application_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('recipient_benefit_release_id');
+            $table->foreign('recipient_benefit_release_id', 'rb_record_release_fk')
+                ->references('id')
+                ->on('recipient_benefit_releases')
+                ->cascadeOnDelete();
+            $table->foreignId('scholarship_application_id');
+            $table->foreign('scholarship_application_id', 'rb_record_application_fk')
+                ->references('id')
+                ->on('scholarship_applications')
+                ->cascadeOnDelete();
             $table->foreignId('applicant_id')->constrained('users')->cascadeOnDelete();
             $table->string('status')->default('scheduled')->index();
             $table->boolean('originals_verified')->default(false);

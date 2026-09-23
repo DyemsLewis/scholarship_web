@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Database\Seeders\ProductionAdminSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -17,13 +19,21 @@ class PlatformOperationsTest extends TestCase
     {
         $backupPath = storage_path('framework/testing/platform-backups');
         $databasePath = storage_path('framework/testing/platform-backup.sqlite');
+        $publicUploadsPath = storage_path('framework/testing/platform-public-uploads');
         $defaultConnection = config('database.default');
         File::deleteDirectory($backupPath);
+        File::deleteDirectory($publicUploadsPath);
         File::ensureDirectoryExists(dirname($databasePath));
+        File::ensureDirectoryExists($publicUploadsPath);
         File::put($databasePath, '');
+        File::put($publicUploadsPath.DIRECTORY_SEPARATOR.'test-program-logo.png', 'test-image');
         config([
             'platform.backup.path' => $backupPath,
             'platform.backup.retention_days' => 7,
+            'platform.backup.include_private_files' => false,
+            'platform.backup.include_public_files' => false,
+            'platform.backup.include_public_uploads' => true,
+            'platform.backup.public_uploads_path' => $publicUploadsPath,
             'database.default' => 'backup_test',
             'database.connections.backup_test' => [
                 ...config('database.connections.sqlite'),
@@ -34,7 +44,7 @@ class PlatformOperationsTest extends TestCase
 
         try {
             $this->artisan('migrate:fresh', ['--database' => 'backup_test'])->assertSuccessful();
-            $this->artisan('platform:backup', ['--database-only' => true])
+            $this->artisan('platform:backup')
                 ->expectsOutputToContain('Platform backup created and verified')
                 ->assertSuccessful();
 
@@ -46,6 +56,7 @@ class PlatformOperationsTest extends TestCase
             $this->assertTrue($archive->open($archives[0], ZipArchive::CHECKCONS) === true);
             $this->assertNotFalse($archive->locateName('manifest.json'));
             $this->assertNotFalse($archive->locateName('database/database.sqlite'));
+            $this->assertNotFalse($archive->locateName('public/uploads/test-program-logo.png'));
             $this->assertGreaterThan(0, $archive->statName('database/database.sqlite')['size']);
             $archive->close();
 
@@ -56,8 +67,27 @@ class PlatformOperationsTest extends TestCase
             DB::purge('backup_test');
             config(['database.default' => $defaultConnection]);
             File::deleteDirectory($backupPath);
+            File::deleteDirectory($publicUploadsPath);
             File::delete($databasePath);
         }
+    }
+
+    public function test_production_admin_seeder_creates_only_the_configured_admin(): void
+    {
+        config([
+            'platform.bootstrap_admin.email' => 'owner@example.test',
+            'platform.bootstrap_admin.username' => 'portal_owner',
+            'platform.bootstrap_admin.password' => 'Strong!Hosting123',
+        ]);
+
+        $this->seed(ProductionAdminSeeder::class);
+
+        $admin = User::query()->where('email', 'owner@example.test')->firstOrFail();
+        $this->assertSame('admin', $admin->role);
+        $this->assertTrue($admin->hasVerifiedEmail());
+        $this->assertTrue(Hash::check('Strong!Hosting123', $admin->password));
+        $this->assertSame('Portal Administrator', $admin->adminProfile?->display_name);
+        $this->assertSame(1, User::query()->count());
     }
 
     public function test_retention_command_removes_only_expired_operational_data(): void

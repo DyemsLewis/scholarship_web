@@ -2,8 +2,8 @@
 import { computed, onMounted, ref } from 'vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
-import ProviderSectionNav from '../components/ProviderSectionNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { formatFileSize } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 
@@ -39,13 +39,6 @@ function statusLabel(value) {
         provider_review: 'Ready for your review',
         completed: 'Completed',
     }[value] ?? String(value ?? 'pending').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function statusClass(value) {
-    if (value === 'completed') return 'bg-emerald-100 text-emerald-800';
-    if (value === 'provider_review') return 'bg-sky-100 text-sky-800';
-    if (value === 'needs_information') return 'bg-amber-100 text-amber-800';
-    return 'bg-slate-100 text-slate-700';
 }
 
 function meetingStatusClass(value) {
@@ -192,23 +185,20 @@ onMounted(loadWorkspace);
 
         <section class="provider-page">
             <div class="provider-container">
-                <header class="provider-hero">
-                    <a href="/provider/billing/requests" class="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-950">
-                        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to your requests
-                    </a>
-                    <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Service workspace</p>
-                            <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ purchase?.plan_name ?? 'Provider service' }}</h1>
-                            <p class="mt-2 font-mono text-xs text-slate-500">{{ purchase?.reference_number }}</p>
-                        </div>
-                        <span v-if="purchase" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold', statusClass(purchase.fulfillment_status)]">
-                            {{ statusLabel(purchase.fulfillment_status) }}
-                        </span>
-                    </div>
-                </header>
-
-                <ProviderSectionNav section="support" />
+                <TaskPageHeader
+                    theme="provider"
+                    eyebrow="Service workspace"
+                    :title="purchase?.plan_name ?? 'Provider service'"
+                    description="Schedule the support meeting, share files, and follow the work until completion."
+                    icon="fa-solid fa-headset"
+                    secondary-href="/provider/billing/requests"
+                    secondary-label="Back to requests"
+                >
+                    <template #meta>
+                        <span class="font-mono">{{ purchase?.reference_number || 'Loading reference' }}</span>
+                        <span v-if="purchase">{{ statusLabel(purchase.fulfillment_status) }}</span>
+                    </template>
+                </TaskPageHeader>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">Loading service workspace...</div>
                 <div v-else-if="errorMessage || !purchase" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
@@ -238,9 +228,8 @@ onMounted(loadWorkspace);
                             <section class="provider-panel order-2 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
                                     <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Progress</p>
-                                        <h2 class="mt-1 text-xl font-bold text-slate-950">Service steps</h2>
-                                        <p class="mt-1 text-sm text-slate-600">Track completed support work.</p>
+                                        <h2 class="font-bold text-slate-950">Service steps</h2>
+                                        <p class="mt-1 text-sm text-slate-500">The support team updates these steps as work progresses.</p>
                                     </div>
                                     <span class="w-fit rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">{{ completedMilestones }} of {{ purchase.milestones?.length ?? 0 }} completed</span>
                                 </div>
@@ -258,13 +247,9 @@ onMounted(loadWorkspace);
 
                             <section class="provider-panel order-1 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
-                                    <div class="flex items-start gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i></span>
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Next step</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Schedule your service meeting</h2>
-                                            <p class="mt-1 text-sm leading-6 text-slate-600">Choose a preferred time and meeting format.</p>
-                                        </div>
+                                    <div>
+                                        <h2 class="font-bold text-slate-950">Service meeting</h2>
+                                        <p class="mt-1 text-sm text-slate-500">Choose a preferred time and format for the discussion.</p>
                                     </div>
                                     <span v-if="purchase.meeting_status" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold capitalize', meetingStatusClass(purchase.meeting_status)]">{{ purchase.meeting_status }}</span>
                                 </div>
@@ -315,8 +300,8 @@ onMounted(loadWorkspace);
 
                             <section class="provider-panel order-3 overflow-hidden">
                                 <div class="border-b border-slate-200 p-4 sm:px-5">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Files</p>
-                                    <h2 class="mt-1 text-xl font-bold text-slate-950">Supporting files and deliverables</h2>
+                                    <h2 class="font-bold text-slate-950">Files and deliverables</h2>
+                                    <p class="mt-1 text-sm text-slate-500">Share reference files and review work returned by support.</p>
                                 </div>
                                 <div class="grid gap-4 p-4 sm:p-5 lg:grid-cols-2">
                                     <div class="min-w-0">
@@ -351,8 +336,8 @@ onMounted(loadWorkspace);
 
                             <section class="provider-panel order-4 overflow-hidden">
                                 <div class="border-b border-slate-200 p-4 sm:px-5">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Updates</p>
-                                    <h2 class="mt-1 text-xl font-bold text-slate-950">Service history</h2>
+                                    <h2 class="font-bold text-slate-950">Messages and history</h2>
+                                    <p class="mt-1 text-sm text-slate-500">Keep service-related questions and responses in one record.</p>
                                 </div>
                                 <div class="divide-y divide-slate-200">
                                     <article v-for="update in purchase.updates" :key="update.id" class="flex gap-3 p-4 sm:px-6">

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -58,10 +59,12 @@ const applicantVerificationStates = {
 
 const paginationLabel = computed(() => {
     if (!pagination.value.total) {
-        return `0 matching accounts from ${stats.value.total_users} total accounts.`;
+        return '0 accounts';
     }
 
-    return `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total} matching accounts from ${stats.value.total_users} total accounts.`;
+    const range = `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total}`;
+
+    return pagination.value.total === stats.value.total_users ? range : `${range} matches`;
 });
 
 function roleLabel(role) {
@@ -116,10 +119,6 @@ async function loadAdminData(page = 1, options = {}) {
     }
 }
 
-function selectRole(role) {
-    selectedRole.value = role;
-}
-
 function goToPage(page) {
     if (page < 1 || page > pagination.value.last_page || page === pagination.value.current_page) {
         return;
@@ -142,42 +141,31 @@ onMounted(loadAdminData);
 
         <section class="admin-page">
             <div class="admin-container min-w-0">
-                <header class="admin-hero">
-                    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Accounts
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Manage platform accounts
-                            </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Search, filter, and review applicant, provider, and admin accounts.
-                            </p>
-                        </div>
+                <TaskPageHeader
+                    theme="admin"
+                    eyebrow="Accounts"
+                    title="Manage platform accounts"
+                    description="Find an account, check its access, or create a managed account."
+                    icon="fa-solid fa-users-gear"
+                >
+                    <template v-if="!isLoading" #meta>
+                        <span>{{ stats.total_users }} total accounts</span>
+                        <span v-if="stats.suspended_users">{{ stats.suspended_users }} suspended</span>
+                        <span v-if="stats.password_resets_required">{{ stats.password_resets_required }} require a password reset</span>
+                    </template>
+                    <template #actions>
+                        <a
+                            href="/admin/accounts/create"
+                            class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+                        >
+                            Create account
+                        </a>
+                    </template>
+                </TaskPageHeader>
 
-                        <div class="flex flex-col gap-2 sm:flex-row">
-                            <a
-                                href="/admin/accounts/create"
-                                class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-                            >
-                                Create account
-                            </a>
-                        </div>
-                    </div>
-                </header>
-
-                <section class="admin-panel mt-5 p-5">
-                    <div>
-                        <h3 class="text-xl font-bold text-slate-950">Account directory</h3>
-                        <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                            {{ paginationLabel }}
-                        </p>
-                    </div>
-
-                    <div class="mt-4 flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div class="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                            <div class="relative w-full sm:max-w-sm">
+                <section class="admin-panel mt-5 overflow-hidden">
+                    <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/80 p-3 lg:flex-row lg:items-center">
+                            <div class="relative w-full lg:max-w-md">
                                 <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
                                 <input
                                     v-model="search"
@@ -186,45 +174,31 @@ onMounted(loadAdminData);
                                     class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-9 pr-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"
                                 >
                             </div>
-                            <button
-                                type="button"
-                                class="rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
-                                @click="loadAdminData(pagination.current_page)"
-                            >
-                                Refresh
-                            </button>
-                        </div>
-                        <p class="text-xs font-semibold text-slate-500">
-                            {{ stats.suspended_users }} suspended &middot; {{ stats.password_resets_required }} reset required
-                        </p>
+                            <label class="flex min-w-0 items-center gap-2 lg:ml-auto">
+                                <span class="shrink-0 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Role</span>
+                                <select
+                                    v-model="selectedRole"
+                                    class="min-w-40 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-amber-500"
+                                >
+                                    <option v-for="filter in roleFilters" :key="filter.value" :value="filter.value">
+                                        {{ filter.label }} ({{ filter.count }})
+                                    </option>
+                                </select>
+                            </label>
+                            <p class="shrink-0 text-xs font-semibold text-slate-500">
+                                {{ paginationLabel }}
+                            </p>
                     </div>
 
-                    <div class="mt-4 flex flex-wrap gap-2">
-                        <button
-                            v-for="filter in roleFilters"
-                            :key="filter.value"
-                            type="button"
-                            :class="[
-                                'rounded-md border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] transition',
-                                selectedRole === filter.value
-                                    ? 'border-slate-900 bg-slate-900 text-white'
-                                    : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'
-                            ]"
-                            @click="selectRole(filter.value)"
-                        >
-                            {{ filter.label }} ({{ filter.count }})
-                        </button>
+                    <div v-if="isLoading" class="p-6 text-sm text-slate-500">
+                        Loading accounts...
                     </div>
 
-                    <div v-if="isLoading" class="mt-5 rounded-md border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
-                        Loading users...
-                    </div>
-
-                    <div v-else-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
+                    <div v-else-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                         {{ errorMessage }}
                     </div>
 
-                    <div v-else-if="users.length" class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                    <div v-else-if="users.length" class="bg-white">
                         <div class="hidden grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_12rem_5.5rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 lg:grid">
                             <span>Account</span>
                             <span class="text-center">Role</span>
@@ -242,16 +216,12 @@ onMounted(loadAdminData);
                                     {{ userInitials(user) }}
                                 </div>
                                 <div class="min-w-0 flex-1">
-                                    <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ user.name }}</h4>
-                                    <p class="mt-1 truncate text-xs leading-5 text-slate-500">
+                                    <h4 class="truncate text-sm font-bold leading-5 text-slate-950">{{ user.name }}</h4>
+                                    <p class="mt-0.5 truncate text-xs leading-5 text-slate-500">
                                         {{ user.email }}
                                         <template v-if="user.username">
                                             <span class="mx-1 text-slate-300">&middot;</span>
                                             @{{ user.username }}
-                                        </template>
-                                        <template v-if="user.created_at">
-                                            <span class="mx-1 text-slate-300">&middot;</span>
-                                            Joined {{ user.created_at }}
                                         </template>
                                     </p>
                                 </div>
@@ -334,20 +304,20 @@ onMounted(loadAdminData);
                         </article>
                     </div>
 
-                    <div v-else class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
+                    <div v-else class="p-6">
                         <p class="text-sm font-bold text-slate-900">No matching accounts</p>
                         <p class="mt-1 text-sm leading-6 text-slate-500">Try another role or search term.</p>
                     </div>
 
                     <div
                         v-if="pagination.last_page > 1"
-                        class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"
+                        class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between"
                     >
                         <span>Page {{ pagination.current_page }} of {{ pagination.last_page }}</span>
                         <div class="flex gap-2">
                             <button
                                 type="button"
-                                class="rounded-md border border-slate-300 px-3 py-2 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                                 :disabled="pagination.current_page <= 1"
                                 @click="goToPage(pagination.current_page - 1)"
                             >
@@ -355,7 +325,7 @@ onMounted(loadAdminData);
                             </button>
                             <button
                                 type="button"
-                                class="rounded-md border border-slate-300 px-3 py-2 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                                 :disabled="pagination.current_page >= pagination.last_page"
                                 @click="goToPage(pagination.current_page + 1)"
                             >

@@ -2,11 +2,13 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { limitPhoneNumber } from '../support/phoneNumber';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
+const successMessage = ref('');
 const validationErrors = ref({});
 const user = ref(null);
 const form = reactive({
@@ -65,14 +67,17 @@ async function loadProfile() {
 async function saveProfile() {
     isSaving.value = true;
     errorMessage.value = '';
+    successMessage.value = '';
     validationErrors.value = {};
 
     try {
         const response = await window.axios.patch('/admin/profile', { ...form });
 
         applyUser(response.data.user);
+        successMessage.value = 'Profile changes saved.';
     } catch (error) {
         validationErrors.value = error.response?.data?.errors ?? {};
+        errorMessage.value = error.response?.data?.message ?? (Object.keys(validationErrors.value).length ? '' : 'Unable to save profile changes.');
     } finally {
         isSaving.value = false;
     }
@@ -87,19 +92,20 @@ onMounted(loadProfile);
 
         <section class="admin-page">
             <div class="admin-container">
-                <header class="admin-hero">
-                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                        Admin Profile
-                    </p>
-                    <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                        Account and identity
-                    </h2>
-                    <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                        Manage your administrator identity, contact details, and portal credentials.
-                    </p>
-                </header>
+                <TaskPageHeader
+                    theme="admin"
+                    eyebrow="Admin profile"
+                    title="Account and identity"
+                    description="Update your contact details and administrator credentials."
+                    icon="fa-solid fa-id-badge"
+                >
+                    <template #meta>
+                        <span>{{ user?.username || 'Username not set' }}</span>
+                        <span>{{ user?.email || 'Email not set' }}</span>
+                    </template>
+                </TaskPageHeader>
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="admin-panel mt-5 p-6 text-sm text-slate-500">
                     Loading admin profile...
                 </div>
 
@@ -107,66 +113,28 @@ onMounted(loadProfile);
                     <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
                         {{ errorMessage }}
                     </p>
-                    <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-sm">
-                        <div class="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                            <div class="flex min-w-0 items-center gap-4">
-                                <div class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-amber-300 text-lg font-black text-slate-950">
-                                    {{ adminInitials }}
-                                </div>
-                                <div class="min-w-0">
-                                    <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Administrator account</p>
-                                    <h3 class="mt-1 truncate font-display text-2xl font-bold text-white">
-                                        {{ user?.display_name || user?.name || 'Admin' }}
-                                    </h3>
-                                    <p class="mt-1 text-sm text-slate-300">System oversight and platform administration</p>
-                                </div>
-                            </div>
-                            <span class="w-fit shrink-0 rounded-md bg-white/10 px-3 py-1.5 text-xs font-bold uppercase text-white ring-1 ring-white/15">
-                                Admin
-                            </span>
-                        </div>
-                        <div class="grid border-t border-white/10 bg-white/[0.04] sm:grid-cols-3 sm:divide-x sm:divide-white/10">
-                            <div class="flex items-start gap-3 p-4">
-                                <i class="fa-solid fa-at mt-0.5 text-amber-300" aria-hidden="true"></i>
-                                <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Username</p>
-                                    <p class="mt-1 truncate text-sm font-semibold text-white">{{ user?.username || 'Not set' }}</p>
-                                </div>
-                            </div>
-                            <div class="flex items-start gap-3 border-t border-white/10 p-4 sm:border-t-0">
-                                <i class="fa-solid fa-envelope mt-0.5 text-amber-300" aria-hidden="true"></i>
-                                <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Email</p>
-                                    <p class="mt-1 truncate text-sm font-semibold text-white">{{ user?.email || 'Not set' }}</p>
-                                </div>
-                            </div>
-                            <div class="flex items-start gap-3 border-t border-white/10 p-4 sm:border-t-0">
-                                <i class="fa-solid fa-phone mt-0.5 text-amber-300" aria-hidden="true"></i>
-                                <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Contact</p>
-                                    <p class="mt-1 truncate text-sm font-semibold text-white">{{ user?.contact_number || 'Not set' }}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+                    <p v-if="successMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 shadow-sm">
+                        {{ successMessage }}
+                    </p>
 
                     <form class="admin-panel overflow-hidden" @submit.prevent="saveProfile">
-                        <div class="flex items-center gap-3 p-5 sm:p-6">
-                            <span class="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                <i class="fa-solid fa-user-gear" aria-hidden="true"></i>
-                            </span>
-                            <div>
-                                <p class="font-bold text-slate-950">Profile details</p>
-                                <p class="mt-0.5 text-sm text-slate-500">Information used to identify your administrator account.</p>
+                        <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                            <div class="flex min-w-0 items-center gap-3">
+                                <span class="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-black text-amber-300">{{ adminInitials }}</span>
+                                <div class="min-w-0">
+                                    <p class="truncate text-lg font-black text-slate-950">{{ user?.display_name || user?.name || 'Admin' }}</p>
+                                    <p class="mt-0.5 text-sm text-slate-500">Administrator account</p>
+                                </div>
                             </div>
+                            <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase text-slate-700">Admin</span>
                         </div>
 
-                        <section class="grid gap-5 border-t border-slate-200 p-5 sm:p-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
-                            <div>
-                                <p class="text-sm font-bold text-slate-950">Personal identity</p>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Your name and the label shown across the admin portal.</p>
+                        <section class="border-t border-slate-200 p-5 sm:p-6">
+                            <div class="mb-4">
+                                <h2 class="text-sm font-black text-slate-950">Personal identity</h2>
+                                <p class="mt-1 text-xs text-slate-500">Name displayed across the admin portal.</p>
                             </div>
-                            <div>
+                            <div class="max-w-4xl">
                                 <div class="grid gap-4 md:grid-cols-[1fr_5rem_1fr]">
                                     <label>
                                         <span :class="labelClass">First name</span>
@@ -192,12 +160,12 @@ onMounted(loadProfile);
                             </div>
                         </section>
 
-                        <section class="grid gap-5 border-t border-slate-200 p-5 sm:p-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
-                            <div>
-                                <p class="text-sm font-bold text-slate-950">Account and contact</p>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Credentials and contact details for this account.</p>
+                        <section class="border-t border-slate-200 p-5 sm:p-6">
+                            <div class="mb-4">
+                                <h2 class="text-sm font-black text-slate-950">Account and contact</h2>
+                                <p class="mt-1 text-xs text-slate-500">Sign-in identity and contact number.</p>
                             </div>
-                            <div class="grid gap-4 md:grid-cols-2">
+                            <div class="grid max-w-4xl gap-4 md:grid-cols-2">
                                 <label>
                                     <span :class="labelClass">Email</span>
                                     <input v-model="form.email" type="email" placeholder="admin@example.com" :class="inputClass">
@@ -217,7 +185,7 @@ onMounted(loadProfile);
                         </section>
 
                         <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                            <p class="text-xs leading-5 text-slate-500">Password changes are handled through account management.</p>
+                            <p class="text-xs leading-5 text-slate-500">Only this administrator account is updated.</p>
                             <button type="submit" :disabled="isSaving" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
                                 {{ isSaving ? 'Saving...' : 'Save profile' }}
                             </button>

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -154,24 +155,20 @@ onMounted(loadInsights);
 
         <section class="provider-page">
             <div class="provider-container">
-                <header class="provider-hero">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                                Provider Review
-                            </p>
-                            <h2 class="mt-2 font-display text-3xl font-bold text-slate-950">
-                                Review center
-                            </h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                                Review document packets and program progress.
-                            </p>
-                        </div>
-                        <a href="/provider/applications" class="rounded-md bg-slate-900 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800">
-                            Open applications
-                        </a>
-                    </div>
-                </header>
+                <TaskPageHeader
+                    theme="provider"
+                    eyebrow="Provider review"
+                    title="Review center"
+                    description="See application flow, program activity, and document issues that need attention."
+                    icon="fa-solid fa-chart-column"
+                    action-href="/provider/applications/review"
+                    action-label="Open applications"
+                >
+                    <template #meta>
+                        <span>{{ summary.total_applications ?? 0 }} applications</span>
+                        <span>{{ documentReviewPagination.total }} document packets</span>
+                    </template>
+                </TaskPageHeader>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading provider review...
@@ -252,16 +249,13 @@ onMounted(loadInsights);
                                 <h3 class="mt-2 text-xl font-bold text-slate-950">
                                     Applicant document packets
                                 </h3>
-                                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Open one applicant packet to review its files together.
-                                </p>
                             </div>
                             <div class="flex shrink-0 items-center gap-2">
                                 <span class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
                                     {{ documentReviewPagination.total }} applications
                                 </span>
                                 <a
-                                    href="/provider/applications"
+                                    href="/provider/applications/review"
                                     class="rounded-md border border-slate-300 px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                                 >
                                     View queue
@@ -417,11 +411,8 @@ onMounted(loadInsights);
                             <h3 class="mt-2 text-xl font-bold text-slate-950">
                                 Recommendation signals
                             </h3>
-                            <p class="mt-2 text-sm leading-6 text-slate-600">
-                                DSS summarizes how applicant profiles compare with your published program criteria. Use it to prioritize review, not as an automatic approval decision.
-                            </p>
-                            <p class="mt-3 text-sm leading-6 text-slate-600">
-                                Average suitability score: <span class="font-bold text-slate-950">{{ dssSummary.average_score || 0 }}%</span>
+                            <p class="mt-2 text-sm text-slate-600">
+                                Prioritization guide only. Average match: <span class="font-bold text-slate-950">{{ dssSummary.average_score || 0 }}%</span>
                             </p>
                             <div class="mt-5 flex flex-wrap gap-2">
                                 <div

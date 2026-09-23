@@ -21,6 +21,7 @@ class AuditPlatformReadiness extends Command
             $this->checkDatabase(),
             $this->checkMigrations($migrator),
             $this->checkStorage(),
+            $this->checkFrontendAssets(),
             $this->checkOpenSsl(),
             $this->checkEnvironment(),
             $this->checkDebugMode(),
@@ -110,13 +111,35 @@ class AuditPlatformReadiness extends Command
 
     private function checkStorage(): array
     {
-        $paths = [storage_path(), storage_path('framework'), storage_path('logs')];
+        $paths = [
+            storage_path(),
+            storage_path('framework'),
+            storage_path('logs'),
+            base_path('bootstrap/cache'),
+            (string) config('platform.backup.public_uploads_path', public_path('uploads')),
+        ];
         $writable = collect($paths)->every(fn (string $path): bool => is_dir($path) && is_writable($path));
 
         return $this->result(
             'Writable storage',
             $writable ? 'pass' : 'fail',
-            $writable ? 'Storage, framework cache, and log paths are writable.' : 'Grant the web process write access to storage and bootstrap/cache.',
+            $writable
+                ? 'Storage, cache, logs, and public upload paths are writable.'
+                : 'Grant the web process write access to storage, bootstrap/cache, and public/uploads.',
+        );
+    }
+
+    private function checkFrontendAssets(): array
+    {
+        $manifest = public_path('build/manifest.json');
+        $built = is_file($manifest) && filesize($manifest) > 0;
+
+        return $this->result(
+            'Frontend production build',
+            $built ? 'pass' : (app()->environment('production') ? 'fail' : 'warn'),
+            $built
+                ? 'The Vite production manifest is present.'
+                : 'Run npm ci and npm run build during deployment.',
         );
     }
 
@@ -211,6 +234,7 @@ class AuditPlatformReadiness extends Command
             strtolower(str_replace('\\', '/', public_path())),
         );
         $retention = (int) config('platform.backup.retention_days');
+        $publicUploadsIncluded = (bool) config('platform.backup.include_public_uploads');
 
         if (! $enabled) {
             return $this->result(
@@ -220,14 +244,17 @@ class AuditPlatformReadiness extends Command
             );
         }
 
-        $valid = $outsidePublic && $retention > 0 && class_exists(\ZipArchive::class);
+        $valid = $outsidePublic
+            && $retention > 0
+            && $publicUploadsIncluded
+            && class_exists(\ZipArchive::class);
 
         return $this->result(
             'Automated backups',
             $valid ? 'pass' : 'fail',
             $valid
-                ? "Daily verified backups are configured for {$path} with {$retention}-day retention."
-                : 'Use a positive retention period, enable PHP zip, and keep PLATFORM_BACKUP_PATH outside public/.',
+                ? "Daily verified backups include private files and public uploads with {$retention}-day retention."
+                : 'Enable PHP zip and public-upload backups, use positive retention, and keep PLATFORM_BACKUP_PATH outside public/.',
         );
     }
 

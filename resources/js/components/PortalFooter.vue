@@ -71,8 +71,8 @@ const contextDetails = computed(() => ({
         links: [
             { href: '/provider', label: 'Dashboard' },
             { href: '/provider/programs', label: 'Programs' },
-            { href: '/provider/applications', label: 'Applications' },
-            { href: '/provider/profile', label: 'Profile' },
+            { href: '/provider/applications/review', label: 'Applications' },
+            { href: '/provider/profile/details', label: 'Profile' },
         ],
     },
     admin: {

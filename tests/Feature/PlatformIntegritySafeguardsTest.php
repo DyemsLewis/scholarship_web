@@ -110,6 +110,7 @@ class PlatformIntegritySafeguardsTest extends TestCase
                 'school' => 'Updated Test School',
                 'grading_scale' => $profile->grading_scale,
                 'gwa' => $profile->gwa,
+                'current_scholarship_status' => $profile->current_scholarship_status,
             ])
             ->assertOk()
             ->assertJsonPath('verification_reset', true)
@@ -145,6 +146,7 @@ class PlatformIntegritySafeguardsTest extends TestCase
                 'school' => $profile->school,
                 'grading_scale' => $profile->grading_scale,
                 'gwa' => $profile->gwa,
+                'current_scholarship_status' => $profile->current_scholarship_status,
             ])
             ->assertOk()
             ->assertJsonPath('verification_reset', false)
@@ -316,6 +318,7 @@ class PlatformIntegritySafeguardsTest extends TestCase
             'account_managed_by' => 'learner',
             'education_level' => 'college',
             'school' => 'Test University',
+            'school_type' => 'public',
             'enrollment_status' => 'Enrolled',
             'course_or_strand' => 'BS Information Technology',
             'year_level' => '1st year',
@@ -325,6 +328,7 @@ class PlatformIntegritySafeguardsTest extends TestCase
             'grading_scale' => 'percentage',
             'income_bracket' => 'Below PHP 10,000',
             'household_size' => 4,
+            'current_scholarship_status' => 'none',
             'city' => 'Quezon City',
             'province' => 'Metro Manila',
             'region' => 'NCR',

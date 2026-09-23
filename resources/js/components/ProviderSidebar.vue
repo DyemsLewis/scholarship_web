@@ -6,52 +6,71 @@ const hasPermission = (permission) => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes(permission),
 );
-const canManageBilling = hasPermission('manage_billing');
-const canManageReports = hasPermission('manage_reports');
-const supportHref = canManageBilling ? '/provider/billing' : '/provider/reports';
-const supportLabel = canManageBilling && canManageReports
-    ? 'Support'
-    : canManageBilling
-        ? 'Services'
-        : 'Reports';
-const navLinks = [
+const canManagePrograms = hasPermission('manage_programs');
+const canReviewApplications = hasPermission('review_applications') && window.portalUser?.can_post_scholarships;
+const canManageProfile = hasPermission('manage_profile');
+const canManageTeam = hasPermission('manage_team');
+const canManageBilling = hasPermission('manage_billing') && window.portalUser?.can_post_scholarships;
+const canManageReports = hasPermission('manage_reports') && window.portalUser?.can_post_scholarships;
+const navLinks = computed(() => [
     { href: '/provider', label: 'Dashboard', icon: 'fa-solid fa-gauge-high', exact: true },
-    {
-        href: '/provider/profile',
-        label: 'Profile',
-        icon: 'fa-solid fa-building-user',
-        activePaths: ['/provider/profile', '/provider/team'],
-    },
-    {
+    ...(canManagePrograms || hasPermission('review_applications') ? [{
         href: '/provider/programs',
         label: 'Programs',
         icon: 'fa-solid fa-graduation-cap',
-        anyPermission: ['manage_programs', 'review_applications'],
-    },
-    {
-        href: '/provider/applications',
+        children: [
+            { href: '/provider/programs', label: 'Program overview', exact: true },
+            ...(canManagePrograms ? [{ href: '/provider/programs/create', label: 'Create program', exact: true }] : []),
+            ...(canManagePrograms ? [{ href: '/provider/programs/edit', label: 'Edit programs', exact: true }] : []),
+            { href: '/provider/programs/manage', label: 'Manage programs', exact: true },
+        ],
+    }] : []),
+    ...(canReviewApplications ? [{
+        href: '/provider/applications/review',
         label: 'Applications',
         icon: 'fa-solid fa-user-check',
-        permission: 'review_applications',
-        requiresApproval: true,
-    },
+        children: [
+            { href: '/provider/applications/review', label: 'Applicant review', exact: true },
+            { href: '/provider/applications/activities', label: 'Activity schedules', exact: true },
+            { href: '/provider/applications/results', label: 'Record results', exact: true },
+            { href: '/provider/applications/decisions', label: 'Final decisions', exact: true },
+        ],
+    }] : []),
+    ...(canReviewApplications ? [{
+        href: '/provider/applications/recipients',
+        label: 'Recipients',
+        icon: 'fa-solid fa-award',
+        children: [
+            { href: '/provider/applications/recipients', label: 'Selected recipients', exact: true },
+            { href: '/provider/applications/waitlist', label: 'Waitlist', exact: true },
+            { href: '/provider/monitoring', label: 'Recipient monitoring', exact: true },
+        ],
+    }] : []),
     {
-        href: supportHref,
-        label: supportLabel,
-        icon: 'fa-solid fa-headset',
-        anyPermission: ['manage_billing', 'manage_reports'],
-        requiresApproval: true,
-        activePaths: ['/provider/billing', '/provider/reports'],
+        href: '/provider/profile/details',
+        label: 'Organization',
+        icon: 'fa-solid fa-building-user',
+        activePaths: ['/provider/profile', '/provider/team'],
+        children: [
+            { href: '/provider/profile/details', label: canManageProfile ? 'Provider details' : 'View provider details', exact: true },
+            { href: '/provider/profile/verification', label: 'Verification', exact: true },
+            { href: '/provider/profile/representative', label: 'Representative account', exact: true },
+            ...(canManageTeam ? [{ href: '/provider/team', label: 'Team and access', exact: true }] : []),
+        ],
     },
-];
-
-const visibleNavLinks = computed(() => navLinks.filter((link) => (
-    (!link.requiresApproval || window.portalUser?.can_post_scholarships)
-        && (
-            (!link.permission || hasPermission(link.permission))
-            && (!link.anyPermission || link.anyPermission.some(hasPermission))
-        )
-)));
+    ...((canManageBilling || canManageReports) ? [{
+        href: canManageBilling ? '/provider/billing' : '/provider/reports',
+        label: 'Support',
+        icon: 'fa-solid fa-headset',
+        children: [
+            ...(canManageBilling ? [
+                { href: '/provider/billing', label: 'Service options', exact: true },
+                { href: '/provider/billing/requests', label: 'Your requests', exact: true },
+            ] : []),
+            ...(canManageReports ? [{ href: '/provider/reports', label: 'Reports', exact: true }] : []),
+        ],
+    }] : []),
+]);
 </script>
 
 <template>
@@ -60,7 +79,7 @@ const visibleNavLinks = computed(() => navLinks.filter((link) => (
         subtitle="Scholarship Desk"
         icon="fa-solid fa-building-columns"
         home-href="/provider"
-        :nav-links="visibleNavLinks"
+        :nav-links="navLinks"
         logout-message="You will need to sign in again to continue using the provider portal."
     />
 </template>

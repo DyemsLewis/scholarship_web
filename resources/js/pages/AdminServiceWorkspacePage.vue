@@ -1,9 +1,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import AdminFooter from '../components/AdminFooter.vue';
-import AdminSectionNav from '../components/AdminSectionNav.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { formatFileSize } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 
@@ -184,19 +184,27 @@ onMounted(loadWorkspace);
 
         <section class="admin-page">
             <div class="admin-container">
-                <header class="admin-hero">
-                    <a href="/admin/billing" class="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to service queue</a>
-                    <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Service request</p>
-                            <h1 class="mt-2 font-display text-3xl font-bold text-slate-950">{{ purchase?.plan_name ?? 'Provider service' }}</h1>
-                            <p class="mt-2 text-sm text-slate-600">{{ purchase?.provider?.name }} <span class="mx-1 text-slate-300">|</span> <span class="font-mono text-xs">{{ purchase?.reference_number }}</span></p>
-                        </div>
-                        <span v-if="purchase" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold', statusClass(purchase.fulfillment_status)]">{{ statusLabel(purchase.fulfillment_status) }}</span>
-                    </div>
-                </header>
+                <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
+                    <a href="/admin/billing" class="font-bold text-slate-600 transition hover:text-slate-950">Service requests</a>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
+                    <span class="truncate font-semibold text-slate-950">{{ purchase?.plan_name ?? 'Request workspace' }}</span>
+                </nav>
 
-                <AdminSectionNav section="operations" />
+                <TaskPageHeader
+                    theme="admin"
+                    eyebrow="Service request"
+                    :title="purchase?.plan_name ?? 'Provider service'"
+                    description="Confirm the meeting, update progress, and share completed work."
+                    icon="fa-solid fa-headset"
+                >
+                    <template v-if="purchase" #meta>
+                        <span>{{ purchase.provider?.name || 'Provider' }}</span>
+                        <span class="font-mono">{{ purchase.reference_number }}</span>
+                    </template>
+                    <template v-if="purchase" #actions>
+                        <span v-if="purchase" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold', statusClass(purchase.fulfillment_status)]">{{ statusLabel(purchase.fulfillment_status) }}</span>
+                    </template>
+                </TaskPageHeader>
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">Loading service request...</div>
                 <div v-else-if="errorMessage || !purchase" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
